@@ -1164,4 +1164,51 @@ void main() {
           reason: 'v65 block must seed sales.confirm');
     });
   });
+
+  group('onUpgrade → v70 (daily_closings persisted day close, #174)', () {
+    Future<bool> objectExists(AppDatabase db, String type, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='$type' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test('creates the daily_closings table + sync index + bump trigger', () async {
+      // A fresh v70 DB already creates daily_closings at onCreate. Drop it +
+      // step user_version back so the re-open's v70 block does the real create.
+      final db1 = await openAndInit();
+      expect(await objectExists(db1, 'table', 'daily_closings'), isTrue,
+          reason: 'onCreate should create the table');
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1.customStatement('DROP TABLE IF EXISTS daily_closings');
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+      expect(await objectExists(db1, 'table', 'daily_closings'), isFalse);
+      await db1.customStatement('PRAGMA user_version = 65');
+      await db1.close();
+
+      // Re-open → onUpgrade(65 → 70) recreates the table, its (business_id,
+      // last_updated_at) sync index, and the last_updated_at bump trigger.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await objectExists(db2, 'table', 'daily_closings'), isTrue,
+          reason: 'v70 block must create daily_closings');
+      expect(
+        await objectExists(db2, 'index', 'idx_daily_closings_business_lua'),
+        isTrue,
+        reason: 'v70 must create the (business_id, last_updated_at) sync index',
+      );
+      expect(
+        await objectExists(
+            db2, 'trigger', 'bump_daily_closings_last_updated_at'),
+        isTrue,
+        reason: 'v70 must create the last_updated_at bump trigger',
+      );
+
+      // The natural-key UNIQUE (business_id, business_date) is enforced.
+      final cols = await columnsOf(db2, 'daily_closings');
+      expect(cols, containsAll(<String>{'business_date', 'total_sales_kobo'}));
+    });
+  });
 }

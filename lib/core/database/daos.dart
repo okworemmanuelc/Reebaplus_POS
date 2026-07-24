@@ -27,6 +27,7 @@ part 'daos_sync_diagnostics.dart';
 part 'daos_stores_sessions.dart';
 part 'daos_permissions.dart';
 part 'daos_org.dart';
+part 'daos_reports.dart';
 
 /// Sentinel for "argument was not provided" on optional setter parameters,
 /// distinct from "argument was provided as null". Used by methods that

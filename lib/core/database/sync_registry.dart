@@ -1159,6 +1159,19 @@ final List<SyncedTable> kSyncRegistry = [
       resilient: true,
     ),
   ),
+  // #174 (PRD #155, ADR 0021 §2) — persisted day close. A normal synced tenant
+  // table, but append/FIRST-WRITE-ONLY: the row is frozen at the first review of
+  // a finished day and never mutated, so no `scrubCreatedAt` (not a void-able
+  // ledger) and no `hardDelete` (never tombstoned). FK → businesses / users /
+  // stores (all pulled earlier), so a bespoke FK-RESILIENT restore that
+  // insert-or-IGNOREs — first-writer-wins holds on the pull side too (a pulled
+  // divergent snapshot from another device never clobbers the one this device
+  // already knows). See [_restoreDailyClosings].
+  const SyncedTable(
+    name: 'daily_closings',
+    tenantScoped: true,
+    restore: _restoreDailyClosings,
+  ),
   SyncedTable(
     name: 'sessions',
     tenantScoped: true,
@@ -1214,6 +1227,31 @@ Future<void> _restoreOrders(
       fkSkipped,
       () => ex.db.into(ex.db.orders).insertOnConflictUpdate(data),
       healUniqueCollision: () => ex.healLocalOrderNumberBlocker(data),
+    );
+  }
+}
+
+/// `daily_closings` (#174): append/first-write-only snapshot restore. A pulled
+/// row for a day already snapshotted locally is IGNORED (`insertOrIgnore`), so
+/// first-writer-wins holds on the pull side — the first snapshot a device knows
+/// about (locally written or pulled) is never clobbered by a later, divergent
+/// one from another device. FK-resilient (FK → businesses / users / stores): a
+/// snapshot can land in a pull before its store/reviewer slice.
+Future<void> _restoreDailyClosings(
+  SyncRestoreExecutor ex,
+  String table,
+  List<Map<String, dynamic>> rows,
+  Set<String>? fkSkipped,
+) async {
+  for (final r in rows) {
+    final data = DailyClosingData.fromJson(r);
+    await ex.insertResilient(
+      'daily_closings',
+      r,
+      fkSkipped,
+      () => ex.db
+          .into(ex.db.dailyClosings)
+          .insert(data, mode: InsertMode.insertOrIgnore),
     );
   }
 }

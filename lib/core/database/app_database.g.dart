@@ -29111,6 +29111,1363 @@ class StockCountsCompanion extends UpdateCompanion<StockCountData> {
   }
 }
 
+class $DailyClosingsTable extends DailyClosings
+    with TableInfo<$DailyClosingsTable, DailyClosingData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DailyClosingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _businessDateMeta = const VerificationMeta(
+    'businessDate',
+  );
+  @override
+  late final GeneratedColumn<String> businessDate = GeneratedColumn<String>(
+    'business_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _storeScopeIdMeta = const VerificationMeta(
+    'storeScopeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeScopeId = GeneratedColumn<String>(
+    'store_scope_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _totalSalesKoboMeta = const VerificationMeta(
+    'totalSalesKobo',
+  );
+  @override
+  late final GeneratedColumn<int> totalSalesKobo = GeneratedColumn<int>(
+    'total_sales_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _refundsKoboMeta = const VerificationMeta(
+    'refundsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> refundsKobo = GeneratedColumn<int>(
+    'refunds_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _discountsKoboMeta = const VerificationMeta(
+    'discountsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> discountsKobo = GeneratedColumn<int>(
+    'discounts_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cogsKoboMeta = const VerificationMeta(
+    'cogsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cogsKobo = GeneratedColumn<int>(
+    'cogs_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _grossProfitKoboMeta = const VerificationMeta(
+    'grossProfitKobo',
+  );
+  @override
+  late final GeneratedColumn<int> grossProfitKobo = GeneratedColumn<int>(
+    'gross_profit_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _netProfitKoboMeta = const VerificationMeta(
+    'netProfitKobo',
+  );
+  @override
+  late final GeneratedColumn<int> netProfitKobo = GeneratedColumn<int>(
+    'net_profit_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _expensesKoboMeta = const VerificationMeta(
+    'expensesKobo',
+  );
+  @override
+  late final GeneratedColumn<int> expensesKobo = GeneratedColumn<int>(
+    'expenses_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _damagesCostKoboMeta = const VerificationMeta(
+    'damagesCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> damagesCostKobo = GeneratedColumn<int>(
+    'damages_cost_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cashSalesKoboMeta = const VerificationMeta(
+    'cashSalesKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cashSalesKobo = GeneratedColumn<int>(
+    'cash_sales_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cashInKoboMeta = const VerificationMeta(
+    'cashInKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cashInKobo = GeneratedColumn<int>(
+    'cash_in_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cashOutKoboMeta = const VerificationMeta(
+    'cashOutKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cashOutKobo = GeneratedColumn<int>(
+    'cash_out_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _netCashMovementKoboMeta =
+      const VerificationMeta('netCashMovementKobo');
+  @override
+  late final GeneratedColumn<int> netCashMovementKobo = GeneratedColumn<int>(
+    'net_cash_movement_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _stockCogsKoboMeta = const VerificationMeta(
+    'stockCogsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> stockCogsKobo = GeneratedColumn<int>(
+    'stock_cogs_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _stockExpectedClosingKoboMeta =
+      const VerificationMeta('stockExpectedClosingKobo');
+  @override
+  late final GeneratedColumn<int> stockExpectedClosingKobo =
+      GeneratedColumn<int>(
+        'stock_expected_closing_kobo',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      );
+  static const VerificationMeta _itemsSoldMeta = const VerificationMeta(
+    'itemsSold',
+  );
+  @override
+  late final GeneratedColumn<int> itemsSold = GeneratedColumn<int>(
+    'items_sold',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shortageUnitsMeta = const VerificationMeta(
+    'shortageUnits',
+  );
+  @override
+  late final GeneratedColumn<int> shortageUnits = GeneratedColumn<int>(
+    'shortage_units',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _reviewedByMeta = const VerificationMeta(
+    'reviewedBy',
+  );
+  @override
+  late final GeneratedColumn<String> reviewedBy = GeneratedColumn<String>(
+    'reviewed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _reviewedAtMeta = const VerificationMeta(
+    'reviewedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reviewedAt = GeneratedColumn<DateTime>(
+    'reviewed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    businessDate,
+    storeScopeId,
+    totalSalesKobo,
+    refundsKobo,
+    discountsKobo,
+    cogsKobo,
+    grossProfitKobo,
+    netProfitKobo,
+    expensesKobo,
+    damagesCostKobo,
+    cashSalesKobo,
+    cashInKobo,
+    cashOutKobo,
+    netCashMovementKobo,
+    stockCogsKobo,
+    stockExpectedClosingKobo,
+    itemsSold,
+    shortageUnits,
+    reviewedBy,
+    reviewedAt,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'daily_closings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DailyClosingData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('business_date')) {
+      context.handle(
+        _businessDateMeta,
+        businessDate.isAcceptableOrUnknown(
+          data['business_date']!,
+          _businessDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_businessDateMeta);
+    }
+    if (data.containsKey('store_scope_id')) {
+      context.handle(
+        _storeScopeIdMeta,
+        storeScopeId.isAcceptableOrUnknown(
+          data['store_scope_id']!,
+          _storeScopeIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('total_sales_kobo')) {
+      context.handle(
+        _totalSalesKoboMeta,
+        totalSalesKobo.isAcceptableOrUnknown(
+          data['total_sales_kobo']!,
+          _totalSalesKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('refunds_kobo')) {
+      context.handle(
+        _refundsKoboMeta,
+        refundsKobo.isAcceptableOrUnknown(
+          data['refunds_kobo']!,
+          _refundsKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('discounts_kobo')) {
+      context.handle(
+        _discountsKoboMeta,
+        discountsKobo.isAcceptableOrUnknown(
+          data['discounts_kobo']!,
+          _discountsKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cogs_kobo')) {
+      context.handle(
+        _cogsKoboMeta,
+        cogsKobo.isAcceptableOrUnknown(data['cogs_kobo']!, _cogsKoboMeta),
+      );
+    }
+    if (data.containsKey('gross_profit_kobo')) {
+      context.handle(
+        _grossProfitKoboMeta,
+        grossProfitKobo.isAcceptableOrUnknown(
+          data['gross_profit_kobo']!,
+          _grossProfitKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('net_profit_kobo')) {
+      context.handle(
+        _netProfitKoboMeta,
+        netProfitKobo.isAcceptableOrUnknown(
+          data['net_profit_kobo']!,
+          _netProfitKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expenses_kobo')) {
+      context.handle(
+        _expensesKoboMeta,
+        expensesKobo.isAcceptableOrUnknown(
+          data['expenses_kobo']!,
+          _expensesKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('damages_cost_kobo')) {
+      context.handle(
+        _damagesCostKoboMeta,
+        damagesCostKobo.isAcceptableOrUnknown(
+          data['damages_cost_kobo']!,
+          _damagesCostKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cash_sales_kobo')) {
+      context.handle(
+        _cashSalesKoboMeta,
+        cashSalesKobo.isAcceptableOrUnknown(
+          data['cash_sales_kobo']!,
+          _cashSalesKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cash_in_kobo')) {
+      context.handle(
+        _cashInKoboMeta,
+        cashInKobo.isAcceptableOrUnknown(
+          data['cash_in_kobo']!,
+          _cashInKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cash_out_kobo')) {
+      context.handle(
+        _cashOutKoboMeta,
+        cashOutKobo.isAcceptableOrUnknown(
+          data['cash_out_kobo']!,
+          _cashOutKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('net_cash_movement_kobo')) {
+      context.handle(
+        _netCashMovementKoboMeta,
+        netCashMovementKobo.isAcceptableOrUnknown(
+          data['net_cash_movement_kobo']!,
+          _netCashMovementKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('stock_cogs_kobo')) {
+      context.handle(
+        _stockCogsKoboMeta,
+        stockCogsKobo.isAcceptableOrUnknown(
+          data['stock_cogs_kobo']!,
+          _stockCogsKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('stock_expected_closing_kobo')) {
+      context.handle(
+        _stockExpectedClosingKoboMeta,
+        stockExpectedClosingKobo.isAcceptableOrUnknown(
+          data['stock_expected_closing_kobo']!,
+          _stockExpectedClosingKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('items_sold')) {
+      context.handle(
+        _itemsSoldMeta,
+        itemsSold.isAcceptableOrUnknown(data['items_sold']!, _itemsSoldMeta),
+      );
+    }
+    if (data.containsKey('shortage_units')) {
+      context.handle(
+        _shortageUnitsMeta,
+        shortageUnits.isAcceptableOrUnknown(
+          data['shortage_units']!,
+          _shortageUnitsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reviewed_by')) {
+      context.handle(
+        _reviewedByMeta,
+        reviewedBy.isAcceptableOrUnknown(data['reviewed_by']!, _reviewedByMeta),
+      );
+    }
+    if (data.containsKey('reviewed_at')) {
+      context.handle(
+        _reviewedAtMeta,
+        reviewedAt.isAcceptableOrUnknown(data['reviewed_at']!, _reviewedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DailyClosingData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DailyClosingData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      businessDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_date'],
+      )!,
+      storeScopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_scope_id'],
+      ),
+      totalSalesKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_sales_kobo'],
+      )!,
+      refundsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}refunds_kobo'],
+      )!,
+      discountsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}discounts_kobo'],
+      )!,
+      cogsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cogs_kobo'],
+      )!,
+      grossProfitKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}gross_profit_kobo'],
+      )!,
+      netProfitKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}net_profit_kobo'],
+      )!,
+      expensesKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expenses_kobo'],
+      )!,
+      damagesCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}damages_cost_kobo'],
+      )!,
+      cashSalesKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cash_sales_kobo'],
+      )!,
+      cashInKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cash_in_kobo'],
+      )!,
+      cashOutKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cash_out_kobo'],
+      )!,
+      netCashMovementKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}net_cash_movement_kobo'],
+      )!,
+      stockCogsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stock_cogs_kobo'],
+      )!,
+      stockExpectedClosingKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stock_expected_closing_kobo'],
+      )!,
+      itemsSold: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}items_sold'],
+      )!,
+      shortageUnits: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shortage_units'],
+      )!,
+      reviewedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reviewed_by'],
+      ),
+      reviewedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reviewed_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DailyClosingsTable createAlias(String alias) {
+    return $DailyClosingsTable(attachedDatabase, alias);
+  }
+}
+
+class DailyClosingData extends DataClass
+    implements Insertable<DailyClosingData> {
+  final String id;
+  final String businessId;
+  final String businessDate;
+  final String? storeScopeId;
+  final int totalSalesKobo;
+  final int refundsKobo;
+  final int discountsKobo;
+  final int cogsKobo;
+  final int grossProfitKobo;
+  final int netProfitKobo;
+  final int expensesKobo;
+  final int damagesCostKobo;
+  final int cashSalesKobo;
+  final int cashInKobo;
+  final int cashOutKobo;
+  final int netCashMovementKobo;
+  final int stockCogsKobo;
+  final int stockExpectedClosingKobo;
+  final int itemsSold;
+  final int shortageUnits;
+  final String? reviewedBy;
+  final DateTime reviewedAt;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const DailyClosingData({
+    required this.id,
+    required this.businessId,
+    required this.businessDate,
+    this.storeScopeId,
+    required this.totalSalesKobo,
+    required this.refundsKobo,
+    required this.discountsKobo,
+    required this.cogsKobo,
+    required this.grossProfitKobo,
+    required this.netProfitKobo,
+    required this.expensesKobo,
+    required this.damagesCostKobo,
+    required this.cashSalesKobo,
+    required this.cashInKobo,
+    required this.cashOutKobo,
+    required this.netCashMovementKobo,
+    required this.stockCogsKobo,
+    required this.stockExpectedClosingKobo,
+    required this.itemsSold,
+    required this.shortageUnits,
+    this.reviewedBy,
+    required this.reviewedAt,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['business_date'] = Variable<String>(businessDate);
+    if (!nullToAbsent || storeScopeId != null) {
+      map['store_scope_id'] = Variable<String>(storeScopeId);
+    }
+    map['total_sales_kobo'] = Variable<int>(totalSalesKobo);
+    map['refunds_kobo'] = Variable<int>(refundsKobo);
+    map['discounts_kobo'] = Variable<int>(discountsKobo);
+    map['cogs_kobo'] = Variable<int>(cogsKobo);
+    map['gross_profit_kobo'] = Variable<int>(grossProfitKobo);
+    map['net_profit_kobo'] = Variable<int>(netProfitKobo);
+    map['expenses_kobo'] = Variable<int>(expensesKobo);
+    map['damages_cost_kobo'] = Variable<int>(damagesCostKobo);
+    map['cash_sales_kobo'] = Variable<int>(cashSalesKobo);
+    map['cash_in_kobo'] = Variable<int>(cashInKobo);
+    map['cash_out_kobo'] = Variable<int>(cashOutKobo);
+    map['net_cash_movement_kobo'] = Variable<int>(netCashMovementKobo);
+    map['stock_cogs_kobo'] = Variable<int>(stockCogsKobo);
+    map['stock_expected_closing_kobo'] = Variable<int>(
+      stockExpectedClosingKobo,
+    );
+    map['items_sold'] = Variable<int>(itemsSold);
+    map['shortage_units'] = Variable<int>(shortageUnits);
+    if (!nullToAbsent || reviewedBy != null) {
+      map['reviewed_by'] = Variable<String>(reviewedBy);
+    }
+    map['reviewed_at'] = Variable<DateTime>(reviewedAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  DailyClosingsCompanion toCompanion(bool nullToAbsent) {
+    return DailyClosingsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      businessDate: Value(businessDate),
+      storeScopeId: storeScopeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeScopeId),
+      totalSalesKobo: Value(totalSalesKobo),
+      refundsKobo: Value(refundsKobo),
+      discountsKobo: Value(discountsKobo),
+      cogsKobo: Value(cogsKobo),
+      grossProfitKobo: Value(grossProfitKobo),
+      netProfitKobo: Value(netProfitKobo),
+      expensesKobo: Value(expensesKobo),
+      damagesCostKobo: Value(damagesCostKobo),
+      cashSalesKobo: Value(cashSalesKobo),
+      cashInKobo: Value(cashInKobo),
+      cashOutKobo: Value(cashOutKobo),
+      netCashMovementKobo: Value(netCashMovementKobo),
+      stockCogsKobo: Value(stockCogsKobo),
+      stockExpectedClosingKobo: Value(stockExpectedClosingKobo),
+      itemsSold: Value(itemsSold),
+      shortageUnits: Value(shortageUnits),
+      reviewedBy: reviewedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reviewedBy),
+      reviewedAt: Value(reviewedAt),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory DailyClosingData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DailyClosingData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      businessDate: serializer.fromJson<String>(json['businessDate']),
+      storeScopeId: serializer.fromJson<String?>(json['storeScopeId']),
+      totalSalesKobo: serializer.fromJson<int>(json['totalSalesKobo']),
+      refundsKobo: serializer.fromJson<int>(json['refundsKobo']),
+      discountsKobo: serializer.fromJson<int>(json['discountsKobo']),
+      cogsKobo: serializer.fromJson<int>(json['cogsKobo']),
+      grossProfitKobo: serializer.fromJson<int>(json['grossProfitKobo']),
+      netProfitKobo: serializer.fromJson<int>(json['netProfitKobo']),
+      expensesKobo: serializer.fromJson<int>(json['expensesKobo']),
+      damagesCostKobo: serializer.fromJson<int>(json['damagesCostKobo']),
+      cashSalesKobo: serializer.fromJson<int>(json['cashSalesKobo']),
+      cashInKobo: serializer.fromJson<int>(json['cashInKobo']),
+      cashOutKobo: serializer.fromJson<int>(json['cashOutKobo']),
+      netCashMovementKobo: serializer.fromJson<int>(
+        json['netCashMovementKobo'],
+      ),
+      stockCogsKobo: serializer.fromJson<int>(json['stockCogsKobo']),
+      stockExpectedClosingKobo: serializer.fromJson<int>(
+        json['stockExpectedClosingKobo'],
+      ),
+      itemsSold: serializer.fromJson<int>(json['itemsSold']),
+      shortageUnits: serializer.fromJson<int>(json['shortageUnits']),
+      reviewedBy: serializer.fromJson<String?>(json['reviewedBy']),
+      reviewedAt: serializer.fromJson<DateTime>(json['reviewedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'businessDate': serializer.toJson<String>(businessDate),
+      'storeScopeId': serializer.toJson<String?>(storeScopeId),
+      'totalSalesKobo': serializer.toJson<int>(totalSalesKobo),
+      'refundsKobo': serializer.toJson<int>(refundsKobo),
+      'discountsKobo': serializer.toJson<int>(discountsKobo),
+      'cogsKobo': serializer.toJson<int>(cogsKobo),
+      'grossProfitKobo': serializer.toJson<int>(grossProfitKobo),
+      'netProfitKobo': serializer.toJson<int>(netProfitKobo),
+      'expensesKobo': serializer.toJson<int>(expensesKobo),
+      'damagesCostKobo': serializer.toJson<int>(damagesCostKobo),
+      'cashSalesKobo': serializer.toJson<int>(cashSalesKobo),
+      'cashInKobo': serializer.toJson<int>(cashInKobo),
+      'cashOutKobo': serializer.toJson<int>(cashOutKobo),
+      'netCashMovementKobo': serializer.toJson<int>(netCashMovementKobo),
+      'stockCogsKobo': serializer.toJson<int>(stockCogsKobo),
+      'stockExpectedClosingKobo': serializer.toJson<int>(
+        stockExpectedClosingKobo,
+      ),
+      'itemsSold': serializer.toJson<int>(itemsSold),
+      'shortageUnits': serializer.toJson<int>(shortageUnits),
+      'reviewedBy': serializer.toJson<String?>(reviewedBy),
+      'reviewedAt': serializer.toJson<DateTime>(reviewedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  DailyClosingData copyWith({
+    String? id,
+    String? businessId,
+    String? businessDate,
+    Value<String?> storeScopeId = const Value.absent(),
+    int? totalSalesKobo,
+    int? refundsKobo,
+    int? discountsKobo,
+    int? cogsKobo,
+    int? grossProfitKobo,
+    int? netProfitKobo,
+    int? expensesKobo,
+    int? damagesCostKobo,
+    int? cashSalesKobo,
+    int? cashInKobo,
+    int? cashOutKobo,
+    int? netCashMovementKobo,
+    int? stockCogsKobo,
+    int? stockExpectedClosingKobo,
+    int? itemsSold,
+    int? shortageUnits,
+    Value<String?> reviewedBy = const Value.absent(),
+    DateTime? reviewedAt,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => DailyClosingData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    businessDate: businessDate ?? this.businessDate,
+    storeScopeId: storeScopeId.present ? storeScopeId.value : this.storeScopeId,
+    totalSalesKobo: totalSalesKobo ?? this.totalSalesKobo,
+    refundsKobo: refundsKobo ?? this.refundsKobo,
+    discountsKobo: discountsKobo ?? this.discountsKobo,
+    cogsKobo: cogsKobo ?? this.cogsKobo,
+    grossProfitKobo: grossProfitKobo ?? this.grossProfitKobo,
+    netProfitKobo: netProfitKobo ?? this.netProfitKobo,
+    expensesKobo: expensesKobo ?? this.expensesKobo,
+    damagesCostKobo: damagesCostKobo ?? this.damagesCostKobo,
+    cashSalesKobo: cashSalesKobo ?? this.cashSalesKobo,
+    cashInKobo: cashInKobo ?? this.cashInKobo,
+    cashOutKobo: cashOutKobo ?? this.cashOutKobo,
+    netCashMovementKobo: netCashMovementKobo ?? this.netCashMovementKobo,
+    stockCogsKobo: stockCogsKobo ?? this.stockCogsKobo,
+    stockExpectedClosingKobo:
+        stockExpectedClosingKobo ?? this.stockExpectedClosingKobo,
+    itemsSold: itemsSold ?? this.itemsSold,
+    shortageUnits: shortageUnits ?? this.shortageUnits,
+    reviewedBy: reviewedBy.present ? reviewedBy.value : this.reviewedBy,
+    reviewedAt: reviewedAt ?? this.reviewedAt,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  DailyClosingData copyWithCompanion(DailyClosingsCompanion data) {
+    return DailyClosingData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      businessDate: data.businessDate.present
+          ? data.businessDate.value
+          : this.businessDate,
+      storeScopeId: data.storeScopeId.present
+          ? data.storeScopeId.value
+          : this.storeScopeId,
+      totalSalesKobo: data.totalSalesKobo.present
+          ? data.totalSalesKobo.value
+          : this.totalSalesKobo,
+      refundsKobo: data.refundsKobo.present
+          ? data.refundsKobo.value
+          : this.refundsKobo,
+      discountsKobo: data.discountsKobo.present
+          ? data.discountsKobo.value
+          : this.discountsKobo,
+      cogsKobo: data.cogsKobo.present ? data.cogsKobo.value : this.cogsKobo,
+      grossProfitKobo: data.grossProfitKobo.present
+          ? data.grossProfitKobo.value
+          : this.grossProfitKobo,
+      netProfitKobo: data.netProfitKobo.present
+          ? data.netProfitKobo.value
+          : this.netProfitKobo,
+      expensesKobo: data.expensesKobo.present
+          ? data.expensesKobo.value
+          : this.expensesKobo,
+      damagesCostKobo: data.damagesCostKobo.present
+          ? data.damagesCostKobo.value
+          : this.damagesCostKobo,
+      cashSalesKobo: data.cashSalesKobo.present
+          ? data.cashSalesKobo.value
+          : this.cashSalesKobo,
+      cashInKobo: data.cashInKobo.present
+          ? data.cashInKobo.value
+          : this.cashInKobo,
+      cashOutKobo: data.cashOutKobo.present
+          ? data.cashOutKobo.value
+          : this.cashOutKobo,
+      netCashMovementKobo: data.netCashMovementKobo.present
+          ? data.netCashMovementKobo.value
+          : this.netCashMovementKobo,
+      stockCogsKobo: data.stockCogsKobo.present
+          ? data.stockCogsKobo.value
+          : this.stockCogsKobo,
+      stockExpectedClosingKobo: data.stockExpectedClosingKobo.present
+          ? data.stockExpectedClosingKobo.value
+          : this.stockExpectedClosingKobo,
+      itemsSold: data.itemsSold.present ? data.itemsSold.value : this.itemsSold,
+      shortageUnits: data.shortageUnits.present
+          ? data.shortageUnits.value
+          : this.shortageUnits,
+      reviewedBy: data.reviewedBy.present
+          ? data.reviewedBy.value
+          : this.reviewedBy,
+      reviewedAt: data.reviewedAt.present
+          ? data.reviewedAt.value
+          : this.reviewedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DailyClosingData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('businessDate: $businessDate, ')
+          ..write('storeScopeId: $storeScopeId, ')
+          ..write('totalSalesKobo: $totalSalesKobo, ')
+          ..write('refundsKobo: $refundsKobo, ')
+          ..write('discountsKobo: $discountsKobo, ')
+          ..write('cogsKobo: $cogsKobo, ')
+          ..write('grossProfitKobo: $grossProfitKobo, ')
+          ..write('netProfitKobo: $netProfitKobo, ')
+          ..write('expensesKobo: $expensesKobo, ')
+          ..write('damagesCostKobo: $damagesCostKobo, ')
+          ..write('cashSalesKobo: $cashSalesKobo, ')
+          ..write('cashInKobo: $cashInKobo, ')
+          ..write('cashOutKobo: $cashOutKobo, ')
+          ..write('netCashMovementKobo: $netCashMovementKobo, ')
+          ..write('stockCogsKobo: $stockCogsKobo, ')
+          ..write('stockExpectedClosingKobo: $stockExpectedClosingKobo, ')
+          ..write('itemsSold: $itemsSold, ')
+          ..write('shortageUnits: $shortageUnits, ')
+          ..write('reviewedBy: $reviewedBy, ')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    businessId,
+    businessDate,
+    storeScopeId,
+    totalSalesKobo,
+    refundsKobo,
+    discountsKobo,
+    cogsKobo,
+    grossProfitKobo,
+    netProfitKobo,
+    expensesKobo,
+    damagesCostKobo,
+    cashSalesKobo,
+    cashInKobo,
+    cashOutKobo,
+    netCashMovementKobo,
+    stockCogsKobo,
+    stockExpectedClosingKobo,
+    itemsSold,
+    shortageUnits,
+    reviewedBy,
+    reviewedAt,
+    createdAt,
+    lastUpdatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DailyClosingData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.businessDate == this.businessDate &&
+          other.storeScopeId == this.storeScopeId &&
+          other.totalSalesKobo == this.totalSalesKobo &&
+          other.refundsKobo == this.refundsKobo &&
+          other.discountsKobo == this.discountsKobo &&
+          other.cogsKobo == this.cogsKobo &&
+          other.grossProfitKobo == this.grossProfitKobo &&
+          other.netProfitKobo == this.netProfitKobo &&
+          other.expensesKobo == this.expensesKobo &&
+          other.damagesCostKobo == this.damagesCostKobo &&
+          other.cashSalesKobo == this.cashSalesKobo &&
+          other.cashInKobo == this.cashInKobo &&
+          other.cashOutKobo == this.cashOutKobo &&
+          other.netCashMovementKobo == this.netCashMovementKobo &&
+          other.stockCogsKobo == this.stockCogsKobo &&
+          other.stockExpectedClosingKobo == this.stockExpectedClosingKobo &&
+          other.itemsSold == this.itemsSold &&
+          other.shortageUnits == this.shortageUnits &&
+          other.reviewedBy == this.reviewedBy &&
+          other.reviewedAt == this.reviewedAt &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> businessDate;
+  final Value<String?> storeScopeId;
+  final Value<int> totalSalesKobo;
+  final Value<int> refundsKobo;
+  final Value<int> discountsKobo;
+  final Value<int> cogsKobo;
+  final Value<int> grossProfitKobo;
+  final Value<int> netProfitKobo;
+  final Value<int> expensesKobo;
+  final Value<int> damagesCostKobo;
+  final Value<int> cashSalesKobo;
+  final Value<int> cashInKobo;
+  final Value<int> cashOutKobo;
+  final Value<int> netCashMovementKobo;
+  final Value<int> stockCogsKobo;
+  final Value<int> stockExpectedClosingKobo;
+  final Value<int> itemsSold;
+  final Value<int> shortageUnits;
+  final Value<String?> reviewedBy;
+  final Value<DateTime> reviewedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const DailyClosingsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.businessDate = const Value.absent(),
+    this.storeScopeId = const Value.absent(),
+    this.totalSalesKobo = const Value.absent(),
+    this.refundsKobo = const Value.absent(),
+    this.discountsKobo = const Value.absent(),
+    this.cogsKobo = const Value.absent(),
+    this.grossProfitKobo = const Value.absent(),
+    this.netProfitKobo = const Value.absent(),
+    this.expensesKobo = const Value.absent(),
+    this.damagesCostKobo = const Value.absent(),
+    this.cashSalesKobo = const Value.absent(),
+    this.cashInKobo = const Value.absent(),
+    this.cashOutKobo = const Value.absent(),
+    this.netCashMovementKobo = const Value.absent(),
+    this.stockCogsKobo = const Value.absent(),
+    this.stockExpectedClosingKobo = const Value.absent(),
+    this.itemsSold = const Value.absent(),
+    this.shortageUnits = const Value.absent(),
+    this.reviewedBy = const Value.absent(),
+    this.reviewedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DailyClosingsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String businessDate,
+    this.storeScopeId = const Value.absent(),
+    this.totalSalesKobo = const Value.absent(),
+    this.refundsKobo = const Value.absent(),
+    this.discountsKobo = const Value.absent(),
+    this.cogsKobo = const Value.absent(),
+    this.grossProfitKobo = const Value.absent(),
+    this.netProfitKobo = const Value.absent(),
+    this.expensesKobo = const Value.absent(),
+    this.damagesCostKobo = const Value.absent(),
+    this.cashSalesKobo = const Value.absent(),
+    this.cashInKobo = const Value.absent(),
+    this.cashOutKobo = const Value.absent(),
+    this.netCashMovementKobo = const Value.absent(),
+    this.stockCogsKobo = const Value.absent(),
+    this.stockExpectedClosingKobo = const Value.absent(),
+    this.itemsSold = const Value.absent(),
+    this.shortageUnits = const Value.absent(),
+    this.reviewedBy = const Value.absent(),
+    this.reviewedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       businessDate = Value(businessDate);
+  static Insertable<DailyClosingData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? businessDate,
+    Expression<String>? storeScopeId,
+    Expression<int>? totalSalesKobo,
+    Expression<int>? refundsKobo,
+    Expression<int>? discountsKobo,
+    Expression<int>? cogsKobo,
+    Expression<int>? grossProfitKobo,
+    Expression<int>? netProfitKobo,
+    Expression<int>? expensesKobo,
+    Expression<int>? damagesCostKobo,
+    Expression<int>? cashSalesKobo,
+    Expression<int>? cashInKobo,
+    Expression<int>? cashOutKobo,
+    Expression<int>? netCashMovementKobo,
+    Expression<int>? stockCogsKobo,
+    Expression<int>? stockExpectedClosingKobo,
+    Expression<int>? itemsSold,
+    Expression<int>? shortageUnits,
+    Expression<String>? reviewedBy,
+    Expression<DateTime>? reviewedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (businessDate != null) 'business_date': businessDate,
+      if (storeScopeId != null) 'store_scope_id': storeScopeId,
+      if (totalSalesKobo != null) 'total_sales_kobo': totalSalesKobo,
+      if (refundsKobo != null) 'refunds_kobo': refundsKobo,
+      if (discountsKobo != null) 'discounts_kobo': discountsKobo,
+      if (cogsKobo != null) 'cogs_kobo': cogsKobo,
+      if (grossProfitKobo != null) 'gross_profit_kobo': grossProfitKobo,
+      if (netProfitKobo != null) 'net_profit_kobo': netProfitKobo,
+      if (expensesKobo != null) 'expenses_kobo': expensesKobo,
+      if (damagesCostKobo != null) 'damages_cost_kobo': damagesCostKobo,
+      if (cashSalesKobo != null) 'cash_sales_kobo': cashSalesKobo,
+      if (cashInKobo != null) 'cash_in_kobo': cashInKobo,
+      if (cashOutKobo != null) 'cash_out_kobo': cashOutKobo,
+      if (netCashMovementKobo != null)
+        'net_cash_movement_kobo': netCashMovementKobo,
+      if (stockCogsKobo != null) 'stock_cogs_kobo': stockCogsKobo,
+      if (stockExpectedClosingKobo != null)
+        'stock_expected_closing_kobo': stockExpectedClosingKobo,
+      if (itemsSold != null) 'items_sold': itemsSold,
+      if (shortageUnits != null) 'shortage_units': shortageUnits,
+      if (reviewedBy != null) 'reviewed_by': reviewedBy,
+      if (reviewedAt != null) 'reviewed_at': reviewedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DailyClosingsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? businessDate,
+    Value<String?>? storeScopeId,
+    Value<int>? totalSalesKobo,
+    Value<int>? refundsKobo,
+    Value<int>? discountsKobo,
+    Value<int>? cogsKobo,
+    Value<int>? grossProfitKobo,
+    Value<int>? netProfitKobo,
+    Value<int>? expensesKobo,
+    Value<int>? damagesCostKobo,
+    Value<int>? cashSalesKobo,
+    Value<int>? cashInKobo,
+    Value<int>? cashOutKobo,
+    Value<int>? netCashMovementKobo,
+    Value<int>? stockCogsKobo,
+    Value<int>? stockExpectedClosingKobo,
+    Value<int>? itemsSold,
+    Value<int>? shortageUnits,
+    Value<String?>? reviewedBy,
+    Value<DateTime>? reviewedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return DailyClosingsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      businessDate: businessDate ?? this.businessDate,
+      storeScopeId: storeScopeId ?? this.storeScopeId,
+      totalSalesKobo: totalSalesKobo ?? this.totalSalesKobo,
+      refundsKobo: refundsKobo ?? this.refundsKobo,
+      discountsKobo: discountsKobo ?? this.discountsKobo,
+      cogsKobo: cogsKobo ?? this.cogsKobo,
+      grossProfitKobo: grossProfitKobo ?? this.grossProfitKobo,
+      netProfitKobo: netProfitKobo ?? this.netProfitKobo,
+      expensesKobo: expensesKobo ?? this.expensesKobo,
+      damagesCostKobo: damagesCostKobo ?? this.damagesCostKobo,
+      cashSalesKobo: cashSalesKobo ?? this.cashSalesKobo,
+      cashInKobo: cashInKobo ?? this.cashInKobo,
+      cashOutKobo: cashOutKobo ?? this.cashOutKobo,
+      netCashMovementKobo: netCashMovementKobo ?? this.netCashMovementKobo,
+      stockCogsKobo: stockCogsKobo ?? this.stockCogsKobo,
+      stockExpectedClosingKobo:
+          stockExpectedClosingKobo ?? this.stockExpectedClosingKobo,
+      itemsSold: itemsSold ?? this.itemsSold,
+      shortageUnits: shortageUnits ?? this.shortageUnits,
+      reviewedBy: reviewedBy ?? this.reviewedBy,
+      reviewedAt: reviewedAt ?? this.reviewedAt,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (businessDate.present) {
+      map['business_date'] = Variable<String>(businessDate.value);
+    }
+    if (storeScopeId.present) {
+      map['store_scope_id'] = Variable<String>(storeScopeId.value);
+    }
+    if (totalSalesKobo.present) {
+      map['total_sales_kobo'] = Variable<int>(totalSalesKobo.value);
+    }
+    if (refundsKobo.present) {
+      map['refunds_kobo'] = Variable<int>(refundsKobo.value);
+    }
+    if (discountsKobo.present) {
+      map['discounts_kobo'] = Variable<int>(discountsKobo.value);
+    }
+    if (cogsKobo.present) {
+      map['cogs_kobo'] = Variable<int>(cogsKobo.value);
+    }
+    if (grossProfitKobo.present) {
+      map['gross_profit_kobo'] = Variable<int>(grossProfitKobo.value);
+    }
+    if (netProfitKobo.present) {
+      map['net_profit_kobo'] = Variable<int>(netProfitKobo.value);
+    }
+    if (expensesKobo.present) {
+      map['expenses_kobo'] = Variable<int>(expensesKobo.value);
+    }
+    if (damagesCostKobo.present) {
+      map['damages_cost_kobo'] = Variable<int>(damagesCostKobo.value);
+    }
+    if (cashSalesKobo.present) {
+      map['cash_sales_kobo'] = Variable<int>(cashSalesKobo.value);
+    }
+    if (cashInKobo.present) {
+      map['cash_in_kobo'] = Variable<int>(cashInKobo.value);
+    }
+    if (cashOutKobo.present) {
+      map['cash_out_kobo'] = Variable<int>(cashOutKobo.value);
+    }
+    if (netCashMovementKobo.present) {
+      map['net_cash_movement_kobo'] = Variable<int>(netCashMovementKobo.value);
+    }
+    if (stockCogsKobo.present) {
+      map['stock_cogs_kobo'] = Variable<int>(stockCogsKobo.value);
+    }
+    if (stockExpectedClosingKobo.present) {
+      map['stock_expected_closing_kobo'] = Variable<int>(
+        stockExpectedClosingKobo.value,
+      );
+    }
+    if (itemsSold.present) {
+      map['items_sold'] = Variable<int>(itemsSold.value);
+    }
+    if (shortageUnits.present) {
+      map['shortage_units'] = Variable<int>(shortageUnits.value);
+    }
+    if (reviewedBy.present) {
+      map['reviewed_by'] = Variable<String>(reviewedBy.value);
+    }
+    if (reviewedAt.present) {
+      map['reviewed_at'] = Variable<DateTime>(reviewedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DailyClosingsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('businessDate: $businessDate, ')
+          ..write('storeScopeId: $storeScopeId, ')
+          ..write('totalSalesKobo: $totalSalesKobo, ')
+          ..write('refundsKobo: $refundsKobo, ')
+          ..write('discountsKobo: $discountsKobo, ')
+          ..write('cogsKobo: $cogsKobo, ')
+          ..write('grossProfitKobo: $grossProfitKobo, ')
+          ..write('netProfitKobo: $netProfitKobo, ')
+          ..write('expensesKobo: $expensesKobo, ')
+          ..write('damagesCostKobo: $damagesCostKobo, ')
+          ..write('cashSalesKobo: $cashSalesKobo, ')
+          ..write('cashInKobo: $cashInKobo, ')
+          ..write('cashOutKobo: $cashOutKobo, ')
+          ..write('netCashMovementKobo: $netCashMovementKobo, ')
+          ..write('stockCogsKobo: $stockCogsKobo, ')
+          ..write('stockExpectedClosingKobo: $stockExpectedClosingKobo, ')
+          ..write('itemsSold: $itemsSold, ')
+          ..write('shortageUnits: $shortageUnits, ')
+          ..write('reviewedBy: $reviewedBy, ')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ActivityLogsTable extends ActivityLogs
     with TableInfo<$ActivityLogsTable, ActivityLogData> {
   @override
@@ -39137,6 +40494,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PaymentTransactionsTable paymentTransactions =
       $PaymentTransactionsTable(this);
   late final $StockCountsTable stockCounts = $StockCountsTable(this);
+  late final $DailyClosingsTable dailyClosings = $DailyClosingsTable(this);
   late final $ActivityLogsTable activityLogs = $ActivityLogsTable(this);
   late final $ErrorLogsTable errorLogs = $ErrorLogsTable(this);
   late final $NotificationsTable notifications = $NotificationsTable(this);
@@ -39175,6 +40533,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final ShipmentsDao shipmentsDao = ShipmentsDao(this as AppDatabase);
   late final ExpensesDao expensesDao = ExpensesDao(this as AppDatabase);
   late final ExpenseBudgetsDao expenseBudgetsDao = ExpenseBudgetsDao(
+    this as AppDatabase,
+  );
+  late final DailyClosingsDao dailyClosingsDao = DailyClosingsDao(
     this as AppDatabase,
   );
   late final SyncDao syncDao = SyncDao(this as AppDatabase);
@@ -39299,6 +40660,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     savedCarts,
     paymentTransactions,
     stockCounts,
+    dailyClosings,
     activityLogs,
     errorLogs,
     notifications,
@@ -40231,6 +41593,27 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_stockCountsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$DailyClosingsTable, List<DailyClosingData>>
+  _dailyClosingsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.dailyClosings,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.dailyClosings.businessId,
+    ),
+  );
+
+  $$DailyClosingsTableProcessedTableManager get dailyClosingsRefs {
+    final manager = $$DailyClosingsTableTableManager(
+      $_db,
+      $_db.dailyClosings,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dailyClosingsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -41591,6 +42974,31 @@ class $$BusinessesTableFilterComposer
           }) => $$StockCountsTableFilterComposer(
             $db: $db,
             $table: $db.stockCounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dailyClosingsRefs(
+    Expression<bool> Function($$DailyClosingsTableFilterComposer f) f,
+  ) {
+    final $$DailyClosingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableFilterComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -43103,6 +44511,31 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> dailyClosingsRefs<T extends Object>(
+    Expression<T> Function($$DailyClosingsTableAnnotationComposer a) f,
+  ) {
+    final $$DailyClosingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> activityLogsRefs<T extends Object>(
     Expression<T> Function($$ActivityLogsTableAnnotationComposer a) f,
   ) {
@@ -43510,6 +44943,7 @@ class $$BusinessesTableTableManager
             bool savedCartsRefs,
             bool paymentTransactionsRefs,
             bool stockCountsRefs,
+            bool dailyClosingsRefs,
             bool activityLogsRefs,
             bool errorLogsRefs,
             bool notificationsRefs,
@@ -43662,6 +45096,7 @@ class $$BusinessesTableTableManager
                 savedCartsRefs = false,
                 paymentTransactionsRefs = false,
                 stockCountsRefs = false,
+                dailyClosingsRefs = false,
                 activityLogsRefs = false,
                 errorLogsRefs = false,
                 notificationsRefs = false,
@@ -43720,6 +45155,7 @@ class $$BusinessesTableTableManager
                     if (savedCartsRefs) db.savedCarts,
                     if (paymentTransactionsRefs) db.paymentTransactions,
                     if (stockCountsRefs) db.stockCounts,
+                    if (dailyClosingsRefs) db.dailyClosings,
                     if (activityLogsRefs) db.activityLogs,
                     if (errorLogsRefs) db.errorLogs,
                     if (notificationsRefs) db.notifications,
@@ -44557,6 +45993,27 @@ class $$BusinessesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (dailyClosingsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          DailyClosingData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._dailyClosingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dailyClosingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (activityLogsRefs)
                         await $_getPrefetchedData<
                           BusinessData,
@@ -44911,6 +46368,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool savedCartsRefs,
         bool paymentTransactionsRefs,
         bool stockCountsRefs,
+        bool dailyClosingsRefs,
         bool activityLogsRefs,
         bool errorLogsRefs,
         bool notificationsRefs,
@@ -47410,6 +48868,27 @@ final class $$StoresTableReferences
     );
   }
 
+  static MultiTypedResultKey<$DailyClosingsTable, List<DailyClosingData>>
+  _dailyClosingsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.dailyClosings,
+    aliasName: $_aliasNameGenerator(
+      db.stores.id,
+      db.dailyClosings.storeScopeId,
+    ),
+  );
+
+  $$DailyClosingsTableProcessedTableManager get dailyClosingsRefs {
+    final manager = $$DailyClosingsTableTableManager(
+      $_db,
+      $_db.dailyClosings,
+    ).filter((f) => f.storeScopeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dailyClosingsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$ActivityLogsTable, List<ActivityLogData>>
   _activityLogsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.activityLogs,
@@ -48023,6 +49502,31 @@ class $$StoresTableFilterComposer
           }) => $$StockCountsTableFilterComposer(
             $db: $db,
             $table: $db.stockCounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dailyClosingsRefs(
+    Expression<bool> Function($$DailyClosingsTableFilterComposer f) f,
+  ) {
+    final $$DailyClosingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.storeScopeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableFilterComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -48731,6 +50235,31 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> dailyClosingsRefs<T extends Object>(
+    Expression<T> Function($$DailyClosingsTableAnnotationComposer a) f,
+  ) {
+    final $$DailyClosingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.storeScopeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> activityLogsRefs<T extends Object>(
     Expression<T> Function($$ActivityLogsTableAnnotationComposer a) f,
   ) {
@@ -48867,6 +50396,7 @@ class $$StoresTableTableManager
             bool savedCartsRefs,
             bool paymentTransactionsRefs,
             bool stockCountsRefs,
+            bool dailyClosingsRefs,
             bool activityLogsRefs,
             bool storeRolePermissionsRefs,
             bool inviteCodesRefs,
@@ -48952,6 +50482,7 @@ class $$StoresTableTableManager
                 savedCartsRefs = false,
                 paymentTransactionsRefs = false,
                 stockCountsRefs = false,
+                dailyClosingsRefs = false,
                 activityLogsRefs = false,
                 storeRolePermissionsRefs = false,
                 inviteCodesRefs = false,
@@ -48979,6 +50510,7 @@ class $$StoresTableTableManager
                     if (savedCartsRefs) db.savedCarts,
                     if (paymentTransactionsRefs) db.paymentTransactions,
                     if (stockCountsRefs) db.stockCounts,
+                    if (dailyClosingsRefs) db.dailyClosings,
                     if (activityLogsRefs) db.activityLogs,
                     if (storeRolePermissionsRefs) db.storeRolePermissions,
                     if (inviteCodesRefs) db.inviteCodes,
@@ -49409,6 +50941,27 @@ class $$StoresTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (dailyClosingsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          DailyClosingData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._dailyClosingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dailyClosingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeScopeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (activityLogsRefs)
                         await $_getPrefetchedData<
                           StoreData,
@@ -49534,6 +51087,7 @@ typedef $$StoresTableProcessedTableManager =
         bool savedCartsRefs,
         bool paymentTransactionsRefs,
         bool stockCountsRefs,
+        bool dailyClosingsRefs,
         bool activityLogsRefs,
         bool storeRolePermissionsRefs,
         bool inviteCodesRefs,
@@ -49658,6 +51212,24 @@ final class $$UsersTableReferences
     ).filter((f) => f.countedBy.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_stockCountsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$DailyClosingsTable, List<DailyClosingData>>
+  _dailyClosingsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.dailyClosings,
+    aliasName: $_aliasNameGenerator(db.users.id, db.dailyClosings.reviewedBy),
+  );
+
+  $$DailyClosingsTableProcessedTableManager get dailyClosingsRefs {
+    final manager = $$DailyClosingsTableTableManager(
+      $_db,
+      $_db.dailyClosings,
+    ).filter((f) => f.reviewedBy.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dailyClosingsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -49955,6 +51527,31 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
           }) => $$StockCountsTableFilterComposer(
             $db: $db,
             $table: $db.stockCounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dailyClosingsRefs(
+    Expression<bool> Function($$DailyClosingsTableFilterComposer f) f,
+  ) {
+    final $$DailyClosingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.reviewedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableFilterComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50409,6 +52006,31 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> dailyClosingsRefs<T extends Object>(
+    Expression<T> Function($$DailyClosingsTableAnnotationComposer a) f,
+  ) {
+    final $$DailyClosingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.reviewedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> errorLogsRefs<T extends Object>(
     Expression<T> Function($$ErrorLogsTableAnnotationComposer a) f,
   ) {
@@ -50580,6 +52202,7 @@ class $$UsersTableTableManager
             bool storeId,
             bool stockAdjustmentsRefs,
             bool stockCountsRefs,
+            bool dailyClosingsRefs,
             bool errorLogsRefs,
             bool notificationsRefs,
             bool sessionsRefs,
@@ -50691,6 +52314,7 @@ class $$UsersTableTableManager
                 storeId = false,
                 stockAdjustmentsRefs = false,
                 stockCountsRefs = false,
+                dailyClosingsRefs = false,
                 errorLogsRefs = false,
                 notificationsRefs = false,
                 sessionsRefs = false,
@@ -50703,6 +52327,7 @@ class $$UsersTableTableManager
                   explicitlyWatchedTables: [
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (stockCountsRefs) db.stockCounts,
+                    if (dailyClosingsRefs) db.dailyClosings,
                     if (errorLogsRefs) db.errorLogs,
                     if (notificationsRefs) db.notifications,
                     if (sessionsRefs) db.sessions,
@@ -50796,6 +52421,27 @@ class $$UsersTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.countedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (dailyClosingsRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          DailyClosingData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._dailyClosingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dailyClosingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.reviewedBy == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -50950,6 +52596,7 @@ typedef $$UsersTableProcessedTableManager =
         bool storeId,
         bool stockAdjustmentsRefs,
         bool stockCountsRefs,
+        bool dailyClosingsRefs,
         bool errorLogsRefs,
         bool notificationsRefs,
         bool sessionsRefs,
@@ -80926,6 +82573,915 @@ typedef $$StockCountsTableProcessedTableManager =
       StockCountData,
       PrefetchHooks Function({bool businessId, bool storeId, bool countedBy})
     >;
+typedef $$DailyClosingsTableCreateCompanionBuilder =
+    DailyClosingsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String businessDate,
+      Value<String?> storeScopeId,
+      Value<int> totalSalesKobo,
+      Value<int> refundsKobo,
+      Value<int> discountsKobo,
+      Value<int> cogsKobo,
+      Value<int> grossProfitKobo,
+      Value<int> netProfitKobo,
+      Value<int> expensesKobo,
+      Value<int> damagesCostKobo,
+      Value<int> cashSalesKobo,
+      Value<int> cashInKobo,
+      Value<int> cashOutKobo,
+      Value<int> netCashMovementKobo,
+      Value<int> stockCogsKobo,
+      Value<int> stockExpectedClosingKobo,
+      Value<int> itemsSold,
+      Value<int> shortageUnits,
+      Value<String?> reviewedBy,
+      Value<DateTime> reviewedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$DailyClosingsTableUpdateCompanionBuilder =
+    DailyClosingsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> businessDate,
+      Value<String?> storeScopeId,
+      Value<int> totalSalesKobo,
+      Value<int> refundsKobo,
+      Value<int> discountsKobo,
+      Value<int> cogsKobo,
+      Value<int> grossProfitKobo,
+      Value<int> netProfitKobo,
+      Value<int> expensesKobo,
+      Value<int> damagesCostKobo,
+      Value<int> cashSalesKobo,
+      Value<int> cashInKobo,
+      Value<int> cashOutKobo,
+      Value<int> netCashMovementKobo,
+      Value<int> stockCogsKobo,
+      Value<int> stockExpectedClosingKobo,
+      Value<int> itemsSold,
+      Value<int> shortageUnits,
+      Value<String?> reviewedBy,
+      Value<DateTime> reviewedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$DailyClosingsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $DailyClosingsTable, DailyClosingData> {
+  $$DailyClosingsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.dailyClosings.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeScopeIdTable(_$AppDatabase db) =>
+      db.stores.createAlias(
+        $_aliasNameGenerator(db.dailyClosings.storeScopeId, db.stores.id),
+      );
+
+  $$StoresTableProcessedTableManager? get storeScopeId {
+    final $_column = $_itemColumn<String>('store_scope_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeScopeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _reviewedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.dailyClosings.reviewedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get reviewedBy {
+    final $_column = $_itemColumn<String>('reviewed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_reviewedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$DailyClosingsTableFilterComposer
+    extends Composer<_$AppDatabase, $DailyClosingsTable> {
+  $$DailyClosingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get businessDate => $composableBuilder(
+    column: $table.businessDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get totalSalesKobo => $composableBuilder(
+    column: $table.totalSalesKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get refundsKobo => $composableBuilder(
+    column: $table.refundsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get discountsKobo => $composableBuilder(
+    column: $table.discountsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cogsKobo => $composableBuilder(
+    column: $table.cogsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get grossProfitKobo => $composableBuilder(
+    column: $table.grossProfitKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get netProfitKobo => $composableBuilder(
+    column: $table.netProfitKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expensesKobo => $composableBuilder(
+    column: $table.expensesKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get damagesCostKobo => $composableBuilder(
+    column: $table.damagesCostKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cashSalesKobo => $composableBuilder(
+    column: $table.cashSalesKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cashInKobo => $composableBuilder(
+    column: $table.cashInKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cashOutKobo => $composableBuilder(
+    column: $table.cashOutKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get netCashMovementKobo => $composableBuilder(
+    column: $table.netCashMovementKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stockCogsKobo => $composableBuilder(
+    column: $table.stockCogsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stockExpectedClosingKobo => $composableBuilder(
+    column: $table.stockExpectedClosingKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get itemsSold => $composableBuilder(
+    column: $table.itemsSold,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shortageUnits => $composableBuilder(
+    column: $table.shortageUnits,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeScopeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeScopeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get reviewedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reviewedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DailyClosingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DailyClosingsTable> {
+  $$DailyClosingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get businessDate => $composableBuilder(
+    column: $table.businessDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalSalesKobo => $composableBuilder(
+    column: $table.totalSalesKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get refundsKobo => $composableBuilder(
+    column: $table.refundsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get discountsKobo => $composableBuilder(
+    column: $table.discountsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cogsKobo => $composableBuilder(
+    column: $table.cogsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get grossProfitKobo => $composableBuilder(
+    column: $table.grossProfitKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get netProfitKobo => $composableBuilder(
+    column: $table.netProfitKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expensesKobo => $composableBuilder(
+    column: $table.expensesKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get damagesCostKobo => $composableBuilder(
+    column: $table.damagesCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cashSalesKobo => $composableBuilder(
+    column: $table.cashSalesKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cashInKobo => $composableBuilder(
+    column: $table.cashInKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cashOutKobo => $composableBuilder(
+    column: $table.cashOutKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get netCashMovementKobo => $composableBuilder(
+    column: $table.netCashMovementKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stockCogsKobo => $composableBuilder(
+    column: $table.stockCogsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stockExpectedClosingKobo => $composableBuilder(
+    column: $table.stockExpectedClosingKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get itemsSold => $composableBuilder(
+    column: $table.itemsSold,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shortageUnits => $composableBuilder(
+    column: $table.shortageUnits,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeScopeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeScopeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get reviewedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reviewedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DailyClosingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DailyClosingsTable> {
+  $$DailyClosingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get businessDate => $composableBuilder(
+    column: $table.businessDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get totalSalesKobo => $composableBuilder(
+    column: $table.totalSalesKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get refundsKobo => $composableBuilder(
+    column: $table.refundsKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get discountsKobo => $composableBuilder(
+    column: $table.discountsKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cogsKobo =>
+      $composableBuilder(column: $table.cogsKobo, builder: (column) => column);
+
+  GeneratedColumn<int> get grossProfitKobo => $composableBuilder(
+    column: $table.grossProfitKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get netProfitKobo => $composableBuilder(
+    column: $table.netProfitKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expensesKobo => $composableBuilder(
+    column: $table.expensesKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get damagesCostKobo => $composableBuilder(
+    column: $table.damagesCostKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cashSalesKobo => $composableBuilder(
+    column: $table.cashSalesKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cashInKobo => $composableBuilder(
+    column: $table.cashInKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cashOutKobo => $composableBuilder(
+    column: $table.cashOutKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get netCashMovementKobo => $composableBuilder(
+    column: $table.netCashMovementKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stockCogsKobo => $composableBuilder(
+    column: $table.stockCogsKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stockExpectedClosingKobo => $composableBuilder(
+    column: $table.stockExpectedClosingKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get itemsSold =>
+      $composableBuilder(column: $table.itemsSold, builder: (column) => column);
+
+  GeneratedColumn<int> get shortageUnits => $composableBuilder(
+    column: $table.shortageUnits,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeScopeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeScopeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get reviewedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reviewedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DailyClosingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DailyClosingsTable,
+          DailyClosingData,
+          $$DailyClosingsTableFilterComposer,
+          $$DailyClosingsTableOrderingComposer,
+          $$DailyClosingsTableAnnotationComposer,
+          $$DailyClosingsTableCreateCompanionBuilder,
+          $$DailyClosingsTableUpdateCompanionBuilder,
+          (DailyClosingData, $$DailyClosingsTableReferences),
+          DailyClosingData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool storeScopeId,
+            bool reviewedBy,
+          })
+        > {
+  $$DailyClosingsTableTableManager(_$AppDatabase db, $DailyClosingsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DailyClosingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DailyClosingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DailyClosingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> businessDate = const Value.absent(),
+                Value<String?> storeScopeId = const Value.absent(),
+                Value<int> totalSalesKobo = const Value.absent(),
+                Value<int> refundsKobo = const Value.absent(),
+                Value<int> discountsKobo = const Value.absent(),
+                Value<int> cogsKobo = const Value.absent(),
+                Value<int> grossProfitKobo = const Value.absent(),
+                Value<int> netProfitKobo = const Value.absent(),
+                Value<int> expensesKobo = const Value.absent(),
+                Value<int> damagesCostKobo = const Value.absent(),
+                Value<int> cashSalesKobo = const Value.absent(),
+                Value<int> cashInKobo = const Value.absent(),
+                Value<int> cashOutKobo = const Value.absent(),
+                Value<int> netCashMovementKobo = const Value.absent(),
+                Value<int> stockCogsKobo = const Value.absent(),
+                Value<int> stockExpectedClosingKobo = const Value.absent(),
+                Value<int> itemsSold = const Value.absent(),
+                Value<int> shortageUnits = const Value.absent(),
+                Value<String?> reviewedBy = const Value.absent(),
+                Value<DateTime> reviewedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DailyClosingsCompanion(
+                id: id,
+                businessId: businessId,
+                businessDate: businessDate,
+                storeScopeId: storeScopeId,
+                totalSalesKobo: totalSalesKobo,
+                refundsKobo: refundsKobo,
+                discountsKobo: discountsKobo,
+                cogsKobo: cogsKobo,
+                grossProfitKobo: grossProfitKobo,
+                netProfitKobo: netProfitKobo,
+                expensesKobo: expensesKobo,
+                damagesCostKobo: damagesCostKobo,
+                cashSalesKobo: cashSalesKobo,
+                cashInKobo: cashInKobo,
+                cashOutKobo: cashOutKobo,
+                netCashMovementKobo: netCashMovementKobo,
+                stockCogsKobo: stockCogsKobo,
+                stockExpectedClosingKobo: stockExpectedClosingKobo,
+                itemsSold: itemsSold,
+                shortageUnits: shortageUnits,
+                reviewedBy: reviewedBy,
+                reviewedAt: reviewedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String businessDate,
+                Value<String?> storeScopeId = const Value.absent(),
+                Value<int> totalSalesKobo = const Value.absent(),
+                Value<int> refundsKobo = const Value.absent(),
+                Value<int> discountsKobo = const Value.absent(),
+                Value<int> cogsKobo = const Value.absent(),
+                Value<int> grossProfitKobo = const Value.absent(),
+                Value<int> netProfitKobo = const Value.absent(),
+                Value<int> expensesKobo = const Value.absent(),
+                Value<int> damagesCostKobo = const Value.absent(),
+                Value<int> cashSalesKobo = const Value.absent(),
+                Value<int> cashInKobo = const Value.absent(),
+                Value<int> cashOutKobo = const Value.absent(),
+                Value<int> netCashMovementKobo = const Value.absent(),
+                Value<int> stockCogsKobo = const Value.absent(),
+                Value<int> stockExpectedClosingKobo = const Value.absent(),
+                Value<int> itemsSold = const Value.absent(),
+                Value<int> shortageUnits = const Value.absent(),
+                Value<String?> reviewedBy = const Value.absent(),
+                Value<DateTime> reviewedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DailyClosingsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                businessDate: businessDate,
+                storeScopeId: storeScopeId,
+                totalSalesKobo: totalSalesKobo,
+                refundsKobo: refundsKobo,
+                discountsKobo: discountsKobo,
+                cogsKobo: cogsKobo,
+                grossProfitKobo: grossProfitKobo,
+                netProfitKobo: netProfitKobo,
+                expensesKobo: expensesKobo,
+                damagesCostKobo: damagesCostKobo,
+                cashSalesKobo: cashSalesKobo,
+                cashInKobo: cashInKobo,
+                cashOutKobo: cashOutKobo,
+                netCashMovementKobo: netCashMovementKobo,
+                stockCogsKobo: stockCogsKobo,
+                stockExpectedClosingKobo: stockExpectedClosingKobo,
+                itemsSold: itemsSold,
+                shortageUnits: shortageUnits,
+                reviewedBy: reviewedBy,
+                reviewedAt: reviewedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$DailyClosingsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({businessId = false, storeScopeId = false, reviewedBy = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$DailyClosingsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$DailyClosingsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeScopeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeScopeId,
+                                    referencedTable:
+                                        $$DailyClosingsTableReferences
+                                            ._storeScopeIdTable(db),
+                                    referencedColumn:
+                                        $$DailyClosingsTableReferences
+                                            ._storeScopeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (reviewedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.reviewedBy,
+                                    referencedTable:
+                                        $$DailyClosingsTableReferences
+                                            ._reviewedByTable(db),
+                                    referencedColumn:
+                                        $$DailyClosingsTableReferences
+                                            ._reviewedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$DailyClosingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DailyClosingsTable,
+      DailyClosingData,
+      $$DailyClosingsTableFilterComposer,
+      $$DailyClosingsTableOrderingComposer,
+      $$DailyClosingsTableAnnotationComposer,
+      $$DailyClosingsTableCreateCompanionBuilder,
+      $$DailyClosingsTableUpdateCompanionBuilder,
+      (DailyClosingData, $$DailyClosingsTableReferences),
+      DailyClosingData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool storeScopeId,
+        bool reviewedBy,
+      })
+    >;
 typedef $$ActivityLogsTableCreateCompanionBuilder =
     ActivityLogsCompanion Function({
       Value<String> id,
@@ -89910,6 +92466,8 @@ class $AppDatabaseManager {
       $$PaymentTransactionsTableTableManager(_db, _db.paymentTransactions);
   $$StockCountsTableTableManager get stockCounts =>
       $$StockCountsTableTableManager(_db, _db.stockCounts);
+  $$DailyClosingsTableTableManager get dailyClosings =>
+      $$DailyClosingsTableTableManager(_db, _db.dailyClosings);
   $$ActivityLogsTableTableManager get activityLogs =>
       $$ActivityLogsTableTableManager(_db, _db.activityLogs);
   $$ErrorLogsTableTableManager get errorLogs =>

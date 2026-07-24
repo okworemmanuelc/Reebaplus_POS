@@ -573,6 +573,64 @@ class StockCounts extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// #174 (PRD #155, ADR 0021 §2) — a persisted day close. The FIRST time a
+// permitted user (Manager+ via Gates.dailyReconciliation) opens a FINISHED
+// calendar day's Daily Reconciliation detail, the computed figure set is frozen
+// here as a synced snapshot: one row per (business, calendar day), natural-key
+// FIRST-WRITER-WINS (re-opening never overwrites). The detail thereafter renders
+// live figures alongside this snapshot with a per-card delta badge when they
+// diverge — silent history mutation (late syncs, cancels, backdated entries)
+// becomes VISIBLE. Purely OBSERVATIONAL: writing/reading a snapshot changes no
+// money flow and no existing figure. The id is DETERMINISTIC from
+// (business_id, business_date) so two devices mint the SAME id and converge
+// (see [UuidV7.deterministic]); every *_kobo column is bigint on the cloud
+// (0160). A normal synced tenant table (not a ledger, never hard-deleted).
+// Mirrors supabase/migrations/0160_money_integrity_daily_closings.sql.
+@DataClassName('DailyClosingData')
+class DailyClosings extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  // The calendar day being closed, YYYY-MM-DD (matches StockCounts.businessDate).
+  TextColumn get businessDate => text()();
+  // The §12.1 active-store scope the figures were captured in (null = All
+  // Stores). Informational only: the natural key is (business, day), so the
+  // delta badges render only when the current viewer's scope matches this.
+  TextColumn get storeScopeId => text().nullable().references(Stores, #id)();
+  // ── Frozen figure set (period-scoped; see ReconData in recon_data.dart) ──
+  IntColumn get totalSalesKobo => integer().withDefault(const Constant(0))();
+  IntColumn get refundsKobo => integer().withDefault(const Constant(0))();
+  IntColumn get discountsKobo => integer().withDefault(const Constant(0))();
+  IntColumn get cogsKobo => integer().withDefault(const Constant(0))();
+  IntColumn get grossProfitKobo => integer().withDefault(const Constant(0))();
+  IntColumn get netProfitKobo => integer().withDefault(const Constant(0))();
+  IntColumn get expensesKobo => integer().withDefault(const Constant(0))();
+  IntColumn get damagesCostKobo => integer().withDefault(const Constant(0))();
+  IntColumn get cashSalesKobo => integer().withDefault(const Constant(0))();
+  IntColumn get cashInKobo => integer().withDefault(const Constant(0))();
+  IntColumn get cashOutKobo => integer().withDefault(const Constant(0))();
+  IntColumn get netCashMovementKobo =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get stockCogsKobo => integer().withDefault(const Constant(0))();
+  IntColumn get stockExpectedClosingKobo =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get itemsSold => integer().withDefault(const Constant(0))();
+  IntColumn get shortageUnits => integer().withDefault(const Constant(0))();
+  // Who reviewed (froze) the day, and when (review time).
+  TextColumn get reviewedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get reviewedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (business_id, business_date)',
+  ];
+}
+
 class CustomerCrateBalances extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
@@ -1777,6 +1835,7 @@ class MigrationEvents extends Table {
     PendingCrateReturns,
     PaymentTransactions,
     StockCounts,
+    DailyClosings,
     ActivityLogs,
     ErrorLogs,
     Notifications,
@@ -1806,6 +1865,7 @@ class MigrationEvents extends Table {
     ShipmentsDao,
     ExpensesDao,
     ExpenseBudgetsDao,
+    DailyClosingsDao,
     SyncDao,
     ActivityLogDao,
     ErrorLogDao,
@@ -1875,7 +1935,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 65;
+  int get schemaVersion => 70;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4180,6 +4240,40 @@ class AppDatabase extends _$AppDatabase {
           "VALUES ('sales.confirm', "
           "'Confirm an order and settle crate deposits', 'Sales')",
         );
+      }
+      if (from < 70) {
+        // v70 (#174 persisted day close, PRD #155 / ADR 0021 §2). One new synced
+        // tenant table `daily_closings` — the first review of a finished
+        // calendar day freezes its computed figure set as a snapshot. Mirrors
+        // supabase/migrations/0160_money_integrity_daily_closings.sql.
+        //
+        // The (business_id, last_updated_at) sync index and the bump trigger
+        // match the generic `_postCreateStatements` loops so a fresh install
+        // (onCreate) and an upgrade end up identical. Idempotency guard (like
+        // v45/v46) for a DB stepped back to < 70 by the revert-then-re-upgrade
+        // tests. NOTE (cross-branch lane): schema versions 66–69 are reserved
+        // for parallel money-integrity branches; the orchestrator renumbers to
+        // contiguous at merge.
+        final dcExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='daily_closings'",
+        ).get();
+        if (dcExists.isEmpty) {
+          await m.createTable(dailyClosings);
+          await customStatement(
+            'CREATE INDEX idx_daily_closings_business_lua '
+            'ON daily_closings (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_daily_closings_last_updated_at '
+            'AFTER UPDATE ON daily_closings '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE daily_closings SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
       }
     },
     beforeOpen: (details) async {
