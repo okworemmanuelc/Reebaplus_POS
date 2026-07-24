@@ -31,6 +31,14 @@ ReconData recon({
   int stockExpiredKobo = 0,
   int stockOtherMovementsKobo = 0,
   int stockExpectedClosingKobo = 0,
+  // Business net position (#163) inputs — assets counted, liabilities netted.
+  int inventoryOnHandKobo = 0,
+  int totalOwedKobo = 0,
+  bool showCrates = false,
+  int crateDepositKobo = 0,
+  int supplierPayableKobo = 0,
+  int heldCrateDepositsKobo = 0,
+  int supplierCrateDebtKobo = 0,
 }) {
   return ReconData(
     totalRevenueKobo: totalRevenueKobo < 0 ? costedRevenueKobo : totalRevenueKobo,
@@ -68,12 +76,14 @@ ReconData recon({
     shortages: const [],
     goodsReceivedKobo: 0,
     supplierPaidKobo: 0,
-    totalOwedKobo: 0,
-    showCrates: false,
+    totalOwedKobo: totalOwedKobo,
+    showCrates: showCrates,
     crateUnits: 0,
-    crateDepositKobo: 0,
-    supplierPayableKobo: 0,
-    inventoryOnHandKobo: 0,
+    crateDepositKobo: crateDepositKobo,
+    supplierPayableKobo: supplierPayableKobo,
+    heldCrateDepositsKobo: heldCrateDepositsKobo,
+    supplierCrateDebtKobo: supplierCrateDebtKobo,
+    inventoryOnHandKobo: inventoryOnHandKobo,
     uncostedInventoryItems: 0,
     surplusCostKobo: surplusCostKobo,
     stockOpeningKobo: stockOpeningKobo,
@@ -242,6 +252,83 @@ void main() {
       expect(recon(stockExpectedClosingKobo: 1).hasStockFlow, isTrue);
       expect(recon(stockReceivedKobo: 1).hasStockFlow, isTrue);
       expect(recon(stockExpiredKobo: 1).hasStockFlow, isTrue);
+    });
+  });
+
+  group('ReconData business net position — crate honesty (#163)', () {
+    test('counts the empties asset AND subtracts both crate liabilities', () {
+      // Inventory 500,000 + customer debt 40,000 + empties held 90,000
+      //   − supplier money owed 30,000 − customer deposits held 60,000
+      //   − supplier crate debt 20,000 = 520,000.
+      final d = recon(
+        inventoryOnHandKobo: 500000,
+        totalOwedKobo: 40000,
+        showCrates: true,
+        crateDepositKobo: 90000,
+        supplierPayableKobo: 30000,
+        heldCrateDepositsKobo: 60000,
+        supplierCrateDebtKobo: 20000,
+      );
+      expect(d.businessNetPositionKobo, 520000);
+    });
+
+    test('a shop holding deposits and owing suppliers shows a LOWER, correct '
+        'net position than the asset-only figure', () {
+      // Same crate asset, but one shop has resolved liabilities and the other
+      // still holds customer deposits and owes suppliers empties.
+      final assetOnly = recon(
+        inventoryOnHandKobo: 500000,
+        showCrates: true,
+        crateDepositKobo: 90000,
+      );
+      final withLiabilities = recon(
+        inventoryOnHandKobo: 500000,
+        showCrates: true,
+        crateDepositKobo: 90000,
+        heldCrateDepositsKobo: 60000,
+        supplierCrateDebtKobo: 20000,
+      );
+      expect(assetOnly.businessNetPositionKobo, 590000);
+      expect(withLiabilities.businessNetPositionKobo, 510000);
+      expect(
+        withLiabilities.businessNetPositionKobo,
+        lessThan(assetOnly.businessNetPositionKobo),
+        reason: 'held deposits + supplier crate debt cut the honest position',
+      );
+      // The gap is exactly the two liability legs (80,000).
+      expect(
+        assetOnly.businessNetPositionKobo -
+            withLiabilities.businessNetPositionKobo,
+        80000,
+      );
+    });
+
+    test('each liability leg subtracts independently', () {
+      final base = recon(inventoryOnHandKobo: 100000, showCrates: true);
+      expect(base.businessNetPositionKobo, 100000);
+      expect(
+        recon(inventoryOnHandKobo: 100000, showCrates: true,
+                heldCrateDepositsKobo: 15000)
+            .businessNetPositionKobo,
+        85000,
+      );
+      expect(
+        recon(inventoryOnHandKobo: 100000, showCrates: true,
+                supplierCrateDebtKobo: 25000)
+            .businessNetPositionKobo,
+        75000,
+      );
+    });
+
+    test('a non-crate business (no crate legs) is unchanged — position is just '
+        'inventory + debt − supplier money owed', () {
+      final d = recon(
+        inventoryOnHandKobo: 200000,
+        totalOwedKobo: 50000,
+        supplierPayableKobo: 30000,
+      );
+      // No crate asset, no crate liabilities → 200,000 + 50,000 − 30,000.
+      expect(d.businessNetPositionKobo, 220000);
     });
   });
 

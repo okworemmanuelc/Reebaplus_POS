@@ -10,6 +10,48 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Crate pool #6 (#163) — net-position honesty (subtract held deposits + supplier debt) — CODE-COMPLETE (2026-07-24)
+Sixth slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
+Branch `feat/crate-pool-net-position-honesty` off `feat/crate-pool-cancel-completes-ledger`
+(#162, HEAD 0c7488b — #163 is STACKED on #162, not main). Makes the Daily
+Reconciliation "Business worth right now" figure (`businessNetPositionKobo`)
+honest about crate liabilities: it already books the physical empties as an
+ASSET (`crateDepositKobo`); this slice ALSO subtracts the two matching crate
+LIABILITIES. This comes last because it is only trustworthy once the balances
+are ledger-derived (#158/#159/#160/#162).
+- **Two liability legs, both ledger-derived + business-wide.** (1) Held customer
+  crate deposits — the money we still owe customers back on return — reuses the
+  existing `crateDepositSummaryProvider.heldKobo` (the `crate_deposit` wallet
+  family net: taken − refunded − forfeited). (2) Supplier crate debt — empties we
+  owe suppliers for the full crates they delivered — a NEW business-wide derived
+  read `CratePoolDao.watchSupplierCrateDebtValueKobo()` = `SUM(quantity_delta)`
+  per manufacturer across EVERY supplier × that manufacturer's current
+  `depositAmountKobo`, summed (the all-suppliers roll-up of #160's
+  `watchSupplierCrateDebt`, same join to the current deposit rate). Surfaced via
+  the new `supplierCrateDebtValueKoboProvider`.
+- **The getter.** `businessNetPositionKobo` = `inventoryOnHand + customerDebt +
+  crateAsset − supplierPayable − heldCustomerDeposits − supplierCrateDebt`. Both
+  crate legs are valued at the SAME current per-manufacturer deposit rate as the
+  physical-empties asset, so the asset and its two liabilities net symmetrically.
+  Gated on `showCrates` (a non-crate business carries no crate legs — they'd be 0
+  anyway: no deposit-family wallet rows, no `supplier_crate_ledger`). A shop
+  holding deposits and owing suppliers now shows a LOWER, correct position.
+- **UI + export.** The `_businessWorthCard` gains two subtracted lines ("Crate
+  deposits held for customers (now)" / "Crate debt owed to suppliers (now)",
+  shown only when non-zero) and the CSV export mirrors them (gated on
+  `showCrates`), so the displayed breakdown ties to the computed figure.
+- **No migration, no writes.** A pure derived read + getter; nothing enqueues,
+  no schema change, append-only ledgers untouched. Only reads the ledgers #158–
+  #162 already made authoritative.
+- **Tests (TDD, red→green).** `test/dashboard/recon_data_test.dart` gains a
+  net-position group (asset + both liability legs together; each leg subtracts
+  independently; a non-crate business is unchanged; a shop with liabilities shows
+  a lower position than the asset-only figure — the exact AC).
+  `test/crates/supplier_crate_debt_derived_test.dart` gains a business-wide value
+  group (all-suppliers roll-up = Σ net crates × rate; a supplier crate credit
+  nets the debt down; a settled brand = 0; re-emits live). Analyzer clean on all
+  touched files; `test/crates/` + `test/dashboard/` green (+136).
+
 ### Crate pool #5 (#162) — Cancel completes the crate ledger — CODE-COMPLETE (2026-07-24)
 Fifth slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
 Branch `feat/crate-pool-cancel-completes-ledger` off `main` (HEAD 12d0e4f). Makes

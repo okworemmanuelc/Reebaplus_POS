@@ -269,6 +269,17 @@ final supplierCrateDepositHeldProvider =
   whenAbsent: 0,
 );
 
+/// #163 — the business-wide crate debt WE owe suppliers, valued in kobo at the
+/// current per-manufacturer deposit rate, DERIVED from the append-only
+/// `supplier_crate_ledger` (all suppliers). Positive = empties we still owe for
+/// full crates delivered. The crate-side liability the net-position figure nets
+/// out (Daily Reconciliation), alongside held customer deposits.
+final supplierCrateDebtValueKoboProvider =
+    businessScopedStreamAutoDispose<int>(
+  (ref, db, businessId) => db.cratePoolDao.watchSupplierCrateDebtValueKobo(),
+  whenAbsent: 0,
+);
+
 /// One supplier's cumulative crates received from / returned (sent back) to
 /// them — running totals, not the net balance.
 final supplierCrateMovementTotalsProvider =

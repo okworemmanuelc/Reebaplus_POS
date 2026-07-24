@@ -1164,6 +1164,42 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// #163 — the business-wide supplier crate DEBT valued in kobo at the current
+  /// per-manufacturer deposit rate, DERIVED from the append-only
+  /// `supplier_crate_ledger` (never the demoted `supplier_crate_balances`
+  /// cache). Sums `quantity_delta` per manufacturer across EVERY supplier, values
+  /// each at that manufacturer's `depositAmountKobo`, and totals them — the
+  /// business-wide, all-suppliers roll-up of [watchSupplierCrateDebt] (same join
+  /// to the current deposit rate). Positive = empties WE still owe suppliers for
+  /// the full crates they delivered; a supplier crate credit (negative balance)
+  /// nets it down. This is the crate-side liability the net-position figure
+  /// subtracts, the analogue of the money-side supplier payable. Re-emits live
+  /// on any new supplier crate movement (the ledger insert is an observed write).
+  Stream<int> watchSupplierCrateDebtValueKobo() {
+    final sumExpr = supplierCrateLedger.quantityDelta.sum();
+    final query = selectOnly(supplierCrateLedger).join([
+      innerJoin(
+        manufacturers,
+        manufacturers.id.equalsExp(supplierCrateLedger.manufacturerId),
+      ),
+    ])
+      ..addColumns([manufacturers.depositAmountKobo, sumExpr])
+      ..where(whereBusiness(supplierCrateLedger))
+      ..groupBy([
+        supplierCrateLedger.manufacturerId,
+        manufacturers.depositAmountKobo,
+      ]);
+    return query.watch().map((rows) {
+      var total = 0;
+      for (final r in rows) {
+        final qty = r.read(sumExpr) ?? 0;
+        final rate = r.read(manufacturers.depositAmountKobo) ?? 0;
+        total += qty * rate;
+      }
+      return total;
+    });
+  }
+
   // ── Shared helpers ─────────────────────────────────────────────────────
 
   /// Append an append-only, store-stamped business-pool ledger row and enqueue

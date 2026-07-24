@@ -494,6 +494,14 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         if (d.showCrates)
           _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
         _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
+        // #163 — crate liabilities netted against the empties asset above: the
+        // deposits we still hold for customers (owed back on return) and the
+        // crate debt we owe suppliers for full crates delivered. Only shown when
+        // there is something to owe, so the card stays clean for a settled shop.
+        if (d.showCrates && d.heldCrateDepositsKobo != 0)
+          _line(context, theme, 'Crate deposits held for customers (now)', '− ${formatCurrency(d.heldCrateDepositsKobo / 100.0)}', color: dangerColor),
+        if (d.showCrates && d.supplierCrateDebtKobo != 0)
+          _line(context, theme, 'Crate debt owed to suppliers (now)', '− ${formatCurrency(d.supplierCrateDebtKobo / 100.0)}', color: dangerColor),
         // Supplier account position — tracks payments made to suppliers vs
         // goods received. Negative (red) = a debt we owe them for unpaid goods;
         // positive (green) = money we paid them in advance (a prepayment), not
@@ -798,6 +806,13 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         // Supplier account position: negative = a debt we owe for unpaid goods,
         // positive = money we paid the supplier in advance (a prepayment).
         ['Supplier account balance (now)', money(d.supplierAccountBalanceKobo)],
+        // #163 — crate liabilities netted into the position below.
+        if (d.showCrates)
+          ['Crate deposits held for customers (now)',
+            money(d.heldCrateDepositsKobo)],
+        if (d.showCrates)
+          ['Crate debt owed to suppliers (now)',
+            money(d.supplierCrateDebtKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
         // Cash flow (business-wide) — mirrors _cashFlowCard.
         ['Cash sales', money(d.cashSalesKobo)],

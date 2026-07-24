@@ -130,9 +130,26 @@ one place to call and cannot reintroduce the drift.
   docked spendable AND left "deposits held" inflated; the deposit-family debit
   deflates held to 0 and leaves spendable untouched — the wallet's own
   compensating-entry release (`settleCrateDepositReturn`). No migration.
-- **#163** — `businessNetPositionKobo` subtracts held customer crate deposits and
-  supplier crate debt (honest in both directions), which is only trustworthy once
-  balances are ledger-derived.
+- **#163 (DONE 2026-07-24)** — `businessNetPositionKobo` (Daily Reconciliation
+  "Business worth right now") now nets out BOTH crate liabilities against the
+  empties asset it already books: the crate deposits we still HOLD for customers
+  (`crateDepositSummaryProvider.heldKobo` — the `crate_deposit` wallet family net,
+  business-wide) and the crate debt we owe SUPPLIERS (a new business-wide derived
+  read `CratePoolDao.watchSupplierCrateDebtValueKobo` = `SUM(quantity_delta) ×
+  current per-manufacturer `depositAmountKobo`` over `supplier_crate_ledger`
+  across every supplier, surfaced via `supplierCrateDebtValueKoboProvider`). Both
+  legs are ledger-derived (trustworthy only after #158–#162), business-wide (like
+  outstanding customer debt), gated on `showCrates`, and valued at the SAME
+  current deposit rate as the physical-empties asset — so the asset and its two
+  matching liabilities net symmetrically. A shop holding deposits and owing
+  suppliers now shows a lower, honest position; the detail card + CSV export gain
+  the two subtracted lines. No migration, no writes (a pure read + getter). Tests:
+  `recon_data_test.dart` gains a net-position group (asset + both liability legs,
+  each subtracting independently, non-crate business unchanged);
+  `supplier_crate_debt_derived_test.dart` gains a business-wide value group
+  (all-suppliers roll-up, credit nets down, settled = 0, live). **After this slice
+  the crate asset is booked AND both crate liabilities are subtracted — the
+  net-position figure is honest in both directions.**
 
 ## Invariants that still bind
 
