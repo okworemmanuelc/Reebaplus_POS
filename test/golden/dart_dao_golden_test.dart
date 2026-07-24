@@ -185,13 +185,26 @@ void main() {
           scenario.checkout.discountKobo, scenario.maxDiscountPercent, gross);
       final net = gross - discount;
 
+      // #175: the crate deposit paid at checkout, keyed by manufacturer id. Added
+      // ON TOP of the goods total — the grand total the checkout passes is
+      // goods + deposit, and createOrder carves the deposit into its own
+      // `crate_deposit` payment row. 0 for the Slice 2–4 fixtures.
+      final depositByMfrId = <String, int>{
+        for (final e in scenario.checkout.depositPaidByManufacturer.entries)
+          manufacturerIdByKey[e.key]!: e.value,
+      };
+      final depositTotal =
+          depositByMfrId.values.fold<int>(0, (s, v) => s + v);
+      final grandTotal = net + depositTotal;
+
       // The cash actually settled: for a walk-in cash/transfer it's the net; for
       // a credit/wallet sale it's exactly what the fixture tendered (0 for a
       // Pay-with-Credit or a no-cash Credit Sale). The wallet's DEBIT leg is the
-      // net owed, so createOrder's totalAmountKobo arg is [net] (the debit basis,
-      // deposit carve-out is Slice 4), while the order header keeps gross.
+      // grand total owed (goods + held deposit), so createOrder's
+      // totalAmountKobo arg is [grandTotal], while the order header carries the
+      // same grand total (deposit inclusive).
       final cashPaid =
-          customerId != null ? scenario.checkout.amountPaidKobo : net;
+          customerId != null ? scenario.checkout.amountPaidKobo : grandTotal;
       // createOrder uses paymentMethod only to label the CREDIT leg's reference
       // (topup_cash / topup_transfer). The RPC maps every non-transfer tender to
       // topup_cash, so mirror that: 'transfer' stays, everything else → 'cash'.
@@ -226,23 +239,25 @@ void main() {
           id: Value(orderId),
           businessId: businessId,
           orderNumber: orderNumber,
-          totalAmountKobo: gross,
+          totalAmountKobo: gross + depositTotal,
           discountKobo: Value(discount),
-          netAmountKobo: net,
+          netAmountKobo: grandTotal,
           amountPaidKobo: Value(cashPaid),
           paymentType: 'cash',
           status: 'pending',
           staffId: Value(staffId),
           storeId: Value(storeId),
           customerId: Value(customerId),
+          crateDepositPaidKobo: Value(depositTotal),
         ),
         items: items,
         customerId: customerId,
         amountPaidKobo: cashPaid,
-        totalAmountKobo: net,
+        totalAmountKobo: grandTotal,
         staffId: staffId,
         storeId: storeId,
         paymentMethod: tenderMethod,
+        crateDepositPaidByManufacturer: depositByMfrId,
       );
 
       // ── Collect the resulting rows in fixture terms ────────────────────────
@@ -259,6 +274,17 @@ void main() {
       final payment = await (db.select(db.paymentTransactions)
             ..where((p) => p.orderId.equals(orderId) & p.type.equals('sale')))
           .getSingleOrNull();
+      // #175: the non-`sale` money rows this checkout posted (crate_deposit /
+      // wallet_topup), for the split assertion.
+      final extraPaymentRows = await (db.select(db.paymentTransactions)
+            ..where((p) =>
+                p.orderId.equals(orderId) & p.type.equals('sale').not()))
+          .get();
+      final extraPayments = [
+        for (final p in extraPaymentRows)
+          ActualTypedPayment(
+              type: p.type, method: p.method, amountKobo: p.amountKobo),
+      ];
 
       // Wallet legs THIS sale posted (order_id == this order — excludes the
       // seeded opening balance) + the customer's derived spendable balance.
@@ -375,6 +401,7 @@ void main() {
             ? null
             : ActualPayment(
                 method: payment.method, amountKobo: payment.amountKobo),
+        extraPayments: extraPayments,
         walletLegs: walletLegs,
         customerBalanceAfter: customerBalanceAfter,
         crateLines: crateLines,

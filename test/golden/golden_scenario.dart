@@ -80,8 +80,15 @@ class FxCheckout {
   final int discountKobo;
   final int amountPaidKobo;
   final List<FxCheckoutLine> items;
+
+  /// #175 (money integrity #5): the crate deposit actually paid at checkout, per
+  /// manufacturer key (kobo). Empty for the Slice 2–4 fixtures (the web
+  /// crate-track path collects no deposit money). When set, the runner carves it
+  /// out into its own `crate_deposit` payment row and adds it to the order total.
+  final Map<String, int> depositPaidByManufacturer;
   FxCheckout(this.paymentMethod, this.discountKobo, this.amountPaidKobo,
-      this.items);
+      this.items,
+      {this.depositPaidByManufacturer = const {}});
 }
 
 /// A registered customer attached to a credit/wallet scenario (Slice 3, #44).
@@ -138,6 +145,21 @@ class ExpectedPayment {
   ExpectedPayment(Map<String, dynamic> j)
       : method = j['method'] as String,
         amountKobo = j['amount_kobo'] as int;
+}
+
+/// #175: a NON-`sale` money row the checkout is expected to post — a
+/// `crate_deposit` (the refundable held deposit) or a `wallet_topup` (an
+/// overpayment's excess). Compared as a multiset by [signature].
+class ExpectedTypedPayment {
+  final String type;
+  final String method;
+  final int amountKobo;
+  ExpectedTypedPayment(Map<String, dynamic> j)
+      : type = j['type'] as String,
+        method = j['method'] as String,
+        amountKobo = j['amount_kobo'] as int;
+
+  String get signature => '$type|$method|$amountKobo';
 }
 
 /// One wallet ledger leg the checkout is expected to post (Slice 3). Compared as
@@ -205,6 +227,13 @@ class GoldenScenario {
   /// hide-don't-write. Only the debt-limit guard is modelled today.
   final String? expectRejection;
 
+  /// #175: true ⇒ the SQL `checkout_order` RPC arm SKIPS this scenario. The
+  /// tender/deposit/overpayment row split is implemented on the mobile (Dart)
+  /// arm; the web RPC must add the matching split before it can honour these —
+  /// flagged to the web repo, out of scope for the mobile issue. The Dart arm
+  /// always runs them.
+  final bool dartArmOnly;
+
   /// The expected order header, or null for a rejection scenario (no rows).
   final ExpectedOrder? expectedOrder;
   final List<ExpectedItem> expectedItems;
@@ -218,9 +247,15 @@ class GoldenScenario {
   /// productKey → expected recomputed scalar buying_price_kobo cache.
   final Map<String, int> expectedScalarCost;
 
-  /// The expected cash payment row, or null when the sale settled no cash (a
-  /// pay-with-credit / pure credit sale posts no payment_transactions row).
+  /// The expected cash `sale` payment row, or null when the sale settled no cash
+  /// (a pay-with-credit / pure credit sale posts no `sale` row).
   final ExpectedPayment? expectedPayment;
+
+  /// #175: the NON-`sale` money rows the checkout is expected to post — the
+  /// `crate_deposit` (held) and/or `wallet_topup` (overpayment excess) rows.
+  /// Empty for the Slice 2–4 fixtures, so the multiset assertion is a no-op
+  /// there. Compared order-independently.
+  final List<ExpectedTypedPayment> expectedExtraPayments;
 
   /// The wallet legs the sale is expected to post (empty for a walk-in).
   final List<ExpectedWalletLeg> expectedWalletLegs;
@@ -252,12 +287,14 @@ class GoldenScenario {
     required this.checkout,
     required this.maxDiscountPercent,
     required this.expectRejection,
+    required this.dartArmOnly,
     required this.expectedOrder,
     required this.expectedItems,
     required this.expectedBatchRemaining,
     required this.expectedInventory,
     required this.expectedScalarCost,
     required this.expectedPayment,
+    required this.expectedExtraPayments,
     required this.expectedWalletLegs,
     required this.expectedCustomerBalanceAfterKobo,
     required this.expectedCrateLines,
@@ -342,9 +379,16 @@ class GoldenScenario {
             .map((i) =>
                 FxCheckoutLine(i['product'] as String, i['quantity'] as int))
             .toList(),
+        depositPaidByManufacturer: {
+          for (final e in ((j['checkout']['deposit_paid_by_manufacturer']
+                  as Map<String, dynamic>?) ??
+              const <String, dynamic>{}).entries)
+            e.key: e.value as int,
+        },
       ),
       maxDiscountPercent: j['max_discount_percent'] as int?,
       expectRejection: rejectedWith,
+      dartArmOnly: j['dart_arm_only'] as bool? ?? false,
       expectedOrder: exp['order'] == null
           ? null
           : ExpectedOrder(exp['order'] as Map<String, dynamic>),
@@ -356,6 +400,9 @@ class GoldenScenario {
       expectedScalarCost: scalar,
       expectedPayment:
           paymentJson == null ? null : ExpectedPayment(paymentJson),
+      expectedExtraPayments: ((exp['extra_payments'] as List?) ?? const [])
+          .map((p) => ExpectedTypedPayment(p as Map<String, dynamic>))
+          .toList(),
       expectedWalletLegs: ((exp['wallet_legs'] as List?) ?? const [])
           .map((l) => ExpectedWalletLeg(l as Map<String, dynamic>))
           .toList(),
@@ -432,6 +479,17 @@ class ActualPayment {
   ActualPayment({required this.method, required this.amountKobo});
 }
 
+/// One posted NON-`sale` money row (#175), in fixture terms. Compared by
+/// [signature].
+class ActualTypedPayment {
+  final String type;
+  final String method;
+  final int amountKobo;
+  ActualTypedPayment(
+      {required this.type, required this.method, required this.amountKobo});
+  String get signature => '$type|$method|$amountKobo';
+}
+
 /// One posted wallet leg, in fixture terms. Compared by [signature].
 class ActualWalletLeg {
   final String referenceType;
@@ -470,8 +528,12 @@ class CheckoutOutcome {
   /// productKey → scalar buying_price_kobo cache.
   final Map<String, int> productScalarCost;
 
-  /// The cash payment row, or null when the sale settled no cash.
+  /// The cash `sale` payment row, or null when the sale settled no cash.
   final ActualPayment? payment;
+
+  /// The NON-`sale` money rows THIS sale posted (#175) — crate_deposit /
+  /// wallet_topup; empty for a plain sale.
+  final List<ActualTypedPayment> extraPayments;
 
   /// The wallet legs THIS sale posted (order_id == this order); empty walk-in.
   final List<ActualWalletLeg> walletLegs;
@@ -498,6 +560,7 @@ class CheckoutOutcome {
     required this.inventoryAfter,
     required this.productScalarCost,
     required this.payment,
+    this.extraPayments = const [],
     this.walletLegs = const [],
     this.customerBalanceAfter,
     this.crateLines = const {},
@@ -568,6 +631,15 @@ void expectGolden(
     expect(actual.payment!.amountKobo, s.expectedPayment!.amountKobo,
         reason: '${s.name}: payment amount');
   }
+
+  // #175 — the non-`sale` money rows (crate_deposit / wallet_topup), compared as
+  // a multiset by type|method|amount. Empty for the Slice 2–4 fixtures.
+  final expectedExtraSigs =
+      s.expectedExtraPayments.map((p) => p.signature).toList()..sort();
+  final actualExtraSigs =
+      actual.extraPayments.map((p) => p.signature).toList()..sort();
+  expect(actualExtraSigs, equals(expectedExtraSigs),
+      reason: '${s.name}: split money rows (type|method|amount)');
 
   // Wallet ledger legs (multiset) + the derived balance — the Slice 3 credit
   // contract. Walk-in scenarios have no customer and assert neither.
