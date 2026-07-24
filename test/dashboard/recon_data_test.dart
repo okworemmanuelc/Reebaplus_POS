@@ -34,6 +34,7 @@ ReconData recon({
   int stockExpectedClosingKobo = 0,
   // Business net position (#163) inputs — assets counted, liabilities netted.
   int inventoryOnHandKobo = 0,
+  int inTransitValueKobo = 0,
   int totalOwedKobo = 0,
   bool showCrates = false,
   int crateDepositKobo = 0,
@@ -86,6 +87,7 @@ ReconData recon({
     heldCrateDepositsKobo: heldCrateDepositsKobo,
     supplierCrateDebtKobo: supplierCrateDebtKobo,
     inventoryOnHandKobo: inventoryOnHandKobo,
+    inTransitValueKobo: inTransitValueKobo,
     uncostedInventoryItems: 0,
     surplusCostKobo: surplusCostKobo,
     stockOpeningKobo: stockOpeningKobo,
@@ -332,6 +334,13 @@ void main() {
       // No crate asset, no crate liabilities → 200,000 + 50,000 − 30,000.
       expect(d.businessNetPositionKobo, 220000);
     });
+
+    test('#7b: in-transit stock value is counted as an asset in worth', () {
+      // 200,000 on hand + 60,000 dispatched-not-received = 260,000 worth. The
+      // in-transit stock used to vanish between dispatch and receipt.
+      final d = recon(inventoryOnHandKobo: 200000, inTransitValueKobo: 60000);
+      expect(d.businessNetPositionKobo, 260000);
+    });
   });
 
   group('ReconData integrity flag (issue #72 slice 3, ADR 0014)', () {
@@ -373,6 +382,31 @@ void main() {
         recon(hasStockCount: true, surplusCostKobo: 5000).hasIntegrityGap,
         isTrue,
       );
+    });
+  });
+
+  // ── #170 #7a: loss valuation prefers the written snapshot ──────────────────
+  group('lossValueKobo (snapshot-at-write vs current-cost fallback)', () {
+    test('a snapshotted loss uses the recorded value, ignoring current cost', () {
+      // A later cost edit raised current cost to 99000, but the loss keeps its
+      // write-time value of 45000 (3 × 15000).
+      expect(lossValueKobo(45000, 3, 99000), 45000);
+    });
+
+    test('a legacy quantity-only loss (no snapshot) falls back to current cost',
+        () {
+      expect(lossValueKobo(null, 3, 15000), 45000);
+    });
+
+    test('a null current cost on a legacy row counts as zero', () {
+      expect(lossValueKobo(null, 3, null), 0);
+    });
+
+    test('a snapshot of zero (fully uncosted draw) is respected, not treated as '
+        'missing', () {
+      // value_kobo == 0 means the units drew from uncosted batches — do NOT fall
+      // back to current cost (that would invent a loss the queue never held).
+      expect(lossValueKobo(0, 3, 99000), 0);
     });
   });
 }

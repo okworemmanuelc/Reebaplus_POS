@@ -7,14 +7,22 @@
 ///     adjustment (migration 0141)
 ///
 /// The rule (§16.6.1, v34): a pending request makes NO inventory change; an
-/// approval applies the delta (adjustStock semantics — no Cost Batch, an
-/// adjustment is a correction not an inflow); a rejection makes no change. Any
-/// drift between the two arms fails the build.
+/// approval applies the delta; a rejection makes no change. Any drift between
+/// the two arms on status + inventory fails the build.
 ///
 /// The stock-keeper → pending path is pinned on the DART arm only: the Tier-2 RPC
 /// identity is the business CEO, whom the server routes to immediate-apply — so
 /// 'request' scenarios SKIP on the RPC arm (same precedent as the discount clamp
 /// in the checkout suite). 'approve'/'reject' run on both.
+///
+/// Money-integrity #7a (#170, PRD #155) gives the approval its COST semantics on
+/// the mobile DAO: an approved increase creates a Cost Batch (Uncosted when the
+/// approval carries no price), and an approved decrease draws the FIFO queue
+/// down and SNAPSHOTS the drawn value onto the adjustment. The web RPC
+/// (approve_stock_adjustment, 0141) does not yet move cost — flagged to the web
+/// repo — so the cost scenarios are `dartArmOnly` (the RPC arm skips them, the
+/// same precedent as the #175 money-track scenarios). status + inventory stay
+/// pinned on BOTH arms.
 library;
 
 import 'dart:convert';
@@ -37,6 +45,22 @@ class StockAdjScenario {
   final String expectedStatus; // 'pending' | 'approved' | 'rejected'
   final int expectedInventoryAfter;
 
+  /// #7a: seed a costed Cost Batch of [startQty] @ this cost before the op, so a
+  /// decrease has real cost to draw. Null → no batch seeded (an unpriced start).
+  final int? inflowCostKobo;
+
+  /// #7a (dartArmOnly): the value_kobo the approved DECREASE must snapshot.
+  final int? expectedSnapshotValueKobo;
+
+  /// #7a (dartArmOnly): the cost_kobo of the Cost Batch an approved INCREASE
+  /// must create (0 = Uncosted).
+  final int? expectedNewBatchCostKobo;
+
+  /// Skips the RPC arm: the web cost pass is out of scope for #170 (flagged to
+  /// the web repo). status + inventory still run on both arms for non-dartArmOnly
+  /// scenarios.
+  final bool dartArmOnly;
+
   StockAdjScenario._({
     required this.name,
     required this.operation,
@@ -45,6 +69,10 @@ class StockAdjScenario {
     required this.reason,
     required this.expectedStatus,
     required this.expectedInventoryAfter,
+    this.inflowCostKobo,
+    this.expectedSnapshotValueKobo,
+    this.expectedNewBatchCostKobo,
+    this.dartArmOnly = false,
   });
 
   factory StockAdjScenario._fromJson(Map<String, dynamic> j) {
@@ -57,6 +85,10 @@ class StockAdjScenario {
       reason: j['reason'] as String? ?? 'adjustment',
       expectedStatus: exp['status'] as String,
       expectedInventoryAfter: exp['inventory_after'] as int,
+      inflowCostKobo: j['inflow_cost_kobo'] as int?,
+      expectedSnapshotValueKobo: exp['dart_snapshot_value_kobo'] as int?,
+      expectedNewBatchCostKobo: exp['dart_new_batch_cost_kobo'] as int?,
+      dartArmOnly: j['dart_arm_only'] as bool? ?? false,
     );
   }
 }
@@ -73,11 +105,35 @@ List<StockAdjScenario> loadStockAdjScenarios() {
 class StockAdjOutcome {
   final String status;
   final int inventoryAfter;
-  StockAdjOutcome({required this.status, required this.inventoryAfter});
+
+  /// #7a (dartArmOnly): the value_kobo snapshotted onto the applied adjustment
+  /// (null for a non-decrease or when the arm doesn't track cost).
+  final int? snapshotValueKobo;
+
+  /// #7a (dartArmOnly): the cost_kobo of the batch created by an applied
+  /// increase (null when no batch was created).
+  final int? newBatchCostKobo;
+
+  StockAdjOutcome({
+    required this.status,
+    required this.inventoryAfter,
+    this.snapshotValueKobo,
+    this.newBatchCostKobo,
+  });
 }
 
 void expectStockAdjGolden(StockAdjScenario s, StockAdjOutcome actual) {
   expect(actual.status, s.expectedStatus, reason: '${s.name}: request status');
   expect(actual.inventoryAfter, s.expectedInventoryAfter,
       reason: '${s.name}: inventory on-hand after the operation');
+  // #7a cost pins — asserted only where the scenario declares them (the dart
+  // arm; the RPC arm skips dartArmOnly scenarios entirely).
+  if (s.expectedSnapshotValueKobo != null) {
+    expect(actual.snapshotValueKobo, s.expectedSnapshotValueKobo,
+        reason: '${s.name}: loss value snapshotted onto the adjustment');
+  }
+  if (s.expectedNewBatchCostKobo != null) {
+    expect(actual.newBatchCostKobo, s.expectedNewBatchCostKobo,
+        reason: '${s.name}: cost of the batch the increase created');
+  }
 }

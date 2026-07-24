@@ -64,6 +64,16 @@ void main() {
             ),
           );
 
+      // #7a: seed a costed batch so an approved decrease has real cost to draw.
+      if (s.inflowCostKobo != null && s.startQty > 0) {
+        await db.costBatchesDao.recordInflowBatch(
+          productId: productId,
+          storeId: storeId,
+          quantity: s.startQty,
+          costKobo: s.inflowCostKobo!,
+        );
+      }
+
       // A stock keeper files the request — a pending row, no inventory change.
       final reqDao = db.stockAdjustmentRequestsDao;
       await reqDao.requestStockAdjustment(
@@ -95,10 +105,35 @@ void main() {
                 (i) => i.productId.equals(productId) & i.storeId.equals(storeId)))
           .getSingleOrNull();
 
+      // #7a cost outcomes: the value snapshotted onto an applied decrease, and
+      // the cost of the batch an applied increase created (the newest batch).
+      int? snapshotValueKobo;
+      if (finalReq.status == 'approved' && s.quantityDiff < 0) {
+        final adj = await (db.select(db.stockAdjustments)
+              ..where((a) =>
+                  a.productId.equals(productId) &
+                  a.quantityDiff.equals(s.quantityDiff)))
+            .getSingleOrNull();
+        snapshotValueKobo = adj?.valueKobo;
+      }
+      int? newBatchCostKobo;
+      if (finalReq.status == 'approved' && s.quantityDiff > 0) {
+        final batch = await (db.select(db.costBatches)
+              ..where((b) => b.productId.equals(productId))
+              ..orderBy([(b) => OrderingTerm.desc(b.receivedAt)])
+              ..limit(1))
+            .getSingleOrNull();
+        newBatchCostKobo = batch?.costKobo;
+      }
+
       expectStockAdjGolden(
         s,
         StockAdjOutcome(
-            status: finalReq.status, inventoryAfter: inv?.quantity ?? 0),
+          status: finalReq.status,
+          inventoryAfter: inv?.quantity ?? 0,
+          snapshotValueKobo: snapshotValueKobo,
+          newBatchCostKobo: newBatchCostKobo,
+        ),
       );
     });
   }

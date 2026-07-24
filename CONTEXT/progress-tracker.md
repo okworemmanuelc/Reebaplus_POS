@@ -10,6 +10,120 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Money integrity #7 (#170) — full cost-batch coverage (hook the central mutator) — IN PROGRESS (2026-07-24)
+Seventh slice of the #155 money-integrity PRD (ADR 0021 family). Branch
+`feat/money-cost-batch-coverage-170` off `main`. Independent costing track (runs
+parallel to the payment slices). Product decision (locked): loss valuation rate =
+**snapshot-at-write** (never today's-rate). Split into 7a → 7b → 7c commits.
+- **7a — adjustStock cost hooks + valued losses (DONE).** The central mutator
+  `InventoryDao.adjustStock` now carries value with quantity, on the v1 (flag-off)
+  path, for plain `adjustment` movements only (transfer legs = 7b; the v2 domain
+  RPC is server-authoritative + out of scope, flagged to the web repo):
+  • an **increase** creates a fresh FIFO Cost Batch through the SAME
+    `CostBatchesDao.recordInflowBatch` inflow Receive Stock uses — costed when the
+    caller passes `inflowUnitCostKobo` (the existing-product Add path now does),
+    Uncosted (0) otherwise — so its later sales draw real/backfillable COGS, never
+    phantom 0;
+  • a **decrease** draws the FIFO queue down oldest-first (new
+    `CostBatchesDao.drawDownOutflow`, uncovered units cost 0 like a sale) and
+    SNAPSHOTS the drawn value onto the `stock_adjustments` row
+    (`unit_cost_kobo`/`value_kobo`), so a later cost-price edit can't restate a
+    past loss.
+  • `adjustStock` gained `inflowUnitCostKobo` / `inflowReceivedAt` / `trackCost`.
+    **Receive Stock passes `trackCost:false`** (it owns its receipt-dated batch —
+    letting adjustStock also create one would double the FIFO layer). The inventory
+    golden's receive producer mirrors that.
+  • **Report loss valuation** (recon P&L `damageCostKobo`) switches to the written
+    snapshot via the new pure helper `lossValueKobo(snapshot, units, currentCost)`
+    — snapshot-at-write for #170 rows, current-cost fallback for legacy
+    quantity-only rows (labelled). A snapshot of 0 (uncosted draw) is respected,
+    not treated as missing.
+  • **Schema:** Drift v65→**v66** + cloud `0155_money_integrity_cost_batch_coverage.sql`
+    add nullable `stock_adjustments.unit_cost_kobo` + `value_kobo` (both **bigint**
+    on cloud). Simple add-columns (no CHECK/NOT NULL rebuild); legacy rows NULL.
+    No sync_registry change (Restore.plain pass-through carries the new columns).
+  • **Tests:** `test/costing/adjust_stock_cost_coverage_test.dart` (7 DAO cases);
+    recon `lossValueKobo` (4 cases); stock-adjustment **golden fixtures** extended
+    with 2 `dart_arm_only` cost scenarios (RPC arm skips them — web cost pass out
+    of scope) + the dart arm asserts the snapshot/new-batch; migration v65→v66
+    case; inventory golden receive producer updated to `trackCost:false`.
+- **7b — transfers move cost + in-transit worth (DONE).** A store transfer moves
+  COST with quantity so the receiving store's margin is real and the source keeps
+  no phantom coverage:
+  • **dispatch** (both `createTransfer` and the request→`dispatchTransfer` path)
+    draws the source's FIFO batches down (`drawDownOutflow`) for the dispatched
+    qty; the drawn TOTAL rides the transfer as `stock_transfers.cost_kobo`;
+  • **receipt** (`receiveTransfer`) creates the destination's Cost Batch at the
+    carried per-unit cost (round(cost_kobo/qty); legacy null-cost → Uncosted),
+    so a sale at the destination draws real COGS;
+  • **cancel** (`cancelTransfer`) restores the source's cost layer at the carried
+    cost (goods came back — no permanent coverage loss);
+  • **in-transit worth:** `ReconData.inTransitValueKobo` = Σ `cost_kobo` over
+    in_transit transfers (either endpoint in scope; business-wide under All
+    Stores), added to `businessNetPositionKobo` — value that used to vanish
+    between dispatch and receipt.
+  • adjustStock's transfer_out/transfer_in legs stay cost-neutral (guarded
+    `!isTransfer`); the transfer DAO owns the cost movement, so there's no double
+    draw/inflow.
+  • **Schema:** Drift v66→**v67** + cloud `0156_money_integrity_transfer_cost.sql`
+    add nullable `stock_transfers.cost_kobo` (**bigint** on cloud). Simple
+    add-column; legacy transfers NULL. No sync_registry change (Restore.plain).
+  • **Tests:** `test/transfer/transfer_cost_movement_test.dart` (5 DAO cases:
+    dispatch rides cost, receipt creates dest batch + real COGS, cancel restores
+    source, legacy null-cost → Uncosted receipt, in-transit sum); recon
+    `businessNetPositionKobo` in-transit case; migration v66→v67 case. Existing
+    `test/transfer/stock_transfer_dao_test.dart` unaffected.
+- **7c — cancel batch restore + product-delete write-off (DONE).** CODE-ONLY —
+  no schema/migration (uses the existing cost_batches + stock_adjustments tables
+  and the 0133 recost RPC):
+  • **cancel batch restore** (`OrdersDao.markCancelled`, v1 path): after the
+    stock restore, each cancelled `order_items` line re-creates a Cost Batch at
+    the per-unit COGS the sale snapshotted (`buying_price_kobo`), so the FIFO
+    queue and the shelf stay in step — the drawn units come back COSTED, not as
+    phantom 0-cost stock. Quick-sale (null-product) lines skipped. LOCAL
+    APPROXIMATION by design;
+  • **cancel push triggers the server recost** — new pure collector
+    `SupabaseSyncService.collectReturnStockTxPairs` turns pushed `return`
+    stock_transactions (the cancel's compensating restores) into
+    `pos_recost_pairs` candidates, so a cancel fires the SAME server-authoritative
+    recost a sale push does; the authoritative replay then supersedes the local
+    layer (ADR 0005 Batch-Boundary Reconciliation);
+  • **product-delete write-off** — new `InventoryDao.writeOffAllStockForDelete`
+    draws every store's remaining stock down through adjustStock (closing the
+    open FIFO layers + SNAPSHOTTING the value via #7a) and returns the total
+    written-off value; `product_detail_screen` deletes via it and logs "(wrote
+    off ₦X of remaining stock)" — value that used to vanish (deleted-product cost
+    lookup → 0) is now booked + visible.
+  • **Tests:** `test/costing/cancel_and_delete_cost_test.dart` (5: cancel restores
+    the costed layer, cancel emits a return-tx the collector catches, collector
+    ignores non-return movements, write-off draws down + snapshots + returns
+    total, empty-product write-off is a no-op).
+
+**Schema/migration lane consumed by #170:** Drift **v66, v67** (v65→66→67); cloud
+migrations **`0155_money_integrity_cost_batch_coverage.sql`** (7a) +
+**`0156_money_integrity_transfer_cost.sql`** (7b). No new synced tables; new
+columns: `stock_adjustments.unit_cost_kobo` + `value_kobo` (7a),
+`stock_transfers.cost_kobo` (7b) — all nullable bigint, no sync_registry change.
+No new permission keys. No ADR needed (extends ADR 0005 costing).
+
+**/review outcome (both axes):** Standards — clean pass (kobo=bigint on both
+migrations, `formatCurrency` used, business-scoping honored, pass-through sync
+correct). Spec — snapshot-at-write honored; v2-RPC-out-of-scope acceptable; all
+core ACs met. Known partials (documented, not fixed here):
+- **Count-shortage VARIANCE-CARD valuation still uses current cost.** The write
+  side snapshots correctly (a count decrement flows through `adjustStock` →
+  `value_kobo`), but `recon_data.dart`'s `shortageCostKobo` derives from the
+  count session's `linesJson` (an independent record), not the snapshot — so a
+  later cost edit can still restate a past count-shortage in the *variance card*.
+  The P&L net-result loss (damages/expiry) IS immutable. Correlating the two
+  subsystems is a report-truth refactor (PRD "Report truth" §, audit #30) with
+  double-count risk — deferred, not attempted at the end of this slice.
+- **Sub-naira transfer-batch rounding.** Receipt/cancel rebuild the destination
+  batch at `round(cost_kobo/qty)` per unit, so the batch total can drift <₦1 from
+  the carried total — the same per-unit rounding `drawDownSale` uses for COGS.
+  In-transit WORTH uses the exact `cost_kobo` (no drift). Accepted as consistent
+  with the existing per-unit-kobo COGS convention.
+
 ### Money integrity #5 (#175) — tender picker + cash-card honesty (deposit out of Cash sales) — CODE-COMPLETE (2026-07-24)
 Fifth slice of the #155 money-integrity PRD (ADR 0021). **CODE-ONLY — no
 migration** (the `transfer` method, the `crate_deposit`/`wallet_topup` types, and

@@ -1366,6 +1366,32 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('inventory', invRow);
       }
 
+      // Cost batches (#170 #7c): restore each sale line's consumed cost LAYER at
+      // the per-unit COGS the sale snapshotted (`order_items.buying_price_kobo`),
+      // so the FIFO queue and the shelf stay in step — the drawn units come back
+      // costed, not as phantom 0-cost stock. This is a LOCAL APPROXIMATION: the
+      // cancel push re-costs the same (product, store) pairs server-side (the
+      // `pos_recost_pairs` pass a sale push triggers, now also fired from the
+      // pushed `return` stock_transactions), and that authoritative replay
+      // supersedes this layer — keeping the client consistent with
+      // Batch-Boundary Reconciliation (ADR 0005) instead of fighting it. Quick-
+      // sale lines carry no product and are skipped (they were never batched).
+      final cancelledLines =
+          await (select(orderItems)..where(
+                (i) => i.orderId.equals(orderId) & whereBusiness(i),
+              ))
+              .get();
+      for (final line in cancelledLines) {
+        final productId = line.productId;
+        if (productId == null || line.quantity <= 0) continue;
+        await db.costBatchesDao.recordInflowBatch(
+          productId: productId,
+          storeId: line.storeId,
+          quantity: line.quantity,
+          costKobo: line.buyingPriceKobo,
+        );
+      }
+
       // Payment: post DATED compensating rows through the #169 seam (PRD #155) —
       // the append-only ledger discipline. Every ORIGINAL payment row is LEFT
       // UNTOUCHED (no in-place void): cash reporting counts each row on its OWN

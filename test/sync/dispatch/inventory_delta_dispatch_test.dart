@@ -61,7 +61,8 @@ void main() {
   group('InventoryDao.adjustStock dispatch', () {
     test(
         'flag OFF: enqueues stock_adjustments + stock_transactions + inventory '
-        '(no domain envelope)', () async {
+        '+ cost_batches (an increase now creates a FIFO layer, #170 #7a; '
+        'no domain envelope)', () async {
       await setFlag(db, 'feature.domain_rpcs_v2.inventory_delta', on: false);
       final fx = await _seedInventoryFixtures(db, businessId);
 
@@ -78,10 +79,16 @@ void main() {
       expect(await db.select(db.stockTransactions).get(), hasLength(1));
       final inv = await db.select(db.inventory).getSingle();
       expect(inv.quantity, 15);
+      // #170 #7a: the increase created an Uncosted (0) cost batch so its later
+      // sales draw backfillable COGS, never phantom 0.
+      final batch = await db.select(db.costBatches).getSingle();
+      expect(batch.qtyRemaining, 5);
+      expect(batch.costKobo, 0);
 
       final pending = await getPendingQueue(db);
       final actionTypes = pending.map((r) => r.actionType).toList()..sort();
       expect(actionTypes, [
+        'cost_batches:upsert',
         'inventory:upsert',
         'stock_adjustments:upsert',
         'stock_transactions:upsert',

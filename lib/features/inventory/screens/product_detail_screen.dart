@@ -1968,30 +1968,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               final actorId = ref.read(authProvider).currentUser?.id;
               // Remove any remaining stock first, so the deletion is recorded
               // in the History tab as adjustment rows (§16.8) and the product
-              // stops counting toward stock totals. Best-effort — a failure
-              // here must not block the soft-delete + activity log.
+              // stops counting toward stock totals. #170 #7c: the write-off draws
+              // the FIFO cost batches down and SNAPSHOTS the value, returning the
+              // total so the delete is booked with a VISIBLE value instead of the
+              // value silently vanishing. Best-effort — a failure here must not
+              // block the soft-delete + activity log.
+              var writtenOffKobo = 0;
               try {
-                final stores = await db.storesDao.getActiveStores();
-                for (final s in stores) {
-                  final rows = await db.inventoryDao.getProductsWithStock(
-                    storeId: s.id,
-                  );
-                  final qty =
-                      rows
-                          .where((r) => r.product.id == productId)
-                          .firstOrNull
-                          ?.totalStock ??
-                      0;
-                  if (qty > 0) {
-                    await db.inventoryDao.adjustStock(
-                      productId,
-                      s.id,
-                      -qty,
-                      'Product deleted: $productName',
-                      actorId,
-                    );
-                  }
-                }
+                writtenOffKobo = await db.inventoryDao.writeOffAllStockForDelete(
+                  productId,
+                  actorId,
+                );
               } catch (e, st) {
                 CrashReporter.record(
                   e,
@@ -2002,11 +1989,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               }
               try {
                 await db.catalogDao.softDeleteProduct(productId);
+                final actorName =
+                    ref.read(authProvider).currentUser?.name ?? 'Unknown';
+                final writeOffNote = writtenOffKobo > 0
+                    ? ' (wrote off ${formatCurrency(writtenOffKobo / 100)} of '
+                          'remaining stock)'
+                    : '';
                 await ref
                     .read(activityLogProvider)
                     .logAction(
                       'delete_product',
-                      '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} deleted product: $productName',
+                      '$actorName deleted product: $productName$writeOffNote',
                       productId: productId,
                     );
                 ref.read(cartProvider).removeItem(productName);

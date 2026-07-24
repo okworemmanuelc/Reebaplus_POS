@@ -142,8 +142,12 @@ void main() {
           );
         }
         for (final line in s.lines) {
-          await db.inventoryDao
-              .adjustStock(productId, storeId, line.quantity, 'Stock received', staffId);
+          // trackCost:false mirrors ReceiveStockService (#170 #7a): Receive Stock
+          // owns its receipt-dated batch below, so adjustStock must NOT also
+          // create an inflow batch (that would double the FIFO layer).
+          await db.inventoryDao.adjustStock(
+              productId, storeId, line.quantity, 'Stock received', staffId,
+              trackCost: false);
           await db.costBatchesDao.recordInflowBatch(
             productId: productId,
             storeId: storeId,
