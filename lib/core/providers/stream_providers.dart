@@ -1836,6 +1836,18 @@ final allStockCountsProvider = businessScopedStream<List<StockCountData>>(
   whenAbsent: const [],
 );
 
+/// The persisted day-close snapshot for a calendar day (`YYYY-MM-DD`), or null
+/// when the day has not been reviewed yet (#174, PRD #155, ADR 0021 §2).
+/// Reactive so a peer device's snapshot — or this device's own first review —
+/// surfaces the reconciliation detail's as-reviewed-vs-current delta badges
+/// live. At most one row exists per (business, day) — first-writer-wins.
+final dailyClosingForDayProvider =
+    businessScopedStreamFamily<DailyClosingData?, String>(
+  (ref, db, businessId, businessDate) =>
+      db.dailyClosingsDao.watchForDay(businessDate),
+  whenAbsent: null,
+);
+
 /// Every applied stock adjustment for the business (newest first). Used by the
 /// §25.10 Business Statement / Store Reconciliation to value damages
 /// (`reason` `damage:<key>`, §17.2): at cost for the CEO P&L, at selling price

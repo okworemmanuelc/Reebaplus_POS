@@ -1,6 +1,44 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
+
+/// Builds a persisted-day-close snapshot row from a frozen figure set, for the
+/// delta-comparison tests (#174). Metadata (id/business/date/timestamps) is
+/// neutral — the comparison only reads the figures + reviewer + reviewedAt.
+DailyClosingData snapshotOf(
+  DailyClosingFigures f, {
+  String? reviewedBy,
+  String? storeScopeId,
+}) {
+  final ts = DateTime.utc(2026, 7, 21, 8);
+  return DailyClosingData(
+    id: 'snap-1',
+    businessId: 'biz-1',
+    businessDate: '2026-07-20',
+    storeScopeId: storeScopeId,
+    totalSalesKobo: f.totalSalesKobo,
+    refundsKobo: f.refundsKobo,
+    discountsKobo: f.discountsKobo,
+    cogsKobo: f.cogsKobo,
+    grossProfitKobo: f.grossProfitKobo,
+    netProfitKobo: f.netProfitKobo,
+    expensesKobo: f.expensesKobo,
+    damagesCostKobo: f.damagesCostKobo,
+    cashSalesKobo: f.cashSalesKobo,
+    cashInKobo: f.cashInKobo,
+    cashOutKobo: f.cashOutKobo,
+    netCashMovementKobo: f.netCashMovementKobo,
+    stockCogsKobo: f.stockCogsKobo,
+    stockExpectedClosingKobo: f.stockExpectedClosingKobo,
+    itemsSold: f.itemsSold,
+    shortageUnits: f.shortageUnits,
+    reviewedBy: reviewedBy,
+    reviewedAt: ts,
+    createdAt: ts,
+    lastUpdatedAt: ts,
+  );
+}
 
 /// Builds a [ReconData] with everything zeroed except the P&L inputs a test
 /// cares about — the getters under test only touch revenue / discounts / COGS /
@@ -373,6 +411,131 @@ void main() {
         recon(hasStockCount: true, surplusCostKobo: 5000).hasIntegrityGap,
         isTrue,
       );
+    });
+  });
+
+  group('Persisted day close — figure mapping (#174)', () {
+    test('dailyClosingFiguresFrom freezes the period-scoped figures', () {
+      final d = recon(
+        totalRevenueKobo: 100000,
+        costedRevenueKobo: 90000,
+        discountsKobo: 5000,
+        cogsKobo: 60000,
+        expensesKobo: 5000,
+        damageCostKobo: 2000,
+        cashSalesKobo: 400000,
+        cashDebtsCollectedKobo: 50000,
+        cashRefundsKobo: 10000,
+        cashExpensesKobo: 20000,
+        cashSupplierPaidKobo: 30000,
+        stockCogsKobo: 55000,
+        stockExpectedClosingKobo: 900000,
+      );
+      final f = dailyClosingFiguresFrom(d);
+
+      expect(f.totalSalesKobo, 100000);
+      // grossProfit = (90,000 − 5,000) − 60,000 = 25,000; net = 25k − 5k − 2k.
+      expect(f.grossProfitKobo, 25000);
+      expect(f.netProfitKobo, 18000);
+      expect(f.cashSalesKobo, 400000);
+      expect(f.cashInKobo, 450000); // 400k sales + 50k debts collected
+      expect(f.cashOutKobo, 60000); // 10k + 20k + 30k
+      expect(f.netCashMovementKobo, 390000); // 450k − 60k
+      expect(f.stockCogsKobo, 55000);
+      expect(f.stockExpectedClosingKobo, 900000);
+    });
+  });
+
+  group('Persisted day close — as-reviewed vs current delta (#174)', () {
+    test('an unchanged day shows no delta on any card', () {
+      final d = recon(
+        totalRevenueKobo: 100000,
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        cashSalesKobo: 80000,
+        stockExpectedClosingKobo: 500000,
+      );
+      final snapshot = snapshotOf(dailyClosingFiguresFrom(d));
+
+      // Live figures identical to what was frozen → nothing moved.
+      final cmp = reconClosingComparison(snapshot, d);
+      expect(cmp.anyChanged, isFalse);
+      expect(cmp.totalSales.changed, isFalse);
+      expect(cmp.totalSales.delta, 0);
+      expect(cmp.netProfit.changed, isFalse);
+      expect(cmp.netCashMovement.changed, isFalse);
+      expect(cmp.stockExpectedClosing.changed, isFalse);
+    });
+
+    test('a late sale that lifts total sales flags only the sales card', () {
+      final reviewed = recon(
+        totalRevenueKobo: 100000,
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        expensesKobo: 5000,
+      );
+      final snapshot = snapshotOf(dailyClosingFiguresFrom(reviewed));
+
+      // A backdated/late sale of ₦200 syncs into the day AFTER review, lifting
+      // Total sales but leaving the (costed) P&L inputs untouched here.
+      final live = recon(
+        totalRevenueKobo: 120000,
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        expensesKobo: 5000,
+      );
+      final cmp = reconClosingComparison(snapshot, live);
+
+      expect(cmp.anyChanged, isTrue);
+      expect(cmp.totalSales.reviewed, 100000);
+      expect(cmp.totalSales.current, 120000);
+      expect(cmp.totalSales.delta, 20000);
+      expect(cmp.totalSales.changed, isTrue);
+      // The P&L headline didn't move → that card shows no badge.
+      expect(cmp.netProfit.changed, isFalse);
+      expect(cmp.netProfit.delta, 0);
+    });
+
+    test('a cancel that reverses cash and stock flags those cards', () {
+      final reviewed = recon(
+        totalRevenueKobo: 100000,
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        cashSalesKobo: 80000,
+        stockExpectedClosingKobo: 500000,
+      );
+      final snapshot = snapshotOf(dailyClosingFiguresFrom(reviewed));
+
+      // Later: cash movement and expected stock closing both shift.
+      final live = recon(
+        totalRevenueKobo: 100000,
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        cashSalesKobo: 80000,
+        cashRefundsKobo: 12000, // a refund left the till after review
+        stockExpectedClosingKobo: 512000, // the cancelled stock came back
+      );
+      final cmp = reconClosingComparison(snapshot, live);
+
+      expect(cmp.anyChanged, isTrue);
+      expect(cmp.netCashMovement.delta, -12000);
+      expect(cmp.netCashMovement.changed, isTrue);
+      expect(cmp.stockExpectedClosing.delta, 12000);
+      expect(cmp.stockExpectedClosing.changed, isTrue);
+      // Total sales headline unchanged (a cancel is booked as a compensating
+      // refund row, not a shrink of the sales figure — ADR 0021).
+      expect(cmp.totalSales.changed, isFalse);
+    });
+
+    test('carries the reviewer + reviewedAt through for the badge subtitle', () {
+      final d = recon(totalRevenueKobo: 100000, costedRevenueKobo: 100000);
+      final snapshot = snapshotOf(
+        dailyClosingFiguresFrom(d),
+        reviewedBy: 'user-9',
+      );
+      final cmp = reconClosingComparison(snapshot, d);
+      expect(cmp.reviewedBy, 'user-9');
+      expect(cmp.reviewedAt, DateTime.utc(2026, 7, 21, 8));
     });
   });
 }
