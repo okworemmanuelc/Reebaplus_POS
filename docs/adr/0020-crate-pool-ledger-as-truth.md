@@ -117,8 +117,19 @@ one place to call and cannot reintroduce the drift.
   balance is ever pushed to the cloud — only append-only ledger rows sync — so
   the ADR's hard contract now holds for every one of the four caches plus the
   scalar.**
-- **#162** — Cancel appends compensating rows (no phantom debt; deposit reversed
-  with a deposit-family reference type).
+- **#162 (DONE 2026-07-24)** — Cancel completes the crate ledger. A cancelled
+  sale's `issued` customer crate rows are reversed through a new seam verb
+  `CratePoolDao.reverseIssuedByCustomer` (the ENQUEUED counterpart of
+  `reverseIssuedByCustomerLocal` — a cancel reverses a sale the cloud ACCEPTED,
+  so the compensating `-quantity` 'adjusted' ledger row syncs; the demoted
+  `customer_crate_balances` cache stays local-only), so the customer's derived
+  crate debt nets back to its pre-sale value — no phantom debt. `markCancelled`
+  now releases the held `crate_deposit` wallet leg with a **deposit-family**
+  `crate_deposit_refunded` debit instead of the generic `'void'`: 'void' lands in
+  the SPENDABLE bucket (outside `kCrateDepositReferenceTypes`), so it wrongly
+  docked spendable AND left "deposits held" inflated; the deposit-family debit
+  deflates held to 0 and leaves spendable untouched — the wallet's own
+  compensating-entry release (`settleCrateDepositReturn`). No migration.
 - **#163** — `businessNetPositionKobo` subtracts held customer crate deposits and
   supplier crate debt (honest in both directions), which is only trustworthy once
   balances are ledger-derived.

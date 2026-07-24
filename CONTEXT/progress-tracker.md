@@ -10,6 +10,48 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Crate pool #5 (#162) — Cancel completes the crate ledger — CODE-COMPLETE (2026-07-24)
+Fifth slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
+Branch `feat/crate-pool-cancel-completes-ledger` off `main` (HEAD 12d0e4f). Makes
+**Cancel complete the crate ledger** so a refunded sale leaves no phantom crate
+debt and no inflated deposit liability — the A1 prerequisite of ledger-as-truth.
+- **No phantom crate debt (crate-track).** `OrdersDao.markCancelled` (v1 path)
+  now reverses the crate rows the sale ISSUED to the customer through a new Crate
+  Pool seam verb `CratePoolDao.reverseIssuedByCustomer` — the ENQUEUED twin of
+  the existing local-only `reverseIssuedByCustomerLocal` (both delegate to a
+  shared private `_reverseIssuedByCustomer({required bool enqueue})`). A cancel
+  reverses a sale the cloud ACCEPTED, so the compensating `-quantity` 'adjusted'
+  `crate_ledger` row is enqueued and SYNCS (peers converge); the demoted
+  `customer_crate_balances` cache is decremented locally but never pushed (#158
+  local-only projection). The customer's derived crate debt
+  (`watchCustomerCrateDebt` = SUM over the ledger) nets back to its exact pre-sale
+  value. The crate write stays inside the seam, so `crate_seam_ban_test` is happy.
+- **Correct deposit reversal (money-track).** The held `crate_deposit` wallet leg
+  is now released with a DEPOSIT-FAMILY `crate_deposit_refunded` debit instead of
+  the generic `'void'`. `'void'` is outside `kCrateDepositReferenceTypes`, so it
+  landed in the SPENDABLE balance sum (wrongly docking the customer) and never
+  offset the `+crate_deposit` credit (leaving "deposits held" permanently
+  inflated). `crate_deposit_refunded` — the same release
+  `settleCrateDepositReturn` posts — deflates held to 0 and is excluded from
+  spendable, so spendable is untouched. The reversal filter also now skips legs
+  that are THEMSELVES a reversal/settlement (refund/void + the deposit-family
+  debits + the spendable `crate_refund`) so only the ORIGINAL sale legs are
+  reversed, never a compensation.
+- **Scope + known gap.** v1 (live) cancel path only; the v2 `pos_cancel_order`
+  envelope is untouched (its flag stays held off until the RPC mints the reversal
+  server-side). No migration — append-only `crate_ledger` + `wallet_transactions`
+  rows only. This is the Checkout→Cancel path (an unsettled sale); a full reversal
+  of a deposit already SETTLED at Confirm is out of scope — `markCancelled` has no
+  status guard, so cancelling an already-settled order would over-release the held
+  deposit. That confirm-then-cancel late-refund window is the deferred PRD #156 A6
+  (with A3 Confirm idempotency) — flagged here, not built.
+- **Tests.** New `test/crates/crate_cancel_completes_ledger_test.dart` (4), TDD
+  (verified red against pre-fix `lib`): AC1 crate-track derived debt back to 0 +
+  the compensating ledger row syncs (never the cache); AC2 deposits-held deflates
+  to 0 with spendable unaffected + the release leg is a deposit-family type, never
+  a `'void'` of the deposit amount. Full suite: 1008 pass / 110 skip / 1 fail
+  (the pre-existing unrelated `who_is_working_screen_test`).
+
 ### Crate pool #7 (#166) — demote `manufacturer_crate_balances` off the push set — CODE-COMPLETE (2026-07-24)
 Follow-up slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
 Branch `feat/crate-pool-manufacturer-demote` off `main` (HEAD 6793ce5, post-#160).
