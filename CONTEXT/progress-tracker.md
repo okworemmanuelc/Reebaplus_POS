@@ -73,7 +73,38 @@ parallel to the payment slices). Product decision (locked): loss valuation rate 
     source, legacy null-cost → Uncosted receipt, in-transit sum); recon
     `businessNetPositionKobo` in-transit case; migration v66→v67 case. Existing
     `test/transfer/stock_transfer_dao_test.dart` unaffected.
-- **7c — cancel batch restore + product-delete write-off:** PENDING.
+- **7c — cancel batch restore + product-delete write-off (DONE).** CODE-ONLY —
+  no schema/migration (uses the existing cost_batches + stock_adjustments tables
+  and the 0133 recost RPC):
+  • **cancel batch restore** (`OrdersDao.markCancelled`, v1 path): after the
+    stock restore, each cancelled `order_items` line re-creates a Cost Batch at
+    the per-unit COGS the sale snapshotted (`buying_price_kobo`), so the FIFO
+    queue and the shelf stay in step — the drawn units come back COSTED, not as
+    phantom 0-cost stock. Quick-sale (null-product) lines skipped. LOCAL
+    APPROXIMATION by design;
+  • **cancel push triggers the server recost** — new pure collector
+    `SupabaseSyncService.collectReturnStockTxPairs` turns pushed `return`
+    stock_transactions (the cancel's compensating restores) into
+    `pos_recost_pairs` candidates, so a cancel fires the SAME server-authoritative
+    recost a sale push does; the authoritative replay then supersedes the local
+    layer (ADR 0005 Batch-Boundary Reconciliation);
+  • **product-delete write-off** — new `InventoryDao.writeOffAllStockForDelete`
+    draws every store's remaining stock down through adjustStock (closing the
+    open FIFO layers + SNAPSHOTTING the value via #7a) and returns the total
+    written-off value; `product_detail_screen` deletes via it and logs "(wrote
+    off ₦X of remaining stock)" — value that used to vanish (deleted-product cost
+    lookup → 0) is now booked + visible.
+  • **Tests:** `test/costing/cancel_and_delete_cost_test.dart` (5: cancel restores
+    the costed layer, cancel emits a return-tx the collector catches, collector
+    ignores non-return movements, write-off draws down + snapshots + returns
+    total, empty-product write-off is a no-op).
+
+**Schema/migration lane consumed by #170:** Drift **v66, v67** (v65→66→67); cloud
+migrations **`0155_money_integrity_cost_batch_coverage.sql`** (7a) +
+**`0156_money_integrity_transfer_cost.sql`** (7b). No new synced tables; new
+columns: `stock_adjustments.unit_cost_kobo` + `value_kobo` (7a),
+`stock_transfers.cost_kobo` (7b) — all nullable bigint, no sync_registry change.
+No new permission keys. No ADR needed (extends ADR 0005 costing).
 
 ### Money integrity #5 (#175) — tender picker + cash-card honesty (deposit out of Cash sales) — CODE-COMPLETE (2026-07-24)
 Fifth slice of the #155 money-integrity PRD (ADR 0021). **CODE-ONLY — no

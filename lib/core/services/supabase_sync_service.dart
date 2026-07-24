@@ -977,6 +977,12 @@ class SupabaseSyncService {
           if (group.table == 'order_items') {
             collectOrderItemPairs(chunkPayloads, recostPairs);
           }
+          // #170 #7c — a delivered `return` stock_transaction (a cancel's
+          // compensating restore) makes its (product, store) pair a recost
+          // candidate, so a cancel triggers the same server recost a sale does.
+          if (group.table == 'stock_transactions') {
+            collectReturnStockTxPairs(chunkPayloads, recostPairs);
+          }
           // A clean chunk below the connection's ceiling counts toward
           // growing the adaptive size back up; already-at-ceiling just
           // resets the streak.
@@ -1366,6 +1372,30 @@ class SupabaseSyncService {
     for (final p in orderItemPayloads) {
       final pid = p['product_id'];
       final sid = p['store_id'];
+      if (pid is String && sid is String) {
+        into.add((productId: pid, storeId: sid));
+      }
+    }
+  }
+
+  /// Collect the (product, store) pairs from a batch of freshly-pushed
+  /// `stock_transactions` upsert payloads whose `movement_type` is `return`
+  /// (#170 #7c). A cancel writes compensating `return` rows and restores each
+  /// consumed cost layer LOCALLY; pushing those rows makes their (product,
+  /// store) pairs recost candidates too, so the cancel triggers the SAME
+  /// server-authoritative `pos_recost_pairs` pass a sale push does — the
+  /// authoritative replay then supersedes the local batch-restore approximation.
+  /// Non-`return` movements (sale/adjustment/transfer legs) are skipped here:
+  /// sale pairs already come from `order_items`, and the rest never change COGS.
+  @visibleForTesting
+  static void collectReturnStockTxPairs(
+    Iterable<Map<String, dynamic>> stockTxPayloads,
+    Set<({String productId, String storeId})> into,
+  ) {
+    for (final p in stockTxPayloads) {
+      if (p['movement_type'] != 'return') continue;
+      final pid = p['product_id'];
+      final sid = p['location_id'];
       if (pid is String && sid is String) {
         into.add((productId: pid, storeId: sid));
       }

@@ -422,6 +422,58 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// The stable reason stamped on the write-off adjustments a product delete
+  /// posts (#170 #7c). A constant (not the display name) so reports can find the
+  /// rows and their snapshotted value.
+  static const productDeletedReason = 'product_deleted';
+
+  /// Write off ALL remaining stock of [productId] across every active store as a
+  /// deletion is finalised (#170 #7c), and return the TOTAL value written off
+  /// (kobo). Each per-store decrement runs through [adjustStock], so it draws the
+  /// FIFO cost batches down (closing the open layers) and SNAPSHOTS the drawn
+  /// value onto its `stock_adjustments` row — value that previously just vanished
+  /// when a product was deleted (the deleted-product cost lookup falls to 0). The
+  /// caller surfaces the returned total in the delete activity log so the
+  /// write-off is visible. Idempotent for a re-tapped delete: a store already at
+  /// 0 on-hand is skipped, and the value is read back from the row this call
+  /// wrote.
+  Future<int> writeOffAllStockForDelete(
+    String productId,
+    String? staffId,
+  ) async {
+    var totalValueKobo = 0;
+    final stores = await db.storesDao.getActiveStores();
+    for (final store in stores) {
+      final invRow =
+          await (select(inventory)..where(
+                (t) =>
+                    t.productId.equals(productId) &
+                    t.storeId.equals(store.id) &
+                    whereBusiness(t),
+              ))
+              .getSingleOrNull();
+      final qty = invRow?.quantity ?? 0;
+      if (qty <= 0) continue;
+
+      await adjustStock(productId, store.id, -qty, productDeletedReason, staffId);
+
+      final adj =
+          await (select(stockAdjustments)
+                ..where(
+                  (a) =>
+                      a.productId.equals(productId) &
+                      a.storeId.equals(store.id) &
+                      a.reason.equals(productDeletedReason) &
+                      whereBusiness(a),
+                )
+                ..orderBy([(a) => OrderingTerm.desc(a.createdAt)])
+                ..limit(1))
+              .getSingleOrNull();
+      totalValueKobo += adj?.valueKobo ?? 0;
+    }
+    return totalValueKobo;
+  }
+
   Stream<List<CategoryData>> watchAllCategories() {
     return (select(categories)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
