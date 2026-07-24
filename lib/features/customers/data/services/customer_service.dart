@@ -185,6 +185,24 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     );
   }
 
+  /// §18 / PRD #155 (#173) — voids a mistyped customer credit top-up
+  /// (CEO/Manager only; gated at the UI on `customers.wallet.withdraw`).
+  /// Delegates to [CreditLedgerService.voidTopup], which appends the
+  /// compensating wallet debit AND the reversal payment row atomically so the
+  /// voided amount drops out of the reconciliation's "Debts collected".
+  /// Returns whether a void was posted (false = not a live top-up).
+  Future<bool> voidTopup({
+    required String walletTxnId,
+    required String staffId,
+    String? reason,
+  }) {
+    return CreditLedgerService(_db).voidTopup(
+      walletTxnId: walletTxnId,
+      staffId: staffId,
+      reason: reason,
+    );
+  }
+
   Future<void> updateWalletLimit(String customerId, double newLimit) async {
     final customer = getById(customerId);
     if (customer == null) {
