@@ -79,6 +79,14 @@ ReconData recon({
   int supplierPayableKobo = 0,
   int heldCrateDepositsKobo = 0,
   int supplierCrateDebtKobo = 0,
+  // #176 report-truth inputs.
+  int salesPaidNowKobo = 0,
+  int salesOnCreditKobo = 0,
+  int forfeitIncomeKobo = 0,
+  int uncostedTakingsKobo = 0,
+  int stockTransfersKobo = 0,
+  int stockCountAdjustmentsKobo = 0,
+  int stockDeletionsKobo = 0,
 }) {
   return ReconData(
     totalRevenueKobo: totalRevenueKobo < 0 ? costedRevenueKobo : totalRevenueKobo,
@@ -137,6 +145,13 @@ ReconData recon({
     stockExpectedClosingKobo: stockExpectedClosingKobo,
     topItems: const [],
     manufacturerEmpties: const [],
+    salesPaidNowKobo: salesPaidNowKobo,
+    salesOnCreditKobo: salesOnCreditKobo,
+    forfeitIncomeKobo: forfeitIncomeKobo,
+    uncostedTakingsKobo: uncostedTakingsKobo,
+    stockTransfersKobo: stockTransfersKobo,
+    stockCountAdjustmentsKobo: stockCountAdjustmentsKobo,
+    stockDeletionsKobo: stockDeletionsKobo,
   );
 }
 
@@ -467,7 +482,9 @@ void main() {
       );
       final f = dailyClosingFiguresFrom(d);
 
-      expect(f.totalSalesKobo, 100000);
+      // #176 — the frozen "Total Sales" is now the unified NET headline (item
+      // lines − discounts): 100,000 gross − 5,000 discount = 95,000.
+      expect(f.totalSalesKobo, 95000);
       // grossProfit = (90,000 − 5,000) − 60,000 = 25,000; net = 25k − 5k − 2k.
       expect(f.grossProfitKobo, 25000);
       expect(f.netProfitKobo, 18000);
@@ -570,6 +587,118 @@ void main() {
       final cmp = reconClosingComparison(snapshot, d);
       expect(cmp.reviewedBy, 'user-9');
       expect(cmp.reviewedAt, DateTime.utc(2026, 7, 21, 8));
+    });
+  });
+
+  // ── #176 report-truth: the single Total Sales getter ──────────────────────
+  group('ReconData.totalSalesKobo — net headline (#176)', () {
+    test('is gross item-line revenue minus discounts', () {
+      final d = recon(totalRevenueKobo: 120000, discountsKobo: 20000);
+      expect(d.totalSalesKobo, 100000);
+    });
+
+    test('with no discount it equals gross item-line revenue', () {
+      final d = recon(totalRevenueKobo: 90000);
+      expect(d.totalSalesKobo, 90000);
+    });
+
+    test('the frozen day-close Total Sales is the NET figure', () {
+      final d = recon(totalRevenueKobo: 100000, discountsKobo: 5000);
+      expect(dailyClosingFiguresFrom(d).totalSalesKobo, 95000);
+    });
+  });
+
+  // ── #176 report-truth: forfeit income + quick-sale takings in net profit ──
+  group('ReconData net profit — forfeit income + quick-sale takings (#176)', () {
+    test('quick-sale takings are added to net profit (no COGS deducted)', () {
+      // Costed gross profit 40,000 (100k rev − 60k COGS) + 12,000 quick-sale
+      // takings, no expenses/damages → 52,000. Gross profit itself is unchanged.
+      final d = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        uncostedTakingsKobo: 12000,
+      );
+      expect(d.grossProfitKobo, 40000);
+      expect(d.netProfitKobo, 52000);
+    });
+
+    test('forfeit income is added to net profit', () {
+      final d = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        forfeitIncomeKobo: 8000,
+      );
+      expect(d.netProfitKobo, 48000);
+    });
+
+    test('both additions flow through with the deductions', () {
+      final d = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        uncostedTakingsKobo: 12000,
+        forfeitIncomeKobo: 8000,
+        expensesKobo: 5000,
+        damageCostKobo: 2000,
+        crateDamageDepositKobo: 1000,
+      );
+      // 40,000 + 12,000 + 8,000 − 5,000 − 2,000 − 1,000 = 52,000.
+      expect(d.netProfitKobo, 52000);
+    });
+
+    test('gross margin stays costed-only (quick-sale takings never dilute it)',
+        () {
+      final d = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        uncostedTakingsKobo: 999999,
+      );
+      // Margin is 40,000 / 100,000 = 40.0%, untouched by the uncosted takings.
+      expect(d.grossMarginPct, '40.0');
+    });
+  });
+
+  // ── #176 report-truth: stock "Other movements" broken out by cause ────────
+  group('ReconData stock breakout — transfers / count fixes / deletions (#176)',
+      () {
+    test('the broken-out classes fold into the derived closing (equation ties)',
+        () {
+      // Opening 100,000, COGS 20,000, then +5,000 transfer in, −3,000 count
+      // correction, −4,000 product deletion, +1,000 other = 79,000 closing.
+      final d = recon(
+        stockOpeningKobo: 100000,
+        stockCogsKobo: 20000,
+        stockTransfersKobo: 5000,
+        stockCountAdjustmentsKobo: -3000,
+        stockDeletionsKobo: -4000,
+        stockOtherMovementsKobo: 1000,
+        stockExpectedClosingKobo: 79000,
+      );
+      expect(d.stockDerivedClosingKobo, 79000);
+      expect(d.stockDerivedClosingKobo, d.stockExpectedClosingKobo);
+    });
+
+    test('hasStockFlow is true when only a broken-out class is non-zero', () {
+      expect(recon(stockTransfersKobo: 1).hasStockFlow, isTrue);
+      expect(recon(stockCountAdjustmentsKobo: 1).hasStockFlow, isTrue);
+      expect(recon(stockDeletionsKobo: 1).hasStockFlow, isTrue);
+    });
+  });
+
+  group('stock-movement reason classifiers (#176)', () {
+    test('product-delete write-off reason matches exactly, never as substring',
+        () {
+      // The machine constant a product delete stamps (InventoryDao).
+      expect(isProductDeleteReason('product_deleted'), isTrue);
+      expect(isProductDeleteReason('deleted extra stock'), isFalse);
+      expect(isProductDeleteReason('Daily stock count adjustment'), isFalse);
+    });
+
+    test('daily-count reconciliation reason matches "count"', () {
+      expect(isCountReconciliationReason('Daily stock count adjustment'),
+          isTrue);
+      expect(isCountReconciliationReason('COUNT fix'), isTrue);
+      expect(isCountReconciliationReason('Damage'), isFalse);
+      expect(isCountReconciliationReason('product_deleted'), isFalse);
     });
   });
 }

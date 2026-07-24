@@ -39,6 +39,10 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   // charge it). Rate is entered as a percentage and stored as basis points.
   bool _vatEnabled = false;
   final _vatRateController = TextEditingController();
+  // VAT basis (#176): inclusive = marked prices already contain VAT (the
+  // default, most shops); exclusive = VAT added on top. Inclusive avoids the
+  // (1+r) overstatement the exclusive formula produced for inclusive-price shops.
+  VatBasis _vatBasis = VatBasis.inclusive;
   bool _loading = true;
   bool _saving = false;
 
@@ -81,6 +85,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     final currency = await db.settingsDao.get('default_currency');
     final vatEnabledRaw = await db.settingsDao.get(kVatEnabledKey);
     final vatBps = parseVatRateBps(await db.settingsDao.get(kVatRateBpsKey));
+    final vatBasis = parseVatBasis(await db.settingsDao.get(kVatBasisKey));
 
     // Attempt to resolve a cached local logo path.
     String? logoPath;
@@ -112,6 +117,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         _currency,
       }.toList()..sort();
       _vatEnabled = vatEnabledRaw?.trim().toLowerCase() == 'true';
+      _vatBasis = vatBasis;
       _vatRateController.text = vatBps > 0
           ? VatConfig(enabled: true, rateBps: vatBps).ratePercentLabel
           : '';
@@ -222,6 +228,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         final pct = double.tryParse(_vatRateController.text.trim()) ?? 0;
         final bps = pct <= 0 ? 0 : (pct * 100).round();
         await db.settingsDao.set(kVatRateBpsKey, bps.toString());
+        // #176 — persist the inclusive/exclusive basis (inclusive default).
+        await db.settingsDao.set(
+          kVatBasisKey,
+          _vatBasis == VatBasis.inclusive ? 'inclusive' : 'exclusive',
+        );
       }
       await db.activityLogDao.log(
         action: 'settings.business_info.update',
@@ -431,6 +442,32 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                               label: 'VAT rate (%)',
                               prefixIcon: Icons.percent_rounded,
                             ),
+                          ),
+                          // #176 — inclusive/exclusive basis (inclusive default).
+                          const SizedBox(height: 8),
+                          SwitchListTile(
+                            value: _vatBasis == VatBasis.inclusive,
+                            onChanged: (v) => setState(() {
+                              _vatBasis = v
+                                  ? VatBasis.inclusive
+                                  : VatBasis.exclusive;
+                            }),
+                            activeThumbColor:
+                                Theme.of(context).colorScheme.primary,
+                            activeTrackColor: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.35),
+                            title: Text(
+                              'Prices already include VAT',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            subtitle: Text(
+                              'On: your marked prices contain VAT (most shops), '
+                              'so the closing shows the VAT portion within them. '
+                              'Off: VAT is added on top of your prices.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            contentPadding: EdgeInsets.zero,
                           ),
                         ],
                       ],

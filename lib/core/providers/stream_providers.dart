@@ -1214,12 +1214,14 @@ final currencySymbolProvider = Provider<String>((ref) {
 });
 
 /// The business's VAT configuration (opt-in, OFF by default), streamed from the
-/// synced `vat_enabled` / `vat_rate_bps` settings keys — same mechanism as
-/// [currencyCodeProvider], so a CEO toggling VAT in Settings propagates across
-/// devices with no migration. A row is only "enabled" when the flag is `'true'`
-/// AND the rate is positive, so an enabled-but-unconfigured business shows no
-/// VAT. Consumed by the standardized daily closing (Phase 1 surfaces VAT due on
-/// net sales; the checkout/receipt VAT leg is a later slice).
+/// synced `vat_enabled` / `vat_rate_bps` / `vat_basis` settings keys — same
+/// mechanism as [currencyCodeProvider], so a CEO toggling VAT in Settings
+/// propagates across devices with no migration. A row is only "enabled" when the
+/// flag is `'true'` AND the rate is positive, so an enabled-but-unconfigured
+/// business shows no VAT. The basis (inclusive/exclusive, inclusive default)
+/// selects how the due figure is computed from recorded takings. Consumed by the
+/// standardized daily closing (Phase 1 surfaces VAT due on net sales; the
+/// checkout/receipt VAT leg is a later slice).
 final vatConfigProvider = businessScopedStream<VatConfig>(
   (ref, db, businessId) => db.settingsDao.watch(kVatEnabledKey).asyncMap((
     enabledRaw,
@@ -1227,7 +1229,8 @@ final vatConfigProvider = businessScopedStream<VatConfig>(
     final enabled = enabledRaw?.trim().toLowerCase() == 'true';
     if (!enabled) return VatConfig.off;
     final rateBps = parseVatRateBps(await db.settingsDao.get(kVatRateBpsKey));
-    return VatConfig(enabled: rateBps > 0, rateBps: rateBps);
+    final basis = parseVatBasis(await db.settingsDao.get(kVatBasisKey));
+    return VatConfig(enabled: rateBps > 0, rateBps: rateBps, basis: basis);
   }),
   whenAbsent: VatConfig.off,
 );
@@ -1876,6 +1879,17 @@ final allSupplierLedgerEntriesProvider =
 final allPaymentTransactionsProvider =
     businessScopedStream<List<PaymentTransactionData>>(
   (ref, db, businessId) => db.ordersDao.watchAllPaymentTransactions(),
+  whenAbsent: const [],
+);
+
+/// Every non-voided `crate_deposit_forfeited` wallet row (business-wide, newest
+/// first). Feeds the Daily Reconciliation forfeit-income line (#176): a kept
+/// deposit is money legitimately earned, summed IN PERIOD as income in the P&L.
+/// Narrow by design — wallet rows carry no `storeId`, so this is business-wide
+/// like the held-deposit figure.
+final crateForfeitRowsProvider =
+    businessScopedStream<List<WalletTransactionData>>(
+  (ref, db, businessId) => db.walletTransactionsDao.watchForfeitRows(),
   whenAbsent: const [],
 );
 
