@@ -10,6 +10,56 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Money integrity #1 (#169) — payments compensating-row seam + sync/schema plumbing (prefactor) — CODE-COMPLETE (2026-07-24)
+Root prefactor of the #155 money-integrity PRD (ADR **0021**). Behavior-preserving:
+introduces the seam + schema/flag plumbing every later correction slice depends on,
+with NO user-visible flow change. Branch `feat/money-integrity-1-payments-seam` off
+`main` (HEAD 757a18e).
+- **The seam.** New `PaymentTransactionsDao.postReversalPayment` (part file
+  `daos_payments.dart`, registered in the `@DriftDatabase` daos list) posts a DATED
+  compensating `payment_transactions` row: the ORIGINAL row is left untouched, the
+  reversal lands on its OWN `created_at` day (the correction day), copies the
+  original's single typed reference (so the exactly-one CHECK holds), inherits/
+  overrides `store_id`, and enqueues for sync. Legacy in-place void columns stay
+  read-only. The correction paths (cancel / expense reject-delete / top-up void) are
+  wired to CALL it in later slices — this prefactor only introduces the verb.
+- **Schema (Drift v63→**v64**, cloud `0153_money_integrity_payments_seam.sql`).**
+  `payment_transactions` gains nullable `store_id` (stamped on new sale / expense /
+  crate-refund rows; joins the ledger immutable-column set); `orders` gains nullable
+  `confirmed_by` (unused until #171); the payment-type CHECK is widened via the
+  established constraint-migration pattern (rebuild locally, DROP+re-add CHECK on
+  cloud) to add the deposit-distinct **`crate_deposit`** type (unused until #175).
+  The new type CHECK string:
+  `CHECK (type IN ('sale','purchase','expense','refund','wallet_topup','crate_deposit'))`.
+  All `*_kobo` columns stay bigint. v64 addColumn(store_id) BEFORE the TableMigration
+  rebuild (else drift fills the new column with the literal name), then recreates the
+  two indexes + three triggers (bump + immutable + no-delete). Cloud re-bakes the
+  payment append-only trigger so `store_id` is immutable there too.
+- **scrubCreatedAt for the crate ledgers.** `crate_ledger` + `supplier_crate_ledger`
+  were NOT previously flagged (only wallet / supplier-ledger / payment were) — ADDED
+  `scrubCreatedAt: true` in `sync_registry.dart`, closing the latent void-push P0001
+  orphan trap before any crate-void feature ships. Golden test's frozen scrub set
+  widened to match.
+- **Cash-flow day-basis invariant (no-op today).** Verified the reconciliation
+  cash-flow summary already counts each payment row on its OWN `created_at` day
+  (`inSpan(p.createdAt)`), and no report sums cash by sale-day — the invariant the
+  correction slices rely on. Comment updated; no code change needed.
+- **Tests (TDD).** `test/payments/reversal_payment_seam_test.dart` (3: original
+  untouched + lands on own day; enqueued as upsert; store/amount overridable);
+  `test/database/migration_upgrade_test.dart` v63→v64 (confirmed_by + store_id added,
+  widened CHECK admits crate_deposit, legacy row store_id NULL, triggers/indexes
+  recreated, store_id now immutable); `test/sync/normalize_payload_whitelist_test.dart`
+  crate-ledger + supplier-crate-ledger void re-push drops created_at.
+- **Verification.** `flutter analyze` clean (0/0 project-wide). Full `flutter test` =
+  **1023 pass / 110 skip / 1 fail** — the lone failure `who_is_working_screen_test` is
+  the pre-existing environmental Supabase-400 flake (auth code untouched here).
+- **Deviations / follow-ups.** `store_id` is stamped where a store is trivially in
+  scope (sale / expense / crate-refund payment rows + the seam); the wallet top-up
+  path (`CreditLedgerService.topUp/recordRepayment`) has NO store param today, so
+  those new rows stay `store_id`-null (still valid → business-wide) until a later
+  slice threads store context — a feature-layer change out of this prefactor's scope.
+  DO NOT push/deploy the cloud migration; the orchestrator sequences merge/deploy.
+
 ### Crate pool #6 (#163) — net-position honesty (subtract held deposits + supplier debt) — CODE-COMPLETE (2026-07-24)
 Sixth slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
 Branch `feat/crate-pool-net-position-honesty` off `feat/crate-pool-cancel-completes-ledger`
