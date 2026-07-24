@@ -1236,4 +1236,81 @@ void main() {
       expect(legacy.data['value_kobo'], isNull);
     });
   });
+
+  group('onUpgrade v66 → v67 (money-integrity #7b transfers move cost, #170)',
+      () {
+    Future<bool> columnExists(
+        AppDatabase db, String table, String column) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM pragma_table_info('$table') WHERE name = ?",
+            variables: [Variable<String>(column)],
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test('adds stock_transfers.cost_kobo (the cost that rides a transfer); '
+        'legacy transfers keep it NULL', () async {
+      final biz = UuidV7.generate();
+      final fromStore = UuidV7.generate();
+      final toStore = UuidV7.generate();
+      final productId = UuidV7.generate();
+      final userId = UuidV7.generate();
+      final legacyTransferId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Src')",
+        [fromStore, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Dst')",
+        [toStore, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO products (id, business_id, name) VALUES (?, ?, 'Widget')",
+        [productId, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) VALUES (?, ?, 'CEO', '0')",
+        [userId, biz],
+      );
+
+      // Revert stock_transfers to the pre-v67 shape: drop cost_kobo.
+      await db1
+          .customStatement('ALTER TABLE stock_transfers DROP COLUMN cost_kobo');
+      expect(await columnExists(db1, 'stock_transfers', 'cost_kobo'), isFalse);
+
+      // A pre-existing (legacy) transfer on the reverted table.
+      await db1.customStatement(
+        'INSERT INTO stock_transfers '
+        '(id, business_id, from_location_id, to_location_id, product_id, '
+        'quantity, status, initiated_by) '
+        "VALUES (?, ?, ?, ?, ?, 5, 'received', ?)",
+        [legacyTransferId, biz, fromStore, toStore, productId, userId],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 66');
+      await db1.close();
+
+      // Re-open → onUpgrade(66 → 67) adds the nullable cost_kobo column.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await columnExists(db2, 'stock_transfers', 'cost_kobo'), isTrue);
+
+      // The legacy transfer survives and its new cost_kobo is NULL.
+      final legacy = await db2
+          .customSelect(
+            'SELECT cost_kobo FROM stock_transfers WHERE id = ?',
+            variables: [Variable<String>(legacyTransferId)],
+          )
+          .getSingle();
+      expect(legacy.data['cost_kobo'], isNull);
+    });
+  });
 }

@@ -47,7 +47,32 @@ parallel to the payment slices). Product decision (locked): loss valuation rate 
     with 2 `dart_arm_only` cost scenarios (RPC arm skips them — web cost pass out
     of scope) + the dart arm asserts the snapshot/new-batch; migration v65→v66
     case; inventory golden receive producer updated to `trackCost:false`.
-- **7b — transfers move cost + in-transit worth:** PENDING.
+- **7b — transfers move cost + in-transit worth (DONE).** A store transfer moves
+  COST with quantity so the receiving store's margin is real and the source keeps
+  no phantom coverage:
+  • **dispatch** (both `createTransfer` and the request→`dispatchTransfer` path)
+    draws the source's FIFO batches down (`drawDownOutflow`) for the dispatched
+    qty; the drawn TOTAL rides the transfer as `stock_transfers.cost_kobo`;
+  • **receipt** (`receiveTransfer`) creates the destination's Cost Batch at the
+    carried per-unit cost (round(cost_kobo/qty); legacy null-cost → Uncosted),
+    so a sale at the destination draws real COGS;
+  • **cancel** (`cancelTransfer`) restores the source's cost layer at the carried
+    cost (goods came back — no permanent coverage loss);
+  • **in-transit worth:** `ReconData.inTransitValueKobo` = Σ `cost_kobo` over
+    in_transit transfers (either endpoint in scope; business-wide under All
+    Stores), added to `businessNetPositionKobo` — value that used to vanish
+    between dispatch and receipt.
+  • adjustStock's transfer_out/transfer_in legs stay cost-neutral (guarded
+    `!isTransfer`); the transfer DAO owns the cost movement, so there's no double
+    draw/inflow.
+  • **Schema:** Drift v66→**v67** + cloud `0156_money_integrity_transfer_cost.sql`
+    add nullable `stock_transfers.cost_kobo` (**bigint** on cloud). Simple
+    add-column; legacy transfers NULL. No sync_registry change (Restore.plain).
+  • **Tests:** `test/transfer/transfer_cost_movement_test.dart` (5 DAO cases:
+    dispatch rides cost, receipt creates dest batch + real COGS, cancel restores
+    source, legacy null-cost → Uncosted receipt, in-transit sum); recon
+    `businessNetPositionKobo` in-transit case; migration v66→v67 case. Existing
+    `test/transfer/stock_transfer_dao_test.dart` unaffected.
 - **7c — cancel batch restore + product-delete write-off:** PENDING.
 
 ### Money integrity #5 (#175) — tender picker + cash-card honesty (deposit out of Cash sales) — CODE-COMPLETE (2026-07-24)

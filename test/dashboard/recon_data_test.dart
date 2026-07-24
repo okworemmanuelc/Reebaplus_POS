@@ -34,6 +34,7 @@ ReconData recon({
   int stockExpectedClosingKobo = 0,
   // Business net position (#163) inputs — assets counted, liabilities netted.
   int inventoryOnHandKobo = 0,
+  int inTransitValueKobo = 0,
   int totalOwedKobo = 0,
   bool showCrates = false,
   int crateDepositKobo = 0,
@@ -86,6 +87,7 @@ ReconData recon({
     heldCrateDepositsKobo: heldCrateDepositsKobo,
     supplierCrateDebtKobo: supplierCrateDebtKobo,
     inventoryOnHandKobo: inventoryOnHandKobo,
+    inTransitValueKobo: inTransitValueKobo,
     uncostedInventoryItems: 0,
     surplusCostKobo: surplusCostKobo,
     stockOpeningKobo: stockOpeningKobo,
@@ -331,6 +333,13 @@ void main() {
       );
       // No crate asset, no crate liabilities → 200,000 + 50,000 − 30,000.
       expect(d.businessNetPositionKobo, 220000);
+    });
+
+    test('#7b: in-transit stock value is counted as an asset in worth', () {
+      // 200,000 on hand + 60,000 dispatched-not-received = 260,000 worth. The
+      // in-transit stock used to vanish between dispatch and receipt.
+      final d = recon(inventoryOnHandKobo: 200000, inTransitValueKobo: 60000);
+      expect(d.businessNetPositionKobo, 260000);
     });
   });
 

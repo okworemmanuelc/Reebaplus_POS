@@ -17535,6 +17535,17 @@ class $StockTransfersTable extends StockTransfers
       'REFERENCES users (id)',
     ),
   );
+  static const VerificationMeta _costKoboMeta = const VerificationMeta(
+    'costKobo',
+  );
+  @override
+  late final GeneratedColumn<int> costKobo = GeneratedColumn<int>(
+    'cost_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _initiatedAtMeta = const VerificationMeta(
     'initiatedAt',
   );
@@ -17594,6 +17605,7 @@ class $StockTransfersTable extends StockTransfers
     status,
     initiatedBy,
     receivedBy,
+    costKobo,
     initiatedAt,
     receivedAt,
     createdAt,
@@ -17683,6 +17695,12 @@ class $StockTransfersTable extends StockTransfers
         receivedBy.isAcceptableOrUnknown(data['received_by']!, _receivedByMeta),
       );
     }
+    if (data.containsKey('cost_kobo')) {
+      context.handle(
+        _costKoboMeta,
+        costKobo.isAcceptableOrUnknown(data['cost_kobo']!, _costKoboMeta),
+      );
+    }
     if (data.containsKey('initiated_at')) {
       context.handle(
         _initiatedAtMeta,
@@ -17758,6 +17776,10 @@ class $StockTransfersTable extends StockTransfers
         DriftSqlType.string,
         data['${effectivePrefix}received_by'],
       ),
+      costKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cost_kobo'],
+      ),
       initiatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}initiated_at'],
@@ -17794,6 +17816,7 @@ class StockTransferData extends DataClass
   final String status;
   final String initiatedBy;
   final String? receivedBy;
+  final int? costKobo;
   final DateTime initiatedAt;
   final DateTime? receivedAt;
   final DateTime createdAt;
@@ -17808,6 +17831,7 @@ class StockTransferData extends DataClass
     required this.status,
     required this.initiatedBy,
     this.receivedBy,
+    this.costKobo,
     required this.initiatedAt,
     this.receivedAt,
     required this.createdAt,
@@ -17826,6 +17850,9 @@ class StockTransferData extends DataClass
     map['initiated_by'] = Variable<String>(initiatedBy);
     if (!nullToAbsent || receivedBy != null) {
       map['received_by'] = Variable<String>(receivedBy);
+    }
+    if (!nullToAbsent || costKobo != null) {
+      map['cost_kobo'] = Variable<int>(costKobo);
     }
     map['initiated_at'] = Variable<DateTime>(initiatedAt);
     if (!nullToAbsent || receivedAt != null) {
@@ -17849,6 +17876,9 @@ class StockTransferData extends DataClass
       receivedBy: receivedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(receivedBy),
+      costKobo: costKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(costKobo),
       initiatedAt: Value(initiatedAt),
       receivedAt: receivedAt == null && nullToAbsent
           ? const Value.absent()
@@ -17873,6 +17903,7 @@ class StockTransferData extends DataClass
       status: serializer.fromJson<String>(json['status']),
       initiatedBy: serializer.fromJson<String>(json['initiatedBy']),
       receivedBy: serializer.fromJson<String?>(json['receivedBy']),
+      costKobo: serializer.fromJson<int?>(json['costKobo']),
       initiatedAt: serializer.fromJson<DateTime>(json['initiatedAt']),
       receivedAt: serializer.fromJson<DateTime?>(json['receivedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -17892,6 +17923,7 @@ class StockTransferData extends DataClass
       'status': serializer.toJson<String>(status),
       'initiatedBy': serializer.toJson<String>(initiatedBy),
       'receivedBy': serializer.toJson<String?>(receivedBy),
+      'costKobo': serializer.toJson<int?>(costKobo),
       'initiatedAt': serializer.toJson<DateTime>(initiatedAt),
       'receivedAt': serializer.toJson<DateTime?>(receivedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -17909,6 +17941,7 @@ class StockTransferData extends DataClass
     String? status,
     String? initiatedBy,
     Value<String?> receivedBy = const Value.absent(),
+    Value<int?> costKobo = const Value.absent(),
     DateTime? initiatedAt,
     Value<DateTime?> receivedAt = const Value.absent(),
     DateTime? createdAt,
@@ -17923,6 +17956,7 @@ class StockTransferData extends DataClass
     status: status ?? this.status,
     initiatedBy: initiatedBy ?? this.initiatedBy,
     receivedBy: receivedBy.present ? receivedBy.value : this.receivedBy,
+    costKobo: costKobo.present ? costKobo.value : this.costKobo,
     initiatedAt: initiatedAt ?? this.initiatedAt,
     receivedAt: receivedAt.present ? receivedAt.value : this.receivedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -17949,6 +17983,7 @@ class StockTransferData extends DataClass
       receivedBy: data.receivedBy.present
           ? data.receivedBy.value
           : this.receivedBy,
+      costKobo: data.costKobo.present ? data.costKobo.value : this.costKobo,
       initiatedAt: data.initiatedAt.present
           ? data.initiatedAt.value
           : this.initiatedAt,
@@ -17974,6 +18009,7 @@ class StockTransferData extends DataClass
           ..write('status: $status, ')
           ..write('initiatedBy: $initiatedBy, ')
           ..write('receivedBy: $receivedBy, ')
+          ..write('costKobo: $costKobo, ')
           ..write('initiatedAt: $initiatedAt, ')
           ..write('receivedAt: $receivedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -17993,6 +18029,7 @@ class StockTransferData extends DataClass
     status,
     initiatedBy,
     receivedBy,
+    costKobo,
     initiatedAt,
     receivedAt,
     createdAt,
@@ -18011,6 +18048,7 @@ class StockTransferData extends DataClass
           other.status == this.status &&
           other.initiatedBy == this.initiatedBy &&
           other.receivedBy == this.receivedBy &&
+          other.costKobo == this.costKobo &&
           other.initiatedAt == this.initiatedAt &&
           other.receivedAt == this.receivedAt &&
           other.createdAt == this.createdAt &&
@@ -18027,6 +18065,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
   final Value<String> status;
   final Value<String> initiatedBy;
   final Value<String?> receivedBy;
+  final Value<int?> costKobo;
   final Value<DateTime> initiatedAt;
   final Value<DateTime?> receivedAt;
   final Value<DateTime> createdAt;
@@ -18042,6 +18081,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     this.status = const Value.absent(),
     this.initiatedBy = const Value.absent(),
     this.receivedBy = const Value.absent(),
+    this.costKobo = const Value.absent(),
     this.initiatedAt = const Value.absent(),
     this.receivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -18058,6 +18098,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     this.status = const Value.absent(),
     required String initiatedBy,
     this.receivedBy = const Value.absent(),
+    this.costKobo = const Value.absent(),
     this.initiatedAt = const Value.absent(),
     this.receivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -18079,6 +18120,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     Expression<String>? status,
     Expression<String>? initiatedBy,
     Expression<String>? receivedBy,
+    Expression<int>? costKobo,
     Expression<DateTime>? initiatedAt,
     Expression<DateTime>? receivedAt,
     Expression<DateTime>? createdAt,
@@ -18095,6 +18137,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
       if (status != null) 'status': status,
       if (initiatedBy != null) 'initiated_by': initiatedBy,
       if (receivedBy != null) 'received_by': receivedBy,
+      if (costKobo != null) 'cost_kobo': costKobo,
       if (initiatedAt != null) 'initiated_at': initiatedAt,
       if (receivedAt != null) 'received_at': receivedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -18113,6 +18156,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     Value<String>? status,
     Value<String>? initiatedBy,
     Value<String?>? receivedBy,
+    Value<int?>? costKobo,
     Value<DateTime>? initiatedAt,
     Value<DateTime?>? receivedAt,
     Value<DateTime>? createdAt,
@@ -18129,6 +18173,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
       status: status ?? this.status,
       initiatedBy: initiatedBy ?? this.initiatedBy,
       receivedBy: receivedBy ?? this.receivedBy,
+      costKobo: costKobo ?? this.costKobo,
       initiatedAt: initiatedAt ?? this.initiatedAt,
       receivedAt: receivedAt ?? this.receivedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -18167,6 +18212,9 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     if (receivedBy.present) {
       map['received_by'] = Variable<String>(receivedBy.value);
     }
+    if (costKobo.present) {
+      map['cost_kobo'] = Variable<int>(costKobo.value);
+    }
     if (initiatedAt.present) {
       map['initiated_at'] = Variable<DateTime>(initiatedAt.value);
     }
@@ -18197,6 +18245,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
           ..write('status: $status, ')
           ..write('initiatedBy: $initiatedBy, ')
           ..write('receivedBy: $receivedBy, ')
+          ..write('costKobo: $costKobo, ')
           ..write('initiatedAt: $initiatedAt, ')
           ..write('receivedAt: $receivedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -67771,6 +67820,7 @@ typedef $$StockTransfersTableCreateCompanionBuilder =
       Value<String> status,
       required String initiatedBy,
       Value<String?> receivedBy,
+      Value<int?> costKobo,
       Value<DateTime> initiatedAt,
       Value<DateTime?> receivedAt,
       Value<DateTime> createdAt,
@@ -67788,6 +67838,7 @@ typedef $$StockTransfersTableUpdateCompanionBuilder =
       Value<String> status,
       Value<String> initiatedBy,
       Value<String?> receivedBy,
+      Value<int?> costKobo,
       Value<DateTime> initiatedAt,
       Value<DateTime?> receivedAt,
       Value<DateTime> createdAt,
@@ -67966,6 +68017,11 @@ class $$StockTransfersTableFilterComposer
 
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get costKobo => $composableBuilder(
+    column: $table.costKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -68177,6 +68233,11 @@ class $$StockTransfersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get costKobo => $composableBuilder(
+    column: $table.costKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get initiatedAt => $composableBuilder(
     column: $table.initiatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -68353,6 +68414,9 @@ class $$StockTransfersTableAnnotationComposer
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get costKobo =>
+      $composableBuilder(column: $table.costKobo, builder: (column) => column);
 
   GeneratedColumn<DateTime> get initiatedAt => $composableBuilder(
     column: $table.initiatedAt,
@@ -68584,6 +68648,7 @@ class $$StockTransfersTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<String> initiatedBy = const Value.absent(),
                 Value<String?> receivedBy = const Value.absent(),
+                Value<int?> costKobo = const Value.absent(),
                 Value<DateTime> initiatedAt = const Value.absent(),
                 Value<DateTime?> receivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -68599,6 +68664,7 @@ class $$StockTransfersTableTableManager
                 status: status,
                 initiatedBy: initiatedBy,
                 receivedBy: receivedBy,
+                costKobo: costKobo,
                 initiatedAt: initiatedAt,
                 receivedAt: receivedAt,
                 createdAt: createdAt,
@@ -68616,6 +68682,7 @@ class $$StockTransfersTableTableManager
                 Value<String> status = const Value.absent(),
                 required String initiatedBy,
                 Value<String?> receivedBy = const Value.absent(),
+                Value<int?> costKobo = const Value.absent(),
                 Value<DateTime> initiatedAt = const Value.absent(),
                 Value<DateTime?> receivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -68631,6 +68698,7 @@ class $$StockTransfersTableTableManager
                 status: status,
                 initiatedBy: initiatedBy,
                 receivedBy: receivedBy,
+                costKobo: costKobo,
                 initiatedAt: initiatedAt,
                 receivedAt: receivedAt,
                 createdAt: createdAt,

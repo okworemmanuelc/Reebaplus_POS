@@ -1197,7 +1197,9 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     final now = DateTime.now();
 
     await transaction(() async {
-      // 1. Write the header row (in_transit).
+      // 1. Write the header row (in_transit) — inserted first so the
+      //    transfer_out ledger row below can FK-reference it. Enqueued once at
+      //    the end, after cost_kobo is known (#7b).
       final header = StockTransfersCompanion.insert(
         id: Value(transferId),
         businessId: requireBusinessId(),
@@ -1211,7 +1213,6 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         lastUpdatedAt: Value(now),
       );
       await into(stockTransfers).insert(header);
-      await db.syncDao.enqueueUpsert('stock_transfers', header);
 
       // 2. Decrement source inventory (transfer_out). The adjustStock helper
       //    handles both the v2 domain-RPC path and the legacy flag-off path,
@@ -1225,6 +1226,23 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         movementType: 'transfer_out',
         refId: transferId,
       );
+
+      // 3. #7b: draw the source's FIFO batches down and RIDE the drawn cost on
+      //    the transfer, so receipt can create the destination batch at that
+      //    value and the source keeps no phantom coverage. Uncovered units draw
+      //    0 (uncosted). Enqueue the header once now, carrying cost_kobo.
+      final drawnKobo =
+          await db.costBatchesDao.drawDownOutflow(productId, fromStoreId, quantity);
+      await (update(stockTransfers)
+            ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
+          .write(StockTransfersCompanion(
+        costKobo: Value(drawnKobo),
+        lastUpdatedAt: Value(DateTime.now()),
+      ));
+      final row = await (select(
+        stockTransfers,
+      )..where((t) => t.id.equals(transferId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert('stock_transfers', row.toCompanion(true));
     });
 
     // 3. Activity log.
@@ -1307,6 +1325,23 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         refId: transferId,
       );
 
+      // 1b. #7b: create the destination's Cost Batch at the cost that RODE the
+      //     transfer, so the receiving store sells at real COGS. Per-unit =
+      //     round(total carried cost / qty); a legacy transfer that carried no
+      //     cost (cost_kobo NULL) makes an Uncosted (0) batch, as receipts did
+      //     before #170. adjustStock skips the batch for a transfer_in leg, so
+      //     this is the single destination inflow.
+      final perUnitCostKobo = (transfer.costKobo != null && transfer.quantity > 0)
+          ? (transfer.costKobo! / transfer.quantity).round()
+          : 0;
+      await db.costBatchesDao.recordInflowBatch(
+        productId: transfer.productId,
+        storeId: transfer.toLocationId,
+        quantity: transfer.quantity,
+        costKobo: perUnitCostKobo,
+        receivedAt: now,
+      );
+
       // 2. Flip header → received.
       final updated = transfer
           .toCompanion(true)
@@ -1386,6 +1421,22 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         cancelledBy,
         movementType: 'transfer_in',
         refId: transferId,
+      );
+
+      // 1b. #7b: restore the source's Cost Batch at the cost that was drawn down
+      //     at dispatch — the goods physically came back, so the source keeps
+      //     its coverage instead of losing it forever. Per-unit = round(carried
+      //     cost / qty); a legacy transfer that carried no cost restores an
+      //     Uncosted layer. adjustStock skips the batch for a transfer_in leg.
+      final perUnitCostKobo = (transfer.costKobo != null && transfer.quantity > 0)
+          ? (transfer.costKobo! / transfer.quantity).round()
+          : 0;
+      await db.costBatchesDao.recordInflowBatch(
+        productId: transfer.productId,
+        storeId: transfer.fromLocationId,
+        quantity: transfer.quantity,
+        costKobo: perUnitCostKobo,
+        receivedAt: DateTime.now(),
       );
 
       // 2. Flip header → cancelled.
@@ -1569,12 +1620,23 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         refId: transferId,
       );
 
-      // 2. Flip header → in_transit, persisting any altered quantity.
+      // 1b. #7b: draw the source's FIFO batches down for the DISPATCHED quantity
+      //     and ride the drawn cost on the transfer (receipt creates the
+      //     destination batch at it; the source keeps no phantom coverage).
+      final drawnKobo = await db.costBatchesDao.drawDownOutflow(
+        transfer.productId,
+        transfer.fromLocationId,
+        dispatchedQty!,
+      );
+
+      // 2. Flip header → in_transit, persisting any altered quantity + the
+      //    carried cost (#7b).
       final updated = transfer
           .toCompanion(true)
           .copyWith(
             status: const Value('in_transit'),
             quantity: Value(dispatchedQty!),
+            costKobo: Value(drawnKobo),
             lastUpdatedAt: Value(now),
           );
       await (update(stockTransfers)

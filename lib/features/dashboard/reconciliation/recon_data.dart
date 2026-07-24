@@ -322,6 +322,9 @@ class ReconData {
     required this.supplierCrateDebtKobo,
     required this.supplierPayableKobo,
     required this.inventoryOnHandKobo,
+    // #170 #7b: dispatched-not-received stock value (optional, default 0 so the
+    // pure-getter test harness stays source-compatible).
+    this.inTransitValueKobo = 0,
     required this.uncostedInventoryItems,
     required this.surplusCostKobo,
     required this.stockOpeningKobo,
@@ -422,6 +425,11 @@ class ReconData {
 
   final int supplierPayableKobo;
   final int inventoryOnHandKobo;
+
+  /// #170 #7b: value of stock dispatched between stores but not yet received
+  /// (in_transit transfers, at the cost that rode each transfer). An asset that
+  /// used to vanish between dispatch and receipt — now counted in Business worth.
+  final int inTransitValueKobo;
   final int uncostedInventoryItems;
   final int surplusCostKobo;
 
@@ -535,16 +543,20 @@ class ReconData {
       damageCostKobo -
       crateDamageDepositKobo -
       shortageCostKobo;
-  /// Point-in-time net worth, honest about crate liabilities (#163). ASSETS:
-  /// inventory at cost, the empty crates we physically hold ([crateDepositKobo],
-  /// valued at deposit), and money customers owe us. LIABILITIES netted out:
-  /// what we owe suppliers for goods ([supplierPayableKobo]), the crate deposits
-  /// we still hold for customers ([heldCrateDepositsKobo] — owed back on return),
-  /// and the crate debt we owe suppliers ([supplierCrateDebtKobo]). Booking the
-  /// crate asset while ignoring the matching deposit/supplier liabilities
-  /// overstated worth; both legs are now subtracted.
+  /// Point-in-time net worth, honest about crate liabilities (#163) and
+  /// in-transit stock (#170 #7b). ASSETS: inventory at cost, stock dispatched
+  /// between stores but not yet received ([inTransitValueKobo] — value that used
+  /// to vanish between dispatch and receipt), the empty crates we physically
+  /// hold ([crateDepositKobo], valued at deposit), and money customers owe us.
+  /// LIABILITIES netted out: what we owe suppliers for goods
+  /// ([supplierPayableKobo]), the crate deposits we still hold for customers
+  /// ([heldCrateDepositsKobo] — owed back on return), and the crate debt we owe
+  /// suppliers ([supplierCrateDebtKobo]). Booking the crate asset while ignoring
+  /// the matching deposit/supplier liabilities overstated worth; both legs are
+  /// now subtracted.
   int get businessNetPositionKobo =>
       inventoryOnHandKobo +
+      inTransitValueKobo +
       totalOwedKobo +
       crateDepositKobo -
       supplierPayableKobo -
@@ -715,6 +727,23 @@ ReconData computeReconData(
       uncostedInventoryItems += p.totalStock;
     } else {
       inventoryOnHandKobo += p.totalStock * p.product.buyingPriceKobo;
+    }
+  }
+
+  // ── In-transit stock value (#170 #7b, point-in-time) ─────────────────────
+  // Stock dispatched between stores but not yet received: removed from the
+  // source's inventory row, not yet added to the destination — so it counts in
+  // neither store's on-hand and, before #7b, was valued nowhere. The cost that
+  // rode each transfer (`cost_kobo`, legacy NULL → 0) restores it to Business
+  // worth. Included when EITHER endpoint is in the active store scope (so a
+  // locked source store still sees what it dispatched); business-wide under All
+  // Stores.
+  final inTransitTransfers =
+      ref.watch(allInTransitTransfersProvider).valueOrNull ?? const [];
+  var inTransitValueKobo = 0;
+  for (final t in inTransitTransfers) {
+    if (inScope(t.fromLocationId) || inScope(t.toLocationId)) {
+      inTransitValueKobo += t.costKobo ?? 0;
     }
   }
 
@@ -1091,6 +1120,7 @@ ReconData computeReconData(
     supplierCrateDebtKobo: supplierCrateDebtKobo,
     supplierPayableKobo: supplierPayableKobo,
     inventoryOnHandKobo: inventoryOnHandKobo,
+    inTransitValueKobo: inTransitValueKobo,
     uncostedInventoryItems: uncostedInventoryItems,
     surplusCostKobo: surplusCostKobo,
     stockOpeningKobo: stockOpeningKobo,

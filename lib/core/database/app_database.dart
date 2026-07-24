@@ -768,6 +768,14 @@ class StockTransfers extends Table {
   TextColumn get status => text().withDefault(const Constant('pending'))();
   TextColumn get initiatedBy => text().references(Users, #id)();
   TextColumn get receivedBy => text().nullable().references(Users, #id)();
+  // Money-integrity #7b (#170, PRD #155): the TOTAL FIFO cost drawn down from the
+  // source at dispatch — the drawn cost RIDES the transfer so the destination's
+  // Cost Batch is created at that value on receipt, and dispatched-not-received
+  // stock (`in_transit`) surfaces in Business worth. NULL for a `pending` request
+  // (nothing dispatched yet) and for every legacy transfer written before #170
+  // (its receipt creates an Uncosted batch, as before). Cloud side MUST be bigint
+  // (money-column rule).
+  IntColumn get costKobo => integer().nullable()();
   DateTimeColumn get initiatedAt =>
       dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get receivedAt => dateTime().nullable()();
@@ -1885,7 +1893,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 66;
+  int get schemaVersion => 67;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4215,6 +4223,24 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         if (hasValue.isEmpty) {
           await m.addColumn(stockAdjustments, stockAdjustments.valueKobo);
+        }
+      }
+      if (from < 67) {
+        // v67 (#170 money-integrity #7b transfers move cost, PRD #155). Mirrors
+        // supabase/migrations/0156_money_integrity_transfer_cost.sql.
+        //
+        // stock_transfers gains a nullable `cost_kobo`: the total FIFO cost the
+        // source drew down at dispatch, riding the transfer so the destination's
+        // Cost Batch is created at that value on receipt and in-transit stock
+        // surfaces in Business worth. Simple add-column (the status CHECK is
+        // untouched); legacy transfers keep NULL (Uncosted receipt, as before).
+        // Idempotency guard mirrors v64/v66.
+        final hasTransferCost = await customSelect(
+          "SELECT 1 FROM pragma_table_info('stock_transfers') "
+          "WHERE name = 'cost_kobo'",
+        ).get();
+        if (hasTransferCost.isEmpty) {
+          await m.addColumn(stockTransfers, stockTransfers.costKobo);
         }
       }
     },
