@@ -898,6 +898,88 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
   }
 
+  /// §18 / PRD #155 (#173) — confirm, then void a mistyped customer credit
+  /// top-up (CEO/Manager only, gated on `customers.wallet.withdraw`). Appends
+  /// the compensating wallet debit AND the reversal payment row so the amount
+  /// drops out of the reconciliation's "Debts collected". Only offered on a
+  /// live cash/transfer top-up row.
+  Future<void> _confirmVoidTopup(WalletTransactionData txn) async {
+    // Defense-in-depth: re-check the gate at the action boundary (hard rule #6).
+    if (!Gates.refundCustomerWallet.allowsNow(ref)) return;
+    final staffId = ref.read(authProvider).currentUser?.id;
+    if (staffId == null) {
+      AppNotification.showError(
+        context,
+        'Could not void this top-up yet — no active session.',
+      );
+      return;
+    }
+    final theme = Theme.of(context);
+    final reasonCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.colorScheme.surface,
+        title: const Text('Void this credit top-up?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${formatCurrency(txn.amountKobo / 100)} will be reversed from '
+              '$_name\'s credit balance and dropped from Debts collected. '
+              'This cannot be undone.',
+            ),
+            SizedBox(height: ctx.getRSize(12)),
+            TextField(
+              controller: reasonCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Void', style: TextStyle(color: danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final reason = reasonCtrl.text.trim();
+    try {
+      final voided = await ref
+          .read(customerServiceProvider)
+          .voidTopup(
+            walletTxnId: txn.id,
+            staffId: staffId,
+            reason: reason.isEmpty ? null : reason,
+          );
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            voided ? 'Top-up voided' : 'This top-up can no longer be voided',
+          ),
+          backgroundColor: voided ? success : danger,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      AppNotification.showError(
+        context,
+        'Could not void this top-up. Please try again.',
+      );
+    }
+  }
+
   /// §18 — open the prefilled Edit Customer Details sheet (CEO/Manager only,
   /// `customers.update`). Prefill comes from the live watched row, falling back
   /// to the row this screen was opened with.
@@ -1906,6 +1988,16 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     final isCredit = txn.type == 'credit';
                     final amount = txn.amountKobo / 100.0;
                     final color = isCredit ? success : danger;
+                    // #173 — a live cash/transfer top-up can be voided by anyone
+                    // who can withdraw from the wallet (the sanctioned fix for a
+                    // mistyped Add Credit). Hide-don't-block: no affordance
+                    // renders when the gate is denied or the row isn't a live
+                    // top-up.
+                    final isVoidableTopup =
+                        txn.voidedAt == null &&
+                        (txn.referenceType == 'topup_cash' ||
+                            txn.referenceType == 'topup_transfer') &&
+                        Gates.refundCustomerWallet.allows(ref);
                     return Padding(
                       padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
                       child: _GlassyCard(
@@ -1962,6 +2054,24 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 color: color,
                               ),
                             ),
+                            if (isVoidableTopup) ...[
+                              SizedBox(width: ctx.getRSize(6)),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: BoxConstraints(
+                                  minWidth: ctx.getRSize(32),
+                                  minHeight: ctx.getRSize(32),
+                                ),
+                                tooltip: 'Void top-up',
+                                icon: Icon(
+                                  FontAwesomeIcons.arrowRotateLeft.data,
+                                  size: ctx.getRSize(14),
+                                  color: danger,
+                                ),
+                                onPressed: () => _confirmVoidTopup(txn),
+                              ),
+                            ],
                           ],
                         ),
                       ),

@@ -10,6 +10,45 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Money integrity #4 (#173) — expense reject/delete + wallet top-up void post reversal rows — CODE-COMPLETE (2026-07-24)
+Second correction slice on the #169 seam (parent PRD #155). CODE-ONLY — **no
+schema/migration, no new permission key**. Branch
+`feat/money-integrity-4-expense-topup-reversals` off `main` (HEAD b99400f, which
+includes the merged #169 prefactor).
+- **Expense reject + soft-delete now post a compensating reversal**
+  (`daos_expenses.dart`). `addExpense` always writes a `type == 'expense'` payment
+  row (even while `pending`), so the recon cash card's `cashExpensesKobo` drained
+  forever on reject/delete. New private helper `_postExpenseCashReversal` sums the
+  CURRENT net `expense` cash for the expense and, if > 0, posts a **negative-amount
+  `expense`** row through the #169 seam (`postReversalPayment`), inside the same
+  transaction as the state change. Original (+X) + reversal (−X) → `cashExpensesKobo`
+  nets to **zero**, making the reject dialog's "No money moves" true and stopping the
+  delete-and-re-enter fix from double-counting. **Idempotent**: reverses only the
+  standing net, so reject-then-delete (or a double-tap) posts at most one reversal.
+- **Wallet top-up void** (`CreditLedgerService.voidTopup`, exposed via
+  `CustomerService.voidTopup`). One transaction: marks the original credit voided +
+  appends the compensating wallet DEBIT (referenceType `void`, mirrors
+  `WalletTransactionsDao.voidTransaction`) AND posts a **negative-amount
+  `wallet_topup`** reversal through the seam → the recon `cashDebtsCollectedKobo`
+  ("Debts collected (cash)") nets the voided collection to **zero**. Only genuine
+  top-ups (`topup_cash`/`topup_transfer`) are voidable; already-voided → no-op.
+- **Gated UI entry point** (customer detail screen credit-history rows): a trailing
+  "Void top-up" icon appears only on a LIVE cash/transfer top-up row AND when
+  `Gates.refundCustomerWallet` (`customers.wallet.withdraw`) allows — **reused an
+  existing permission, no new key** → no cloud-catalogue deploy-ordering concern.
+  Tapping it opens a confirm dialog (optional reason) → `voidTopup`, re-checking the
+  gate at the action boundary (hide-don't-block + defense-in-depth).
+- **Reversal `type` decision.** Verified against `recon_data.dart`'s cash loop
+  (`method=='cash'`, `voidedAt==null`, bucket by `type`): a same-type
+  negative-amount row is the ONLY choice that nets a cash-OUT `expense` (or a cash-IN
+  `wallet_topup`) to zero — a `refund` type would ADD to cash-out, not cancel it.
+  The seam copies the original's `method` so the reversal always lands in the same
+  bucket. No type-CHECK widening needed (both types already valid).
+- **Tests.** `test/expenses/expense_reversal_test.dart` (6) +
+  `test/wallet/topup_void_reversal_test.dart` (5) assert the compensating rows, the
+  net-to-zero via the recon's exact cash predicate, sync enqueue, idempotency, and
+  non-top-up rejection. All green; `flutter analyze` clean; golden suite unaffected.
+
 ### Money integrity #1 (#169) — payments compensating-row seam + sync/schema plumbing (prefactor) — CODE-COMPLETE (2026-07-24)
 Root prefactor of the #155 money-integrity PRD (ADR **0021**). Behavior-preserving:
 introduces the seam + schema/flag plumbing every later correction slice depends on,

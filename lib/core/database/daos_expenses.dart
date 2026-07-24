@@ -278,8 +278,60 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
-  /// CEO rejects a pending expense with a reason (§20.4). No funds movement.
-  /// Notifies the recorder.
+  /// Posts a compensating reversal for an expense's paired cash record (#173 /
+  /// PRD #155). `addExpense` ALWAYS writes a `type == 'expense'`
+  /// payment_transactions row — even while the expense is still `pending` — so
+  /// the reconciliation's cash card (`recon_data.dart`, `cashExpensesKobo`:
+  /// cash-method `type == 'expense'` rows summed on their own `created_at` day)
+  /// keeps counting that cash OUT forever unless the row is reversed. Rejecting
+  /// or soft-deleting an expense therefore posts a NEGATIVE-amount `expense` row
+  /// through the #169 seam ([PaymentTransactionsDao.postReversalPayment]): the
+  /// original (+X) and the reversal (−X) net to zero on the cash card, so the
+  /// reject dialog's "No money moves" is actually true and the sanctioned
+  /// delete-and-re-enter fix stops double-counting cash out.
+  ///
+  /// Idempotent: it reverses only the CURRENT net `expense` cash still standing
+  /// for [expenseId], so a reject followed by a delete (or a double-tap) posts
+  /// at most one net-zeroing reversal. Must run inside the caller's transaction
+  /// so the reversal commits atomically with the state change; the seam opens no
+  /// transaction of its own, joining the ambient one.
+  Future<void> _postExpenseCashReversal({
+    required String expenseId,
+    required String performedBy,
+    required String reason,
+    required DateTime at,
+  }) async {
+    final rows =
+        await (select(paymentTransactions)..where(
+              (p) =>
+                  whereBusiness(p) &
+                  p.expenseId.equals(expenseId) &
+                  p.type.equals('expense'),
+            ))
+            .get();
+    if (rows.isEmpty) return;
+    // Net of the original expense row(s) minus any reversal already posted.
+    final netKobo = rows.fold<int>(0, (sum, r) => sum + r.amountKobo);
+    if (netKobo <= 0) return; // already reversed — stay idempotent
+    // Carry the original's typed reference (expense_id) + method into the
+    // reversal so it lands in the SAME cash bucket and cancels the original.
+    final original = rows.reduce(
+      (a, b) => a.createdAt.isBefore(b.createdAt) ? a : b,
+    );
+    await db.paymentTransactionsDao.postReversalPayment(
+      original: original,
+      reversalType: 'expense',
+      performedBy: performedBy,
+      amountKobo: -netKobo,
+      reason: reason,
+      at: at,
+    );
+  }
+
+  /// CEO rejects a pending expense with a reason (§20.4). No funds movement —
+  /// the paired cash record is reversed in the same transaction (#173) so the
+  /// reconciliation cash card nets this expense to zero, making the reject
+  /// dialog's "No money moves" true. Notifies the recorder.
   Future<void> rejectExpense({
     required String expenseId,
     required String approverId,
@@ -330,6 +382,15 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         staffId: approverId,
         storeId: exp.storeId,
         expenseId: expenseId,
+      );
+
+      // #173 — reverse the paired cash record so "No money moves on a reject"
+      // is true (nets cashExpensesKobo to zero for this expense).
+      await _postExpenseCashReversal(
+        expenseId: expenseId,
+        performedBy: approverId,
+        reason: 'Expense rejected',
+        at: now,
       );
     });
 
@@ -388,7 +449,10 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
 
   /// Soft-deletes an expense (§20.3, CEO only, hard rule #9 — enqueueUpsert, not
   /// delete). The 24h / role gate is enforced by the caller. (Funds Register was
-  /// removed, §23, so a delete no longer reverses any account balance.)
+  /// removed, §23, so a delete no longer reverses any account balance.) The
+  /// paired cash record IS reversed in the same transaction (#173) so the
+  /// sanctioned delete-and-re-enter wrong-amount fix does not double-count cash
+  /// out on the reconciliation cash card.
   Future<void> softDeleteExpense({
     required String expenseId,
     required String performedBy,
@@ -429,6 +493,15 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         expenses,
       )..where((t) => t.id.equals(expenseId) & whereBusiness(t))).getSingle();
       await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
+
+      // #173 — reverse the paired cash record so delete-then-re-create does not
+      // double-count cash out (nets cashExpensesKobo to zero for this expense).
+      await _postExpenseCashReversal(
+        expenseId: expenseId,
+        performedBy: performedBy,
+        reason: 'Expense deleted',
+        at: now,
+      );
     });
 
     if (didDelete) {

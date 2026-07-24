@@ -291,4 +291,134 @@ class CreditLedgerService {
     voidedBy: voidedBy,
     reason: reason,
   );
+
+  /// §18 / PRD #155 (#173) — voids a customer credit TOP-UP by [walletTxnId]
+  /// (the top-up's `wallet_transactions` credit row). A mistyped Add-Credit
+  /// entry is corrected without fabricating an offsetting sale. In ONE
+  /// transaction it:
+  ///   1. marks the original credit voided and appends a compensating wallet
+  ///      DEBIT (referenceType `void`) — the same append-only pattern as
+  ///      [WalletTransactionsDao.voidTransaction], so the derived balance drops
+  ///      the credit; and
+  ///   2. reverses the paired `wallet_topup` payment row through the #169 seam
+  ///      ([PaymentTransactionsDao.postReversalPayment]) with a NEGATIVE amount,
+  ///      so the reconciliation cash card's "Debts collected (cash)"
+  ///      (`cashDebtsCollectedKobo`: cash-method `type == 'wallet_topup'` rows)
+  ///      nets this collection to zero — the voided amount drops out.
+  ///
+  /// Only genuine top-ups (referenceType `topup_cash` / `topup_transfer`) are
+  /// voidable here; anything else is a no-op. Idempotent — an already-voided
+  /// top-up returns false. The UI entry point (customer screen) is gated on
+  /// `customers.wallet.withdraw` (Gates.refundCustomerWallet). Returns whether a
+  /// void was posted.
+  Future<bool> voidTopup({
+    required String walletTxnId,
+    required String staffId,
+    String? reason,
+  }) async {
+    const topupRefs = {'topup_cash', 'topup_transfer'};
+    final businessId = _walletTxDao.requireBusinessId();
+
+    return _db.transaction(() async {
+      final original =
+          await (_db.select(_db.walletTransactions)
+                ..where(
+                  (t) =>
+                      t.businessId.equals(businessId) &
+                      t.id.equals(walletTxnId),
+                )
+                ..limit(1))
+              .getSingleOrNull();
+      if (original == null) return false;
+      if (original.voidedAt != null) return false; // already voided
+      if (!topupRefs.contains(original.referenceType)) return false;
+
+      final now = DateTime.now();
+
+      // 1a. Mark the original credit voided in place (retained metadata, as
+      //     WalletTransactionsDao.voidTransaction does).
+      await (_db.update(
+        _db.walletTransactions,
+      )..where((t) => t.id.equals(walletTxnId))).write(
+        WalletTransactionsCompanion(
+          voidedAt: Value(now),
+          voidedBy: Value(staffId),
+          voidReason: Value(reason),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+
+      // 1b. Append the compensating wallet debit (opposite sign) so the derived
+      //     balance drops the credit.
+      final compId = UuidV7.generate();
+      final compComp = WalletTransactionsCompanion.insert(
+        id: Value(compId),
+        businessId: businessId,
+        walletId: original.walletId,
+        customerId: original.customerId,
+        type: original.type == 'credit' ? 'debit' : 'credit',
+        amountKobo: original.amountKobo,
+        signedAmountKobo: -original.signedAmountKobo,
+        referenceType: 'void',
+        orderId: Value(original.orderId),
+        performedBy: Value(staffId),
+        createdAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await _db.into(_db.walletTransactions).insert(compComp);
+
+      final updatedOrig =
+          await (_db.select(_db.walletTransactions)
+                ..where((t) => t.id.equals(walletTxnId))
+                ..limit(1))
+              .getSingle();
+      await _db.syncDao.enqueueUpsert('wallet_transactions', updatedOrig);
+      await _db.syncDao.enqueueUpsert('wallet_transactions', compComp);
+
+      // 2. Reverse the paired payment row (#169 seam), negative so the cash
+      //    card nets the collection to zero. Legacy top-ups with no payment row
+      //    (e.g. pre-ledger data) simply skip this leg.
+      final payment =
+          await (_db.select(_db.paymentTransactions)
+                ..where(
+                  (p) =>
+                      p.businessId.equals(businessId) &
+                      p.walletTxnId.equals(walletTxnId) &
+                      p.type.equals('wallet_topup'),
+                )
+                ..limit(1))
+              .getSingleOrNull();
+      if (payment != null) {
+        await _db.paymentTransactionsDao.postReversalPayment(
+          original: payment,
+          reversalType: 'wallet_topup',
+          performedBy: staffId,
+          amountKobo: -payment.amountKobo,
+          reason: reason,
+          at: now,
+        );
+      }
+
+      // 3. Audit + notify (§24 money movement).
+      await _db.activityLogDao.logActivity(
+        action: 'customer.wallet.topup_voided',
+        description:
+            'Voided credit top-up of '
+            '${formatCurrency(original.amountKobo / 100)}'
+            '${reason != null && reason.trim().isNotEmpty ? ' — ${reason.trim()}' : ''}',
+        staffId: staffId,
+        entityType: 'customer',
+        entityId: original.customerId,
+      );
+      await _db.notificationsDao.fireNotification(
+        type: 'wallet_topup_voided',
+        message:
+            'A credit top-up of '
+            '${formatCurrency(original.amountKobo / 100)} was voided',
+        severity: 'info',
+        linkedRecordId: original.customerId,
+      );
+      return true;
+    });
+  }
 }
