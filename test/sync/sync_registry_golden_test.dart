@@ -89,6 +89,8 @@ void main() {
     'price_lists',
     'payment_transactions',
     'stock_counts',
+    // #174: persisted day close — one snapshot per (business, calendar day).
+    'daily_closings',
     'sessions',
     'settings',
   ];
@@ -127,6 +129,8 @@ void main() {
     'pending_crate_returns',
     'payment_transactions',
     'stock_counts',
+    // #174: persisted day close snapshot.
+    'daily_closings',
     'expense_categories',
     'expenses',
     'expense_budgets',

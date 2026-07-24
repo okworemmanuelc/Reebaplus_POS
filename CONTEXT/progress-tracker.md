@@ -10,7 +10,7 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
-### Money integrity #7 (#170) — full cost-batch coverage (hook the central mutator) — IN PROGRESS (2026-07-24)
+### Money integrity #7 (#170) — full cost-batch coverage (hook the central mutator) — MERGED to main (2026-07-24)
 Seventh slice of the #155 money-integrity PRD (ADR 0021 family). Branch
 `feat/money-cost-batch-coverage-170` off `main`. Independent costing track (runs
 parallel to the payment slices). Product decision (locked): loss valuation rate =
@@ -123,6 +123,43 @@ core ACs met. Known partials (documented, not fixed here):
   the carried total — the same per-unit rounding `drawDownSale` uses for COGS.
   In-transit WORTH uses the exact `cost_kobo` (no drift). Accepted as consistent
   with the existing per-unit-kobo COGS convention.
+
+### Money integrity #6 (#174) — persisted day close (snapshot + changed-since-review delta) — MERGED to main (2026-07-24)
+Sixth slice of the #155 money-integrity PRD; implements ADR 0021 §2 (the option
+ADR 0014 deferred). Branch `feat/money-daily-closings-174` off `main`. **Purely
+observational — no money flow or existing figure changes.**
+- **New synced table `daily_closings`** (Drift `DailyClosings`, one `SyncedTable`
+  registry entry after `stock_counts`; `tenantScoped`, append/**first-write-only**
+  — no `scrubCreatedAt`, no `hardDelete`, no REPLICA IDENTITY FULL). One row per
+  `(business_id, business_date)`; **natural-key first-writer-wins**. Deterministic
+  id = `UuidV7.deterministic('daily_closing:<biz>:<day>')` so two devices converge.
+  Frozen figure set = the period-scoped recon figures (total sales, discounts,
+  COGS, gross/net profit, expenses, damages, cash in/out/net-movement, cash sales,
+  stock COGS, expected stock closing, items sold, shortage units) + captured store
+  scope + reviewer + reviewed-at. All `*_kobo` **bigint** on the cloud.
+- **`DailyClosingsDao.snapshotIfAbsent`** — writes the snapshot only when absent
+  (re-open never overwrites), enqueues the push only on a real insert. Restore is
+  **insert-or-ignore** (`_restoreDailyClosings`) so a divergent peer snapshot never
+  clobbers the first one a device knows (first-writer-wins on the pull side too).
+- **UI** — the reconciliation detail (now `ConsumerStatefulWidget`) writes the
+  snapshot once, on open, for a **finished** Day bucket when
+  `Gates.dailyReconciliation` allows; then renders a screen-level "Reviewed …"
+  banner + a per-card "changed since review" delta badge on the Sales / P&L / Cash
+  flow / Stock reconciliation cards when the live figure diverges (only when the
+  current store scope matches the captured scope). Unchanged day shows no badge.
+  One mapper `dailyClosingFiguresFrom` + pure `reconClosingComparison` keep the
+  write and the badges from drifting.
+- **Provider** `dailyClosingForDayProvider` (businessScopedStreamFamily).
+- Drift `schemaVersion` 65 → **v68** (renumbered from the reserved v70 lane at
+  merge of the parallel money-integrity branches). Cloud migration
+  **`0157_money_integrity_daily_closings.sql`** (table + RLS via
+  `current_user_business_ids()` + bump trigger + realtime + `pos_pull_snapshot`
+  rebased on 0132, `daily_closings` after `stock_counts`). SQL written, NOT applied.
+- Tests: `test/dashboard/daily_closings_dao_test.dart` (first-writer-wins, 4),
+  `test/sync/daily_closings_sync_test.dart` (Cloud-Transport fake push + restore +
+  first-writer-wins-on-pull, 3), `test/dashboard/recon_data_test.dart` (+5 figure
+  map + delta), `test/database/migration_upgrade_test.dart` (v68 upgrade, 1),
+  golden + registration sync tests updated. `flutter analyze lib` clean.
 
 ### Money integrity #5 (#175) — tender picker + cash-card honesty (deposit out of Cash sales) — CODE-COMPLETE (2026-07-24)
 Fifth slice of the #155 money-integrity PRD (ADR 0021). **CODE-ONLY — no

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
@@ -18,7 +21,7 @@ import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 /// / profit / goods-received (cost wall, §25.3); their shrinkage is valued at
 /// selling price (an accountability figure). A non-Day bucket lists the
 /// next-finer buckets inside it as a drill-down breakdown.
-class DailyReconciliationDetailScreen extends ConsumerWidget {
+class DailyReconciliationDetailScreen extends ConsumerStatefulWidget {
   const DailyReconciliationDetailScreen({
     super.key,
     required this.start,
@@ -33,17 +36,120 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DailyReconciliationDetailScreen> createState() =>
+      _DailyReconciliationDetailScreenState();
+}
+
+class _DailyReconciliationDetailScreenState
+    extends ConsumerState<DailyReconciliationDetailScreen> {
+  // One-shot guard so the day-close snapshot is attempted once per screen mount
+  // (build can run many times). First-writer-wins in the DAO makes a repeat a
+  // no-op regardless, but this avoids re-scheduling the write on every rebuild.
+  bool _snapshotAttempted = false;
+
+  /// `YYYY-MM-DD` for the Day bucket [DailyReconciliationDetailScreen.start] —
+  /// the natural-key day (matches `DailyClosings.businessDate`).
+  String get _businessDate =>
+      '${widget.start.year.toString().padLeft(4, '0')}-'
+      '${widget.start.month.toString().padLeft(2, '0')}-'
+      '${widget.start.day.toString().padLeft(2, '0')}';
+
+  /// A Day bucket whose whole calendar day has elapsed — the only bucket a day
+  /// close snapshot is written for (#174). Weeks / months / years and the
+  /// current or future day never freeze.
+  bool get _isFinishedDay =>
+      widget.grouping == ReconGrouping.day &&
+      !widget.endExclusive.isAfter(DateTime.now());
+
+  /// True once every stream that feeds a FROZEN figure has emitted its first
+  /// value, so a snapshot never freezes zeros captured mid-load:
+  /// [computeReconData] treats a still-loading stream as empty
+  /// (`valueOrNull ?? const []`), and a zeroed snapshot would lock in
+  /// permanently under first-writer-wins. Until every source is loaded the write
+  /// is deferred — a genuinely empty day still has real (loaded, all-zero)
+  /// streams, so it snapshots correctly. Called during build so the watches
+  /// register and the write retries the instant the last stream warms.
+  bool _frozenFiguresReady(String? activeStoreId) {
+    bool ready<T>(ProviderListenable<AsyncValue<T>> p) => ref.watch(p).hasValue;
+    return ready(allOrdersProvider) &&
+        ready(allPaymentTransactionsProvider) &&
+        ready(allExpensesProvider) &&
+        ready(allStockAdjustmentsProvider) &&
+        ready(allStockTransactionsProvider) &&
+        ready(allStockCountsProvider) &&
+        ready(allSupplierLedgerEntriesProvider) &&
+        ready(productsWithStockProvider(activeStoreId));
+  }
+
+  /// Freezes the day's computed figures as a `daily_closings` snapshot the FIRST
+  /// time a permitted user (Manager+ via [Gates.dailyReconciliation]) opens a
+  /// finished day — natural-key first-writer-wins; re-opening is a no-op.
+  /// PURELY OBSERVATIONAL: no money flow or existing figure changes. [dataReady]
+  /// gates on every source stream having loaded (see [_frozenFiguresReady]) so a
+  /// zeroed mid-load snapshot can't freeze permanently. Deferred past the current
+  /// build so it never mutates a provider mid-build.
+  void _maybeWriteSnapshot(ReconData d, {required bool dataReady}) {
+    if (_snapshotAttempted || !_isFinishedDay || !dataReady) return;
+    if (!Gates.dailyReconciliation.allows(ref)) return;
+    _snapshotAttempted = true;
+    final storeScopeId = ref.read(lockedStoreProvider).value;
+    final reviewedBy = ref.read(currentUserIdProvider);
+    final db = ref.read(databaseProvider);
+    Future.microtask(() async {
+      try {
+        await db.dailyClosingsDao.snapshotIfAbsent(
+          businessDate: _businessDate,
+          storeScopeId: storeScopeId,
+          figures: dailyClosingFiguresFrom(d),
+          reviewedBy: reviewedBy,
+        );
+      } on Exception catch (e) {
+        // Observational-only: a snapshot write must never surface an error into
+        // the reconciliation view. Log (never swallow silently) and allow a
+        // retry on the next open. Programmer errors (e.g. a missing session)
+        // stay uncaught and reach the global handler.
+        debugPrint('[DailyClose] snapshot write failed for $_businessDate: $e');
+        _snapshotAttempted = false;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider); // rebuild money on currency change
     final theme = Theme.of(context);
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     final scopeLabel = ref.watch(activeStoreLabelProvider);
+    final grouping = widget.grouping;
+    final start = widget.start;
+    final endExclusive = widget.endExclusive;
+    final title = widget.title;
+    final activeStoreId = ref.watch(lockedStoreProvider).value;
     final d = computeReconData(
       ref,
       start: start,
       endExclusive: endExclusive,
       isCeo: isCeo,
     );
+    _maybeWriteSnapshot(d, dataReady: _frozenFiguresReady(activeStoreId));
+
+    // As-reviewed-vs-current delta (#174): only for a FINISHED Day that HAS a
+    // snapshot AND whose captured store scope matches the current viewer's scope
+    // (figures from different scopes are not comparable). Null everywhere else,
+    // so a week/month/year, an unreviewed day, or a mismatched scope renders
+    // exactly as before — no badges.
+    final snapshot = _isFinishedDay
+        ? ref.watch(dailyClosingForDayProvider(_businessDate)).valueOrNull
+        : null;
+    final comparison = (snapshot != null && snapshot.storeScopeId == activeStoreId)
+        ? reconClosingComparison(snapshot, d)
+        : null;
+    final reviewerName = comparison?.reviewedBy == null
+        ? null
+        : (ref.watch(usersByBusinessProvider).valueOrNull ??
+                const {})[comparison!.reviewedBy]
+            ?.name;
+
     final children = grouping.finer == null
         ? const <ReconBucket>[]
         : buildReconBuckets(
@@ -90,15 +196,25 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           context.spacingM,
         ).copyWith(bottom: context.spacingM + context.deviceBottomPadding),
         children: [
-          _salesCard(context, theme, d),
+          if (comparison != null) ...[
+            _reviewedBanner(context, theme, comparison, reviewerName),
+            SizedBox(height: context.spacingM),
+          ],
+          _salesCard(context, theme, d, delta: comparison?.totalSales),
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
-            _plCard(context, theme, d),
+            _plCard(context, theme, d, delta: comparison?.netProfit),
             SizedBox(height: context.spacingM),
-            _cashFlowCard(context, theme, d),
+            _cashFlowCard(context, theme, d, delta: comparison?.netCashMovement),
           ],
           SizedBox(height: context.spacingM),
-          _stockReconciliationCard(context, theme, d, isCeo: isCeo),
+          _stockReconciliationCard(
+            context,
+            theme,
+            d,
+            isCeo: isCeo,
+            delta: comparison?.stockExpectedClosing,
+          ),
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
             _businessWorthCard(context, theme, d),
@@ -122,7 +238,12 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
 
   // ── Cards ───────────────────────────────────────────────────────────────
 
-  Widget _salesCard(BuildContext context, ThemeData theme, ReconData d) {
+  Widget _salesCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    ReconFigureDelta? delta,
+  }) {
     return _card(
       context,
       theme,
@@ -170,10 +291,16 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
               : d.topItems.map((e) => '${e.name} (×${e.qty})').join('\n'),
         ),
       ],
+      badge: _deltaBadge(context, theme, delta),
     );
   }
 
-  Widget _plCard(BuildContext context, ThemeData theme, ReconData d) {
+  Widget _plCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    ReconFigureDelta? delta,
+  }) {
     final net = d.netProfitKobo;
     final netColor = net >= 0
         ? theme.extension<AppSemanticColors>()!.success
@@ -256,6 +383,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           ),
         ],
       ],
+      badge: _deltaBadge(context, theme, delta),
     );
   }
 
@@ -264,7 +392,12 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
   /// cash expenses + cash supplier payments out. **Business-wide** (the
   /// payment_transactions ledger has no store) and **not a counted drawer**:
   /// there is no opening float to add this to (Hard Rule #8). CEO-only.
-  Widget _cashFlowCard(BuildContext context, ThemeData theme, ReconData d) {
+  Widget _cashFlowCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    ReconFigureDelta? delta,
+  }) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
     final netColor = d.netCashMovementKobo >= 0 ? successColor : dangerColor;
@@ -310,6 +443,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
       ],
+      badge: _deltaBadge(context, theme, delta),
     );
   }
 
@@ -325,6 +459,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     ThemeData theme,
     ReconData d, {
     required bool isCeo,
+    ReconFigureDelta? delta,
   }) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
@@ -403,6 +538,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           if (d.hasStockCount) ...[_divider(theme), ...countSection()],
         ],
         danger: hasShortage,
+        badge: _deltaBadge(context, theme, delta),
       );
     }
 
@@ -482,6 +618,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ],
       ],
       danger: hasVariance,
+      badge: _deltaBadge(context, theme, delta),
     );
   }
 
@@ -705,6 +842,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     Color color,
     List<Widget> children, {
     bool danger = false,
+    Widget? badge,
   }) {
     return Container(
       padding: EdgeInsets.all(context.spacingM),
@@ -724,14 +862,118 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             children: [
               Icon(icon, size: 15, color: color),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  title,
+                  style:
+                      context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                ),
               ),
+              if (badge != null) ...[const SizedBox(width: 8), badge],
             ],
           ),
           SizedBox(height: context.spacingS),
           ...children,
+        ],
+      ),
+    );
+  }
+
+  // ── Persisted day close (#174) — delta badge + reviewed banner ─────────────
+
+  /// The per-card "changed since review" badge, or null when the day was not
+  /// reviewed or this card's figure has not moved (an unchanged card shows no
+  /// badge). Neutral WARNING treatment: it flags that history mutated after the
+  /// review, not that the change is good or bad.
+  Widget? _deltaBadge(
+    BuildContext context,
+    ThemeData theme,
+    ReconFigureDelta? delta,
+  ) {
+    if (delta == null || !delta.changed) return null;
+    final warn = theme.extension<AppSemanticColors>()!.warning;
+    final up = delta.delta > 0;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(8),
+        vertical: context.getRSize(3),
+      ),
+      decoration: BoxDecoration(
+        color: warn.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(context.radiusL),
+        border: Border.all(color: warn.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(FontAwesomeIcons.arrowsRotate.data, size: 10, color: warn),
+          const SizedBox(width: 5),
+          Text(
+            '${up ? '+' : '−'} ${formatCurrency(delta.delta.abs() / 100.0)} '
+            'since review',
+            style: context.bodySmall.copyWith(
+              color: warn,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The screen-level banner shown once, above the cards, when the finished day
+  /// has a persisted review snapshot (#174). States when (and by whom) the day
+  /// was reviewed, and whether any figure has changed since — turning silent
+  /// history mutation into a visible statement.
+  Widget _reviewedBanner(
+    BuildContext context,
+    ThemeData theme,
+    ReconClosingComparison c,
+    String? reviewerName,
+  ) {
+    final changed = c.anyChanged;
+    final accent = changed
+        ? theme.extension<AppSemanticColors>()!.warning
+        : theme.extension<AppSemanticColors>()!.success;
+    final reviewedOn = DateFormat('d MMM yyyy').format(c.reviewedAt.toLocal());
+    final by = reviewerName == null ? '' : ' by $reviewerName';
+    return Container(
+      padding: EdgeInsets.all(context.spacingM),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(context.radiusL),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            changed
+                ? FontAwesomeIcons.clockRotateLeft.data
+                : FontAwesomeIcons.circleCheck.data,
+            size: 15,
+            color: accent,
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reviewed $reviewedOn$by',
+                  style:
+                      context.bodySmall.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  changed
+                      ? 'Some figures changed after this day was reviewed — the '
+                          'flagged cards show what moved since.'
+                      : 'The figures still match what was reviewed.',
+                  style: context.bodySmall.copyWith(color: theme.hintColor),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -858,8 +1100,9 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     try {
       await shareCsv(
         csv: buildCsv(['Metric', 'Value'], rows),
-        fileName: '${name}_${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}',
-        subject: 'Reconciliation — $scope — $title',
+        fileName:
+            '${name}_${widget.title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}',
+        subject: 'Reconciliation — $scope — ${widget.title}',
       );
     } catch (e) {
       if (context.mounted) {

@@ -1568,3 +1568,24 @@ class InviteCodesDaoManager {
   $$InviteCodesTableTableManager get inviteCodes =>
       $$InviteCodesTableTableManager(_db.attachedDatabase, _db.inviteCodes);
 }
+
+mixin _$DailyClosingsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $UsersTable get users => attachedDatabase.users;
+  $DailyClosingsTable get dailyClosings => attachedDatabase.dailyClosings;
+  DailyClosingsDaoManager get managers => DailyClosingsDaoManager(this);
+}
+
+class DailyClosingsDaoManager {
+  final _$DailyClosingsDaoMixin _db;
+  DailyClosingsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$DailyClosingsTableTableManager get dailyClosings =>
+      $$DailyClosingsTableTableManager(_db.attachedDatabase, _db.dailyClosings);
+}

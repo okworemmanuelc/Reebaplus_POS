@@ -84,6 +84,43 @@ so the prefactor's schema/sync groundwork is coherent.)
 Drift `schemaVersion` 63 → 64; cloud migration
 `0153_money_integrity_payments_seam.sql`.
 
+## Day-close snapshot landed by #174
+
+The synced `daily_closings` table implements decision **§2** (the slice that ADR
+deferred). One row per `(business_id, business_date)`, written the FIRST time a
+permitted user (Manager+ via `Gates.dailyReconciliation`) opens a **finished**
+calendar day's reconciliation detail:
+
+- **Figure set (frozen).** The period-scoped figures the report cards headline —
+  total sales, discounts, COGS, gross/net profit, expenses, damages, cash
+  in/out/net-movement, cash sales, stock COGS, expected stock closing, items
+  sold, shortage units (all `*_kobo` **bigint** on the cloud) — plus the
+  captured store scope, the reviewer, and the review timestamp. The
+  point-in-time "…now" figures (business worth, empties held, on-hand) are
+  deliberately **excluded**: they are meant to reflect the present, so badging
+  them against a past review would be noise. One mapper (`dailyClosingFiguresFrom`)
+  defines *which* figures freeze, so the write and the delta badges cannot drift.
+- **First-writer-wins.** The row id is **deterministic** (UUIDv5 of the natural
+  key), so two devices mint the same id and converge. `snapshotIfAbsent` writes
+  only when no snapshot exists (re-opening never overwrites), and the pull-side
+  restore is **insert-or-ignore**, so the first snapshot a device knows about —
+  locally written or pulled — is never clobbered by a later, divergent one.
+- **Delta badge.** The detail screen renders live figures alongside the snapshot
+  and shows a per-card "changed since review" badge on any card whose figure
+  moved (`reconClosingComparison`), only when the current store scope matches the
+  captured scope. An unchanged reviewed day shows no badge — silent history
+  mutation becomes visible history mutation. Purely observational: no money flow
+  or existing figure changes.
+- **Residual (accepted).** An offline both-write race on the same day resolves
+  last-write on the cloud upsert (the row is not a void-able ledger, so no
+  immutability trigger — that would jam the outbox); each device still keeps the
+  first snapshot it knows locally. Observational-only, so acceptable.
+
+Drift `schemaVersion` → 70 (66–69 reserved for parallel money-integrity
+branches; renumbered contiguous at merge); cloud migration
+`0160_money_integrity_daily_closings.sql`. One `SyncedTable` registry entry
+(`tenantScoped`, append/first-write-only — no `scrubCreatedAt`, no `hardDelete`).
+
 ## Consequences
 
 - Money reports read like a ledger: every naira traces to a durable row, and a

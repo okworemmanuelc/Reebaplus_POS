@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
@@ -1134,3 +1135,106 @@ ReconData computeReconData(
     manufacturerEmpties: manufacturerEmpties,
   );
 }
+
+// ── Persisted day close (#174, PRD #155, ADR 0021 §2) ────────────────────────
+
+/// Maps the computed [ReconData] onto the frozen figure set a `daily_closings`
+/// snapshot persists (#174). ONE place defines WHICH figures a day close freezes,
+/// so the write (`DailyClosingsDao.snapshotIfAbsent`) and the delta badges
+/// ([reconClosingComparison]) can never drift apart. Only PERIOD-scoped figures
+/// are frozen — the point-in-time "…now" figures (business worth, empties held,
+/// on-hand) are deliberately excluded: they are meant to reflect the present, so
+/// badging them against a past review would be noise, not signal.
+DailyClosingFigures dailyClosingFiguresFrom(ReconData d) => DailyClosingFigures(
+  totalSalesKobo: d.totalRevenueKobo,
+  refundsKobo: d.refundsKobo,
+  discountsKobo: d.discountsKobo,
+  cogsKobo: d.cogsKobo,
+  grossProfitKobo: d.grossProfitKobo,
+  netProfitKobo: d.netProfitKobo,
+  expensesKobo: d.expensesKobo,
+  damagesCostKobo: d.damageCostKobo,
+  cashSalesKobo: d.cashSalesKobo,
+  cashInKobo: d.cashInKobo,
+  cashOutKobo: d.cashOutKobo,
+  netCashMovementKobo: d.netCashMovementKobo,
+  stockCogsKobo: d.stockCogsKobo,
+  stockExpectedClosingKobo: d.stockExpectedClosingKobo,
+  itemsSold: d.itemsSold,
+  shortageUnits: d.shortageUnits,
+);
+
+/// One reconciliation card's AS-REVIEWED vs CURRENT figure, for the persisted
+/// day-close delta badge (#174). [reviewed] is the frozen snapshot value;
+/// [current] is the live recomputed value. A non-zero [delta] means the day's
+/// figure moved AFTER it was reviewed — a late sync, a cancel, a backdated entry
+/// — so the card shows the badge; an unchanged figure shows none.
+class ReconFigureDelta {
+  const ReconFigureDelta({required this.reviewed, required this.current});
+  final int reviewed;
+  final int current;
+  int get delta => current - reviewed;
+  bool get changed => delta != 0;
+}
+
+/// The per-card comparison between a persisted `daily_closings` snapshot and the
+/// live figures recomputed for the same finished day (#174). Each field pairs a
+/// card's headline reviewed figure with its current value; the detail screen
+/// renders a delta badge on a card whose figure [ReconFigureDelta.changed].
+///
+/// Built by [reconClosingComparison] only for a FINISHED Day bucket that has a
+/// snapshot AND whose captured store scope matches the current viewer's scope
+/// (figures computed in different scopes are not comparable — see
+/// `DailyClosings.storeScopeId`).
+class ReconClosingComparison {
+  const ReconClosingComparison({
+    required this.reviewedAt,
+    required this.reviewedBy,
+    required this.totalSales,
+    required this.netProfit,
+    required this.netCashMovement,
+    required this.stockExpectedClosing,
+  });
+
+  final DateTime reviewedAt;
+  final String? reviewedBy;
+  final ReconFigureDelta totalSales; // Sales summary card
+  final ReconFigureDelta netProfit; // Profit & Loss card (CEO)
+  final ReconFigureDelta netCashMovement; // Cash flow card (CEO)
+  final ReconFigureDelta stockExpectedClosing; // Stock reconciliation card
+
+  /// True when ANY reviewed card figure has moved since the review — the day
+  /// changed after it was banked against.
+  bool get anyChanged =>
+      totalSales.changed ||
+      netProfit.changed ||
+      netCashMovement.changed ||
+      stockExpectedClosing.changed;
+}
+
+/// Builds the per-card as-reviewed-vs-current comparison from a persisted
+/// [snapshot] and the [live] figures for the same finished day (#174). Pure over
+/// its two inputs so the delta math is unit-testable without a widget.
+ReconClosingComparison reconClosingComparison(
+  DailyClosingData snapshot,
+  ReconData live,
+) => ReconClosingComparison(
+  reviewedAt: snapshot.reviewedAt,
+  reviewedBy: snapshot.reviewedBy,
+  totalSales: ReconFigureDelta(
+    reviewed: snapshot.totalSalesKobo,
+    current: live.totalRevenueKobo,
+  ),
+  netProfit: ReconFigureDelta(
+    reviewed: snapshot.netProfitKobo,
+    current: live.netProfitKobo,
+  ),
+  netCashMovement: ReconFigureDelta(
+    reviewed: snapshot.netCashMovementKobo,
+    current: live.netCashMovementKobo,
+  ),
+  stockExpectedClosing: ReconFigureDelta(
+    reviewed: snapshot.stockExpectedClosingKobo,
+    current: live.stockExpectedClosingKobo,
+  ),
+);
