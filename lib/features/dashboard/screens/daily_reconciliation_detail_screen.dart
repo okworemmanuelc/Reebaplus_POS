@@ -61,13 +61,35 @@ class _DailyReconciliationDetailScreenState
       widget.grouping == ReconGrouping.day &&
       !widget.endExclusive.isAfter(DateTime.now());
 
+  /// True once every stream that feeds a FROZEN figure has emitted its first
+  /// value, so a snapshot never freezes zeros captured mid-load:
+  /// [computeReconData] treats a still-loading stream as empty
+  /// (`valueOrNull ?? const []`), and a zeroed snapshot would lock in
+  /// permanently under first-writer-wins. Until every source is loaded the write
+  /// is deferred — a genuinely empty day still has real (loaded, all-zero)
+  /// streams, so it snapshots correctly. Called during build so the watches
+  /// register and the write retries the instant the last stream warms.
+  bool _frozenFiguresReady(String? activeStoreId) {
+    bool ready<T>(ProviderListenable<AsyncValue<T>> p) => ref.watch(p).hasValue;
+    return ready(allOrdersProvider) &&
+        ready(allPaymentTransactionsProvider) &&
+        ready(allExpensesProvider) &&
+        ready(allStockAdjustmentsProvider) &&
+        ready(allStockTransactionsProvider) &&
+        ready(allStockCountsProvider) &&
+        ready(allSupplierLedgerEntriesProvider) &&
+        ready(productsWithStockProvider(activeStoreId));
+  }
+
   /// Freezes the day's computed figures as a `daily_closings` snapshot the FIRST
   /// time a permitted user (Manager+ via [Gates.dailyReconciliation]) opens a
   /// finished day — natural-key first-writer-wins; re-opening is a no-op.
-  /// PURELY OBSERVATIONAL: no money flow or existing figure changes. Deferred
-  /// past the current build so it never mutates a provider mid-build.
-  void _maybeWriteSnapshot(ReconData d) {
-    if (_snapshotAttempted || !_isFinishedDay) return;
+  /// PURELY OBSERVATIONAL: no money flow or existing figure changes. [dataReady]
+  /// gates on every source stream having loaded (see [_frozenFiguresReady]) so a
+  /// zeroed mid-load snapshot can't freeze permanently. Deferred past the current
+  /// build so it never mutates a provider mid-build.
+  void _maybeWriteSnapshot(ReconData d, {required bool dataReady}) {
+    if (_snapshotAttempted || !_isFinishedDay || !dataReady) return;
     if (!Gates.dailyReconciliation.allows(ref)) return;
     _snapshotAttempted = true;
     final storeScopeId = ref.read(lockedStoreProvider).value;
@@ -81,9 +103,12 @@ class _DailyReconciliationDetailScreenState
           figures: dailyClosingFiguresFrom(d),
           reviewedBy: reviewedBy,
         );
-      } catch (_) {
+      } on Exception catch (e) {
         // Observational-only: a snapshot write must never surface an error into
-        // the reconciliation view. Allow a retry on the next open.
+        // the reconciliation view. Log (never swallow silently) and allow a
+        // retry on the next open. Programmer errors (e.g. a missing session)
+        // stay uncaught and reach the global handler.
+        debugPrint('[DailyClose] snapshot write failed for $_businessDate: $e');
         _snapshotAttempted = false;
       }
     });
@@ -99,20 +124,20 @@ class _DailyReconciliationDetailScreenState
     final start = widget.start;
     final endExclusive = widget.endExclusive;
     final title = widget.title;
+    final activeStoreId = ref.watch(lockedStoreProvider).value;
     final d = computeReconData(
       ref,
       start: start,
       endExclusive: endExclusive,
       isCeo: isCeo,
     );
-    _maybeWriteSnapshot(d);
+    _maybeWriteSnapshot(d, dataReady: _frozenFiguresReady(activeStoreId));
 
     // As-reviewed-vs-current delta (#174): only for a FINISHED Day that HAS a
     // snapshot AND whose captured store scope matches the current viewer's scope
     // (figures from different scopes are not comparable). Null everywhere else,
     // so a week/month/year, an unreviewed day, or a mismatched scope renders
     // exactly as before — no badges.
-    final activeStoreId = ref.watch(lockedStoreProvider).value;
     final snapshot = _isFinishedDay
         ? ref.watch(dailyClosingForDayProvider(_businessDate)).valueOrNull
         : null;
