@@ -216,11 +216,15 @@ void main() {
     },
   };
 
-  // 5) The append-only ledger created_at-scrub set.
+  // 5) The append-only ledger created_at-scrub set. #169 added the two crate
+  //    ledgers preemptively (close the void-push orphan trap before any void
+  //    feature ships).
   const goldenScrubCreatedAt = <String>{
     'payment_transactions',
     'wallet_transactions',
     'supplier_ledger_entries',
+    'crate_ledger',
+    'supplier_crate_ledger',
   };
 
   // 6) The hard-delete tables (the two former switches, one set now).

@@ -28,8 +28,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// Every `payment_transactions` row for this business — the unified physical-
   /// cash tender ledger (`type` in {sale, wallet_topup, refund, expense}, each
   /// carrying its `method`). Newest first. Voided rows are kept; callers filter
-  /// on `voidedAt`. This table has no `storeId`, so the Daily Reconciliation
-  /// cash-flow summary that reads it (ADR 0014) is business-wide.
+  /// on `voidedAt`. New rows carry a nullable `storeId` (#169); legacy rows are
+  /// null, so the Daily Reconciliation cash-flow summary that reads it (ADR
+  /// 0014) still reports business-wide until a later slice filters on it.
   Stream<List<PaymentTransactionData>> watchAllPaymentTransactions() {
     return (select(paymentTransactions)
           ..where((p) => whereBusiness(p))
@@ -827,6 +828,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         final payComp = PaymentTransactionsCompanion.insert(
           id: Value(payId),
           businessId: requireBusinessId(),
+          // #169: stamp the sale-level store on this new payment row (the same
+          // store the header + stock movements use). Nullable; unread by reports
+          // yet, so behavior-preserving.
+          storeId: Value(storeId ?? items.first.storeId.value),
           amountKobo: amountPaidKobo,
           method: paymentMethod,
           type: 'sale',
@@ -1106,12 +1111,19 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('wallet_transactions', refundedComp);
 
         if (refundAsCash) {
+          // #169: stamp the order's store on this new refund payment row
+          // (nullable; unread by reports yet, so behavior-preserving).
+          final settleStore =
+              await (select(orders)
+                    ..where((o) => o.id.equals(orderId) & whereBusiness(o)))
+                  .getSingleOrNull();
           // payment_transactions requires EXACTLY ONE reference (order/shipment/
           // expense/wallet_txn/delivery). Link via the wallet txn — which itself
           // carries the orderId — mirroring WalletService's topup payment row.
           final payComp = PaymentTransactionsCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: requireBusinessId(),
+            storeId: Value(settleStore?.storeId),
             amountKobo: refundAmount,
             method: 'cash',
             type: 'refund',

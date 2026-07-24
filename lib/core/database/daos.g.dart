@@ -532,6 +532,83 @@ class QuickSaleRequestsDaoManager {
       );
 }
 
+mixin _$PaymentTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $CustomersTable get customers => attachedDatabase.customers;
+  $UsersTable get users => attachedDatabase.users;
+  $OrdersTable get orders => attachedDatabase.orders;
+  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
+  $ExpenseCategoriesTable get expenseCategories =>
+      attachedDatabase.expenseCategories;
+  $ExpensesTable get expenses => attachedDatabase.expenses;
+  $CustomerWalletsTable get customerWallets => attachedDatabase.customerWallets;
+  $WalletTransactionsTable get walletTransactions =>
+      attachedDatabase.walletTransactions;
+  $DriversTable get drivers => attachedDatabase.drivers;
+  $DeliveryReceiptsTable get deliveryReceipts =>
+      attachedDatabase.deliveryReceipts;
+  $PaymentTransactionsTable get paymentTransactions =>
+      attachedDatabase.paymentTransactions;
+  PaymentTransactionsDaoManager get managers =>
+      PaymentTransactionsDaoManager(this);
+}
+
+class PaymentTransactionsDaoManager {
+  final _$PaymentTransactionsDaoMixin _db;
+  PaymentTransactionsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$OrdersTableTableManager get orders =>
+      $$OrdersTableTableManager(_db.attachedDatabase, _db.orders);
+  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
+      $$CrateSizeGroupsTableTableManager(
+        _db.attachedDatabase,
+        _db.crateSizeGroups,
+      );
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
+  $$ExpenseCategoriesTableTableManager get expenseCategories =>
+      $$ExpenseCategoriesTableTableManager(
+        _db.attachedDatabase,
+        _db.expenseCategories,
+      );
+  $$ExpensesTableTableManager get expenses =>
+      $$ExpensesTableTableManager(_db.attachedDatabase, _db.expenses);
+  $$CustomerWalletsTableTableManager get customerWallets =>
+      $$CustomerWalletsTableTableManager(
+        _db.attachedDatabase,
+        _db.customerWallets,
+      );
+  $$WalletTransactionsTableTableManager get walletTransactions =>
+      $$WalletTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.walletTransactions,
+      );
+  $$DriversTableTableManager get drivers =>
+      $$DriversTableTableManager(_db.attachedDatabase, _db.drivers);
+  $$DeliveryReceiptsTableTableManager get deliveryReceipts =>
+      $$DeliveryReceiptsTableTableManager(
+        _db.attachedDatabase,
+        _db.deliveryReceipts,
+      );
+  $$PaymentTransactionsTableTableManager get paymentTransactions =>
+      $$PaymentTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.paymentTransactions,
+      );
+}
+
 mixin _$CustomersDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $StoresTable get stores => attachedDatabase.stores;
