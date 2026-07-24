@@ -619,23 +619,18 @@ ReconData computeReconData(
   var discountsKobo = 0;
   var itemsSold = 0;
   var uncostedItems = 0;
-  var refundsKobo = 0;
   final skuSet = <String>{};
   final byStaff = <String?, int>{};
   final byProduct = <String, ({String name, int qty})>{};
   for (final o in orders) {
-    if (o.order.status == 'refunded') {
-      if (inSpan(o.order.createdAt) && inScope(o.order.storeId)) {
-        refundsKobo += o.order.amountPaidKobo;
-      }
-      continue;
-    }
-    // Recognized at checkout ('pending'), not at Confirm ('completed').
+    // Recognized at checkout ('pending'), not at Confirm ('completed'). A
+    // cancelled order is excluded here (orderCountsAsSale is false) — its money
+    // reversal is booked as a real refund payment row, summed below.
     if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
       continue;
     }
     // Order-level discount (contra-revenue). Scoped by the order's store to
-    // match refunds above; lines carry the same storeId in practice.
+    // match the sales lines; lines carry the same storeId in practice.
     if (inScope(o.order.storeId)) discountsKobo += o.order.discountKobo;
     var orderRevenue = 0;
     for (final i in o.items) {
@@ -912,6 +907,25 @@ ReconData computeReconData(
         supplierPaidKobo += l.amountKobo;
       }
     }
+  }
+
+  // ── Refunds (P&L contra + net-result outflow) ────────────────────────────
+  // Every real refund payment row in the period, any tender — the amount
+  // actually paid back to customers. Derived from the append-only payment
+  // ledger (`type == 'refund'`), NOT the retired `orders.status == 'refunded'`
+  // (a status nothing writes, so the old figure read ₦0 forever — #172). A
+  // cancelled sale posts a dated refund cash-out row on the cancel day
+  // (OrdersDao.markCancelled), so refunds land on the day money left and a
+  // reviewed/banked sale day never silently shrinks. Scoped by the row's store
+  // (legacy null-store rows fold into the All-Stores aggregate, as elsewhere)
+  // and by its own created_at day.
+  var refundsKobo = 0;
+  for (final p in payments) {
+    if (p.voidedAt != null) continue;
+    if (p.type != 'refund') continue;
+    if (!inSpan(p.createdAt)) continue;
+    if (!inScope(p.storeId)) continue;
+    refundsKobo += p.amountKobo;
   }
 
   // ── Cash-flow summary (ADR 0014; business-wide, tender-tagged) ───────────
