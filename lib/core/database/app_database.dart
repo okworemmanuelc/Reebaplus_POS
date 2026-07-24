@@ -1081,6 +1081,15 @@ class OrderItems extends Table {
   IntColumn get unitPriceKobo => integer()();
   IntColumn get buyingPriceKobo => integer().withDefault(const Constant(0))();
   IntColumn get totalKobo => integer()();
+  // Catalogue (tier list) price of the line at sale time (#176 report-truth).
+  // Captured so a custom-price concession is derivable in margin review: when a
+  // cashier overrides the price (`sales.set_custom_price`), [unitPriceKobo]
+  // holds the CHARGED price and this holds the tier list price it deviated from,
+  // so `catalogue − charged` per unit is the recorded concession. NULL when no
+  // override was applied (charged == catalogue) and for quick-sale lines (no
+  // catalogue price exists). Nullable + additive; no sync_registry change
+  // (Restore.plain pass-through) — the cloud column must exist first (0158).
+  IntColumn get cataloguePriceKobo => integer().nullable()();
   TextColumn get priceSnapshot => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -1953,7 +1962,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 68;
+  int get schemaVersion => 69;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4334,6 +4343,24 @@ class AppDatabase extends _$AppDatabase {
             "UPDATE daily_closings SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
             'END',
           );
+        }
+      }
+      if (from < 69) {
+        // v69 (#176 report-truth, PRD #155). Mirrors
+        // supabase/migrations/0158_money_integrity_catalogue_price.sql.
+        //
+        // order_items gains a nullable `catalogue_price_kobo`: the tier list
+        // price captured at checkout so a custom-price concession is derivable
+        // (`catalogue − charged`). Simple add-column (order_items' CHECKs are
+        // untouched); legacy lines keep NULL (no recorded concession). No
+        // sync_registry change (Restore.plain pass-through). Idempotency guard
+        // mirrors v64/v66/v67 so a DB stepped back re-upgrades cleanly.
+        final hasCataloguePrice = await customSelect(
+          "SELECT 1 FROM pragma_table_info('order_items') "
+          "WHERE name = 'catalogue_price_kobo'",
+        ).get();
+        if (hasCataloguePrice.isEmpty) {
+          await m.addColumn(orderItems, orderItems.cataloguePriceKobo);
         }
       }
     },

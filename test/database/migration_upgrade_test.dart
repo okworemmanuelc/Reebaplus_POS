@@ -1360,4 +1360,75 @@ void main() {
       expect(cols, containsAll(<String>{'business_date', 'total_sales_kobo'}));
     });
   });
+
+  group('onUpgrade v68 → v69 (order_items catalogue-price snapshot, #176)', () {
+    Future<bool> columnExists(
+        AppDatabase db, String table, String column) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM pragma_table_info('$table') WHERE name = ?",
+            variables: [Variable<String>(column)],
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test('adds order_items.catalogue_price_kobo (a custom-price concession '
+        'reference); legacy lines keep it NULL', () async {
+      final biz = UuidV7.generate();
+      final storeId = UuidV7.generate();
+      final orderId = UuidV7.generate();
+      final legacyItemId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Main')",
+        [storeId, biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-1', 100000, 100000, 'cash', 'pending')",
+        [orderId, biz],
+      );
+
+      // Revert order_items to the pre-v69 shape: drop catalogue_price_kobo.
+      await db1.customStatement(
+          'ALTER TABLE order_items DROP COLUMN catalogue_price_kobo');
+      expect(
+          await columnExists(db1, 'order_items', 'catalogue_price_kobo'),
+          isFalse);
+
+      // A pre-existing (legacy) line on the reverted table.
+      await db1.customStatement(
+        'INSERT INTO order_items '
+        '(id, business_id, order_id, store_id, quantity, unit_price_kobo, '
+        'total_kobo) VALUES (?, ?, ?, ?, 2, 100000, 200000)',
+        [legacyItemId, biz, orderId, storeId],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 68');
+      await db1.close();
+
+      // Re-open → onUpgrade(68 → 69) adds the nullable column.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(
+          await columnExists(db2, 'order_items', 'catalogue_price_kobo'),
+          isTrue);
+
+      // The legacy line survives and its new catalogue_price_kobo is NULL.
+      final legacy = await db2
+          .customSelect(
+            'SELECT catalogue_price_kobo FROM order_items WHERE id = ?',
+            variables: [Variable<String>(legacyItemId)],
+          )
+          .getSingle();
+      expect(legacy.data['catalogue_price_kobo'], isNull);
+    });
+  });
 }
