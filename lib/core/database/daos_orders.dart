@@ -1161,9 +1161,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Cancel/refund an order (§19.7): append compensating stock rows, void the
-  /// payments, and reverse both wallet legs so the customer's wallet returns to
-  /// its pre-sale balance. Inventory is restored.
+  /// Cancel/refund an order (§19.7): append compensating stock rows, post a
+  /// dated refund cash-out row for the goods paid (the original sale payment is
+  /// left intact — money leaves on the cancel day, #172), and reverse both
+  /// wallet legs so the customer's wallet returns to its pre-sale balance.
+  /// Inventory is restored.
   Future<void> markCancelled(
     String orderId,
     String reason,
@@ -1265,22 +1267,43 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('inventory', invRow);
       }
 
-      // Payment: void metadata ONLY (never append a new payment row)
-      await (update(
-        paymentTransactions,
-      )..where((p) => p.orderId.equals(orderId) & p.voidedAt.isNull())).write(
-        PaymentTransactionsCompanion(
-          voidedAt: Value(now.toUtc()),
-          voidedBy: Value(staffId),
-          voidReason: Value('order_cancelled: $reason'),
-          lastUpdatedAt: Value(now),
-        ),
-      );
-      final updatedPays = await (select(
-        paymentTransactions,
-      )..where((p) => p.orderId.equals(orderId) & whereBusiness(p))).get();
-      for (final pay in updatedPays) {
-        await db.syncDao.enqueueUpsert('payment_transactions', pay);
+      // Payment: post a DATED compensating refund cash-out row through the #169
+      // seam (PRD #155) — the append-only ledger discipline. The ORIGINAL sale
+      // row is LEFT UNTOUCHED (no in-place void): cash reporting counts each
+      // payment row on its OWN created_at day, so the sale stays on the sale day
+      // — a day the owner may have already reviewed and banked against — and the
+      // refund lands on the CANCEL day ([now]). We reverse only the GOODS
+      // portion of the amount actually paid (`amountPaid − crateDepositPaid`);
+      // the crate deposit is released on the crate/wallet side above (#162's
+      // `crate_deposit_refunded` debit deflates "held"), never as a second
+      // cash-out here. The seam copies the sale row's single typed reference
+      // (order_id), its store, and its method, so the refund links back to the
+      // order and a cash tender yields a cash refund. (In practice createOrder
+      // writes exactly one 'sale' row per order; the loop is defensive.)
+      final orderRow = await (select(
+        orders,
+      )..where((o) => o.id.equals(orderId) & whereBusiness(o))).getSingle();
+      final salePayments =
+          await (select(paymentTransactions)..where(
+                (p) =>
+                    p.orderId.equals(orderId) &
+                    whereBusiness(p) &
+                    p.type.equals('sale') &
+                    p.voidedAt.isNull(),
+              ))
+              .get();
+      for (final sale in salePayments) {
+        final rawGoodsKobo = sale.amountKobo - orderRow.crateDepositPaidKobo;
+        final goodsPaidKobo = rawGoodsKobo < 0 ? 0 : rawGoodsKobo;
+        if (goodsPaidKobo <= 0) continue;
+        await db.paymentTransactionsDao.postReversalPayment(
+          original: sale,
+          reversalType: 'refund',
+          performedBy: staffId,
+          amountKobo: goodsPaidKobo,
+          reason: 'order_cancelled: $reason',
+          at: now,
+        );
       }
 
       // Wallet: reverse the legs the sale posted (§14.3 / §13.4) so the customer
