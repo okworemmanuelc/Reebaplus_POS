@@ -285,6 +285,7 @@ class ReconData {
     required this.cashRefundsKobo,
     required this.cashExpensesKobo,
     required this.cashSupplierPaidKobo,
+    required this.cashCrateDepositsKobo,
     required this.bestStaff,
     required this.bestStaffKobo,
     required this.expensesKobo,
@@ -360,6 +361,13 @@ class ReconData {
   final int cashRefundsKobo; // OUT — type 'refund'
   final int cashExpensesKobo; // OUT — type 'expense'
   final int cashSupplierPaidKobo; // OUT — supplier_ledger payment_* (not in pay-txns)
+  /// HELD (not operating cash) — cash `crate_deposit` rows collected this period
+  /// net of returns (#175). Refundable customer money the drawer physically
+  /// holds but the business never earns, so it is shown as its own line and is
+  /// deliberately OUTSIDE cashIn / cashOut / net cash movement (never banked as a
+  /// sale). A cancelled deposit sale posts a negative `crate_deposit` row, so a
+  /// same-period collect-then-cancel nets to zero here.
+  final int cashCrateDepositsKobo;
   final String? bestStaff;
   final int bestStaffKobo;
   final int expensesKobo;
@@ -936,13 +944,17 @@ ReconData computeReconData(
   // card does not filter on it yet (legacy rows are null), so it stays
   // business-wide. Each row is counted on its OWN `created_at` day (inSpan
   // below), the invariant the money-correction slices rely on.
-  // Crate deposits (a refundable held liability) are deliberately excluded — the
-  // ask is operating cash (sales + debts collected). `method` casing drifts
-  // ('Cash'/'cash'), so match case-insensitively.
+  // Crate deposits (a refundable held liability) are kept OUT of operating cash
+  // (sales + debts collected) but summed on their own `crate_deposit` line
+  // (#175) so the drawer can be tied WITH the held money broken out — never
+  // banked as a sale. `method` casing drifts ('Cash'/'cash'), so match
+  // case-insensitively. A cancelled deposit sale posts a negative `crate_deposit`
+  // row, so the held line nets a same-period collect-then-cancel to zero.
   var cashSalesKobo = 0;
   var cashDebtsCollectedKobo = 0;
   var cashRefundsKobo = 0;
   var cashExpensesKobo = 0;
+  var cashCrateDepositsKobo = 0;
   for (final p in payments) {
     if (p.voidedAt != null) continue;
     if (p.method.toLowerCase() != 'cash') continue;
@@ -955,6 +967,8 @@ ReconData computeReconData(
       cashRefundsKobo += p.amountKobo;
     } else if (p.type == 'expense') {
       cashExpensesKobo += p.amountKobo;
+    } else if (p.type == 'crate_deposit') {
+      cashCrateDepositsKobo += p.amountKobo;
     }
   }
   // Supplier payments made in cash — the one cash-out NOT in payment_transactions
@@ -1036,6 +1050,7 @@ ReconData computeReconData(
     cashRefundsKobo: cashRefundsKobo,
     cashExpensesKobo: cashExpensesKobo,
     cashSupplierPaidKobo: cashSupplierPaidKobo,
+    cashCrateDepositsKobo: cashCrateDepositsKobo,
     bestStaff: bestStaff,
     bestStaffKobo: bestStaffKobo,
     expensesKobo: expensesKobo,
