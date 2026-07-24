@@ -979,4 +979,156 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v63 → v64 (money-integrity prefactor #169)', () {
+    Future<bool> objectExists(AppDatabase db, String type, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='$type' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test(
+        'adds orders.confirmed_by + payment_transactions.store_id, widens the '
+        'type CHECK to admit crate_deposit, and recreates the append-only '
+        'triggers/indexes (legacy payment rows keep store_id NULL)', () async {
+      final biz = UuidV7.generate();
+      final orderId = UuidV7.generate();
+      final legacyPayId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+
+      // Real FK targets that survive the payment_transactions revert (only that
+      // table is dropped/recreated). The order lets the post-upgrade
+      // crate_deposit insert satisfy the (real) order_id FK.
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-000001-AAAAAA', 100000, 100000, 'cash', 'completed')",
+        [orderId, biz],
+      );
+
+      // (1) Revert orders to the pre-v64 shape: drop confirmed_by.
+      await db1.customStatement('ALTER TABLE orders DROP COLUMN confirmed_by');
+
+      // (2) Revert payment_transactions to the pre-v64 shape: no store_id and
+      //     the old 5-value type CHECK. Recreate WITHOUT FKs (mirrors the v61
+      //     user_businesses revert) so the copy is unconstrained; the migration
+      //     rebuilds the real, FK-carrying table from the Drift schema.
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1.customStatement('DROP TABLE IF EXISTS payment_transactions');
+      await db1.customStatement(
+        'CREATE TABLE payment_transactions ('
+        'id TEXT NOT NULL PRIMARY KEY, business_id TEXT NOT NULL, '
+        'amount_kobo INTEGER NOT NULL, method TEXT NOT NULL, type TEXT NOT NULL, '
+        'order_id TEXT, shipment_id TEXT, expense_id TEXT, wallet_txn_id TEXT, '
+        'delivery_id TEXT, performed_by TEXT, voided_at INTEGER, '
+        'voided_by TEXT, void_reason TEXT, '
+        'created_at INTEGER NOT NULL DEFAULT 0, '
+        'last_updated_at INTEGER NOT NULL DEFAULT 0, '
+        "CHECK (method IN ('cash','transfer','card','wallet','pos','other')), "
+        "CHECK (type IN ('sale','purchase','expense','refund','wallet_topup')))",
+      );
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+
+      // A pre-existing (legacy) sale payment on the reverted table — no store_id.
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, amount_kobo, method, type, order_id, created_at, '
+        'last_updated_at) '
+        "VALUES (?, ?, 100000, 'cash', 'sale', ?, 0, 0)",
+        [legacyPayId, biz, orderId],
+      );
+
+      // The old 5-value CHECK rejects the new crate_deposit type — teeth for the
+      // widening.
+      await expectLater(
+        db1.customStatement(
+          'INSERT INTO payment_transactions '
+          '(id, business_id, amount_kobo, method, type, order_id) '
+          "VALUES (?, ?, 1, 'cash', 'crate_deposit', ?)",
+          [UuidV7.generate(), biz, orderId],
+        ),
+        throwsA(anything),
+        reason: 'the pre-v64 5-value type CHECK must reject crate_deposit',
+      );
+
+      await db1.customStatement('PRAGMA user_version = 63');
+      await db1.close();
+
+      // Re-open → onUpgrade(63 → 64).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      // (1) orders.confirmed_by re-added.
+      expect(
+        (await columnsOf(db2, 'orders')).contains('confirmed_by'),
+        isTrue,
+        reason: 'v64 must add orders.confirmed_by',
+      );
+
+      // (2) payment_transactions.store_id added; the legacy row keeps it NULL.
+      expect(
+        (await columnsOf(db2, 'payment_transactions')).contains('store_id'),
+        isTrue,
+        reason: 'v64 must add payment_transactions.store_id',
+      );
+      final legacy = await db2
+          .customSelect(
+            'SELECT store_id FROM payment_transactions WHERE id = ?',
+            variables: [Variable<String>(legacyPayId)],
+          )
+          .getSingle();
+      expect(legacy.read<String?>('store_id'), isNull,
+          reason: 'legacy rows report business-wide (store_id NULL)');
+
+      // (3) The widened CHECK now accepts a crate_deposit row.
+      await db2.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, amount_kobo, method, type, order_id) '
+        "VALUES (?, ?, 5000, 'cash', 'crate_deposit', ?)",
+        [UuidV7.generate(), biz, orderId],
+      );
+
+      // (4) Append-only triggers + sync/hot-path indexes recreated.
+      expect(await objectExists(db2, 'trigger', 'payment_transactions_immutable'),
+          isTrue, reason: 'v64 must recreate the immutable ledger trigger');
+      expect(await objectExists(db2, 'trigger', 'payment_transactions_no_delete'),
+          isTrue, reason: 'v64 must recreate the no-delete ledger trigger');
+      expect(
+        await objectExists(
+            db2, 'trigger', 'bump_payment_transactions_last_updated_at'),
+        isTrue,
+        reason: 'v64 must recreate the last_updated_at bump trigger',
+      );
+      expect(
+        await objectExists(
+            db2, 'index', 'idx_payment_transactions_business_lua'),
+        isTrue,
+        reason: 'v64 must recreate the (business_id, last_updated_at) sync index',
+      );
+      expect(
+        await objectExists(db2, 'index', 'idx_payment_txn_business_type'),
+        isTrue,
+        reason: 'v64 must recreate the (business_id, type, created_at) index',
+      );
+
+      // (5) The immutable trigger now guards store_id (added to the set): a
+      //     store_id edit on an existing row aborts.
+      await expectLater(
+        db2.customStatement(
+          'UPDATE payment_transactions SET store_id = ? WHERE id = ?',
+          [UuidV7.generate(), legacyPayId],
+        ),
+        throwsA(anything),
+        reason: 'store_id is immutable after insert (append-only ledger)',
+      );
+    });
+  });
 }

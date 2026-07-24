@@ -136,6 +136,9 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
       final payComp = PaymentTransactionsCompanion.insert(
         id: Value(paymentId),
         businessId: requireBusinessId(),
+        // #169: stamp the expense's store on this new payment row (nullable;
+        // unread by reports yet, so behavior-preserving).
+        storeId: Value(storeId),
         amountKobo: amountKobo,
         method: effectivePaymentMethod,
         type: 'expense',

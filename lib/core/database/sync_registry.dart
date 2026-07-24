@@ -999,6 +999,11 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'supplier_crate_ledger',
     tenantScoped: true,
+    // #169: preemptively drop `created_at` on every push so a future void
+    // re-push (the money-integrity slices) can't trip the immutable-column
+    // trigger (P0001) and orphan the row — same trap already closed for the
+    // wallet / supplier / payment ledgers.
+    scrubCreatedAt: true,
     restore: Restore.ledger(
       (db) => db.supplierCrateLedger,
       SupplierCrateLedgerEntryData.fromJson,
@@ -1092,6 +1097,10 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'crate_ledger',
     tenantScoped: true,
+    // #169: preemptively drop `created_at` on every push (see supplier_crate_
+    // ledger above) — closes the latent void-push orphan trap before any void
+    // feature ships.
+    scrubCreatedAt: true,
     restore: Restore.ledger(
       (db) => db.crateLedger,
       CrateLedgerData.fromJson,

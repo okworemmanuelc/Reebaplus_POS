@@ -967,6 +967,11 @@ class Orders extends Table {
   TextColumn get barcode => text().nullable()();
   TextColumn get staffId => text().nullable().references(Users, #id)();
   TextColumn get storeId => text().nullable().references(Stores, #id)();
+  // Who tapped Confirm, recorded separately from [staffId] (the seller) so
+  // best-staff / commission figures stay attributed to the seller (#169 lands
+  // the column; #171 stops Confirm overwriting staffId and starts stamping it).
+  // Nullable; unused until #171. Mirrors 0153_money_integrity_payments_seam.sql.
+  TextColumn get confirmedBy => text().nullable().references(Users, #id)();
   IntColumn get crateDepositPaidKobo =>
       integer().withDefault(const Constant(0))();
   DateTimeColumn get completedAt => dateTime().nullable()();
@@ -1237,6 +1242,11 @@ class PendingCrateReturns extends Table {
 class PaymentTransactions extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
+  // Nullable store where this tender happened (#169 / PRD #155). Stamped on all
+  // NEW rows; legacy rows stay null and report business-wide exactly as before.
+  // The cash-flow reconciliation does not yet filter on it (a later slice does),
+  // so adding it is behavior-preserving.
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   IntColumn get amountKobo => integer()();
   TextColumn get method => text()();
   TextColumn get type => text()();
@@ -1261,7 +1271,14 @@ class PaymentTransactions extends Table {
   @override
   List<String> get customConstraints => [
     "CHECK (method IN ('cash','transfer','card','wallet','pos','other'))",
-    "CHECK (type IN ('sale','purchase','expense','refund','wallet_topup'))",
+    // #169 widened the type CHECK to admit the deposit-distinct `crate_deposit`
+    // type (unused until #175 / PRD #155): a refundable crate deposit is its own
+    // money type so it can be excluded from "Cash sales". Widening a CHECK is a
+    // runtime-resolved change (customConstraints is not baked into the generated
+    // code); existing installs rebuild the table under the new CHECK via the
+    // schemaVersion 64 upgrade step. Mirrors 0153_money_integrity_payments_seam.sql.
+    "CHECK (type IN "
+        "('sale','purchase','expense','refund','wallet_topup','crate_deposit'))",
     '''CHECK (
           (CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN shipment_id IS NOT NULL THEN 1 ELSE 0 END) +
@@ -1784,6 +1801,7 @@ class MigrationEvents extends Table {
     InventoryDao,
     CostBatchesDao,
     OrdersDao,
+    PaymentTransactionsDao,
     CustomersDao,
     ShipmentsDao,
     ExpensesDao,
@@ -1857,7 +1875,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 63;
+  int get schemaVersion => 64;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4066,6 +4084,87 @@ class AppDatabase extends _$AppDatabase {
         // across devices (ADR 0020).
         await _seedCrateOpeningLedger();
       }
+      if (from < 64) {
+        // v64 (#169 money-integrity prefactor, PRD #155). Mirrors
+        // supabase/migrations/0153_money_integrity_payments_seam.sql.
+        //
+        // (1) orders.confirmed_by — the staff who tapped Confirm, recorded
+        //     separately from the seller (staff_id). Nullable, unused until
+        //     #171. Simple add-column (no CHECK/NOT NULL change on orders).
+        //     Idempotency guard for a DB stepped back to < 64 by the
+        //     revert-then-re-upgrade tests (same pattern as v59/v60).
+        final hasConfirmedBy = await customSelect(
+          "SELECT 1 FROM pragma_table_info('orders') "
+          "WHERE name = 'confirmed_by'",
+        ).get();
+        if (hasConfirmedBy.isEmpty) {
+          await m.addColumn(orders, orders.confirmedBy);
+        }
+
+        // (2) payment_transactions.store_id (nullable) + widen the type CHECK to
+        //     admit the deposit-distinct `crate_deposit` type.
+        //
+        //     First ADD the store_id column (guarded), so the rebuild below can
+        //     copy it 1:1 — drift's TableMigration needs a new column to already
+        //     exist on the old table (or a columnTransformer), else it fills the
+        //     column with the literal column name. Legacy rows get NULL.
+        final hasPayStore = await customSelect(
+          "SELECT 1 FROM pragma_table_info('payment_transactions') "
+          "WHERE name = 'store_id'",
+        ).get();
+        if (hasPayStore.isEmpty) {
+          await m.addColumn(paymentTransactions, paymentTransactions.storeId);
+        }
+        //     SQLite can't ALTER a CHECK in place, so rebuild the table from the
+        //     current Drift schema (store_id + the 6-value type CHECK) and copy
+        //     every row 1:1. WIDENING the CHECK keeps every existing sale/refund/
+        //     expense/wallet_topup row valid, so the copy never fails. drift's
+        //     alterTable re-applies the table's EXISTING indexes; DROP-then-CREATE
+        //     each AFTER the rebuild to stay idempotent (same fix as the v29/v61
+        //     rebuilds). Triggers are NOT re-applied by alterTable, so DROP IF
+        //     EXISTS + CREATE the two append-only ledger triggers (immutable +
+        //     no-delete, now guarding store_id too) and the last_updated_at bump
+        //     trigger — emitting the immutable trigger from the single
+        //     `_ledgerTables` source so it can't drift from onCreate.
+        await m.alterTable(TableMigration(paymentTransactions));
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
+        );
+        await customStatement(
+          'CREATE INDEX idx_payment_transactions_business_lua '
+          'ON payment_transactions (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_txn_business_type',
+        );
+        await customStatement(
+          'CREATE INDEX idx_payment_txn_business_type '
+          'ON payment_transactions (business_id, type, created_at)',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_payment_transactions_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_payment_transactions_last_updated_at '
+          'AFTER UPDATE ON payment_transactions '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE payment_transactions SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+        );
+        for (final stmt in _ledgerTriggerStatements(
+          _ledgerTables.firstWhere((l) => l.table == 'payment_transactions'),
+        )) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -4609,6 +4708,7 @@ const List<_LedgerImmutability> _ledgerTables = [
   _LedgerImmutability('payment_transactions', [
     'id',
     'business_id',
+    'store_id',
     'amount_kobo',
     'method',
     'type',

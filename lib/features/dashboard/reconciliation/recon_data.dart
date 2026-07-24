@@ -918,7 +918,10 @@ ReconData computeReconData(
   // Expected cash MOVEMENT for the period from recorded cash tenders — NOT a
   // drawer count (Hard Rule #8: no float, no counted cash). payment_transactions
   // is the unified physical-cash ledger (sale / wallet_topup / refund / expense,
-  // each with a `method`) and has no storeId, so this card is business-wide.
+  // each with a `method`). New rows carry a nullable storeId (#169) but this
+  // card does not filter on it yet (legacy rows are null), so it stays
+  // business-wide. Each row is counted on its OWN `created_at` day (inSpan
+  // below), the invariant the money-correction slices rely on.
   // Crate deposits (a refundable held liability) are deliberately excluded — the
   // ask is operating cash (sales + debts collected). `method` casing drifts
   // ('Cash'/'cash'), so match case-insensitively.

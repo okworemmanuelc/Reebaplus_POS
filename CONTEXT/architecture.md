@@ -165,9 +165,11 @@ Each chunk has a 15 s timeout. On a timeout the chunk size is halved; after 3 co
 > auto-retried.
 
 > **Append-only ledger rule:** for `payment_transactions`, `wallet_transactions`,
-> and `supplier_ledger_entries`, void re-pushes drop `created_at` at the push
-> boundary (`_ledgerCreatedAtScrubTables`) because the cloud owns it and treats
-> it as immutable. See `[[project_ledger_void_created_at_scrub]]`.
+> `supplier_ledger_entries`, and — since #169 (preemptively) — `crate_ledger`
+> and `supplier_crate_ledger`, void re-pushes drop `created_at` at the push
+> boundary (`_ledgerCreatedAtScrubTables`, derived from the registry's
+> `scrubCreatedAt` flag) because the cloud owns it and treats it as immutable.
+> See `[[project_ledger_void_created_at_scrub]]`.
 
 > **Not implemented:** there is currently no push Edge Function, no server-side
 > `413 Payload Too Large` cap, and no `sync_audit_rejected` operator table. An
