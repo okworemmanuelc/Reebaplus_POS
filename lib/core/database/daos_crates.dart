@@ -657,6 +657,44 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   Future<void> reverseIssuedByCustomerLocal({
     required String orderId,
     required String staffId,
+  }) => _reverseIssuedByCustomer(
+        orderId: orderId,
+        staffId: staffId,
+        enqueue: false,
+      );
+
+  /// #162 — reverse the crate rows a CANCELLED sale ISSUED to a customer (the
+  /// "reverse-order-issuance" verb, ADR 0020). The ENQUEUED counterpart of
+  /// [reverseIssuedByCustomerLocal]: a cancel compensates a sale the cloud
+  /// ACCEPTED, so the compensating rows MUST cross the wire for peers to
+  /// converge (the rejected-sale reversal is local-only precisely because the
+  /// cloud never saw the sale's 'issued' rows). For every 'issued' customer
+  /// `crate_ledger` row on [orderId] it appends the inverse `-quantity`
+  /// 'adjusted' row (append-only), so the customer's DERIVED crate debt
+  /// ([watchCustomerCrateDebt]) nets back to its exact pre-sale value — no
+  /// phantom debt for crates the customer never kept. No own transaction: the
+  /// caller ([OrdersDao.markCancelled]) is already inside one. A money-track
+  /// (deposit) or walk-in sale issues no customer crate balance, so this is a
+  /// no-op for it.
+  Future<void> reverseIssuedByCustomer({
+    required String orderId,
+    required String staffId,
+  }) => _reverseIssuedByCustomer(
+        orderId: orderId,
+        staffId: staffId,
+        enqueue: true,
+      );
+
+  /// Shared body of the reverse-order-issuance verb. [enqueue] distinguishes a
+  /// CANCEL (true — the cloud accepted the sale, so the compensating ledger row
+  /// syncs) from a REJECTED-sale recovery (false — the cloud never held the
+  /// issue, so pushing a compensation would wrongly decrement a balance it never
+  /// had, or FK-fail against the rejected order). The `customer_crate_balances`
+  /// cache is a local-only projection (#158) and is NEVER enqueued either way.
+  Future<void> _reverseIssuedByCustomer({
+    required String orderId,
+    required String staffId,
+    required bool enqueue,
   }) async {
     final issuedRows =
         await (select(crateLedger)..where(
@@ -674,22 +712,22 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       final manufacturerId = issued.manufacturerId!;
 
       // Compensating ledger row — the exact inverse of the 'issued' delta.
-      await into(crateLedger).insert(
-        CrateLedgerCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: requireBusinessId(),
-          customerId: Value(customerId),
-          manufacturerId: Value(manufacturerId),
-          quantityDelta: -issued.quantityDelta,
-          movementType: 'adjusted',
-          referenceOrderId: Value(orderId),
-          performedBy: Value(staffId),
-          lastUpdatedAt: Value(now),
-        ),
+      final compRow = CrateLedgerCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        customerId: Value(customerId),
+        manufacturerId: Value(manufacturerId),
+        quantityDelta: -issued.quantityDelta,
+        movementType: 'adjusted',
+        referenceOrderId: Value(orderId),
+        performedBy: Value(staffId),
+        lastUpdatedAt: Value(now),
       );
+      await into(crateLedger).insert(compRow);
 
-      // Decrement the LWW cache back toward its pre-sale value. customUpdate
-      // (not customStatement) so Drift invalidates the watching crate streams.
+      // Decrement the local-only projection cache back toward its pre-sale
+      // value. customUpdate (not customStatement) so Drift invalidates the
+      // watching crate streams.
       await customUpdate(
         'UPDATE customer_crate_balances SET balance = balance - ?, '
         "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
@@ -702,7 +740,12 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         ],
         updates: {customerCrateBalances},
       );
-      // Intentionally NOT enqueued — local-only reversal of a rejected sale.
+
+      // Only the append-only ledger row crosses the wire, and only on the
+      // cancel path — the demoted cache is never pushed (#158).
+      if (enqueue) {
+        await db.syncDao.enqueueUpsert('crate_ledger', compRow);
+      }
     }
   }
 

@@ -1271,24 +1271,45 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('payment_transactions', pay);
       }
 
-      // Wallet: reverse BOTH legs the sale posted (§14.3) so the customer's
-      // wallet returns to its exact pre-sale balance. createOrder debited the
-      // order total (the purchase) and, when anything was paid now, credited the
-      // amount paid (the payment). We append the opposite of each leg (the
-      // ledger is append-only — never mutate): the debit becomes a 'refund'
-      // credit, the payment-credit becomes a 'void' debit. Net wallet effect =
-      // +total − paid, undoing the sale's −(total − paid). Walk-in orders have
-      // no wallet legs, so this is a no-op for them.
+      // Wallet: reverse the legs the sale posted (§14.3 / §13.4) so the customer
+      // returns to their exact pre-sale position. createOrder debited the goods
+      // total (the purchase), credited any amount paid now (the payment), and —
+      // for a money-track sale — HELD the crate deposit as a `crate_deposit`
+      // credit. We append the opposite of each (the ledger is append-only —
+      // never mutate): the goods debit becomes a 'refund' credit, the payment
+      // credit becomes a 'void' debit, and the held `crate_deposit` credit is
+      // released with a DEPOSIT-FAMILY 'crate_deposit_refunded' debit — NOT the
+      // generic 'void' (#162). A 'void' debit lands in the SPENDABLE bucket
+      // (it's outside kCrateDepositReferenceTypes), so it would wrongly dock the
+      // customer's spendable balance AND leave "deposits held" inflated (the
+      // +crate_deposit credit never offset); the deposit-family debit deflates
+      // held to 0 and is excluded from spendable — the same release
+      // settleCrateDepositReturn posts. We skip legs that are THEMSELVES a
+      // reversal/settlement (refund/void + the deposit-family debits + the
+      // spendable crate_refund) so the cancel reverses only the ORIGINAL sale
+      // legs, never a compensation (reversing a settlement's own debit would
+      // itself double-book). NOTE: this is the Checkout->Cancel path (an
+      // unsettled sale); a full reversal of a deposit already SETTLED at Confirm
+      // is not in scope — markCancelled has no status guard, so cancelling an
+      // already-settled order would over-release (PRD #156 A3/A6, the late-refund
+      // window, deferred). Walk-in orders have no wallet legs → this is a no-op.
       final saleWalletLegs =
           await (select(walletTransactions)..where(
                 (t) =>
                     whereBusiness(t) &
                     t.orderId.equals(orderId) &
-                    t.referenceType.isNotIn(const ['refund', 'void']),
+                    t.referenceType.isNotIn(const [
+                      'refund',
+                      'void',
+                      'crate_deposit_refunded',
+                      'crate_deposit_forfeited',
+                      'crate_refund',
+                    ]),
               ))
               .get();
       for (final leg in saleWalletLegs) {
         final toCredit = leg.type == 'debit';
+        final isHeldDeposit = leg.referenceType == 'crate_deposit';
         final compReverse = WalletTransactionsCompanion.insert(
           id: Value(UuidV7.generate()),
           businessId: requireBusinessId(),
@@ -1297,7 +1318,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           type: toCredit ? 'credit' : 'debit',
           amountKobo: leg.amountKobo,
           signedAmountKobo: toCredit ? leg.amountKobo : -leg.amountKobo,
-          referenceType: toCredit ? 'refund' : 'void',
+          referenceType: isHeldDeposit
+              ? 'crate_deposit_refunded'
+              : (toCredit ? 'refund' : 'void'),
           orderId: Value(orderId),
           performedBy: Value(staffId),
           lastUpdatedAt: Value(now),
@@ -1305,6 +1328,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await into(walletTransactions).insert(compReverse);
         await db.syncDao.enqueueUpsert('wallet_transactions', compReverse);
       }
+
+      // Crates: reverse the rows the sale ISSUED to the customer (§13.4 crate-
+      // track brands) so the customer's DERIVED crate debt returns to its
+      // pre-sale value — no phantom debt for crates they never kept. Routed
+      // through the Crate Pool seam (ADR 0020: the sole crate-table writer) and
+      // ENQUEUED (a cancel reverses a sale the cloud accepted). A money-track
+      // (deposit) or walk-in sale issues no customer crate balance, so this is a
+      // no-op for it.
+      await db.cratePoolDao.reverseIssuedByCustomer(
+        orderId: orderId,
+        staffId: staffId,
+      );
     });
   }
 
