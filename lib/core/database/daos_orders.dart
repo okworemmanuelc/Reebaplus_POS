@@ -823,24 +823,65 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('stock_transactions', txComp);
       }
 
+      // #175 (PRD #155) — split the tender into distinct payment types so
+      // "Cash sales" finally ties to the drawer. The single bundled `sale` row
+      // is retired in favour of up to three rows, all carrying the chosen
+      // [paymentMethod] and the sale-level store (#169):
+      //   • `sale`          = GOODS actually paid (amountPaid − deposit, capped
+      //                       at the goods total) — the only row "Cash sales"
+      //                       and headline "Total Sales" count;
+      //   • `crate_deposit` = the refundable deposit HELD — its own money type,
+      //                       excluded from Cash sales, shown as a held line;
+      //   • `wallet_topup`  = any OVERPAYMENT beyond goods+deposit — the
+      //                       customer's credit, counted as debts collected, not
+      //                       a sale.
+      // The three always sum to amountPaidKobo (no cash created or lost). The
+      // checkout guards paid ≥ deposit, so `depositHeld ≤ paid`; clamp anyway.
+      // Guarded on paid > 0: a pure credit / pay-with-wallet sale settles no
+      // cash, so no row is written (and `depositHeld ≤ paid` ⇒ all three are 0
+      // anyway) — matching the pre-#175 single-row behaviour and never touching
+      // `items.first` on an item-less ledger-only order.
+      // (v2's pos_record_sale_v2 mints one bundled `sale` row server-side and
+      // must mirror this split when it goes live — flagged to the RPC owners.)
       if (amountPaidKobo > 0) {
-        final payId = UuidV7.generate();
-        final payComp = PaymentTransactionsCompanion.insert(
-          id: Value(payId),
-          businessId: requireBusinessId(),
-          // #169: stamp the sale-level store on this new payment row (the same
-          // store the header + stock movements use). Nullable; unread by reports
-          // yet, so behavior-preserving.
-          storeId: Value(storeId ?? items.first.storeId.value),
-          amountKobo: amountPaidKobo,
+        final payStoreId = storeId ?? items.first.storeId.value;
+        final depositHeldKobo = crateDepositPaidByManufacturer.values
+            .fold<int>(0, (s, v) => s + v)
+            .clamp(0, amountPaidKobo);
+        final goodsGrandKobo = (totalAmountKobo - depositHeldKobo).clamp(
+          0,
+          totalAmountKobo,
+        );
+        final goodsPaidKobo = (amountPaidKobo - depositHeldKobo).clamp(
+          0,
+          goodsGrandKobo,
+        );
+        final walletTopupKobo =
+            amountPaidKobo - depositHeldKobo - goodsPaidKobo;
+        await _insertCheckoutPaymentRow(
+          orderId: orderId,
+          storeId: payStoreId,
+          amountKobo: goodsPaidKobo,
           method: paymentMethod,
           type: 'sale',
-          orderId: Value(orderId),
-          performedBy: Value(staffId),
-          lastUpdatedAt: Value(DateTime.now()),
+          staffId: staffId,
         );
-        await into(paymentTransactions).insert(payComp);
-        await db.syncDao.enqueueUpsert('payment_transactions', payComp);
+        await _insertCheckoutPaymentRow(
+          orderId: orderId,
+          storeId: payStoreId,
+          amountKobo: depositHeldKobo,
+          method: paymentMethod,
+          type: 'crate_deposit',
+          staffId: staffId,
+        );
+        await _insertCheckoutPaymentRow(
+          orderId: orderId,
+          storeId: payStoreId,
+          amountKobo: walletTopupKobo,
+          method: paymentMethod,
+          type: 'wallet_topup',
+          staffId: staffId,
+        );
       }
 
       // NOTE: the wallet double-entry was posted by _postSaleWalletLegs above,
@@ -865,6 +906,35 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
       return orderId;
     });
+  }
+
+  /// Writes one checkout payment row (#175) and enqueues it for sync. A no-op
+  /// for a non-positive [amountKobo], so a sale with no deposit / no overpayment
+  /// writes only its `sale` row exactly as before. Every row sets `id` +
+  /// `store_id` explicitly (invariant: synced writes set DB-defaulted columns).
+  /// Must be called INSIDE the createOrder transaction.
+  Future<void> _insertCheckoutPaymentRow({
+    required String orderId,
+    required String? storeId,
+    required int amountKobo,
+    required String method,
+    required String type,
+    required String staffId,
+  }) async {
+    if (amountKobo <= 0) return;
+    final comp = PaymentTransactionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      storeId: Value(storeId),
+      amountKobo: amountKobo,
+      method: method,
+      type: type,
+      orderId: Value(orderId),
+      performedBy: Value(staffId),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(paymentTransactions).insert(comp);
+    await db.syncDao.enqueueUpsert('payment_transactions', comp);
   }
 
   /// §14.3 full wallet ledger (rule #4): every registered sale runs through
@@ -1296,40 +1366,52 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('inventory', invRow);
       }
 
-      // Payment: post a DATED compensating refund cash-out row through the #169
-      // seam (PRD #155) — the append-only ledger discipline. The ORIGINAL sale
-      // row is LEFT UNTOUCHED (no in-place void): cash reporting counts each
-      // payment row on its OWN created_at day, so the sale stays on the sale day
-      // — a day the owner may have already reviewed and banked against — and the
-      // refund lands on the CANCEL day ([now]). We reverse only the GOODS
-      // portion of the amount actually paid (`amountPaid − crateDepositPaid`);
-      // the crate deposit is released on the crate/wallet side above (#162's
-      // `crate_deposit_refunded` debit deflates "held"), never as a second
-      // cash-out here. The seam copies the sale row's single typed reference
-      // (order_id), its store, and its method, so the refund links back to the
-      // order and a cash tender yields a cash refund. (In practice createOrder
-      // writes exactly one 'sale' row per order; the loop is defensive.)
-      final orderRow = await (select(
-        orders,
-      )..where((o) => o.id.equals(orderId) & whereBusiness(o))).getSingle();
-      final salePayments =
+      // Payment: post DATED compensating rows through the #169 seam (PRD #155) —
+      // the append-only ledger discipline. Every ORIGINAL payment row is LEFT
+      // UNTOUCHED (no in-place void): cash reporting counts each row on its OWN
+      // created_at day, so the sale stays on the sale day — a day the owner may
+      // have already reviewed and banked against — and the reversal lands on the
+      // CANCEL day ([now]). Since #175 the checkout writes distinct rows per
+      // money type, and each is reversed IN ITS OWN family so every cash-card
+      // figure nets to zero without any double movement:
+      //   • `sale` (goods only after #175) → a `refund` cash-out for the SAME
+      //     amount, AS-IS. Before #175 the `sale` row bundled the deposit and we
+      //     subtracted `crateDepositPaidKobo` here; the split made that
+      //     subtraction a DOUBLE-count (the row is already goods-only), so it is
+      //     retired. Legacy pre-#175 bundled rows refund their full amount, which
+      //     matches how they were counted in "Cash sales", so they stay honest
+      //     too.
+      //   • `crate_deposit` → a NEGATIVE `crate_deposit` row so the held-deposit
+      //     line nets to zero (the physical deposit cash goes back with the
+      //     goods). NOT a `refund` — that would land in Cash refunds while the
+      //     collection was never in Cash sales, breaking the symmetry. Mirrors
+      //     the wallet-side `crate_deposit_refunded` release (#162).
+      //   • `wallet_topup` (overpayment) → a NEGATIVE `wallet_topup` row so
+      //     "Debts collected" nets to zero (mirrors the top-up VOID pattern in
+      //     CreditLedgerService).
+      // The seam copies each row's typed reference (order_id), its store, and its
+      // method, so a cash tender yields a cash reversal and a transfer a transfer
+      // reversal. A `refund` row already on the order (a prior cancel) is never
+      // re-reversed.
+      final orderPayments =
           await (select(paymentTransactions)..where(
                 (p) =>
                     p.orderId.equals(orderId) &
                     whereBusiness(p) &
-                    p.type.equals('sale') &
-                    p.voidedAt.isNull(),
+                    p.voidedAt.isNull() &
+                    p.type.isIn(const ['sale', 'crate_deposit', 'wallet_topup']),
               ))
               .get();
-      for (final sale in salePayments) {
-        final rawGoodsKobo = sale.amountKobo - orderRow.crateDepositPaidKobo;
-        final goodsPaidKobo = rawGoodsKobo < 0 ? 0 : rawGoodsKobo;
-        if (goodsPaidKobo <= 0) continue;
+      for (final pay in orderPayments) {
+        if (pay.amountKobo <= 0) continue;
+        // `sale` reverses as a positive `refund`; the held/credit rows reverse
+        // as a negative row of their own type so their card line nets to zero.
+        final isSale = pay.type == 'sale';
         await db.paymentTransactionsDao.postReversalPayment(
-          original: sale,
-          reversalType: 'refund',
+          original: pay,
+          reversalType: isSale ? 'refund' : pay.type,
           performedBy: staffId,
-          amountKobo: goodsPaidKobo,
+          amountKobo: isSale ? pay.amountKobo : -pay.amountKobo,
           reason: 'order_cancelled: $reason',
           at: now,
         );

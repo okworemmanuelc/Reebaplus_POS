@@ -266,21 +266,43 @@ void main() {
       crateDepositPaidByManufacturer: {mfrId: 50000},
     );
 
-    // The sale row records the full ₦1,500 tendered (goods + deposit bundled).
+    // #175: the sale row is GOODS only (₦1,000); the ₦500 deposit is its own
+    // `crate_deposit` row — kept out of "Cash sales" and headline "Total Sales".
     final sale = await (db.select(db.paymentTransactions)
           ..where((p) => p.type.equals('sale')))
         .getSingle();
-    expect(sale.amountKobo, 150000);
+    expect(sale.amountKobo, 100000, reason: 'the sale row is goods only');
+    final deposit = await (db.select(db.paymentTransactions)
+          ..where((p) => p.type.equals('crate_deposit')))
+        .getSingle();
+    expect(deposit.amountKobo, 50000,
+        reason: 'the deposit is booked under its own crate_deposit type');
+    expect(deposit.orderId, orderId);
 
     await db.ordersDao.markCancelled(orderId, 'refund', staffId);
 
-    // The refund cash-out reverses only the ₦1,000 goods portion — the ₦500
-    // deposit is released on the crate/wallet side (#162), not double-refunded.
+    // The refund cash-out reverses the ₦1,000 goods `sale` row AS-IS — the split
+    // already excluded the deposit, so no second subtraction (that would
+    // double-count).
     final refund = await (db.select(db.paymentTransactions)
           ..where((p) => p.type.equals('refund')))
         .getSingle();
     expect(refund.amountKobo, 100000,
-        reason: 'goods paid = amountPaid − crateDepositPaid');
+        reason: 'the goods-only sale row is refunded as-is');
+    expect(refund.orderId, orderId);
+    expect(refund.method, sale.method);
+
+    // The deposit is released with a NEGATIVE `crate_deposit` row so the
+    // held-money line nets to zero on the cancel day — never a second cash-out,
+    // never double-moved.
+    final depositRows = await (db.select(db.paymentTransactions)
+          ..where((p) => p.type.equals('crate_deposit')))
+        .get();
+    expect(depositRows.map((r) => r.amountKobo).toList()..sort(),
+        [-50000, 50000],
+        reason: 'the deposit is collected then released, netting to zero');
+    expect(depositRows.fold<int>(0, (s, r) => s + r.amountKobo), 0);
+
     // #162 still deflates deposits-held to 0 on the wallet side.
     expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId), 0);
   });

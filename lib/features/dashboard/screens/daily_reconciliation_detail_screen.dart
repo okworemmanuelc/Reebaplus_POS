@@ -294,10 +294,19 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         _line(context, theme, 'Net cash movement',
             formatCurrency(d.netCashMovementKobo / 100.0),
             strong: true, color: netColor),
+        // #175 — refundable crate deposits collected in cash this period, HELD
+        // (net of any cancelled deposit sale). Shown below the net, OUTSIDE it:
+        // it is customers' money in the drawer, never earnings.
+        if (d.cashCrateDepositsKobo != 0) ...[
+          const SizedBox(height: 6),
+          _line(context, theme, 'Crate deposits held (cash)',
+              formatCurrency(d.cashCrateDepositsKobo / 100.0)),
+        ],
         const SizedBox(height: 6),
         Text(
           'Expected cash movement from recorded cash tenders — business-wide, '
-          'not a counted drawer.',
+          'not a counted drawer. Crate deposits are refundable customer money '
+          'held in the drawer, kept out of the net.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
       ],
@@ -821,6 +830,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Expenses paid (cash)', money(d.cashExpensesKobo)],
         ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
         ['Net cash movement', money(d.netCashMovementKobo)],
+        ['Crate deposits held (cash)', money(d.cashCrateDepositsKobo)],
         // Stock reconciliation (at cost) — mirrors _stockFlowCard.
         ['Opening stock (at cost)', money(d.stockOpeningKobo)],
         ['Goods received (at cost)', money(d.stockReceivedKobo)],

@@ -77,6 +77,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // wallet default would book a full-total debt on a thoughtless confirm when
   // the customer has no credit, so the cashier opts into Wallet / Credit Sale.
   PayMode _mode = PayMode.cashTransfer;
+  // #175 (PRD #155) — the real tender captured at checkout ('cash' | 'transfer').
+  // Written to payment_transactions.method so "Cash sales" ties to the drawer:
+  // a transfer sale is EXCLUDED from the cash figure, a cash sale included.
+  // Only meaningful in PayMode.cashTransfer (Wallet debits credit; a pure Credit
+  // Sale settles no cash), so the picker renders inside the amount input.
+  String _tender = 'cash';
   // §14.1 — opt in to printing credit info on the receipt. Off by default;
   // only meaningful for registered customers (walk-ins have no credit balance, §14.3).
   bool _addCreditInfoToReceipt = false;
@@ -218,12 +224,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // could cover it, the cashier opted to book the whole total as debt.
         return 'Credit Sale';
       case PayMode.cashTransfer:
-        if (_isWalkIn) return 'Cash / Transfer';
+        // #175 — reflect the specific tender the cashier picked so the receipt
+        // reads "Cash" / "Transfer" instead of the generic pair.
+        final tenderLabel = _tender == 'transfer' ? 'Transfer' : 'Cash';
+        if (_isWalkIn) return tenderLabel;
         final paidKobo = (_cashReceivedValue * 100).round();
-        if (paidKobo >= _totalKobo) return 'Cash / Transfer';
+        if (paidKobo >= _totalKobo) return tenderLabel;
         // Partial cash now; the shortfall books to the wallet as debt. (A zero
         // amount is blocked by validation, so we never reach here paid = 0.)
-        return 'Cash / Transfer / Credit';
+        return '$tenderLabel / Credit';
     }
   }
 
@@ -1133,7 +1142,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // excess (daos.dart). Wallet / Credit Sale pay nothing now (amountPaid 0):
       // the full total debits the wallet, going into debt if credit can't cover.
       final amountPaidKobo = _isWalkIn ? totalKobo : paidKobo;
-      final paymentSubType = _mode == PayMode.wallet ? 'wallet' : 'cash';
+      // #175 — write the REAL tender ('cash' | 'transfer') the cashier picked on
+      // the payment row(s). Wallet debits the credit balance (no cash tender); a
+      // pure Credit Sale settles no cash, so 'cash' there is a harmless default.
+      final paymentSubType = _mode == PayMode.wallet
+          ? 'wallet'
+          : (_mode == PayMode.cashTransfer ? _tender : 'cash');
 
       // Capture the payment label NOW, while `_mode` and the cash field still
       // reflect the cashier's choice. Clearing the cart on success resets the
@@ -1716,6 +1730,75 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     );
   }
 
+  /// #175 — the Cash / Transfer tender toggle. Two segments; the selected one
+  /// is written to `payment_transactions.method` at checkout.
+  Widget _tenderPicker() {
+    return Row(
+      children: [
+        Expanded(
+          child: _tenderSegment(
+            'Cash',
+            FontAwesomeIcons.moneyBill.data,
+            _tender == 'cash',
+            () => setState(() => _tender = 'cash'),
+          ),
+        ),
+        SizedBox(width: context.getRSize(10)),
+        Expanded(
+          child: _tenderSegment(
+            'Transfer',
+            FontAwesomeIcons.arrowRightArrowLeft.data,
+            _tender == 'transfer',
+            () => setState(() => _tender = 'transfer'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One tender segment (Cash / Transfer). Styled like [_methodChip] but tighter.
+  Widget _tenderSegment(
+    String label,
+    IconData icon,
+    bool selected,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: EdgeInsets.symmetric(vertical: context.getRSize(10)),
+        decoration: BoxDecoration(
+          color: selected ? _primary.withValues(alpha: 0.10) : _surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? _primary : _border,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: context.getRSize(14),
+              color: selected ? _primary : _subtext,
+            ),
+            SizedBox(width: context.getRSize(8)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: context.getRFontSize(13),
+                fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                color: selected ? _primary : _subtext,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Cash / Transfer: the amount-paid field plus the live resulting-balance
   /// preview (registered) or a pay-in-full reminder (walk-in).
   Widget _buildCashTransferInput() {
@@ -1730,6 +1813,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        SizedBox(height: context.getRSize(16)),
+        // #175 — Cash / Transfer tender picker. The chosen tender is written to
+        // payment_transactions.method so a transfer is kept out of the cash
+        // drawer figure. Cash is the default.
+        _tenderPicker(),
         SizedBox(height: context.getRSize(16)),
         AppInput(
           controller: _cashReceivedCtrl,

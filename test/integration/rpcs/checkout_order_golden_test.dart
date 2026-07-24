@@ -479,10 +479,14 @@ void main() {
         // The clamp keys off the CALLER's role cap, and 0135 short-circuits the
         // CEO slug to 100 — so it can't bite for this Tier-2 identity (the
         // business CEO). The clamp rule is pinned on the Dart arm; skip it here
-        // rather than assert an un-clampable caller.
+        // rather than assert an un-clampable caller. #175's tender/deposit/
+        // overpayment row split (dart_arm_only) is likewise pinned on the Dart
+        // arm until the web `checkout_order` RPC implements the matching split.
         skip: _skipReason ??
             (scenario.maxDiscountPercent != null
                 ? 'discount clamp needs a non-CEO caller; pinned on the Dart arm'
-                : null));
+                : scenario.dartArmOnly
+                    ? '#175 money-row split pinned on the Dart arm; web RPC TODO'
+                    : null));
   }
 }
