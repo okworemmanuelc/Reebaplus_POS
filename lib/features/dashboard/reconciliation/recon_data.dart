@@ -308,6 +308,8 @@ class ReconData {
     required this.showCrates,
     required this.crateUnits,
     required this.crateDepositKobo,
+    required this.heldCrateDepositsKobo,
+    required this.supplierCrateDebtKobo,
     required this.supplierPayableKobo,
     required this.inventoryOnHandKobo,
     required this.uncostedInventoryItems,
@@ -385,6 +387,22 @@ class ReconData {
   final bool showCrates;
   final int crateUnits;
   final int crateDepositKobo;
+
+  /// §13.4 / #163 — crate-deposit money the business is still HOLDING for
+  /// customers: the `crate_deposit` wallet family net (taken − refunded −
+  /// forfeited), business-wide. A liability the net position nets out — it is
+  /// owed back the moment a customer returns their crates, so counting the
+  /// physical empties as an asset without subtracting it overstates worth. 0 for
+  /// a non-crate business (no deposit-family rows exist).
+  final int heldCrateDepositsKobo;
+
+  /// #163 — crate debt the business owes SUPPLIERS for the full crates they
+  /// delivered, valued at the current per-manufacturer deposit rate (derived
+  /// `SUM(quantity_delta × depositAmountKobo)` over `supplier_crate_ledger`). A
+  /// liability the net position nets out — the crate-side analogue of the
+  /// money-side [supplierPayableKobo]. 0 for a non-crate business.
+  final int supplierCrateDebtKobo;
+
   final int supplierPayableKobo;
   final int inventoryOnHandKobo;
   final int uncostedInventoryItems;
@@ -500,7 +518,21 @@ class ReconData {
       damageCostKobo -
       crateDamageDepositKobo -
       shortageCostKobo;
-  int get businessNetPositionKobo => inventoryOnHandKobo + totalOwedKobo + crateDepositKobo - supplierPayableKobo;
+  /// Point-in-time net worth, honest about crate liabilities (#163). ASSETS:
+  /// inventory at cost, the empty crates we physically hold ([crateDepositKobo],
+  /// valued at deposit), and money customers owe us. LIABILITIES netted out:
+  /// what we owe suppliers for goods ([supplierPayableKobo]), the crate deposits
+  /// we still hold for customers ([heldCrateDepositsKobo] — owed back on return),
+  /// and the crate debt we owe suppliers ([supplierCrateDebtKobo]). Booking the
+  /// crate asset while ignoring the matching deposit/supplier liabilities
+  /// overstated worth; both legs are now subtracted.
+  int get businessNetPositionKobo =>
+      inventoryOnHandKobo +
+      totalOwedKobo +
+      crateDepositKobo -
+      supplierPayableKobo -
+      heldCrateDepositsKobo -
+      supplierCrateDebtKobo;
 
   /// Supplier account position (§21): all payments made to suppliers minus all
   /// goods received, point-in-time. The inverse of [supplierPayableKobo] and
@@ -951,6 +983,25 @@ ReconData computeReconData(
     });
   }
 
+  // ── Crate liabilities (#163) — netted against the empties asset above ────
+  // The empties we physically hold ([crateDepositKobo]) are only ours to the
+  // extent we don't owe them elsewhere: we owe customers back the deposits they
+  // paid ([crate_deposit] wallet family net), and we owe suppliers empties for
+  // the full crates they delivered (derived supplier crate ledger × current
+  // deposit rate). Both are business-wide (wallets / supplier crate debt aren't
+  // per store, like [totalOwedKobo]) and ledger-derived — trustworthy only now
+  // that #158–#162 made the balances the ledger's, not a stored cache. Gated on
+  // [showCrates] so a non-crate business carries no crate legs (they're 0
+  // anyway — no deposit-family rows, no supplier crate ledger).
+  var heldCrateDepositsKobo = 0;
+  var supplierCrateDebtKobo = 0;
+  if (showCrates) {
+    heldCrateDepositsKobo =
+        ref.watch(crateDepositSummaryProvider).valueOrNull?.heldKobo ?? 0;
+    supplierCrateDebtKobo =
+        ref.watch(supplierCrateDebtValueKoboProvider).valueOrNull ?? 0;
+  }
+
   return ReconData(
     totalRevenueKobo: totalRevenueKobo,
     costedRevenueKobo: costedRevenueKobo,
@@ -991,6 +1042,8 @@ ReconData computeReconData(
     showCrates: showCrates,
     crateUnits: crateUnits,
     crateDepositKobo: crateDepositKobo,
+    heldCrateDepositsKobo: heldCrateDepositsKobo,
+    supplierCrateDebtKobo: supplierCrateDebtKobo,
     supplierPayableKobo: supplierPayableKobo,
     inventoryOnHandKobo: inventoryOnHandKobo,
     uncostedInventoryItems: uncostedInventoryItems,

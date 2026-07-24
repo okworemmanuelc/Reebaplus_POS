@@ -359,6 +359,112 @@ void main() {
     });
   });
 
+  group('business-wide supplier crate debt VALUE (#163 net-position leg)', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      await seed(db);
+    });
+
+    tearDown(() => db.close());
+
+    Future<int> debtValue() =>
+        db.cratePoolDao.watchSupplierCrateDebtValueKobo().first;
+
+    test('no supplier crate activity → 0', () async {
+      expect(await debtValue(), 0);
+    });
+
+    test('value = net crates owed × deposit rate, summed across all suppliers '
+        'and manufacturers', () async {
+      // Supplier A: owe 100 X, return 80 X → net 20 X.
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierA,
+        manufacturerId: manufacturerX,
+        quantity: 100,
+        performedBy: userId,
+      );
+      await db.cratePoolDao.recordReturnToSupplier(
+        supplierId: supplierA,
+        manufacturerId: manufacturerX,
+        quantity: 80,
+        performedBy: userId,
+      );
+      // Supplier B: owe 10 X.
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierB,
+        manufacturerId: manufacturerX,
+        quantity: 10,
+        performedBy: userId,
+      );
+      // Supplier A: owe 5 Y.
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierA,
+        manufacturerId: manufacturerY,
+        quantity: 5,
+        performedBy: userId,
+      );
+
+      // X: (20 + 10) × 50,000 = 1,500,000; Y: 5 × 30,000 = 150,000.
+      expect(await debtValue(), 1650000);
+    });
+
+    test('a supplier crate credit (negative balance) nets the debt down',
+        () async {
+      // Owe 4 X, then return 10 X → net −6 X (the supplier owes us a credit).
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierA,
+        manufacturerId: manufacturerX,
+        quantity: 4,
+        performedBy: userId,
+      );
+      await db.cratePoolDao.recordReturnToSupplier(
+        supplierId: supplierA,
+        manufacturerId: manufacturerX,
+        quantity: 10,
+        performedBy: userId,
+      );
+      // −6 × 50,000 = −300,000 (a net crate asset, correctly reducing debt).
+      expect(await debtValue(), -300000);
+    });
+
+    test('a fully-settled brand contributes 0 to the value', () async {
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierA,
+        manufacturerId: manufacturerX,
+        quantity: 12,
+        performedBy: userId,
+      );
+      await db.cratePoolDao.recordReturnToSupplier(
+        supplierId: supplierA,
+        manufacturerId: manufacturerX,
+        quantity: 12,
+        performedBy: userId,
+      );
+      expect(await debtValue(), 0);
+    });
+
+    test('re-emits live as new supplier crate movements land', () async {
+      final emissions = <int>[];
+      final sub =
+          db.cratePoolDao.watchSupplierCrateDebtValueKobo().listen(emissions.add);
+      await pumpEventQueue();
+      expect(emissions.last, 0);
+
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierA,
+        manufacturerId: manufacturerY,
+        quantity: 3,
+        performedBy: userId,
+      );
+      await pumpEventQueue();
+      // 3 × 30,000 = 90,000.
+      expect(emissions.last, 90000);
+      await sub.cancel();
+    });
+  });
+
   group('multi-device convergence (the drift the model removes)', () {
     test('two offline tills merge; derived balance == combined ledger sum',
         () async {
