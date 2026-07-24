@@ -10,6 +10,46 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Money integrity #7 (#170) — full cost-batch coverage (hook the central mutator) — IN PROGRESS (2026-07-24)
+Seventh slice of the #155 money-integrity PRD (ADR 0021 family). Branch
+`feat/money-cost-batch-coverage-170` off `main`. Independent costing track (runs
+parallel to the payment slices). Product decision (locked): loss valuation rate =
+**snapshot-at-write** (never today's-rate). Split into 7a → 7b → 7c commits.
+- **7a — adjustStock cost hooks + valued losses (DONE).** The central mutator
+  `InventoryDao.adjustStock` now carries value with quantity, on the v1 (flag-off)
+  path, for plain `adjustment` movements only (transfer legs = 7b; the v2 domain
+  RPC is server-authoritative + out of scope, flagged to the web repo):
+  • an **increase** creates a fresh FIFO Cost Batch through the SAME
+    `CostBatchesDao.recordInflowBatch` inflow Receive Stock uses — costed when the
+    caller passes `inflowUnitCostKobo` (the existing-product Add path now does),
+    Uncosted (0) otherwise — so its later sales draw real/backfillable COGS, never
+    phantom 0;
+  • a **decrease** draws the FIFO queue down oldest-first (new
+    `CostBatchesDao.drawDownOutflow`, uncovered units cost 0 like a sale) and
+    SNAPSHOTS the drawn value onto the `stock_adjustments` row
+    (`unit_cost_kobo`/`value_kobo`), so a later cost-price edit can't restate a
+    past loss.
+  • `adjustStock` gained `inflowUnitCostKobo` / `inflowReceivedAt` / `trackCost`.
+    **Receive Stock passes `trackCost:false`** (it owns its receipt-dated batch —
+    letting adjustStock also create one would double the FIFO layer). The inventory
+    golden's receive producer mirrors that.
+  • **Report loss valuation** (recon P&L `damageCostKobo`) switches to the written
+    snapshot via the new pure helper `lossValueKobo(snapshot, units, currentCost)`
+    — snapshot-at-write for #170 rows, current-cost fallback for legacy
+    quantity-only rows (labelled). A snapshot of 0 (uncosted draw) is respected,
+    not treated as missing.
+  • **Schema:** Drift v65→**v66** + cloud `0155_money_integrity_cost_batch_coverage.sql`
+    add nullable `stock_adjustments.unit_cost_kobo` + `value_kobo` (both **bigint**
+    on cloud). Simple add-columns (no CHECK/NOT NULL rebuild); legacy rows NULL.
+    No sync_registry change (Restore.plain pass-through carries the new columns).
+  • **Tests:** `test/costing/adjust_stock_cost_coverage_test.dart` (7 DAO cases);
+    recon `lossValueKobo` (4 cases); stock-adjustment **golden fixtures** extended
+    with 2 `dart_arm_only` cost scenarios (RPC arm skips them — web cost pass out
+    of scope) + the dart arm asserts the snapshot/new-batch; migration v65→v66
+    case; inventory golden receive producer updated to `trackCost:false`.
+- **7b — transfers move cost + in-transit worth:** PENDING.
+- **7c — cancel batch restore + product-delete write-off:** PENDING.
+
 ### Money integrity #5 (#175) — tender picker + cash-card honesty (deposit out of Cash sales) — CODE-COMPLETE (2026-07-24)
 Fifth slice of the #155 money-integrity PRD (ADR 0021). **CODE-ONLY — no
 migration** (the `transfer` method, the `crate_deposit`/`wallet_topup` types, and

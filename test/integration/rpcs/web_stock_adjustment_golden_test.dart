@@ -137,8 +137,10 @@ void main() {
       );
     },
         skip: _skipReason ??
-            (s.operation == 'request'
-                ? 'stock-keeper → pending pinned on the Dart arm (Tier-2 identity is CEO)'
-                : null));
+            (s.dartArmOnly
+                ? '#7a cost pass out of scope for the web RPC (#170, flagged to the web repo)'
+                : s.operation == 'request'
+                    ? 'stock-keeper → pending pinned on the Dart arm (Tier-2 identity is CEO)'
+                    : null));
   }
 }

@@ -1164,4 +1164,76 @@ void main() {
           reason: 'v65 block must seed sales.confirm');
     });
   });
+
+  group('onUpgrade v65 → v66 (money-integrity #7a cost-batch coverage, #170)',
+      () {
+    Future<bool> columnExists(
+        AppDatabase db, String table, String column) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM pragma_table_info('$table') WHERE name = ?",
+            variables: [Variable<String>(column)],
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test('adds stock_adjustments.unit_cost_kobo + value_kobo (loss snapshot); '
+        'legacy rows keep them NULL', () async {
+      final biz = UuidV7.generate();
+      final storeId = UuidV7.generate();
+      final productId = UuidV7.generate();
+      final legacyAdjId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Main')",
+        [storeId, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO products (id, business_id, name) VALUES (?, ?, 'Widget')",
+        [productId, biz],
+      );
+
+      // Revert stock_adjustments to the pre-v66 shape: drop the snapshot columns.
+      await db1
+          .customStatement('ALTER TABLE stock_adjustments DROP COLUMN value_kobo');
+      await db1.customStatement(
+          'ALTER TABLE stock_adjustments DROP COLUMN unit_cost_kobo');
+      expect(await columnExists(db1, 'stock_adjustments', 'value_kobo'), isFalse);
+
+      // A pre-existing (legacy) quantity-only adjustment on the reverted table.
+      await db1.customStatement(
+        'INSERT INTO stock_adjustments '
+        '(id, business_id, product_id, store_id, quantity_diff, reason) '
+        "VALUES (?, ?, ?, ?, -2, 'damage:breakage')",
+        [legacyAdjId, biz, productId, storeId],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 65');
+      await db1.close();
+
+      // Re-open → onUpgrade(65 → 66) adds the two nullable snapshot columns.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await columnExists(db2, 'stock_adjustments', 'unit_cost_kobo'),
+          isTrue);
+      expect(await columnExists(db2, 'stock_adjustments', 'value_kobo'), isTrue);
+
+      // The legacy row survives and its new snapshot columns are NULL (the
+      // labelled current-cost fallback path).
+      final legacy = await db2
+          .customSelect(
+            'SELECT unit_cost_kobo, value_kobo FROM stock_adjustments WHERE id = ?',
+            variables: [Variable<String>(legacyAdjId)],
+          )
+          .getSingle();
+      expect(legacy.data['unit_cost_kobo'], isNull);
+      expect(legacy.data['value_kobo'], isNull);
+    });
+  });
 }

@@ -18299,6 +18299,28 @@ class $StockAdjustmentsTable extends StockAdjustments
       'REFERENCES users (id)',
     ),
   );
+  static const VerificationMeta _unitCostKoboMeta = const VerificationMeta(
+    'unitCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unitCostKobo = GeneratedColumn<int>(
+    'unit_cost_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _valueKoboMeta = const VerificationMeta(
+    'valueKobo',
+  );
+  @override
+  late final GeneratedColumn<int> valueKobo = GeneratedColumn<int>(
+    'value_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -18333,6 +18355,8 @@ class $StockAdjustmentsTable extends StockAdjustments
     quantityDiff,
     reason,
     performedBy,
+    unitCostKobo,
+    valueKobo,
     createdAt,
     lastUpdatedAt,
   ];
@@ -18403,6 +18427,21 @@ class $StockAdjustmentsTable extends StockAdjustments
         ),
       );
     }
+    if (data.containsKey('unit_cost_kobo')) {
+      context.handle(
+        _unitCostKoboMeta,
+        unitCostKobo.isAcceptableOrUnknown(
+          data['unit_cost_kobo']!,
+          _unitCostKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('value_kobo')) {
+      context.handle(
+        _valueKoboMeta,
+        valueKobo.isAcceptableOrUnknown(data['value_kobo']!, _valueKoboMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -18455,6 +18494,14 @@ class $StockAdjustmentsTable extends StockAdjustments
         DriftSqlType.string,
         data['${effectivePrefix}performed_by'],
       ),
+      unitCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_kobo'],
+      ),
+      valueKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}value_kobo'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -18481,6 +18528,8 @@ class StockAdjustmentData extends DataClass
   final int quantityDiff;
   final String reason;
   final String? performedBy;
+  final int? unitCostKobo;
+  final int? valueKobo;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const StockAdjustmentData({
@@ -18491,6 +18540,8 @@ class StockAdjustmentData extends DataClass
     required this.quantityDiff,
     required this.reason,
     this.performedBy,
+    this.unitCostKobo,
+    this.valueKobo,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -18505,6 +18556,12 @@ class StockAdjustmentData extends DataClass
     map['reason'] = Variable<String>(reason);
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
+    }
+    if (!nullToAbsent || unitCostKobo != null) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo);
+    }
+    if (!nullToAbsent || valueKobo != null) {
+      map['value_kobo'] = Variable<int>(valueKobo);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -18522,6 +18579,12 @@ class StockAdjustmentData extends DataClass
       performedBy: performedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(performedBy),
+      unitCostKobo: unitCostKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitCostKobo),
+      valueKobo: valueKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(valueKobo),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -18540,6 +18603,8 @@ class StockAdjustmentData extends DataClass
       quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
       reason: serializer.fromJson<String>(json['reason']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
+      unitCostKobo: serializer.fromJson<int?>(json['unitCostKobo']),
+      valueKobo: serializer.fromJson<int?>(json['valueKobo']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -18555,6 +18620,8 @@ class StockAdjustmentData extends DataClass
       'quantityDiff': serializer.toJson<int>(quantityDiff),
       'reason': serializer.toJson<String>(reason),
       'performedBy': serializer.toJson<String?>(performedBy),
+      'unitCostKobo': serializer.toJson<int?>(unitCostKobo),
+      'valueKobo': serializer.toJson<int?>(valueKobo),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -18568,6 +18635,8 @@ class StockAdjustmentData extends DataClass
     int? quantityDiff,
     String? reason,
     Value<String?> performedBy = const Value.absent(),
+    Value<int?> unitCostKobo = const Value.absent(),
+    Value<int?> valueKobo = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => StockAdjustmentData(
@@ -18578,6 +18647,8 @@ class StockAdjustmentData extends DataClass
     quantityDiff: quantityDiff ?? this.quantityDiff,
     reason: reason ?? this.reason,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    unitCostKobo: unitCostKobo.present ? unitCostKobo.value : this.unitCostKobo,
+    valueKobo: valueKobo.present ? valueKobo.value : this.valueKobo,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -18596,6 +18667,10 @@ class StockAdjustmentData extends DataClass
       performedBy: data.performedBy.present
           ? data.performedBy.value
           : this.performedBy,
+      unitCostKobo: data.unitCostKobo.present
+          ? data.unitCostKobo.value
+          : this.unitCostKobo,
+      valueKobo: data.valueKobo.present ? data.valueKobo.value : this.valueKobo,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -18613,6 +18688,8 @@ class StockAdjustmentData extends DataClass
           ..write('quantityDiff: $quantityDiff, ')
           ..write('reason: $reason, ')
           ..write('performedBy: $performedBy, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
+          ..write('valueKobo: $valueKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -18628,6 +18705,8 @@ class StockAdjustmentData extends DataClass
     quantityDiff,
     reason,
     performedBy,
+    unitCostKobo,
+    valueKobo,
     createdAt,
     lastUpdatedAt,
   );
@@ -18642,6 +18721,8 @@ class StockAdjustmentData extends DataClass
           other.quantityDiff == this.quantityDiff &&
           other.reason == this.reason &&
           other.performedBy == this.performedBy &&
+          other.unitCostKobo == this.unitCostKobo &&
+          other.valueKobo == this.valueKobo &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -18654,6 +18735,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
   final Value<int> quantityDiff;
   final Value<String> reason;
   final Value<String?> performedBy;
+  final Value<int?> unitCostKobo;
+  final Value<int?> valueKobo;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -18665,6 +18748,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     this.quantityDiff = const Value.absent(),
     this.reason = const Value.absent(),
     this.performedBy = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
+    this.valueKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -18677,6 +18762,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     required int quantityDiff,
     required String reason,
     this.performedBy = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
+    this.valueKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -18693,6 +18780,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     Expression<int>? quantityDiff,
     Expression<String>? reason,
     Expression<String>? performedBy,
+    Expression<int>? unitCostKobo,
+    Expression<int>? valueKobo,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -18705,6 +18794,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
       if (quantityDiff != null) 'quantity_diff': quantityDiff,
       if (reason != null) 'reason': reason,
       if (performedBy != null) 'performed_by': performedBy,
+      if (unitCostKobo != null) 'unit_cost_kobo': unitCostKobo,
+      if (valueKobo != null) 'value_kobo': valueKobo,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -18719,6 +18810,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     Value<int>? quantityDiff,
     Value<String>? reason,
     Value<String?>? performedBy,
+    Value<int?>? unitCostKobo,
+    Value<int?>? valueKobo,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -18731,6 +18824,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
       quantityDiff: quantityDiff ?? this.quantityDiff,
       reason: reason ?? this.reason,
       performedBy: performedBy ?? this.performedBy,
+      unitCostKobo: unitCostKobo ?? this.unitCostKobo,
+      valueKobo: valueKobo ?? this.valueKobo,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -18761,6 +18856,12 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     if (performedBy.present) {
       map['performed_by'] = Variable<String>(performedBy.value);
     }
+    if (unitCostKobo.present) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo.value);
+    }
+    if (valueKobo.present) {
+      map['value_kobo'] = Variable<int>(valueKobo.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -18783,6 +18884,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
           ..write('quantityDiff: $quantityDiff, ')
           ..write('reason: $reason, ')
           ..write('performedBy: $performedBy, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
+          ..write('valueKobo: $valueKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -68728,6 +68831,8 @@ typedef $$StockAdjustmentsTableCreateCompanionBuilder =
       required int quantityDiff,
       required String reason,
       Value<String?> performedBy,
+      Value<int?> unitCostKobo,
+      Value<int?> valueKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -68741,6 +68846,8 @@ typedef $$StockAdjustmentsTableUpdateCompanionBuilder =
       Value<int> quantityDiff,
       Value<String> reason,
       Value<String?> performedBy,
+      Value<int?> unitCostKobo,
+      Value<int?> valueKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -68883,6 +68990,16 @@ class $$StockAdjustmentsTableFilterComposer
 
   ColumnFilters<String> get reason => $composableBuilder(
     column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get valueKobo => $composableBuilder(
+    column: $table.valueKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -69038,6 +69155,16 @@ class $$StockAdjustmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get valueKobo => $composableBuilder(
+    column: $table.valueKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -69160,6 +69287,14 @@ class $$StockAdjustmentsTableAnnotationComposer
 
   GeneratedColumn<String> get reason =>
       $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get valueKobo =>
+      $composableBuilder(column: $table.valueKobo, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -69331,6 +69466,8 @@ class $$StockAdjustmentsTableTableManager
                 Value<int> quantityDiff = const Value.absent(),
                 Value<String> reason = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
+                Value<int?> unitCostKobo = const Value.absent(),
+                Value<int?> valueKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -69342,6 +69479,8 @@ class $$StockAdjustmentsTableTableManager
                 quantityDiff: quantityDiff,
                 reason: reason,
                 performedBy: performedBy,
+                unitCostKobo: unitCostKobo,
+                valueKobo: valueKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -69355,6 +69494,8 @@ class $$StockAdjustmentsTableTableManager
                 required int quantityDiff,
                 required String reason,
                 Value<String?> performedBy = const Value.absent(),
+                Value<int?> unitCostKobo = const Value.absent(),
+                Value<int?> valueKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -69366,6 +69507,8 @@ class $$StockAdjustmentsTableTableManager
                 quantityDiff: quantityDiff,
                 reason: reason,
                 performedBy: performedBy,
+                unitCostKobo: unitCostKobo,
+                valueKobo: valueKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,

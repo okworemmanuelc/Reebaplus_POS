@@ -207,6 +207,28 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// 'transfer_in' for stock transfer legs (§16.8.1), along with [refId]
   /// = the StockTransfers.id (maps to stock_transactions.transfer_id in the
   /// v2 RPC via ref_type='transfer').
+  ///
+  /// **Cost semantics (money-integrity #7a, #170 / PRD #155).** The central
+  /// mutator now carries value with quantity so COGS stops drifting to zero-cost
+  /// and losses are valued at the moment they happen — applied on the v1
+  /// (flag-off) path only, and ONLY to plain `adjustment` movements (transfer
+  /// legs move their cost through the transfer DAO in #7b; the v2 domain RPC is
+  /// server-authoritative and out of scope here):
+  ///  • an **increase** creates a fresh FIFO cost batch through the same
+  ///    [CostBatchesDao.recordInflowBatch] inflow Receive Stock uses —
+  ///    [inflowUnitCostKobo] when the caller knows the cost (the existing-
+  ///    product Add path), an **Uncosted** (0) batch otherwise (an approved
+  ///    count/recount) — so its later sales draw real (or backfillable) COGS,
+  ///    never phantom 0.
+  ///  • a **decrease** draws the FIFO queue down oldest-first
+  ///    ([CostBatchesDao.drawDownOutflow]) and SNAPSHOTS the drawn value onto
+  ///    the `stock_adjustments` row (`unit_cost_kobo` / `value_kobo`), so a
+  ///    later cost edit cannot restate that past loss.
+  ///
+  /// [trackCost] `false` opts a caller out of both hooks — used by Receive
+  /// Stock, which writes its own receipt-dated batch (double-batching would
+  /// drift the queue). [inflowReceivedAt] is the FIFO ordering key for an
+  /// increase's batch (defaults to now).
   Future<void> adjustStock(
     String productId,
     String storeId,
@@ -215,6 +237,9 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     String? staffId, {
     String movementType = 'adjustment',
     String? refId,
+    int? inflowUnitCostKobo,
+    DateTime? inflowReceivedAt,
+    bool trackCost = true,
   }) async {
     if (delta == 0) return;
     await transaction(() async {
@@ -321,6 +346,23 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           lastUpdatedAt: Value(DateTime.now()),
         );
       } else {
+        // #7a valued loss: a decrease draws the FIFO queue down oldest-first and
+        // SNAPSHOTS what it drew onto this adjustment row, so a later cost edit
+        // can never restate the loss. Runs after the guarded inventory decrement
+        // above succeeded (a rejected decrement threw). Uncovered units cost 0
+        // (uncosted), exactly like a sale. Skipped when [trackCost] is false.
+        int? snapshotUnitCostKobo;
+        int? snapshotValueKobo;
+        if (trackCost && delta < 0) {
+          final drawnKobo = await db.costBatchesDao.drawDownOutflow(
+            productId,
+            storeId,
+            -delta,
+          );
+          snapshotValueKobo = drawnKobo;
+          snapshotUnitCostKobo = (drawnKobo / -delta).round();
+        }
+
         final adjustmentId = UuidV7.generate();
         final adjComp = StockAdjustmentsCompanion.insert(
           id: Value(adjustmentId),
@@ -330,6 +372,8 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           quantityDiff: delta,
           reason: note,
           performedBy: Value(staffId),
+          unitCostKobo: Value(snapshotUnitCostKobo),
+          valueKobo: Value(snapshotValueKobo),
           lastUpdatedAt: Value(DateTime.now()),
         );
         await into(stockAdjustments).insert(adjComp);
@@ -359,6 +403,22 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
               ))
               .getSingle();
       await db.syncDao.enqueueUpsert('inventory', invRow);
+
+      // #7a inflow batch: a plain-adjustment increase creates a fresh FIFO layer
+      // through the SAME inflow Receive Stock uses — a costed batch when the
+      // caller knows the price (the Add path), an Uncosted (0) batch otherwise —
+      // so its later sales draw real (or backfillable) COGS, never phantom 0.
+      // Transfer legs (isTransfer) move cost through the transfer DAO (#7b);
+      // Receive Stock opts out (trackCost:false) and writes its own batch.
+      if (trackCost && delta > 0 && !isTransfer) {
+        await db.costBatchesDao.recordInflowBatch(
+          productId: productId,
+          storeId: storeId,
+          quantity: delta,
+          costKobo: inflowUnitCostKobo ?? 0,
+          receivedAt: inflowReceivedAt,
+        );
+      }
     });
   }
 

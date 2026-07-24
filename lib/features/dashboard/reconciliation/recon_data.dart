@@ -156,6 +156,15 @@ const String kCrateLostSuffix = '+cratelost';
 bool damageForfeitsFullCrate(String reason) =>
     reason.toLowerCase().contains(kCrateLostSuffix);
 
+/// Value a stock loss (damage / count-shortage / product-delete write-off) for
+/// the P&L (#170 #7a). Prefers [snapshotValueKobo] — the FIFO cost the mutator
+/// drew down and recorded AT WRITE TIME — so a later cost-price edit can never
+/// restate a past loss. A legacy quantity-only row (written before #170) has no
+/// snapshot, so it falls back to [units] × [currentCostKobo] (today's rate) —
+/// the deliberately-labelled fallback. `null` current cost counts as 0.
+int lossValueKobo(int? snapshotValueKobo, int units, int? currentCostKobo) =>
+    snapshotValueKobo ?? (units * (currentCostKobo ?? 0));
+
 // ── Buckets (list cards + drill-down breakdown) ──────────────────────────────
 
 class ReconBucket {
@@ -819,7 +828,11 @@ ReconData computeReconData(
     final units = -a.quantityDiff;
     final p = productById[a.productId];
     damageUnits += units;
-    damageCostKobo += units * (p?.buyingPriceKobo ?? 0);
+    // #170 #7a: value the loss at the FIFO cost SNAPSHOTTED when the damage was
+    // recorded (`value_kobo`), so a later cost-price edit can't rewrite a past
+    // loss. Legacy quantity-only rows (no snapshot, written before #170) keep
+    // the current-cost fallback — the deliberately-labelled behaviour.
+    damageCostKobo += lossValueKobo(a.valueKobo, units, p?.buyingPriceKobo);
     damageRetailKobo += units * (p?.retailerPriceKobo ?? 0);
     if (damageForfeitsFullCrate(a.reason)) {
       crateDamageDepositKobo += units * (depositByMfr[p?.manufacturerId] ?? 0);

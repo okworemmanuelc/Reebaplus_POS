@@ -698,12 +698,17 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             ref.read(receiveCartProvider.notifier).addOrIncrement(updatedProduct, amount: qty);
             if (mounted) AppNotification.showSuccess(context, '$qty units of $existingName added to Receive Cart');
           } else {
+            // #170 #7a: the existing-product "Add quantity" shortcut now records
+            // its cost like a delivery — adjustStock creates a Cost Batch at the
+            // entered buying price (0 → Uncosted), so these units no longer sell
+            // at phantom 0 COGS.
             await db.inventoryDao.adjustStock(
               productId,
               _selectedStore!.id,
               qty,
               'Stock received',
               auth.currentUser?.id ?? 'unknown',
+              inflowUnitCostKobo: buyingKobo,
             );
             if (mounted) AppNotification.showSuccess(context, '$qty units of $existingName added to stock');
           }

@@ -793,6 +793,16 @@ class StockAdjustments extends Table {
   IntColumn get quantityDiff => integer()();
   TextColumn get reason => text()();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
+  // Money-integrity #7a (#170, PRD #155): a decrease (damage / count-shortage /
+  // product-delete write-off) SNAPSHOTS the FIFO cost it drew down here, so a
+  // later cost-price edit can never restate a past loss (the immutability ADR
+  // 0005 demands for COGS). `value_kobo` is the total cost drawn for the whole
+  // adjustment; `unit_cost_kobo` its per-unit figure (round(value/|qty|)). Both
+  // NULL for an increase (an inflow carries no loss) AND for every legacy
+  // quantity-only row written before #170 — reports fall back to current cost
+  // for those (labelled). Cloud side MUST be bigint (money-column rule).
+  IntColumn get unitCostKobo => integer().nullable()();
+  IntColumn get valueKobo => integer().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1875,7 +1885,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 65;
+  int get schemaVersion => 66;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4180,6 +4190,32 @@ class AppDatabase extends _$AppDatabase {
           "VALUES ('sales.confirm', "
           "'Confirm an order and settle crate deposits', 'Sales')",
         );
+      }
+      if (from < 66) {
+        // v66 (#170 money-integrity #7a full cost-batch coverage, PRD #155).
+        // Mirrors supabase/migrations/0155_money_integrity_cost_batch_coverage.sql.
+        //
+        // stock_adjustments gains two nullable snapshot columns so a valued loss
+        // (damage / count-shortage / product-delete write-off) records the FIFO
+        // cost it drew down AT WRITE TIME — a later cost-price edit can no longer
+        // restate a past loss. Both are simple add-columns (stock_adjustments has
+        // no CHECK/NOT NULL to rebuild); legacy rows keep NULL and report at
+        // current cost (the labelled fallback). Idempotency guards mirror v64 so
+        // a DB stepped back by the revert-then-re-upgrade tests re-runs cleanly.
+        final hasUnitCost = await customSelect(
+          "SELECT 1 FROM pragma_table_info('stock_adjustments') "
+          "WHERE name = 'unit_cost_kobo'",
+        ).get();
+        if (hasUnitCost.isEmpty) {
+          await m.addColumn(stockAdjustments, stockAdjustments.unitCostKobo);
+        }
+        final hasValue = await customSelect(
+          "SELECT 1 FROM pragma_table_info('stock_adjustments') "
+          "WHERE name = 'value_kobo'",
+        ).get();
+        if (hasValue.isEmpty) {
+          await m.addColumn(stockAdjustments, stockAdjustments.valueKobo);
+        }
       }
     },
     beforeOpen: (details) async {

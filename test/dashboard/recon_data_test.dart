@@ -375,4 +375,29 @@ void main() {
       );
     });
   });
+
+  // ── #170 #7a: loss valuation prefers the written snapshot ──────────────────
+  group('lossValueKobo (snapshot-at-write vs current-cost fallback)', () {
+    test('a snapshotted loss uses the recorded value, ignoring current cost', () {
+      // A later cost edit raised current cost to 99000, but the loss keeps its
+      // write-time value of 45000 (3 × 15000).
+      expect(lossValueKobo(45000, 3, 99000), 45000);
+    });
+
+    test('a legacy quantity-only loss (no snapshot) falls back to current cost',
+        () {
+      expect(lossValueKobo(null, 3, 15000), 45000);
+    });
+
+    test('a null current cost on a legacy row counts as zero', () {
+      expect(lossValueKobo(null, 3, null), 0);
+    });
+
+    test('a snapshot of zero (fully uncosted draw) is respected, not treated as '
+        'missing', () {
+      // value_kobo == 0 means the units drew from uncosted batches — do NOT fall
+      // back to current cost (that would invent a loss the queue never held).
+      expect(lossValueKobo(0, 3, 99000), 0);
+    });
+  });
 }

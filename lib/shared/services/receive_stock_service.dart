@@ -93,12 +93,17 @@ class ReceiveStockService {
 
       // 2. Per-line stock increment and price persistence.
       for (final line in lines) {
+        // trackCost:false — Receive Stock owns its own receipt-dated Cost Batch
+        // below (recordInflowBatch with the precise `receivedAt`). Letting
+        // adjustStock ALSO create an inflow batch (#170 #7a) would double the
+        // FIFO layer and drift the queue from on-hand.
         await _db.inventoryDao.adjustStock(
           line.productId,
           storeId,
           line.qty,
           'Stock received',
           staffId,
+          trackCost: false,
         );
 
         // Update product prices in the database to persist edited prices

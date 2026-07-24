@@ -226,6 +226,58 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
     return perUnitByIndex;
   }
 
+  /// Draw a NON-sale outflow of [quantity] units down the (product, store) FIFO
+  /// queue oldest-first and return the total cost (kobo) drawn — the shared
+  /// primitive behind money-integrity #7 (#170, PRD #155): a valued loss
+  /// (damage / count-shortage / product-delete write-off, #7a) SNAPSHOTS this
+  /// figure onto its `stock_adjustments` row, and a transfer dispatch (#7b)
+  /// RIDES it onto the transfer so the receiving store's batch is created at the
+  /// same cost.
+  ///
+  /// Same batch bookkeeping as [drawDownSale] — decrements every consumed
+  /// batch's `qty_remaining`, enqueues each for sync, and recomputes the scalar
+  /// display cache — so the queue total can never drift from on-hand. Uncovered
+  /// units (a dry or partially-covered queue) contribute **0**, exactly as an
+  /// uncosted sale line does, so the snapshot never invents cost the batches
+  /// don't hold. A non-positive [quantity] draws nothing and returns 0.
+  ///
+  /// **Must** run inside the caller's inventory transaction (the same rule as
+  /// [recordInflowBatch] / [drawDownSale]).
+  Future<int> drawDownOutflow(
+    String productId,
+    String storeId,
+    int quantity,
+  ) async {
+    if (quantity <= 0) return 0;
+
+    final batchRows = await queueFor(productId, storeId);
+    final batches = batchRows
+        .map((b) => FifoBatch(qtyRemaining: b.qtyRemaining, costKobo: b.costKobo))
+        .toList(growable: false);
+
+    final result = fifoDrawDown(batches, [quantity]);
+    final drawnKobo = result.lineCogsKobo.first;
+
+    for (var bi = 0; bi < batchRows.length; bi++) {
+      final consumed = result.batchConsumption[bi];
+      if (consumed <= 0) continue;
+      final row = batchRows[bi];
+      await (update(costBatches)..where((t) => t.id.equals(row.id))).write(
+        CostBatchesCompanion(
+          qtyRemaining: Value(row.qtyRemaining - consumed),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
+      final updated = await (select(
+        costBatches,
+      )..where((t) => t.id.equals(row.id))).getSingle();
+      await db.syncDao.enqueueUpsert('cost_batches', updated);
+    }
+
+    await _recomputeScalarCost(productId);
+    return drawnKobo;
+  }
+
   /// `Products.buyingPriceKobo` is a display cache over the batch queue (ADR
   /// 0005) — re-point it at the cost of the product's oldest remaining
   /// **costed** batch (across stores). Uncosted (cost-0) batches are skipped and
