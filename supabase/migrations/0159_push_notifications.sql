@@ -1,4 +1,13 @@
--- 0153_push_notifications
+-- 0159_push_notifications
+--
+-- DEPLOY: This migration is ALREADY physically applied on prod (project
+-- ewwyofbvfjyqqirrcaou) under ledger version 20260713151317 — devices.fcm_token
+-- and the rest already exist. It was renumbered 0153 -> 0159 to clear the money-
+-- integrity collision (0153-0158 are the money migrations that now own those
+-- numbers on main). At merge time do NOT expect a fresh apply: every statement
+-- below is idempotent (a safe no-op re-run), or run
+-- `supabase migration repair --status applied 0159` to record it against the
+-- ledger without re-executing.
 --
 -- Reebaplus — OS push notifications for CONSOLE BROADCASTS via Firebase Cloud
 -- Messaging (FCM). See docs/adr/0018-push-notifications-fcm.md + the CONTEXT.md

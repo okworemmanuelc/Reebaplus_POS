@@ -17,7 +17,7 @@ the app is closed; also fixes cosmetically-dead severity on mobile. Branch
 existed** (bell/modal/`NotificationsDao`/severity model + the console inserts the
 rows) — this adds the **OS-push half** + severity rendering. ADR renumbered
 **0016→0018** (0016/0017 were taken by staff-offboarding/barcode on the fast-forward).
-- **Slice 1a — cloud migration `0153_push_notifications.sql` DEPLOYED + VERIFIED.**
+- **Slice 1a — cloud migration `0159_push_notifications.sql` DEPLOYED + VERIFIED.**
   Extends the cloud-only `devices` registry (0129) with `fcm_token` /
   `push_permission_granted` / `fcm_token_updated_at` + a partial index;
   `notifications.push_sent_at` (cloud-only observability, absent from Drift).

@@ -113,7 +113,7 @@ class DeviceRegistryService {
 
   /// Fire-and-forget upsert of this device's FCM token onto its `devices` row,
   /// on the same `(business_id, device_id)` conflict target as [recordPresence]
-  /// (migration `0153`). The server's `_devices_enforce_token_uniqueness`
+  /// (migration `0159`). The server's `_devices_enforce_token_uniqueness`
   /// trigger nulls this token on every *other* row, so one token addresses
   /// exactly one device / most-recent login (invariant #5). Called on
   /// permission-grant, token refresh, and each sign-in where a token exists.

@@ -6,7 +6,7 @@
 // The OAuth2 access-token minting and the concrete HTTP sender live in
 // index.ts (the I/O boundary); this file is the part worth testing.
 
-/// The broadcast row as delivered by the AFTER INSERT trigger (0153) — the
+/// The broadcast row as delivered by the AFTER INSERT trigger (0159) — the
 /// subset of `public.notifications` columns the push needs. All string.
 export interface BroadcastRecord {
   id: string;

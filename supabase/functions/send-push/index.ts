@@ -4,7 +4,7 @@
 //
 // Invocation: NOT called by the app client. An AFTER INSERT trigger on
 // public.notifications (filtered to type = 'console_broadcast') POSTs the new
-// row here via pg_net (migration 0153) — mirroring send-invite-email/0126.
+// row here via pg_net (migration 0159) — mirroring send-invite-email/0126.
 //
 // Auth: no user JWT on this path (deploy with verify_jwt = false). The trigger
 // sends a shared secret in `x-push-hook-secret` (PUSH_HOOK_SECRET); that secret
@@ -191,7 +191,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const service = getServiceClient();
 
   // Resolve every live token for this business (dedup — one push per device,
-  // and a token maps to one row by the 0153 uniqueness trigger anyway).
+  // and a token maps to one row by the 0159 uniqueness trigger anyway).
   const { data: rows, error: tokenErr } = await service
     .from("devices")
     .select("fcm_token")

@@ -266,7 +266,7 @@ with `type = 'console_broadcast'` and `recipient_user_id = NULL`, business-wide)
 reaches staff **even when the app is closed**, via Firebase Cloud Messaging (FCM).
 This is an **alert channel only** — it never carries or persists business data.
 
-- **Cloud (migration `0153`).** The cloud-only `devices` registry (0129) gained
+- **Cloud (migration `0159`).** The cloud-only `devices` registry (0129) gained
   `fcm_token` / `push_permission_granted` / `fcm_token_updated_at` (+ a partial
   index). An `AFTER INSERT` trigger on `notifications` (WHEN
   `type = 'console_broadcast'`) calls the `send-push` Edge Function via `pg_net`,
