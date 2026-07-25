@@ -187,6 +187,40 @@ bool damageForfeitsFullCrate(String reason) =>
 int lossValueKobo(int? snapshotValueKobo, int units, int? currentCostKobo) =>
     snapshotValueKobo ?? (units * (currentCostKobo ?? 0));
 
+/// Value the daily-stock-count SHORTAGE loss for the P&L / variance card from
+/// the #170 write-time snapshot (#182) — the deferral #170 left open (audit
+/// #30). A stock count applies each shortage line through
+/// `InventoryDao.adjustStock` with the reason "Daily stock count adjustment" (a
+/// decrease), which draws the FIFO queue down oldest-first and records the drawn
+/// cost on the `stock_adjustments` row (`value_kobo`). Summing those snapshots —
+/// exactly as the Damages figure already does via [lossValueKobo] — means a
+/// later product-cost edit can never restate a past period's shortage/variance
+/// figure. Legacy quantity-only rows (written before #170, no snapshot) fall
+/// back to current cost, per [lossValueKobo]. Only count-reconciliation removals
+/// in span + scope are summed; the `isCountReconciliationReason` guard is
+/// disjoint from `isDamageReason`, so a shortage is never double-counted as a
+/// damage. Surplus (a gain) draws down no queue and carries no snapshot, so it
+/// stays current-cost in the caller.
+int countShortageLossKobo(
+  Iterable<StockAdjustmentData> adjustments, {
+  required Map<String, ProductData> productById,
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var total = 0;
+  for (final a in adjustments) {
+    if (!isCountReconciliationReason(a.reason) || a.quantityDiff >= 0) continue;
+    if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
+    final units = -a.quantityDiff;
+    total += lossValueKobo(
+      a.valueKobo,
+      units,
+      productById[a.productId]?.buyingPriceKobo,
+    );
+  }
+  return total;
+}
+
 // ── Buckets (list cards + drill-down breakdown) ──────────────────────────────
 
 class ReconBucket {
@@ -1051,7 +1085,6 @@ ReconData computeReconData(
   var surplusCount = 0;
   var surplusUnits = 0;
   var surplusCostKobo = 0;
-  var shortageCostKobo = 0;
   var shortageRetailKobo = 0;
   final shortages = <ReconShortLine>[];
   for (final c in dayCounts) {
@@ -1071,7 +1104,6 @@ ReconData computeReconData(
       }
       if (diff >= 0) continue;
       final units = -diff;
-      shortageCostKobo += units * (p?.buyingPriceKobo ?? 0);
       shortageRetailKobo += units * (p?.retailerPriceKobo ?? 0);
       shortages.add(
         ReconShortLine(
@@ -1083,6 +1115,18 @@ ReconData computeReconData(
       );
     }
   }
+  // #182 — value the count-shortage loss at the FIFO cost SNAPSHOTTED when the
+  // count was saved (`stock_adjustments.value_kobo`, #170), NOT today's cost, so
+  // a later product-cost edit can't restate a past period's shortage/variance.
+  // Mirrors the Damages loop above; units/lines/retail stay count-sourced. The
+  // adjustment rows are the truth for the money — the count session's `linesJson`
+  // carries no snapshot — so a deleted product's shortage keeps its value too.
+  final shortageCostKobo = countShortageLossKobo(
+    adjustments,
+    productById: productById,
+    inSpan: inSpan,
+    inScope: inScope,
+  );
 
   // ── Supplier ledger flows (CEO only) ─────────────────────────────────────
   var goodsReceivedKobo = 0;
