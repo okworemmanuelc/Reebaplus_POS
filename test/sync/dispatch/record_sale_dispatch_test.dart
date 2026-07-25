@@ -225,6 +225,58 @@ void main() {
       expect(item['product_id'], s.productId);
       expect(item['quantity'], 2);
       expect(item['unit_price_kobo'], 100000);
+      // #183 — a full-price line carries no catalogue price, so the optional
+      // catalogue_price_kobo key is not forwarded (nothing to snapshot).
+      expect(item.containsKey('catalogue_price_kobo'), isFalse);
+    });
+
+    test(
+        'flag ON: a custom-price line forwards catalogue_price_kobo in the thin '
+        'item (#183 — v2 record-sale parity with #176)', () async {
+      await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: true);
+      final s = await _seedSaleFixtures(db, businessId);
+      await db.delete(db.syncQueue).go();
+
+      // A concession line: charged 90000, tier list (catalogue) 100000. The
+      // Flutter path stores catalogue_price_kobo only when it differs from the
+      // charged price; the envelope must forward it so pos_record_sale_v2 can
+      // snapshot the concession server-side (migration 0160).
+      await db.ordersDao.createOrder(
+        order: _orderCompanion(
+          s,
+          businessId,
+          orderNumber: 'ORD-CUSTOM',
+          totalKobo: 180000,
+          amountPaidKobo: 180000,
+        ),
+        items: [
+          OrderItemsCompanion.insert(
+            businessId: businessId,
+            orderId: 'placeholder',
+            productId: Value(s.productId),
+            storeId: s.storeId,
+            quantity: 2,
+            unitPriceKobo: 90000,
+            totalKobo: 180000,
+            cataloguePriceKobo: const Value(100000),
+          ),
+        ],
+        customerId: s.customerId,
+        amountPaidKobo: 180000,
+        totalAmountKobo: 180000,
+        staffId: s.staffId,
+        storeId: s.storeId,
+        paymentMethod: 'cash',
+      );
+
+      final pending = await getPendingQueue(db);
+      final domainRow =
+          pending.firstWhere((r) => r.actionType == 'domain:pos_record_sale_v2');
+      final payload = decodePayload(domainRow);
+      final item = (payload['p_items'] as List).first as Map;
+      expect(item['unit_price_kobo'], 90000);
+      expect(item['catalogue_price_kobo'], 100000,
+          reason: 'the tier list price the charge deviated from is forwarded');
     });
 
     test(

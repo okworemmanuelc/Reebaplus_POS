@@ -3723,6 +3723,28 @@ characterization tests pass; full suite 613 pass / 1 pre-existing unrelated fail
 (`who_is_working_screen_test`, fails identically at HEAD). Two-axis `/code-review`
 clean. NEXT: the brief's Bucket 1 (A–F) data-safety fixes, built on this seam.
 
+**2026-07-25 — Cloud sale RPCs snapshot `order_items.catalogue_price_kobo`
+(#183, web/v2 parity with #176).** #176 (0158) added the column and the Flutter
+checkout snapshots the tier list price on a concession, but the cloud sale RPCs
+never set it. New migration `0160_money_integrity_rpc_catalogue_price.sql`
+`CREATE OR REPLACE`s the web `checkout_order` line-insert helper
+(`_checkout_insert_lines`, from 0139) and the mobile v2 record-sale RPC
+(`pos_record_sale_v2`, from 0091) to snapshot `catalogue_price_kobo` from an
+OPTIONAL `p_items.catalogue_price_kobo` key via a new pure helper
+`_catalogue_price_snapshot(catalogue, charged)` — the SQL twin of the Flutter
+rule (record only when it differs from the charged price; NULL otherwise / for
+product-less lines). Signatures unchanged (optional JSON key, not a param) → plain
+CREATE OR REPLACE, no overload/DROP; `catalogue_price_kobo` stays bigint; the 0158
+column is untouched. The mobile v2 envelope (`daos_orders.dart` `thinItems`) now
+forwards the key so a custom-priced v2 sale carries the concession end-to-end. The
+web omits the key → NULL (correct: no custom-price surface). A product-tier-column
+heuristic was rejected (two tiers ⇒ the deviated-from tier isn't reconstructable
+server-side; guessing would fabricate a concession). `flutter analyze` clean; the
+5 `record_sale_dispatch_test` cases pass (one new: envelope forwards
+`catalogue_price_kobo` on a concession line). NOT deployed (no `db push`); draft
+PR only. Out of scope: the `checkout_order` deposit-0 hardwire; the reebaplus-web
+repo; the v1 `pos_record_sale` RPC (not a sale enqueue path).
+
 **To resume in a new session:**
 Read this file first, then `CLAUDE.md`, then the master plan section relevant
 to the unit being picked up.

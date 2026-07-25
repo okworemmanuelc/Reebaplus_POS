@@ -741,6 +741,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
               'buying_price_kobo': ij['buying_price_kobo'],
             if (ij.containsKey('price_snapshot'))
               'price_snapshot': ij['price_snapshot'],
+            // #183 — forward the #176 catalogue (tier list) price so a
+            // custom-price concession survives the v2 record-sale RPC path
+            // (pos_record_sale_v2 records it via _catalogue_price_snapshot,
+            // migration 0160). Optional key: NULL/absent for a full-price line.
+            if (ij.containsKey('catalogue_price_kobo'))
+              'catalogue_price_kobo': ij['catalogue_price_kobo'],
           };
         }).toList();
 
