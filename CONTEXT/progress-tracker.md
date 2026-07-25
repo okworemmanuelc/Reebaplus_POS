@@ -10,6 +10,21 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Money integrity PRD #155 — DEPLOYED to production (2026-07-25)
+All 8 slices (#169/#171/#172/#173/#175 payment-chain + #170 cost-batch + #174
+day-close + #176 report-truth) are on `main` AND live on the prod DB. Cloud
+migrations **0153–0158** applied; Drift schema **v69**. Getting there required
+reconciling a diverged `supabase_migrations` ledger (prod had applied
+0140/0141/0143–0152 under *timestamp* versions) via `supabase migration repair`
+(timestamp→4-digit, schema untouched) before `db push`; see BUILD_LOG 2026-07-25.
+Push-notifications (#138) parked: its migration renumbered `0153→0159` on
+`feat/push-notifications-fcm` (idempotent). GitHub #170/#174/#176 CLOSED; umbrella
+**#155 left open** for owner QA. Post-deploy verify green (all money columns +
+`daily_closings` RLS present; advisors 0 ERROR). **The app is now safe to release
+to devices.** Remaining money follow-ups (deferred, not filed): web
+`checkout_order`/v2-RPC catalogue-price parity; count-shortage variance-card
+still valued at current cost (audit #30).
+
 ### Money integrity #8 (#176) — report-truth patches (single revenue definition) — CODE-COMPLETE (2026-07-25)
 Eighth/final slice of the #155 money-integrity PRD. Branch
 `feat/money-report-truth-176` off `main` (HEAD e2e2b92 — includes merged
