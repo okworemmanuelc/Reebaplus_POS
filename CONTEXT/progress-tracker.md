@@ -21,9 +21,10 @@ Push-notifications (#138) parked: its migration renumbered `0153→0159` on
 `feat/push-notifications-fcm` (idempotent). GitHub #170/#174/#176 CLOSED; umbrella
 **#155 left open** for owner QA. Post-deploy verify green (all money columns +
 `daily_closings` RLS present; advisors 0 ERROR). **The app is now safe to release
-to devices.** Remaining money follow-ups: web `checkout_order`/v2-RPC
-catalogue-price parity (#183, in progress); count-shortage variance-card
-current-cost restatement (audit #30) — **FIXED in #182**, see below.
+to devices.** Post-PRD follow-ups now ALSO merged + DEPLOYED (2026-07-25): #183
+RPC catalogue-price parity (cloud **0160** live) + #182 count-shortage write-time
+valuation (app-only) — both passed `/code-review`, PRs #185/#184 merged (main
+`fae9ab3`); follow-up **#186** filed (variance-card money-vs-units basis divergence).
 
 ### #182 — count-shortage loss valued at the #170 write-time snapshot (audit #30) — CODE-COMPLETE (2026-07-25)
 The last loss surface still recomputed at *current* cost. #170 gave damages a
