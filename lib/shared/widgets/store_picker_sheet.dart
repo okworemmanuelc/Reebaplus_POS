@@ -12,6 +12,11 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 /// (Home / Inventory / POS / Customers / Activity Log) reflects. [onSelected]
 /// runs after a pick (e.g. the drawer closes itself); it does NOT run when the
 /// user dismisses the sheet without choosing.
+///
+/// **Vans never appear here** (#140, van-sales spec §4.1) — the exclusion lives
+/// once, in [selectableStoresProvider], which this sheet and every other store
+/// surface read. The single exception it inherits for free: a driver
+/// (`Gates.vanSell`) assigned to a van sees that van, and only that van.
 Future<void> showStorePickerSheet(
   BuildContext context,
   WidgetRef ref, {

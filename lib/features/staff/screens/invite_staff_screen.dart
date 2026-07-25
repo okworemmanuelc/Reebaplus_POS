@@ -26,24 +26,32 @@ const Map<String, List<String>> _roleCapabilities = {
     'Full, unrestricted access to all business features and settings.',
     'Access profit & loss statement, statement of worth, and logs.',
     'Manage all stores, permissions, and roles.',
-    'Invite, suspend, or delete any staff member.'
+    'Invite, suspend, or delete any staff member.',
   ],
   'manager': [
     'Manage stores, inventory, suppliers, and customers.',
     'Record and self-approve expenses (up to the CEO-defined limit).',
     'Manage stock transfers and record damages.',
-    'Invite and manage Cashiers and Stock keepers.'
+    'Invite and manage Cashiers and Stock keepers.',
   ],
   'cashier': [
     'Access Point of Sale (POS) to create orders and process checkouts.',
     'Add new customers, manage customer credit balances, and record payments.',
     'View basic sales history and print receipts.',
-    'Restricted from editing prices, viewing profit reports, or managing stock.'
+    'Restricted from editing prices, viewing profit reports, or managing stock.',
   ],
   'stock_keeper': [
     'Add stock, record product damages, and count inventory.',
     'Initiate stock transfers between stores.',
-    'Restricted from making sales, viewing customer credit balances, or accessing financial reports.'
+    'Restricted from making sales, viewing customer credit balances, or accessing financial reports.',
+  ],
+  // #140 — the seeded Driver role. Listed last because roles are shown in tier
+  // order (CEO → Manager → Cashier → Stock keeper → Driver) via `roleRank`,
+  // never alphabetically.
+  'driver': [
+    'Sell from the van they are assigned to, on the road.',
+    'Restricted to that van — they never see or sell store stock.',
+    'Cannot load a van, record their own remittance, or close a trip; a manager does all three.',
   ],
 };
 
@@ -426,14 +434,14 @@ class _RoleSelectionCard extends StatelessWidget {
       backgroundColor: isSelected
           ? primaryColor.withValues(alpha: isDark ? 0.15 : 0.08)
           : (isDark
-              ? theme.colorScheme.surface.withValues(alpha: 0.25)
-              : theme.colorScheme.surface.withValues(alpha: 0.6)),
+                ? theme.colorScheme.surface.withValues(alpha: 0.25)
+                : theme.colorScheme.surface.withValues(alpha: 0.6)),
       border: Border.all(
         color: isSelected
             ? primaryColor
             : (isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : theme.colorScheme.primary.withValues(alpha: 0.05)),
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : theme.colorScheme.primary.withValues(alpha: 0.05)),
         width: isSelected ? 2 : 1,
       ),
       child: InkWell(
@@ -504,8 +512,9 @@ class _RoleSelectionCard extends StatelessWidget {
                             size: context.getRSize(12),
                             color: isSelected
                                 ? primaryColor
-                                : theme.colorScheme.onSurfaceVariant
-                                    .withValues(alpha: 0.6),
+                                : theme.colorScheme.onSurfaceVariant.withValues(
+                                    alpha: 0.6,
+                                  ),
                           ),
                         ),
                         Expanded(

@@ -586,6 +586,30 @@ abstract final class Gates {
     rule: Gate.tierAtLeast(GateTier.manager),
   );
 
+  // ── Van Sales cluster (#140, PRD #139 / ADR 0019) ─────────────────────────
+
+  /// Set up and run the van side of the business (`van.manage`, CEO + Manager
+  /// by default) — registering a van location today, and from #141 the load,
+  /// remittance and reconcile flows. This is the *manager* side of van sales;
+  /// a driver never holds it, which is what makes "a driver records their own
+  /// payment" impossible by construction (spec §9.5, edge case 21).
+  static const NamedGate vanManage = NamedGate(
+    name: 'vanManage',
+    action: 'Manage Van Sales',
+    rule: Gate.key('van.manage'),
+  );
+
+  /// Sell from a van on the road (`van.sell`, the seeded Driver role's key).
+  /// Today it is what makes a van *selectable* at all: a van is hidden from
+  /// every normal store surface, and the one viewer it may be an active store
+  /// for is a driver holding this key who is explicitly assigned to that van
+  /// (`selectableStoresFor`). The driver terminal itself lands in #142.
+  static const NamedGate vanSell = NamedGate(
+    name: 'vanSell',
+    action: 'Sell From a Van',
+    rule: Gate.key('van.sell'),
+  );
+
   /// Every declared gate. Backs the membership test (every entry cited) and
   /// doubles as a living inventory of gated actions (support / onboarding).
   static const List<NamedGate> all = <NamedGate>[
@@ -641,5 +665,7 @@ abstract final class Gates {
     viewApprovals,
     dailyReconciliation,
     crateDepositsReport,
+    vanManage,
+    vanSell,
   ];
 }

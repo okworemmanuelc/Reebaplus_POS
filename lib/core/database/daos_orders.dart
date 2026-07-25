@@ -185,6 +185,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
     ({DateTime createdAt, String id})? cursor,
     int limit = 30,
   }) async {
@@ -204,6 +205,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     if (storeId != null) {
       predicate = predicate & orders.storeId.equals(storeId);
     }
+    predicate = predicate & _outsideStores(excludeStoreIds);
 
     final Expression<DateTime> orderDateExpr;
     if (status == 'completed') {
@@ -287,12 +289,27 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     return orderIds.map((id) => result[id]!).toList();
   }
 
+  /// Predicate that drops orders belonging to [excluded] stores — the seam the
+  /// orders list and its stats use to keep **van** orders out of every normal
+  /// (per-store or All-Stores) view (#140, van-sales spec §8.1). Callers pass
+  /// `VanStores.ids`; the van test itself never happens here.
+  ///
+  /// An empty set is a no-op constant (not `NOT IN ()`, which is not valid
+  /// SQLite), so a business with no vans pays nothing. A NULL `store_id` — a
+  /// legacy, pre-store order — is deliberately kept: `NOT IN` over NULL is
+  /// NULL, which would silently drop those rows.
+  Expression<bool> _outsideStores(Set<String> excluded) {
+    if (excluded.isEmpty) return const Constant(true);
+    return orders.storeId.isNull() | orders.storeId.isNotIn(excluded.toList());
+  }
+
   Stream<List<OrderWithItems>> watchOrdersPage({
     required String status,
     String? storeId,
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
     int limit = 30,
   }) {
     final query = select(orders).join([
@@ -311,6 +328,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     if (storeId != null) {
       predicate = predicate & orders.storeId.equals(storeId);
     }
+    predicate = predicate & _outsideStores(excludeStoreIds);
 
     final Expression<DateTime> orderDateExpr;
     if (status == 'completed') {
@@ -394,6 +412,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
   }) {
     final query = selectOnly(orders).join([
       leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
@@ -411,6 +430,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     if (storeId != null) {
       predicate = predicate & orders.storeId.equals(storeId);
     }
+    predicate = predicate & _outsideStores(excludeStoreIds);
 
     final Expression<DateTime> orderDateExpr;
     if (status == 'completed') {

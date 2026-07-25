@@ -87,6 +87,16 @@ extension ReconGroupingX on ReconGrouping {
 /// The store-scope predicate shared by every reconciliation read: the §12.1
 /// active store (a concrete store), else the viewer's full selectable set
 /// ("All Stores" for an all-stores viewer; a confined Manager's assigned stores).
+///
+/// **Vans are out of scope** (#140, van-sales spec §8.1). Road sales are
+/// recognised as revenue when the driver rings them, but they carry no cost
+/// against them until the trip closes, so letting them into the All-Stores
+/// aggregate would inflate every figure this filter guards. They surface
+/// instead as one aggregated "Van Sales" line (#147). Note this is about
+/// *revenue and per-store figures* only: van **stock** still counts towards
+/// All-Stores inventory value and business worth (§4.1), which is why
+/// `inventoryOnHandKobo` below is scoped by the locked store rather than by
+/// this predicate.
 bool Function(String?) reconStoreFilter(WidgetRef ref) {
   final selectableIds = ref
       .watch(selectableStoresProvider)
@@ -94,7 +104,9 @@ bool Function(String?) reconStoreFilter(WidgetRef ref) {
       .toSet();
   final canAll = ref.watch(canViewAllStoresProvider);
   final active = ref.watch(lockedStoreProvider).value;
+  final vans = ref.watch(vanStoresProvider);
   return (storeId) {
+    if (vans.isVan(storeId)) return false;
     if (active != null) return storeId == active;
     if (canAll) return true; // All-Stores aggregate (incl. legacy null-store)
     return storeId != null && selectableIds.contains(storeId);

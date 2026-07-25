@@ -62,10 +62,10 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 40 default rows on fresh install',
+    test('permissions table seeded with 42 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
-      expect(perms.length, equals(40));
+      expect(perms.length, equals(42));
 
       // Spot-check a few keys + categories.
       final keys = perms.map((p) => p.key).toSet();
@@ -78,6 +78,8 @@ void main() {
       expect(keys.contains('staff.remove'), isTrue); // #107 staff offboarding
       expect(keys.contains('stores.manage'), isTrue); // §10.2
       expect(keys.contains('stores.request_transfer'), isTrue); // §16.8.2
+      expect(keys.contains('van.manage'), isTrue); // #140 van sales
+      expect(keys.contains('van.sell'), isTrue); // #140 van sales
       expect(keys.contains('stores.dispatch_transfer'), isTrue); // §16.8.2
       expect(keys.contains('staff.assign_stores'), isTrue); // §9.5
 
@@ -87,7 +89,8 @@ void main() {
       expect(
         categories,
         equals(['Customers', 'Expenses', 'Products', 'Reports',
-                'Sales', 'Staff', 'Stock', 'Stores', 'Suppliers', 'System']),
+                'Sales', 'Staff', 'Stock', 'Stores', 'Suppliers', 'System',
+                'Van Sales']), // #140
       );
     });
 

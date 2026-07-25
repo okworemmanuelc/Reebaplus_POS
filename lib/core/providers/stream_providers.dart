@@ -12,9 +12,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
@@ -94,6 +97,9 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
           from: from,
           to: to,
           search: _arg.search,
+          // #140 — road sales never appear in the store-side orders list; they
+          // surface only as one aggregated Van Sales line (spec §8.1).
+          excludeStoreIds: _ref.read(vanStoresProvider).ids,
           limit: 30,
         );
 
@@ -164,6 +170,7 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
             from: from,
             to: to,
             search: _arg.search,
+            excludeStoreIds: _ref.read(vanStoresProvider).ids,
             cursor: cursor,
             limit: 30,
           );
@@ -216,6 +223,9 @@ final ordersStatsProvider = businessScopedStreamAutoDisposeFamily<
           from: from,
           to: to,
           search: arg.search,
+          // #140 — keep road sales out of the orders tab's totals too, so the
+          // list and its header can never disagree.
+          excludeStoreIds: ref.watch(vanStoresProvider).ids,
         );
   },
   whenAbsent: OrdersStats.empty(),
@@ -1569,6 +1579,25 @@ final currentUserPermissionsReadyProvider = Provider<bool>((ref) {
   return ref.watch(rolePermissionsProvider(role.id)).valueOrNull != null;
 });
 
+/// The live [GateContext] for the current user — the single Riverpod seam
+/// between the pure Gate algebra and the app's permission providers. Watches
+/// the effective permission set, the role tier, and the permissions-ready
+/// signal; every `Guarded`, `GateEvaluation.allows`, and `require` reads it.
+///
+/// Declared here, next to the three providers it composes, rather than in
+/// `core/permissions/guarded.dart` (which re-exports it, so every existing call
+/// site is unaffected): a core provider that must cite a named gate —
+/// [selectableStoresProvider] needs `Gates.vanSell` since #140 — cannot import
+/// the widget layer without an import cycle.
+final gateContextProvider = Provider<GateContext>((ref) {
+  final role = ref.watch(currentUserRoleProvider);
+  return GateContext(
+    grantedKeys: ref.watch(currentUserPermissionsProvider),
+    roleRank: role == null ? null : roleRank(role.slug),
+    isReady: ref.watch(currentUserPermissionsReadyProvider),
+  );
+});
+
 // Permission gating is expressed exclusively through the named-gate registry
 // (ADR 0002, issue #22 flip). The bare single-key permission helper and the
 // manager-tier helper (`isManagerOrAbove`) were REMOVED here: feature code
@@ -1675,13 +1704,27 @@ final canViewAllStoresProvider = Provider<bool>((ref) {
 /// means "no confinement" → all stores. A confined user with no assignment
 /// falls back to all stores so nothing dead-ends on "no store" (the §9.5
 /// staff-assignment editor normally guarantees at least one).
+///
+/// **Vans (#140, van-sales spec §4.1).** A van is a `stores` row, so without a
+/// filter here it would land in every picker and confinement default. It is
+/// dropped for everyone except its own driver: pass [canSellFromVan] true (the
+/// `van.sell` holder) and the vans this user is **explicitly assigned to** stay
+/// in. The "no assignment → no confinement" fallback is measured against the
+/// whole result, so a driver assigned only to a van is confined to that van and
+/// is never silently widened to every warehouse.
 List<StoreData> selectableStoresFor(
   List<StoreData> stores,
-  Set<String>? assigned,
-) {
-  if (assigned == null) return stores;
-  final mine = stores.where((s) => assigned.contains(s.id)).toList();
-  return mine.isEmpty ? stores : mine;
+  Set<String>? assigned, {
+  bool canSellFromVan = false,
+}) {
+  final normal = withoutVans(stores);
+  if (assigned == null) return normal;
+  final mine = normal.where((s) => assigned.contains(s.id)).toList();
+  final myVans = canSellFromVan
+      ? onlyVans(stores).where((s) => assigned.contains(s.id)).toList()
+      : const <StoreData>[];
+  if (mine.isEmpty && myVans.isEmpty) return normal;
+  return [...mine, ...myVans];
 }
 
 /// The stores the current user may select as their active store (§12.1): every
@@ -1690,14 +1733,35 @@ List<StoreData> selectableStoresFor(
 /// POS confinement, and the MainLayout confined-user default all read, so they
 /// never disagree. Returns all stores while assignments are still loading (don't
 /// confine prematurely on a cold start).
+///
+/// **Vans are never here for a normal user** (#140) — see [selectableStoresFor].
+/// This is the choke point that keeps a van out of the store picker, out of
+/// `reconStoreFilter`'s scope, and out of `activeWriteStoreProvider`, so a
+/// warehouse cashier can never see or sell van stock.
 final selectableStoresProvider = Provider<List<StoreData>>((ref) {
   final all = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
-  if (ref.watch(canViewAllStoresProvider)) return all;
+  if (ref.watch(canViewAllStoresProvider)) return withoutVans(all);
   final userId = ref.watch(authProvider).currentUser?.id;
-  if (userId == null) return all;
+  if (userId == null) return withoutVans(all);
   final assigned = ref.watch(myUserStoresProvider(userId)).valueOrNull;
-  if (assigned == null) return all;
-  return selectableStoresFor(all, assigned.map((s) => s.storeId).toSet());
+  if (assigned == null) return withoutVans(all);
+  return selectableStoresFor(
+    all,
+    assigned.map((s) => s.storeId).toSet(),
+    // The one viewer a van is selectable for: a driver (`van.sell`) standing on
+    // the van they were assigned to. Everyone else never sees it.
+    canSellFromVan:
+        Gates.vanSell.rule.evaluate(ref.watch(gateContextProvider)),
+  );
+});
+
+/// The business's van locations, keyed by id — the scope every store-**id**
+/// filter asks (#140). `reconStoreFilter`, the profit report's order set, the
+/// dashboard tiles and the orders list all read this rather than re-deriving
+/// "which stores are vans", so the exclusion can never drift between surfaces.
+final vanStoresProvider = Provider<VanStores>((ref) {
+  final all = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  return VanStores.of(all);
 });
 
 /// Display label for the active-store scope (§21.11 supplier accounts and any

@@ -2079,6 +2079,16 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kStoreKindStore),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -2125,6 +2135,7 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     businessId,
     name,
     location,
+    kind,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2164,6 +2175,12 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
       context.handle(
         _locationMeta,
         location.isAcceptableOrUnknown(data['location']!, _locationMeta),
+      );
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
       );
     }
     if (data.containsKey('is_deleted')) {
@@ -2212,6 +2229,10 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
         DriftSqlType.string,
         data['${effectivePrefix}location'],
       ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -2238,6 +2259,15 @@ class StoreData extends DataClass implements Insertable<StoreData> {
   final String businessId;
   final String name;
   final String? location;
+
+  /// `'store'` (a normal location) or `'van'` (#140). NOT NULL with a `'store'`
+  /// default so every legacy row and every write that ignores the column lands
+  /// as a normal store. The value set is enforced by a cloud CHECK (0161); it
+  /// is deliberately NOT a Drift table-level CHECK because SQLite cannot add a
+  /// table constraint without rebuilding `stores`, and `stores` is the FK
+  /// parent of most of the schema. The client only ever writes the two
+  /// [kStoreKinds] constants (`StoresDao.createStore`).
+  final String kind;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -2246,6 +2276,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     required this.businessId,
     required this.name,
     this.location,
+    required this.kind,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -2259,6 +2290,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     if (!nullToAbsent || location != null) {
       map['location'] = Variable<String>(location);
     }
+    map['kind'] = Variable<String>(kind);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -2273,6 +2305,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       location: location == null && nullToAbsent
           ? const Value.absent()
           : Value(location),
+      kind: Value(kind),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -2289,6 +2322,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       businessId: serializer.fromJson<String>(json['businessId']),
       name: serializer.fromJson<String>(json['name']),
       location: serializer.fromJson<String?>(json['location']),
+      kind: serializer.fromJson<String>(json['kind']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -2302,6 +2336,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       'businessId': serializer.toJson<String>(businessId),
       'name': serializer.toJson<String>(name),
       'location': serializer.toJson<String?>(location),
+      'kind': serializer.toJson<String>(kind),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -2313,6 +2348,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     String? businessId,
     String? name,
     Value<String?> location = const Value.absent(),
+    String? kind,
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -2321,6 +2357,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     businessId: businessId ?? this.businessId,
     name: name ?? this.name,
     location: location.present ? location.value : this.location,
+    kind: kind ?? this.kind,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2333,6 +2370,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           : this.businessId,
       name: data.name.present ? data.name.value : this.name,
       location: data.location.present ? data.location.value : this.location,
+      kind: data.kind.present ? data.kind.value : this.kind,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -2348,6 +2386,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
           ..write('location: $location, ')
+          ..write('kind: $kind, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -2361,6 +2400,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     businessId,
     name,
     location,
+    kind,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2373,6 +2413,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           other.businessId == this.businessId &&
           other.name == this.name &&
           other.location == this.location &&
+          other.kind == this.kind &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -2383,6 +2424,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
   final Value<String> businessId;
   final Value<String> name;
   final Value<String?> location;
+  final Value<String> kind;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -2392,6 +2434,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     this.businessId = const Value.absent(),
     this.name = const Value.absent(),
     this.location = const Value.absent(),
+    this.kind = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2402,6 +2445,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     required String businessId,
     required String name,
     this.location = const Value.absent(),
+    this.kind = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2413,6 +2457,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Expression<String>? businessId,
     Expression<String>? name,
     Expression<String>? location,
+    Expression<String>? kind,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -2423,6 +2468,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       if (businessId != null) 'business_id': businessId,
       if (name != null) 'name': name,
       if (location != null) 'location': location,
+      if (kind != null) 'kind': kind,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -2435,6 +2481,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Value<String>? businessId,
     Value<String>? name,
     Value<String?>? location,
+    Value<String>? kind,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -2445,6 +2492,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       businessId: businessId ?? this.businessId,
       name: name ?? this.name,
       location: location ?? this.location,
+      kind: kind ?? this.kind,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2466,6 +2514,9 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     }
     if (location.present) {
       map['location'] = Variable<String>(location.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
     }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
@@ -2489,6 +2540,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
           ..write('location: $location, ')
+          ..write('kind: $kind, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -48625,6 +48677,7 @@ typedef $$StoresTableCreateCompanionBuilder =
       required String businessId,
       required String name,
       Value<String?> location,
+      Value<String> kind,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -48636,6 +48689,7 @@ typedef $$StoresTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> name,
       Value<String?> location,
+      Value<String> kind,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -49201,6 +49255,11 @@ class $$StoresTableFilterComposer
 
   ColumnFilters<String> get location => $composableBuilder(
     column: $table.location,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -49869,6 +49928,11 @@ class $$StoresTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -49925,6 +49989,9 @@ class $$StoresTableAnnotationComposer
 
   GeneratedColumn<String> get location =>
       $composableBuilder(column: $table.location, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
@@ -50628,6 +50695,7 @@ class $$StoresTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> location = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -50637,6 +50705,7 @@ class $$StoresTableTableManager
                 businessId: businessId,
                 name: name,
                 location: location,
+                kind: kind,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -50648,6 +50717,7 @@ class $$StoresTableTableManager
                 required String businessId,
                 required String name,
                 Value<String?> location = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -50657,6 +50727,7 @@ class $$StoresTableTableManager
                 businessId: businessId,
                 name: name,
                 location: location,
+                kind: kind,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,

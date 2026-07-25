@@ -25,6 +25,33 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Create a location for the current business (#140). [kind] is the only
+  /// thing that separates a warehouse from a van: pass [kStoreKindVan] and the
+  /// row drops out of every normal store surface while still holding real
+  /// per-SKU inventory (van-sales spec §4.1).
+  ///
+  /// Explicit `id` + `lastUpdatedAt` so the cloud echo can't mint a different
+  /// row (synced-write invariant), and routed through the sync queue because
+  /// `stores` is a synced tenant table. Returns the new id.
+  Future<String> createStore({
+    required String name,
+    String? location,
+    String kind = kStoreKindStore,
+  }) async {
+    assert(kStoreKinds.contains(kind), 'unknown store kind: $kind');
+    final row = StoresCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      name: name,
+      location: Value(location == null || location.isEmpty ? null : location),
+      kind: Value(kind),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(stores).insert(row);
+    await db.syncDao.enqueueUpsert('stores', row);
+    return row.id.value;
+  }
+
   Stream<StoreData?> watchStore(String id) {
     return (select(
       stores,

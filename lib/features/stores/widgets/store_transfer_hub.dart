@@ -52,6 +52,10 @@ class StoreTransferHub extends ConsumerWidget {
       for (final p in products) p.product.id: p.product,
     };
     final emptiesMap = ref.watch(storeEmptiesByManufacturerProvider(storeId)).valueOrNull ?? const <String, int>{};
+    // Deliberately UNfiltered (#140): this is a name lookup for rendering, not
+    // a picker. A van can never be a transfer endpoint — `request_stock_screen`
+    // drops it from both dropdowns — but if a legacy row ever names one, show
+    // its real name rather than "a store". The pickers are the exclusion seam.
     final stores =
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
     final storeNames = {for (final s in stores) s.id: s.name};

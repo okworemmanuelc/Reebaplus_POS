@@ -6,20 +6,15 @@ import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/utils/role_display.dart';
 
-/// The live [GateContext] for the current user — the single Riverpod seam
-/// between the pure Gate algebra and the app's permission providers. Watches
-/// the effective permission set, the role tier, and the permissions-ready
-/// signal; every [Guarded], [GateEvaluation.allows], and `require` reads it.
-final gateContextProvider = Provider<GateContext>((ref) {
-  final role = ref.watch(currentUserRoleProvider);
-  return GateContext(
-    grantedKeys: ref.watch(currentUserPermissionsProvider),
-    roleRank: role == null ? null : roleRank(role.slug),
-    isReady: ref.watch(currentUserPermissionsReadyProvider),
-  );
-});
+/// [gateContextProvider] is declared next to the three providers it composes
+/// (`stream_providers.dart`) so a *core provider* can cite a named gate without
+/// importing the widget layer — `selectableStoresProvider` needs
+/// `Gates.vanSell` (#140). It is re-exported here so every call site that
+/// reaches it through the `permissions.dart` barrel keeps working, and so this
+/// module stays the one place a gate is *evaluated*.
+export 'package:reebaplus_pos/core/providers/stream_providers.dart'
+    show gateContextProvider;
 
 /// Evaluate a named gate against the live permission set. The three forms map
 /// to the three enforcement layers (ADR 0002): [allows] render-gates in a

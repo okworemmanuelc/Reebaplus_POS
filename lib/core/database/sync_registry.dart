@@ -536,6 +536,14 @@ final List<SyncedTable> kSyncRegistry = [
       (db) => db.stores,
       StoreData.fromJson,
       resilient: true,
+      // #140 — `kind` is NOT NULL locally, and [Restore.plain] runs `fromJson`
+      // BEFORE the FK-resilient wrapper, so a cloud row missing the column
+      // would throw and abort the whole pull page rather than skip one row.
+      // That is exactly what a device on Drift v70 sees if it pulls before
+      // supabase/migrations/0161 is applied, and what any legacy/web/RPC-
+      // authored row that omits the column would produce afterwards. Defaulting
+      // to a normal store is both the right value and the deploy-order fuse.
+      defaults: {'kind': kStoreKindStore},
     ),
   ),
   const SyncedTable(

@@ -120,12 +120,41 @@ class Manufacturers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A normal selling / stocking location — the default for every `stores` row.
+///
+/// One of the two values `stores.kind` may hold (#140, van-sales spec §4.1).
+/// Declared here (next to the table) rather than in the predicate module so the
+/// DAO layer, which is `part of` this library's sibling, can reach it without a
+/// new import edge. The **only** van *test* is `isVanStore` in
+/// `lib/core/stores/van_store.dart` — never compare `kind` inline.
+const String kStoreKindStore = 'store';
+
+/// A van: a location that holds real per-SKU inventory but drives away with it.
+///
+/// A van is a `stores` row so it inherits inventory, transfers, FIFO costing
+/// and offline sync for free, but it is hidden from every normal store surface
+/// (pickers, store lists, per-store reports) — van-sales spec §4.1 / §8.1.
+const String kStoreKindVan = 'van';
+
+/// The closed set `stores.kind` may hold. Mirrors the cloud CHECK constraint in
+/// `supabase/migrations/0161_van_sales_prefactor.sql`.
+const List<String> kStoreKinds = [kStoreKindStore, kStoreKindVan];
+
 @DataClassName('StoreData')
 class Stores extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
   TextColumn get location => text().nullable()();
+
+  /// `'store'` (a normal location) or `'van'` (#140). NOT NULL with a `'store'`
+  /// default so every legacy row and every write that ignores the column lands
+  /// as a normal store. The value set is enforced by a cloud CHECK (0161); it
+  /// is deliberately NOT a Drift table-level CHECK because SQLite cannot add a
+  /// table constraint without rebuilding `stores`, and `stores` is the FK
+  /// parent of most of the schema. The client only ever writes the two
+  /// [kStoreKinds] constants (`StoresDao.createStore`).
+  TextColumn get kind => text().withDefault(const Constant(kStoreKindStore))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -1962,7 +1991,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 69;
+  int get schemaVersion => 70;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4363,6 +4392,53 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(orderItems, orderItems.cataloguePriceKobo);
         }
       }
+      if (from < 70) {
+        // v70 (#140 Van Sales 1/8 prefactor, PRD #139 / ADR 0019). Mirrors
+        // supabase/migrations/0161_van_sales_prefactor.sql.
+        //
+        // `stores` gains `kind` TEXT NOT NULL DEFAULT 'store' so a location can
+        // be a VAN — a stores row that holds real per-SKU inventory but is
+        // hidden from every normal store surface (van-sales spec §4.1). Simple
+        // add-column with a non-null default; every existing row becomes a
+        // normal 'store'. The `kind IN ('store','van')` CHECK lives on the
+        // cloud only: SQLite cannot add a table constraint without rebuilding
+        // the table, and `stores` is the FK parent of most of the schema. No
+        // sync_registry change — `stores` is a Restore.plain pass-through push
+        // entry, so the new column rides along in both directions.
+        //
+        // NAMING COLLISION — READ THIS BEFORE THE NEXT VAN SLICE. The dormant
+        // `drivers` + `delivery_receipts` tables already in this schema
+        // (registered for sync, in pos_pull_snapshot, with NO DAO, provider or
+        // UI) are a DIFFERENT AXIS and are deliberately left untouched. A
+        // van-sales driver is a `users` row holding the seeded Driver role,
+        // assigned to a van through `user_stores`. `van_trips.driver_user_id`
+        // (#141) points at `users`, never at `drivers`. Retiring the legacy
+        // pair is a separate dead-code sweep, not van-sales work (spec §14).
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69 so a DB stepped back by the
+        // revert-then-re-upgrade tests re-upgrades cleanly.
+        final hasStoreKind = await customSelect(
+          "SELECT 1 FROM pragma_table_info('stores') WHERE name = 'kind'",
+        ).get();
+        if (hasStoreKind.isEmpty) {
+          await m.addColumn(stores, stores.kind);
+        }
+        // Seed the two new permission keys into the local catalogue so Roles &
+        // Permissions lists them and the van gates can resolve. The ROLE GRANTS
+        // arrive from the cloud via sync pull — the cloud catalogue + the
+        // role_permissions backfill live in 0161, which must deploy BEFORE any
+        // grant syncs (role_permissions FK). This step only adds the catalogue
+        // keys. Idempotent — key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('van.manage', "
+          "'Set up vans and run driver reconciliation', 'Van Sales')",
+        );
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('van.sell', 'Sell from a van on the road', 'Van Sales')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -4712,7 +4788,7 @@ const List<String> _v13HotPathIndexStatements = [
 // Identical on every device and on the cloud (mirror this list in
 // supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
 // Each row: (key, description, category). Category groups toggles in
-// the CEO Settings > Roles & Permissions sub-page. 40 keys total.
+// the CEO Settings > Roles & Permissions sub-page. 42 keys total.
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
@@ -4782,6 +4858,12 @@ const List<List<String>> _defaultPermissionRows = [
   // #107 staff offboarding. CEO-only by default; cloud catalog + CEO backfill:
   // 0149. The key exists everywhere before any grant syncs (role_permissions FK).
   ['staff.remove', 'Permanently remove staff (frees their email)', 'Staff'],
+  // Van Sales — #140 (PRD #139 / ADR 0019). `van.manage` is CEO + Manager by
+  // default; `van.sell` belongs to the seeded Driver role. Cloud catalogue +
+  // role grants: 0161. The keys exist everywhere before any grant syncs
+  // (role_permissions FK).
+  ['van.manage', 'Set up vans and run driver reconciliation', 'Van Sales'],
+  ['van.sell', 'Sell from a van on the road', 'Van Sales'],
   // System
   ['activity_logs.view', 'View activity logs', 'System'],
   ['sync.view', 'View sync issues', 'System'],
