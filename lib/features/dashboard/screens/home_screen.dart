@@ -240,7 +240,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     }
 
-    // Filter by selected period and store
+    // Filter by selected period and store. #140 — van orders are excluded from
+    // every dashboard tile (Total Sales, Net Profit, the sales breakdown): road
+    // revenue is real but carries no cost against it until the trip closes, so
+    // an All-Stores figure that counted it would read as 100%-margin sales.
+    // Van P&L lands via the closed-trip artifact (van-sales spec §5.4 / §8.1).
+    final vans = ref.watch(vanStoresProvider);
     final filteredOrdersWithItems = _allOrdersWithItems
         .where(
           (o) =>
@@ -248,6 +253,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // Revenue is recognized at checkout ('pending'), not at the
               // ceremonial Confirm ('completed'). Count any non-reversed sale.
               orderCountsAsSale(o.order.status) &&
+              !vans.isVan(o.order.storeId) &&
               (_selectedStoreId == null || o.order.storeId == _selectedStoreId),
         )
         .toList();

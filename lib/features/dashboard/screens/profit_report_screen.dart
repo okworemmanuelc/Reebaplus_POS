@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
@@ -57,7 +58,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   /// would overstate gross profit as 100% for those items. Their quantity is
   /// reported separately as [_ProfitData.uncostedItems] so the exclusion is
   /// transparent and Revenue − COGS always equals Gross Profit.
-  _ProfitData _compute(List<OrderWithItems> orders, String period) {
+  _ProfitData _compute(
+    List<OrderWithItems> orders,
+    String period,
+    VanStores vans,
+  ) {
     final byProduct = <String, _ProductAccum>{};
     var revenueKobo = 0;
     var cogsKobo = 0;
@@ -67,6 +72,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       // Recognized at checkout ('pending'), not at the ceremonial Confirm
       // ('completed'). Count any non-reversed sale.
       if (!orderCountsAsSale(o.order.status)) continue;
+      // #140 — a van sale is not a store sale. Its COGS is not per-line (it is
+      // the trip's lot snapshot, booked at close), so including it here would
+      // report road revenue at 100% margin. Van P&L comes from the closed-trip
+      // artifact instead (van-sales spec §5.4 / §8.1).
+      if (vans.isVan(o.order.storeId)) continue;
       if (!isDateInPeriod(o.order.createdAt, period)) continue;
       for (final i in o.items) {
         final product = i.product;
@@ -183,7 +193,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     // cost. Revenue / Gross Profit / Margin stay (they're `reports.see_profit`).
     final canSeeCost = Gates.seeReportCostPrices.allows(ref);
     final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
-    final data = _compute(orders, _period);
+    final data = _compute(orders, _period, ref.watch(vanStoresProvider));
     final hasCostedData = data.products.isNotEmpty;
     final hasAnySales = hasCostedData || data.uncostedItems > 0;
 

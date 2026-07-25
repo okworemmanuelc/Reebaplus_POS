@@ -153,6 +153,7 @@ class OrderService {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
     ({DateTime createdAt, String id})? cursor,
     int limit = 30,
   }) {
@@ -162,6 +163,7 @@ class OrderService {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
       cursor: cursor,
       limit: limit,
     );
@@ -173,6 +175,7 @@ class OrderService {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
     int limit = 30,
   }) {
     return _queries.watchOrdersPage(
@@ -181,6 +184,7 @@ class OrderService {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
       limit: limit,
     );
   }
@@ -191,6 +195,7 @@ class OrderService {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
   }) {
     return _queries.watchOrdersStats(
       status: status,
@@ -198,6 +203,7 @@ class OrderService {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
     );
   }
 

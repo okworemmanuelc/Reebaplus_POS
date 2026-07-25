@@ -26,6 +26,12 @@ abstract final class GateTier {
   static const int manager = 1;
   static const int cashier = 2;
   static const int stockKeeper = 3;
+
+  /// #140 — the seeded Driver role sits last, below every store-side role.
+  /// Every existing `tierAtLeast` cutoff (manager, cashier, stockKeeper) is
+  /// therefore closed to a driver by construction; the van keys are the only
+  /// access they gain.
+  static const int driver = 4;
 }
 
 /// The resolved inputs a [Gate] evaluates against: the effective permission
@@ -43,7 +49,8 @@ class GateContext {
   /// Business resolution, CEO all-on) — i.e. `currentUserPermissionsProvider`.
   final Set<String> grantedKeys;
 
-  /// The current role's rank per [GateTier] (0 = CEO … 4 = unknown), or null
+  /// The current role's rank per [GateTier] (0 = CEO … 4 = Driver, 5 =
+  /// unknown), or null
   /// while the role row has not resolved locally. Null makes every tier atom
   /// fail closed.
   final int? roleRank;

@@ -56,6 +56,7 @@ class OrderQueries {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
     ({DateTime createdAt, String id})? cursor,
     int limit = 30,
   }) {
@@ -65,6 +66,7 @@ class OrderQueries {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
       cursor: cursor,
       limit: limit,
     );
@@ -76,6 +78,7 @@ class OrderQueries {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
     int limit = 30,
   }) {
     return _ordersDao.watchOrdersPage(
@@ -84,6 +87,7 @@ class OrderQueries {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
       limit: limit,
     );
   }
@@ -94,6 +98,7 @@ class OrderQueries {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
   }) {
     return _ordersDao.watchOrdersStats(
       status: status,
@@ -101,6 +106,7 @@ class OrderQueries {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
     );
   }
 

@@ -1431,4 +1431,107 @@ void main() {
       expect(legacy.data['catalogue_price_kobo'], isNull);
     });
   });
+
+  group('onUpgrade v69 → v70 (van-as-location + van permission keys, #140)', () {
+    Future<bool> columnExists(
+        AppDatabase db, String table, String column) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM pragma_table_info('$table') WHERE name = ?",
+            variables: [Variable<String>(column)],
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test('adds stores.kind defaulted to \'store\'; legacy stores stay stores '
+        'and can then be flipped to a van', () async {
+      final biz = UuidV7.generate();
+      final legacyStoreId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+
+      // Revert stores to the pre-v70 shape: drop kind.
+      await db1.customStatement('ALTER TABLE stores DROP COLUMN kind');
+      expect(await columnExists(db1, 'stores', 'kind'), isFalse);
+
+      // A pre-existing (legacy) store on the reverted table.
+      await db1.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Main')",
+        [legacyStoreId, biz],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 69');
+      await db1.close();
+
+      // Re-open → onUpgrade(69 → 70) adds the NOT NULL DEFAULT column.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await columnExists(db2, 'stores', 'kind'), isTrue);
+
+      // The legacy store survives and became a normal 'store' — never a van.
+      final legacy = await db2
+          .customSelect(
+            'SELECT kind FROM stores WHERE id = ?',
+            variables: [Variable<String>(legacyStoreId)],
+          )
+          .getSingle();
+      expect(legacy.data['kind'], 'store');
+
+      // And the column actually accepts a van, so #141 has something to build on.
+      final vanId = UuidV7.generate();
+      await db2.customStatement(
+        "INSERT INTO stores (id, business_id, name, kind) "
+        "VALUES (?, ?, 'Van 1', 'van')",
+        [vanId, biz],
+      );
+      final van = await db2
+          .customSelect(
+            'SELECT kind FROM stores WHERE id = ?',
+            variables: [Variable<String>(vanId)],
+          )
+          .getSingle();
+      expect(van.data['kind'], 'van');
+    });
+
+    test('seeds the van.manage / van.sell permission keys, idempotently',
+        () async {
+      final db1 = await openAndInit();
+
+      // Revert the v70 delta: drop the column and both catalogue keys.
+      await db1.customStatement('ALTER TABLE stores DROP COLUMN kind');
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key IN ('van.manage', 'van.sell')",
+      );
+      final before = await db1
+          .customSelect("SELECT COUNT(*) c FROM permissions WHERE key LIKE 'van.%'")
+          .getSingle();
+      expect(before.data['c'], 0);
+
+      await db1.customStatement('PRAGMA user_version = 69');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final rows = await db2
+          .customSelect(
+            "SELECT key, category FROM permissions "
+            "WHERE key LIKE 'van.%' ORDER BY key",
+          )
+          .get();
+      expect(rows.map((r) => r.read<String>('key')),
+          ['van.manage', 'van.sell']);
+      // Both land under one category so the CEO's Roles & Permissions page
+      // groups them together.
+      expect(
+        rows.map((r) => r.read<String>('category')).toSet(),
+        {'Van Sales'},
+      );
+    });
+  });
 }

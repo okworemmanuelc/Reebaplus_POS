@@ -50,6 +50,9 @@ const _categoryOrder = [
   'Customers',
   'Suppliers',
   'Staff',
+  // #140 — `van.manage` / `van.sell`. Sits after Staff because both keys are
+  // about who does what on the road, not about a store-side capability.
+  'Van Sales',
   'System',
   'Funds',
 ];

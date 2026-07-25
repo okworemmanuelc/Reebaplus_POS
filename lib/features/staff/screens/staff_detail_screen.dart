@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -510,7 +511,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   ),
                   SizedBox(height: context.getRSize(4)),
                   Text(
-                    'Pick the store(s) ${user.name} works at.',
+                    'Pick the store(s) or van(s) ${user.name} works at.',
                     style: TextStyle(
                       fontSize: context.getRFontSize(13),
                       color: t.textTheme.bodySmall?.color,
@@ -522,12 +523,26 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // #140 — this list is deliberately the RAW store list
+                          // (vans included). Assigning a driver to a van is the
+                          // existing staff-to-store assignment; vans are hidden
+                          // from *pickers*, not from the place they are set up.
                           for (final s in allStores)
                             CheckboxListTile(
                               contentPadding: EdgeInsets.zero,
                               controlAffinity: ListTileControlAffinity.leading,
                               value: selected.contains(s.id),
                               title: Text(s.name),
+                              subtitle: isVanStore(s)
+                                  ? const Text('Van — sells on the road')
+                                  : null,
+                              secondary: isVanStore(s)
+                                  ? Icon(
+                                      Icons.local_shipping_rounded,
+                                      size: context.getRSize(18),
+                                      color: t.textTheme.bodySmall?.color,
+                                    )
+                                  : null,
                               onChanged: (v) => setSheet(() {
                                 if (v == true) {
                                   selected.add(s.id);
