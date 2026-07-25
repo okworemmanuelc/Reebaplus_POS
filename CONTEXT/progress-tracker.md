@@ -21,9 +21,32 @@ Push-notifications (#138) parked: its migration renumbered `0153→0159` on
 `feat/push-notifications-fcm` (idempotent). GitHub #170/#174/#176 CLOSED; umbrella
 **#155 left open** for owner QA. Post-deploy verify green (all money columns +
 `daily_closings` RLS present; advisors 0 ERROR). **The app is now safe to release
-to devices.** Remaining money follow-ups (deferred, not filed): web
-`checkout_order`/v2-RPC catalogue-price parity; count-shortage variance-card
-still valued at current cost (audit #30).
+to devices.** Remaining money follow-ups: web `checkout_order`/v2-RPC
+catalogue-price parity (#183, in progress); count-shortage variance-card
+current-cost restatement (audit #30) — **FIXED in #182**, see below.
+
+### #182 — count-shortage loss valued at the #170 write-time snapshot (audit #30) — CODE-COMPLETE (2026-07-25)
+The last loss surface still recomputed at *current* cost. #170 gave damages a
+write-time value (`stock_adjustments.value_kobo`) and the Damages recon figure
+reads it via `lossValueKobo`, but the count-SHORTAGE figure kept multiplying
+count units by today's `products.buying_price_kobo`, so a later cost edit
+silently restated every past period's shortage / `stockVarianceKobo` /
+`periodNetResultKobo` / integrity flag. APP-ONLY (no migration — `value_kobo`
+exists since cloud 0155 / Drift v66). A stock count already applies each line
+through `InventoryDao.adjustStock('Daily stock count adjustment', …)`, which
+draws the FIFO queue down and snapshots `value_kobo`; the new pure reducer
+`countShortageLossKobo(adjustments, …)` in `recon_data.dart` sums those snapshots
+over count-reconciliation removals (`isCountReconciliationReason && diff<0`, in
+span+scope) via `lossValueKobo` — mirroring the Damages loop, same current-cost
+fallback for legacy pre-#170 rows. Count-session-sourced units/lines/retail are
+unchanged; only `shortageCostKobo`'s cost basis moved. **Scoped out (by design):**
+surplus (a gain, no snapshot) stays current-cost; the ADR 0014 flow-equation card
+stays current-cost so its closing identity ties out; expiry-via-Record-Damages is
+already snapshot-valued through the Damages loop; the v2 domain-RPC path (flag
+off) mints the row server-side (null-fallback covers it). Regression test
+`test/dashboard/recon_shortage_snapshot_test.dart` proves the figure is stable
+across a post-count cost edit. `flutter analyze` clean; dashboard+costing+
+inventory suites 212 pass. Branch `feat/variance-card-writetime-cost-182`.
 
 ### Money integrity #8 (#176) — report-truth patches (single revenue definition) — CODE-COMPLETE (2026-07-25)
 Eighth/final slice of the #155 money-integrity PRD. Branch
