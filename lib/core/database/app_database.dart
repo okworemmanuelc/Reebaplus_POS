@@ -660,6 +660,314 @@ class DailyClosings extends Table {
   ];
 }
 
+// ─── Van Sales (#141, PRD #139 / ADR 0019, van-sales spec §4.2–§4.4) ────────
+// Mirrors supabase/migrations/0162_van_sales_trips.sql.
+
+/// A trip that is still on the road. The one status a van/driver may hold at
+/// most once at a time — enforced client-side by `VanTripsDao` and cloud-side
+/// by the two partial-unique indexes (spec §4.2).
+const String kVanTripStatusOpen = 'open';
+
+/// A reconciled, settled trip. Terminal: a closed trip is never edited in
+/// place; every later correction is a new signed ledger row (spec §9.4 #16).
+const String kVanTripStatusClosed = 'closed';
+
+/// The closed set `van_trips.status` may hold. Mirrors the cloud CHECK.
+const List<String> kVanTripStatuses = [
+  kVanTripStatusOpen,
+  kVanTripStatusClosed,
+];
+
+/// The driver-ledger entry kinds (spec §4.4). The **type is the event**, not
+/// the sign — the sign lives in `signed_amount_kobo` (debits negative, credits
+/// positive) so `SUM(signed_amount_kobo)` is the balance regardless of how many
+/// kinds get added later.
+///
+/// Written by this slice: [kDriverLedgerTypeLoad] only. The rest are declared
+/// now so the CHECK constraint never needs widening as #143–#146 land — a
+/// CHECK widening on `driver_ledger_entries` would be a SQLite table rebuild
+/// on an append-only table with two triggers on it, which is exactly the kind
+/// of migration worth spending five minutes to avoid.
+const String kDriverLedgerTypeLoad = 'load'; // debit — goods left the warehouse
+const String kDriverLedgerTypeRestock = 'restock'; // debit — #143
+const String kDriverLedgerTypeReturnGood = 'return_good'; // credit — #143
+const String kDriverLedgerTypePaymentCash = 'payment_cash'; // credit — #144
+const String kDriverLedgerTypePaymentTransfer = 'payment_transfer'; // #144
+const String kDriverLedgerTypeShortageWriteoff = 'shortage_writeoff'; // #145
+const String kDriverLedgerTypeDamageWriteoff = 'damage_writeoff'; // #145
+const String kDriverLedgerTypeRestatement = 'restatement'; // #145 §9.4 #15
+const String kDriverLedgerTypeVoid = 'void'; // the compensating row
+
+/// The closed set `driver_ledger_entries.type` may hold.
+const List<String> kDriverLedgerTypes = [
+  kDriverLedgerTypeLoad,
+  kDriverLedgerTypeRestock,
+  kDriverLedgerTypeReturnGood,
+  kDriverLedgerTypePaymentCash,
+  kDriverLedgerTypePaymentTransfer,
+  kDriverLedgerTypeShortageWriteoff,
+  kDriverLedgerTypeDamageWriteoff,
+  kDriverLedgerTypeRestatement,
+  kDriverLedgerTypeVoid,
+];
+
+/// `driver_ledger_entries.reference_type` — WHAT caused the row, so a balance
+/// line can be traced back to the physical event that moved it.
+const String kDriverLedgerRefLot = 'van_trip_lot';
+const String kDriverLedgerRefReturn = 'van_return_event'; // #143
+const String kDriverLedgerRefPayment = 'payment_transaction'; // #144
+const String kDriverLedgerRefTrip = 'van_trip'; // #145 close artifacts
+const String kDriverLedgerRefEntry = 'driver_ledger_entry'; // a void's original
+
+/// The closed set `driver_ledger_entries.reference_type` may hold.
+const List<String> kDriverLedgerRefTypes = [
+  kDriverLedgerRefLot,
+  kDriverLedgerRefReturn,
+  kDriverLedgerRefPayment,
+  kDriverLedgerRefTrip,
+  kDriverLedgerRefEntry,
+];
+
+/// One van run: `open → closed`, referencing van + driver + source warehouse
+/// (van-sales spec §4.2). The aggregate the whole reconciliation hangs off.
+///
+/// **One open trip per van AND per driver.** `VanTripsDao.dispatchLoad` blocks
+/// locally (the first line of defence, and the only one a single device ever
+/// hits); the cloud's two partial-unique indexes
+/// (`WHERE status = 'open'`, 0162) are the second — two managers loading the
+/// same van from two offline devices both write locally and the loser's push
+/// lands in the existing orphan/reject flow (spec §9.1 #4).
+///
+/// **The close-artifact columns are declared here but written by #145.** They
+/// carry 0 for the whole life of an open trip. Declaring them now is deliberate:
+/// #145 needs no migration of its own, so the reconcile-and-close slice can't
+/// collide with a parallel branch over a schema version number. `recovered_kobo`
+/// is the load-price value actually recovered (remitted + good returns);
+/// `shortage_loss_kobo` / `damage_loss_kobo` are **disclosure** fields at COST
+/// whose value is already inside `cogs_kobo` — any report that subtracts them
+/// again double-counts (spec §6.3).
+@DataClassName('VanTripData')
+class VanTrips extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+
+  /// The van. A `stores` row with `kind = 'van'` (#140).
+  TextColumn get vanStoreId => text().references(Stores, #id)();
+
+  /// The driver — a `users` row holding the seeded Driver role. Deliberately
+  /// NOT the dormant legacy `drivers` table, which is a different axis and is
+  /// left untouched (spec §14).
+  TextColumn get driverUserId => text().references(Users, #id)();
+
+  /// The warehouse this trip loads from. One warehouse per trip in v1, so the
+  /// remittance (#144) and the good-return re-batch (#143) both know where the
+  /// money and the goods belong without a per-lot lookup.
+  TextColumn get sourceStoreId => text().references(Stores, #id)();
+
+  TextColumn get status =>
+      text().withDefault(const Constant(kVanTripStatusOpen))();
+  DateTimeColumn get openedAt => dateTime().withDefault(currentDateAndTime)();
+  TextColumn get openedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get closedAt => dateTime().nullable()();
+  TextColumn get closedBy => text().nullable().references(Users, #id)();
+
+  /// True when the trip closed with a residual the driver still owes (spec
+  /// §9.4 #14) — the residual carries forward on their cross-trip balance.
+  BoolColumn get closedWithBalance =>
+      boolean().withDefault(const Constant(false))();
+
+  /// Empty-crate shell memo counts (spec §11). COUNTING ONLY in v1 — no money,
+  /// no `crate_ledger` writes, no crate-pool balance change. They exist so the
+  /// later crate pass inherits history instead of starting blind.
+  IntColumn get shellsOut => integer().withDefault(const Constant(0))();
+  IntColumn get shellsBack => integer().withDefault(const Constant(0))();
+
+  /// Set when a late-syncing road sale forces a post-close restatement (spec
+  /// §9.4 #15). Written by #145.
+  DateTimeColumn get restatedAt => dateTime().nullable()();
+  TextColumn get restatedReason => text().nullable()();
+
+  // ── Close artifact (written once at close by #145; 0 while open) ──────────
+  IntColumn get cogsKobo => integer().withDefault(const Constant(0))();
+  IntColumn get recoveredKobo => integer().withDefault(const Constant(0))();
+  IntColumn get unremittedKobo => integer().withDefault(const Constant(0))();
+  IntColumn get shortageWriteoffKobo =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get damageWriteoffKobo =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get shortageLossKobo => integer().withDefault(const Constant(0))();
+  IntColumn get damageLossKobo => integer().withDefault(const Constant(0))();
+  IntColumn get profitKobo => integer().withDefault(const Constant(0))();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (status IN ('open','closed'))",
+    'CHECK (shells_out >= 0)',
+    'CHECK (shells_back >= 0)',
+    // A closed trip must carry its close stamp; an open one must not.
+    "CHECK ((status = 'closed' AND closed_at IS NOT NULL) OR "
+        "(status = 'open' AND closed_at IS NULL))",
+  ];
+}
+
+/// A priced FIFO load layer: `(product, quantity, load price, snapshotted unit
+/// cost)` — the unit of BOTH credit valuation and COGS (van-sales spec §4.3).
+///
+/// **The lot snapshot is the van's cost truth** (ADR 0019 decision 1). Dispatch
+/// draws the source warehouse's FIFO cost batches down through
+/// `CostBatchesDao.drawDownOutflow` and stamps `round(drawn / quantity)` here;
+/// **no cost batch is created on the van store**, because that would put the
+/// same goods in two queues and make van COGS depend on the order offline sales
+/// sync. If a dispatch ever writes a lot without drawing the source batches
+/// down, that trip's COGS is silently wrong and nothing downstream catches it —
+/// the dispatch transaction does both or neither.
+///
+/// Lots are **never edited in place** after dispatch except [qtyRemaining],
+/// which only ever decreases through a return event (#143).
+@DataClassName('VanTripLotData')
+class VanTripLots extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get tripId => text().references(VanTrips, #id)();
+  TextColumn get productId => text().references(Products, #id)();
+
+  /// Units dispatched on this line. Immutable.
+  IntColumn get quantity => integer()();
+
+  /// The FIFO draw-down cursor for return credits (#143): a good return credits
+  /// at the OLDEST remaining lot's price first and decrements this.
+  IntColumn get qtyRemaining => integer()();
+
+  /// Per unit — what the driver is accountable for. Defaults to the retail tier
+  /// at the picker and is editable per line before dispatch. The single
+  /// valuation for the whole reconciliation.
+  IntColumn get loadPriceKobo => integer()();
+
+  /// Per unit, **snapshotted at dispatch** from the warehouse's FIFO draw-down.
+  /// `0` ONLY when the source batches were genuinely uncosted — such a lot is
+  /// flagged and flows into the app's existing Uncosted transparency bucket; it
+  /// must never silently become free goods (spec §9.1 #2).
+  IntColumn get unitCostKobo => integer().withDefault(const Constant(0))();
+
+  DateTimeColumn get dispatchedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  /// The **client idempotency key** for the dispatch event that created this
+  /// lot (spec §7.1). One dispatch = one id across all its lines; a retry after
+  /// a timeout or a double-tap re-uses it and the whole write is a no-op —
+  /// never a second ledger debit. The `UNIQUE (dispatch_event_id, product_id)`
+  /// below makes that contract enforceable rather than merely intended.
+  TextColumn get dispatchEventId => text()();
+
+  /// Empty-crate shell memo count for this line (spec §11). Counting only.
+  IntColumn get shellsOut => integer().withDefault(const Constant(0))();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'CHECK (quantity > 0)',
+    'CHECK (qty_remaining >= 0)',
+    'CHECK (qty_remaining <= quantity)',
+    'CHECK (load_price_kobo >= 0)',
+    'CHECK (unit_cost_kobo >= 0)',
+    'CHECK (shells_out >= 0)',
+    // The idempotency contract, enforced: one dispatch event contributes at
+    // most one lot per product (the dispatch collapses duplicate product lines
+    // before writing).
+    'UNIQUE (dispatch_event_id, product_id)',
+  ];
+}
+
+/// The consignment ledger — append-only, signed, cross-trip (van-sales spec
+/// §4.4). Balance = `SUM(signed_amount_kobo)`; **negative = the driver owes**.
+///
+/// Modelled directly on [SupplierLedgerEntries]: in `_ledgerTables` (so it gets
+/// the immutable + no-delete triggers), `scrubCreatedAt: true` in the sync
+/// registry (the cloud owns `created_at`; a void re-push must drop it), and a
+/// void appends an opposite-sign compensating row rather than editing or
+/// deleting the original.
+///
+/// **A sale writes no row here.** That is the invariant that makes the balance
+/// a clean measure of `loaded − returned − paid`: loading debits the driver the
+/// full load-price value ("they signed for the van"), and only returns,
+/// remittances and write-offs credit it back.
+@DataClassName('DriverLedgerEntryData')
+class DriverLedgerEntries extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+
+  /// The balance axis — a driver's balance is CROSS-TRIP, so a residual from a
+  /// closed trip follows them onto the next one.
+  TextColumn get driverUserId => text().references(Users, #id)();
+
+  /// Nullable only for a cross-trip correction; normally set.
+  TextColumn get tripId => text().nullable().references(VanTrips, #id)();
+
+  /// One of [kDriverLedgerTypes] — the EVENT, not the sign.
+  TextColumn get type => text()();
+
+  /// Always >= 0. The sign lives in [signedAmountKobo].
+  IntColumn get amountKobo => integer()();
+
+  /// Debits negative, credits positive. Balance = SUM of this column.
+  IntColumn get signedAmountKobo => integer()();
+
+  /// One of [kDriverLedgerRefTypes] + the causing row's id, so a balance line
+  /// traces back to the lot / return / payment that moved it.
+  TextColumn get referenceType => text()();
+  TextColumn get referenceId => text().nullable()();
+
+  /// Remittance proof (#144), mirroring the supplier payment flow.
+  /// [receiptPath] is a DEVICE-LOCAL file path — the string syncs, the image
+  /// does not.
+  TextColumn get paymentMethod => text().nullable()();
+  TextColumn get receiptPath => text().nullable()();
+  TextColumn get referenceNote => text().nullable()();
+
+  /// Dispatch date (load) | paid-on date (remittance) | recorded date (return).
+  DateTimeColumn get activityDate => dateTime()();
+  TextColumn get performedBy => text().nullable().references(Users, #id)();
+
+  DateTimeColumn get voidedAt => dateTime().nullable()();
+  TextColumn get voidedBy => text().nullable().references(Users, #id)();
+  TextColumn get voidReason => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (type IN ('load','restock','return_good','payment_cash',"
+        "'payment_transfer','shortage_writeoff','damage_writeoff',"
+        "'restatement','void'))",
+    "CHECK (reference_type IN ('van_trip_lot','van_return_event',"
+        "'payment_transaction','van_trip','driver_ledger_entry'))",
+    'CHECK (amount_kobo >= 0)',
+    // The sign invariant: a signed amount is the amount or its negation and
+    // nothing else, so no row can ever contribute a figure the amount doesn't
+    // account for.
+    'CHECK (signed_amount_kobo = amount_kobo OR '
+        'signed_amount_kobo = -amount_kobo)',
+  ];
+}
+
 class CustomerCrateBalances extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
@@ -1892,6 +2200,9 @@ class MigrationEvents extends Table {
     PaymentTransactions,
     StockCounts,
     DailyClosings,
+    VanTrips,
+    VanTripLots,
+    DriverLedgerEntries,
     ActivityLogs,
     ErrorLogs,
     Notifications,
@@ -1922,6 +2233,8 @@ class MigrationEvents extends Table {
     ExpensesDao,
     ExpenseBudgetsDao,
     DailyClosingsDao,
+    VanTripsDao,
+    DriverLedgerDao,
     SyncDao,
     ActivityLogDao,
     ErrorLogDao,
@@ -1991,7 +2304,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 70;
+  int get schemaVersion => 71;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4439,6 +4752,68 @@ class AppDatabase extends _$AppDatabase {
           "VALUES ('van.sell', 'Sell from a van on the road', 'Van Sales')",
         );
       }
+      if (from < 71) {
+        // v71 (#141 Van Sales 2/8 — load a van, PRD #139 / ADR 0019). Mirrors
+        // supabase/migrations/0162_van_sales_trips.sql.
+        //
+        // Three new synced tenant tables:
+        //   · van_trips      — the open→closed trip aggregate. Its close-artifact
+        //                      columns ship NOW though #145 writes them, so the
+        //                      reconcile slice needs no migration of its own.
+        //   · van_trip_lots  — the priced FIFO load layer carrying the cost
+        //                      SNAPSHOT drawn from the source warehouse.
+        //   · driver_ledger_entries — the append-only consignment ledger.
+        //
+        // The (business_id, last_updated_at) sync indexes, the bump triggers and
+        // the driver-ledger append-only triggers are emitted with the SAME SQL
+        // shapes as the generic `_postCreateStatements` loops (the ledger pair
+        // comes from `_ledgerTriggerStatements` itself, so it cannot drift), and
+        // the per-feature indexes come from the shared
+        // `_vanSalesHotPathIndexStatements` list — so a fresh install (onCreate)
+        // and an upgrade end up byte-identical.
+        //
+        // Idempotency guard mirrors v45/v46/v68 so a DB stepped back to < 71 by
+        // the revert-then-re-upgrade tests re-upgrades cleanly.
+        final vanTripsExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='van_trips'",
+        ).get();
+        if (vanTripsExists.isEmpty) {
+          await m.createTable(vanTrips);
+          await m.createTable(vanTripLots);
+          await m.createTable(driverLedgerEntries);
+          for (final t in const [
+            'van_trips',
+            'van_trip_lots',
+            'driver_ledger_entries',
+          ]) {
+            await customStatement(
+              'CREATE INDEX idx_${t}_business_lua '
+              'ON $t (business_id, last_updated_at)',
+            );
+            await customStatement(
+              'CREATE TRIGGER bump_${t}_last_updated_at '
+              'AFTER UPDATE ON $t '
+              'FOR EACH ROW '
+              'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+              'BEGIN '
+              "UPDATE $t SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+              'END',
+            );
+          }
+          for (final stmt in _vanSalesHotPathIndexStatements) {
+            await customStatement(stmt);
+          }
+          // Append-only enforcement on the driver ledger — emitted from the
+          // (unchanged) _ledgerTables entry so the trigger SQL can never drift
+          // between onCreate and this upgrade.
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere((l) => l.table == 'driver_ledger_entries'),
+          )) {
+            await customStatement(stmt);
+          }
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -5028,6 +5403,27 @@ const List<_LedgerImmutability> _ledgerTables = [
     'performed_by',
     'created_at',
   ]),
+  // v71 (#141, van-sales spec §4.4) — the driver consignment ledger. Only the
+  // void columns + last_updated_at may change after insert (same contract as
+  // supplier_ledger_entries, which it is modelled on). A correction is an
+  // opposite-sign compensating row, never an edit.
+  _LedgerImmutability('driver_ledger_entries', [
+    'id',
+    'business_id',
+    'driver_user_id',
+    'trip_id',
+    'type',
+    'amount_kobo',
+    'signed_amount_kobo',
+    'reference_type',
+    'reference_id',
+    'payment_method',
+    'receipt_path',
+    'reference_note',
+    'activity_date',
+    'performed_by',
+    'created_at',
+  ]),
   // v53 (§3.13) — supplier empty-crate ledger. Only the void columns +
   // last_updated_at may change after insert (same contract as crate_ledger).
   _LedgerImmutability('supplier_crate_ledger', [
@@ -5043,6 +5439,31 @@ const List<_LedgerImmutability> _ledgerTables = [
     'performed_by',
     'created_at',
   ]),
+];
+
+/// The van-sales per-feature indexes (#141). Shared verbatim by
+/// `_postCreateStatements` (fresh install) and the v71 upgrade step, so a
+/// device that upgraded and a device that installed clean end up byte-identical
+/// — the thing the schema-audit compares.
+const List<String> _vanSalesHotPathIndexStatements = [
+  // The open-trip probes: `WHERE business_id = ? AND van_store_id = ? AND
+  // status = 'open'` (and the driver-keyed twin). Both run on EVERY dispatch.
+  'CREATE INDEX idx_van_trips_business_van_status '
+      'ON van_trips (business_id, van_store_id, status)',
+  'CREATE INDEX idx_van_trips_business_driver_status '
+      'ON van_trips (business_id, driver_user_id, status)',
+  // Oldest-lot-first scan — the FIFO cursor a good return credits against.
+  'CREATE INDEX idx_van_trip_lots_trip_dispatched '
+      'ON van_trip_lots (trip_id, dispatched_at, id)',
+  // The idempotency probe: "has this dispatch event already been applied?"
+  'CREATE INDEX idx_van_trip_lots_dispatch_event '
+      'ON van_trip_lots (business_id, dispatch_event_id)',
+  // Driver ledger history, newest first (mirrors the supplier ledger's index).
+  'CREATE INDEX idx_driver_ledger_business_driver_time '
+      'ON driver_ledger_entries (business_id, driver_user_id, created_at)',
+  // The per-trip ledger slice #145's close artifact sums.
+  'CREATE INDEX idx_driver_ledger_business_trip '
+      'ON driver_ledger_entries (business_id, trip_id)',
 ];
 
 List<String> get _postCreateStatements {
@@ -5095,6 +5516,11 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_activity_logs_business_time ON activity_logs (business_id, created_at)',
     // v30 (Daily Stock Count) — read counts per store/day for the reconciliation report.
     'CREATE INDEX idx_stock_counts_store_date ON stock_counts (store_id, business_date)',
+    // v71 (#141 Van Sales) — the two open-trip probes the load flow runs before
+    // every dispatch (one open trip per van AND per driver), the lot FIFO
+    // cursor scan, the dispatch idempotency probe, and the driver-balance /
+    // per-trip ledger reads. Kept byte-identical in the v71 upgrade step.
+    ..._vanSalesHotPathIndexStatements,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',

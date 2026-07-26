@@ -1764,6 +1764,88 @@ final vanStoresProvider = Provider<VanStores>((ref) {
   return VanStores.of(all);
 });
 
+// ── Van Sales (#141, PRD #139 / ADR 0019) ───────────────────────────────────
+
+/// The business's vans, for the Van Sales hub's own list.
+///
+/// This is deliberately NOT [selectableStoresProvider]: #140 makes a van
+/// selectable only for a `van.sell` driver explicitly assigned to it, so a
+/// manager loading a van would find it in no picker at all. The hub reaches its
+/// vans through [onlyVans] instead — a manager never *stands on* a van, they
+/// dispatch one.
+final vansProvider = Provider<List<StoreData>>((ref) {
+  final all = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  return onlyVans(all);
+});
+
+/// Every trip currently on the road, newest first. Drives the hub's per-van
+/// state ("out since Tuesday" vs. "at the yard").
+final openVanTripsProvider = businessScopedStream<List<VanTripData>>(
+  (ref, db, businessId) => db.vanTripsDao.watchOpenTrips(),
+  whenAbsent: const [],
+);
+
+/// Every trip (open and closed) for one van, newest first.
+final vanTripsForVanProvider =
+    businessScopedStreamFamily<List<VanTripData>, String>(
+  (ref, db, businessId, vanStoreId) =>
+      db.vanTripsDao.watchTripsForVan(vanStoreId),
+  whenAbsent: const [],
+);
+
+/// One trip's priced load lots, oldest dispatch first — the FIFO order returns
+/// credit against (#143) and close consumes for COGS (#145).
+final vanTripLotsProvider =
+    businessScopedStreamFamily<List<VanTripLotData>, String>(
+  (ref, db, businessId, tripId) => db.vanTripsDao.watchLotsForTrip(tripId),
+  whenAbsent: const [],
+);
+
+/// driverUserId → balance (kobo); **negative = the driver owes**. Drivers with
+/// no ledger rows are absent — render them at 0.
+final driverBalancesProvider = businessScopedStream<Map<String, int>>(
+  (ref, db, businessId) => db.driverLedgerDao.watchAllBalancesKobo(),
+  whenAbsent: const {},
+);
+
+/// One driver's live balance (kobo); negative = they owe.
+final driverBalanceProvider = businessScopedStreamFamily<int, String>(
+  (ref, db, businessId, driverUserId) =>
+      db.driverLedgerDao.watchBalanceKobo(driverUserId),
+  whenAbsent: 0,
+);
+
+/// The business's drivers: active staff whose role slug is `driver` (the role
+/// the cloud seeds per business, 0161). Composed from the existing membership /
+/// role / user providers rather than a new query, so a suspended or removed
+/// driver drops out of the Load Van picker the moment their membership changes.
+///
+/// Ordered by name — a flat list of one role, so the tier ordering that governs
+/// mixed role lists doesn't apply.
+final vanDriversProvider = Provider<List<UserData>>((ref) {
+  final memberships =
+      ref.watch(userBusinessesProvider).valueOrNull ?? const <UserBusinessData>[];
+  final roles = ref.watch(allRolesProvider).valueOrNull ?? const <RoleData>[];
+  final users = ref.watch(usersByBusinessProvider).valueOrNull ??
+      const <String, UserData>{};
+
+  final driverRoleIds = {
+    for (final r in roles)
+      if (r.slug == 'driver') r.id,
+  };
+  if (driverRoleIds.isEmpty) return const [];
+
+  final out = <UserData>[];
+  for (final m in memberships) {
+    if (m.status != 'active') continue;
+    if (!driverRoleIds.contains(m.roleId)) continue;
+    final user = users[m.userId];
+    if (user != null) out.add(user);
+  }
+  out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return out;
+});
+
 /// Display label for the active-store scope (§21.11 supplier accounts and any
 /// other screen that wants to caption the current scope): the locked store's
 /// name, or "All Stores" when nothing is locked.

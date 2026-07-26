@@ -278,6 +278,34 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
     return drawnKobo;
   }
 
+  /// What [drawDownOutflow] WOULD draw for [quantity] units — the same figure,
+  /// with none of the side effects (#141, van-sales spec §9.1 #1).
+  ///
+  /// The load-below-cost warning has to answer "is this price under cost?"
+  /// while the manager is still typing, so it cannot use the real draw-down.
+  /// This runs the identical [fifoDrawDown] over the identical queue and
+  /// touches nothing — no batch decrement, no enqueue, no scalar recompute — so
+  /// the answer is exactly what dispatch will snapshot, and asking it on every
+  /// keystroke is free of consequence.
+  ///
+  /// Returns 0 for a dry or uncosted queue, which is "uncosted", NOT "free":
+  /// callers must distinguish the two (an uncosted load is disclosed
+  /// differently from an underwater one).
+  Future<int> peekOutflowCostKobo(
+    String productId,
+    String storeId,
+    int quantity,
+  ) async {
+    if (quantity <= 0) return 0;
+    final batchRows = await queueFor(productId, storeId);
+    final batches = batchRows
+        .map(
+          (b) => FifoBatch(qtyRemaining: b.qtyRemaining, costKobo: b.costKobo),
+        )
+        .toList(growable: false);
+    return fifoDrawDown(batches, [quantity]).lineCogsKobo.first;
+  }
+
   /// `Products.buyingPriceKobo` is a display cache over the batch queue (ADR
   /// 0005) — re-point it at the cost of the product's oldest remaining
   /// **costed** batch (across stores). Uncosted (cost-0) batches are skipped and
