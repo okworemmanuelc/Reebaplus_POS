@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/van_sales/driver_directory.dart';
 import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 import 'package:reebaplus_pos/shared/models/activity_log.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
@@ -1827,6 +1828,65 @@ final driverBalanceProvider = businessScopedStreamFamily<int, String>(
       db.driverLedgerDao.watchBalanceKobo(driverUserId),
   whenAbsent: 0,
 );
+
+/// One driver's whole ledger, newest first — the driver profile's Ledger tab
+/// (#146). Every load, restock, return, remittance, write-off, restatement and
+/// void as its own signed dated row, so any line can be disputed from the
+/// record (spec §4.4).
+final driverLedgerHistoryProvider =
+    businessScopedStreamFamily<List<DriverLedgerEntryData>, String>(
+      (ref, db, businessId, driverUserId) =>
+          db.driverLedgerDao.watchHistory(driverUserId),
+      whenAbsent: const [],
+    );
+
+/// Every trip ONE driver has run, open and closed, newest first — the driver
+/// profile's Trips tab (#146). Ordered by `opened_at`.
+final driverTripsProvider =
+    businessScopedStreamFamily<List<VanTripData>, String>(
+      (ref, db, businessId, driverUserId) =>
+          db.vanTripsDao.watchTripsForDriver(driverUserId),
+      whenAbsent: const [],
+    );
+
+/// Every road sale ONE driver has rung, across every trip, newest first, with
+/// its lines — the driver profile's Sales tab (#146).
+final driverVanSalesProvider =
+    businessScopedStreamFamily<List<OrderWithItems>, String>(
+      (ref, db, businessId, driverUserId) =>
+          db.vanTripsDao.watchSalesWithItemsForDriver(driverUserId),
+      whenAbsent: const [],
+    );
+
+/// The Drivers list (#146, spec §9.5 #19) — every current driver, plus every
+/// FORMER driver the ledger still has a balance for, badged as removed.
+///
+/// Composed from the existing membership / role / user / balance providers
+/// through the pure [buildDriversList], so the rule that keeps a debt visible
+/// after offboarding is testable without a widget tree — and so it cannot drift
+/// from the guard that stops the offboarding in the first place
+/// (`VanTripsDao.assertDriverOffboardable`).
+final vanDriverEntriesProvider = Provider<List<DriverListEntry>>((ref) {
+  final memberships =
+      ref.watch(userBusinessesProvider).valueOrNull ??
+      const <UserBusinessData>[];
+  final roles = ref.watch(allRolesProvider).valueOrNull ?? const <RoleData>[];
+  final users =
+      ref.watch(usersByBusinessProvider).valueOrNull ??
+      const <String, UserData>{};
+  final balances =
+      ref.watch(driverBalancesProvider).valueOrNull ?? const <String, int>{};
+
+  return buildDriversList(
+    memberships: memberships,
+    driverRoleIds: {
+      for (final r in roles)
+        if (r.slug == 'driver') r.id,
+    },
+    usersById: users,
+    balancesKobo: balances,
+  );
+});
 
 /// One trip by id, live — so a screen tracking a trip sees it close under it
 /// rather than acting on a stale status.

@@ -329,6 +329,115 @@ class VanLegNotCancellableException implements Exception {
   String toString() => message;
 }
 
+/// What stands between a driver and the door (#146, van-sales spec §9.5 #20).
+///
+/// A driver is not an ordinary staff member to offboard: they may be holding
+/// the company's goods on a public road, and they may owe for goods that
+/// already left. Removing them nulls their auth link and drops their
+/// membership — after which no van surface can reach them — so the two facts
+/// have to be checked BEFORE the removal, not discovered after it.
+///
+/// The two are deliberately treated differently:
+///
+///  * an **open trip** is a hard block with no override. There is no
+///    acknowledgement a manager can type that makes a van on the road not be on
+///    the road; the answer is always "reconcile and close it first".
+///  * a **non-zero balance** is overridable, but only deliberately. Somebody has
+///    to look at the figure and say, on the record, that the business is letting
+///    it go (or that it will be chased outside the app). That is
+///    [requiresAcknowledgement].
+///
+/// Note what a removal does NOT do: it never deletes the driver's ledger rows.
+/// The balance survives, which is exactly why the Drivers list keeps showing a
+/// former driver who still owes (spec §9.5 #19) — the two rules are two halves
+/// of one guarantee.
+class DriverOffboardingCheck {
+  final String driverUserId;
+
+  /// The trip they are still out on, or null.
+  final VanTripData? openTrip;
+
+  /// Cross-trip driver-ledger balance, kobo. **Negative = they owe.**
+  final int balanceKobo;
+
+  const DriverOffboardingCheck({
+    required this.driverUserId,
+    required this.openTrip,
+    required this.balanceKobo,
+  });
+
+  bool get hasOpenTrip => openTrip != null;
+  bool get hasBalance => balanceKobo != 0;
+
+  /// True when nothing stands in the way — offboarding proceeds untouched.
+  bool get isClear => !hasOpenTrip && !hasBalance;
+
+  /// True when no acknowledgement can unblock this (an open trip).
+  bool get isHardBlocked => hasOpenTrip;
+
+  /// True when an explicit acknowledgement is the only thing missing.
+  bool get requiresAcknowledgement => !hasOpenTrip && hasBalance;
+
+  /// Plain-English copy, in shop-owner words. Null when [isClear].
+  ///
+  /// [secondPerson] switches the grammar for the self-resign path, where the
+  /// person reading it IS the driver — the same facts, addressed to them.
+  String? message(String driverName, {bool secondPerson = false}) {
+    final who = secondPerson ? 'You' : driverName;
+    final owes = secondPerson ? 'owe' : 'owes';
+    final areStill = secondPerson ? 'are' : 'is';
+    final them = secondPerson ? 'you' : 'them';
+
+    if (hasOpenTrip) {
+      return '$who $areStill still out on a trip. That trip has to be '
+          'reconciled and closed first — the van is carrying stock the '
+          'business still owns.';
+    }
+    if (balanceKobo < 0) {
+      final owed = formatCurrency(-balanceKobo / 100);
+      return secondPerson
+          ? 'You still owe $owed. Hand it in, or ask a manager to write it '
+                'off, before you leave — leaving does not clear it.'
+          : '$who still $owes $owed. Settle it, or write it off, or confirm '
+                'below that you are letting it go — removing $them does not '
+                'clear the debt, it only hides the person.';
+    }
+    if (balanceKobo > 0) {
+      final credit = formatCurrency(balanceKobo / 100);
+      return secondPerson
+          ? 'The business still owes you $credit. Collect it before you leave.'
+          : 'The business owes $who $credit. Pay it out, or confirm below that '
+                'you are removing $them with the credit unpaid.';
+    }
+    return null;
+  }
+}
+
+/// Thrown when a driver cannot be offboarded yet (#146, spec §9.5 #20).
+///
+/// [canAcknowledge] is the difference between "come back later" and "say you
+/// mean it": true for a balance (the caller may retry with the acknowledgement
+/// set), false for an open trip (nothing to retry — go close the trip).
+/// [message] is user-facing copy the caller shows verbatim.
+class DriverOffboardingBlockedException implements Exception {
+  final String driverUserId;
+  final String? openTripId;
+  final int balanceKobo;
+  final bool canAcknowledge;
+  final String message;
+
+  const DriverOffboardingBlockedException({
+    required this.driverUserId,
+    required this.openTripId,
+    required this.balanceKobo,
+    required this.canAcknowledge,
+    required this.message,
+  });
+
+  @override
+  String toString() => message;
+}
+
 /// Van trips and their priced load lots (#141, PRD #139 / ADR 0019).
 ///
 /// Owns the dispatch transaction — the one place where a van load's five
@@ -411,6 +520,130 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
                 OrderingTerm(expression: t.openedAt, mode: OrderingMode.desc),
           ]))
         .watch();
+  }
+
+  /// Every trip (open and closed) ONE DRIVER has run, newest first — the driver
+  /// profile's Trips tab (#146).
+  ///
+  /// Ordered and filtered by `opened_at`, never `closed_at`: a trip belongs to
+  /// the day it went out (spec §4.2), and an open trip has no close date at all.
+  /// A month-straddling run therefore sits in the month it left the yard, which
+  /// is the month its load debit hit the driver's balance.
+  Stream<List<VanTripData>> watchTripsForDriver(String driverUserId) {
+    return (select(vanTrips)
+          ..where((t) => whereBusiness(t) & t.driverUserId.equals(driverUserId))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.openedAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// Every road sale ONE DRIVER has rung, across every trip, newest first —
+  /// the driver profile's Sales tab (#146).
+  ///
+  /// Joined to [VanTrips] rather than filtered on a driver column, because an
+  /// order has none: `orders.van_trip_id` is the only van attribution a sale
+  /// carries (spec §4.6), and the trip is what knows whose run it was. The
+  /// inner join is therefore also the van filter — an untagged order cannot
+  /// reach this list.
+  ///
+  /// Items and products come along so a row can open its receipt without a
+  /// second round trip. The customer is always null by construction: the road
+  /// is walk-in only (no wallet, no credit, no crate balance), so there is no
+  /// customer row to join.
+  Stream<List<OrderWithItems>> watchSalesWithItemsForDriver(
+    String driverUserId,
+  ) {
+    final query =
+        select(orders).join([
+            innerJoin(vanTrips, vanTrips.id.equalsExp(orders.vanTripId)),
+            leftOuterJoin(
+              db.orderItems,
+              db.orderItems.orderId.equalsExp(orders.id),
+            ),
+            leftOuterJoin(
+              db.products,
+              db.products.id.equalsExp(db.orderItems.productId),
+            ),
+          ])
+          ..where(
+            whereBusiness(orders) &
+                vanTrips.driverUserId.equals(driverUserId),
+          )
+          ..orderBy([OrderingTerm.desc(orders.createdAt)]);
+
+    return query.watch().map((rows) {
+      final result = <String, OrderWithItems>{};
+      for (final row in rows) {
+        final order = row.readTable(orders);
+        final item = row.readTableOrNull(db.orderItems);
+        final product = row.readTableOrNull(db.products);
+        result.putIfAbsent(order.id, () => OrderWithItems(order, [], null));
+        if (item != null) {
+          result[order.id]!.items.add(
+            OrderItemDataWithProductData(item, product),
+          );
+        }
+      }
+      return result.values.toList(growable: false);
+    });
+  }
+
+  // ── Offboarding guard (#146, spec §9.5 #20) ──────────────────────────────
+
+  /// The two facts that decide whether [driverUserId] can be offboarded.
+  ///
+  /// Read-only and cheap — one indexed lookup and one SUM — so a UI may call it
+  /// to render the state of the Remove button, and the write path calls it
+  /// again at the boundary. See [DriverOffboardingCheck] for why the open trip
+  /// and the balance are treated differently.
+  Future<DriverOffboardingCheck> checkDriverOffboarding(
+    String driverUserId,
+  ) async {
+    return DriverOffboardingCheck(
+      driverUserId: driverUserId,
+      openTrip: await openTripForDriver(driverUserId),
+      balanceKobo: await db.driverLedgerDao.getBalanceKobo(driverUserId),
+    );
+  }
+
+  /// Throw unless [driverUserId] may be offboarded now (#146, spec §9.5 #20).
+  ///
+  /// **This is the enforcement seam, and it belongs on the write path, not on a
+  /// screen.** `AuthService.removeStaffMember` and `resignOwnMembership` both
+  /// call it before their RPC fires, so the guard cannot be walked around by
+  /// removing the driver from the ordinary Staff screen, or by the driver
+  /// resigning themselves — which would otherwise be the obvious way to make a
+  /// debt disappear.
+  ///
+  /// [acknowledgedBalance] is the manager's deliberate override for a non-zero
+  /// balance only. It can never unblock an open trip: [selfService] callers
+  /// (a driver resigning) may not set it at all, because forgiving your own
+  /// debt is not an acknowledgement, it is the thing the guard exists to stop.
+  ///
+  /// Throws [DriverOffboardingBlockedException]; returns normally when clear.
+  Future<void> assertDriverOffboardable(
+    String driverUserId, {
+    required String driverName,
+    bool acknowledgedBalance = false,
+    bool selfService = false,
+  }) async {
+    final check = await checkDriverOffboarding(driverUserId);
+    if (check.isClear) return;
+    // A driver leaving of their own accord can never acknowledge their own
+    // debt away, whatever the caller passes.
+    if (!selfService && check.requiresAcknowledgement && acknowledgedBalance) {
+      return;
+    }
+
+    throw DriverOffboardingBlockedException(
+      driverUserId: driverUserId,
+      openTripId: check.openTrip?.id,
+      balanceKobo: check.balanceKobo,
+      canAcknowledge: !selfService && check.requiresAcknowledgement,
+      message: check.message(driverName, secondPerson: selfService)!,
+    );
   }
 
   /// Every trip (open and closed) for one van, newest first.

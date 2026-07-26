@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_payments_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart';
@@ -81,10 +82,31 @@ class VanSalesHubScreen extends ConsumerWidget {
                 context.getRSize(20),
                 context.getRSize(20) + context.deviceBottomPadding,
               ),
-              itemCount: vans.length,
+              // +1 for the Drivers link, which sits above the vans: the hub's
+              // axis is the fleet, but the money's axis is the PERSON — a
+              // residual follows the driver, not the van (spec §9.4 #14) — so
+              // the way to a driver's account cannot live behind a van card
+              // that may not even be out.
+              itemCount: vans.length + 1,
               separatorBuilder: (_, _) =>
                   SizedBox(height: context.getRSize(12)),
-              itemBuilder: (context, i) {
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return _DriversLink(
+                    driverCount: ref.watch(vanDriverEntriesProvider).length,
+                    owingCount: ref
+                        .watch(vanDriverEntriesProvider)
+                        .where((d) => d.owes)
+                        .length,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DriversListScreen(),
+                      ),
+                    ),
+                  );
+                }
+                final i = index - 1;
                 final van = vans[i];
                 final trip = tripByVan[van.id];
                 return _VanCard(
@@ -161,6 +183,86 @@ class VanSalesHubScreen extends ConsumerWidget {
                 );
               },
             ),
+    );
+  }
+}
+
+/// The way in to the Drivers list (#146) — who owes what, across every trip.
+class _DriversLink extends StatelessWidget {
+  final int driverCount;
+  final int owingCount;
+  final VoidCallback onTap;
+
+  const _DriversLink({
+    required this.driverCount,
+    required this.owingCount,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final semantic = t.extension<AppSemanticColors>()!;
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: EdgeInsets.all(context.getRSize(16)),
+        decoration: BoxDecoration(
+          color: t.colorScheme.surface.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: t.dividerColor),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: context.getRSize(40),
+              height: context.getRSize(40),
+              decoration: BoxDecoration(
+                color: t.colorScheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                FontAwesomeIcons.userTie.data,
+                color: t.colorScheme.primary,
+                size: context.getRSize(16),
+              ),
+            ),
+            SizedBox(width: context.getRSize(14)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Drivers',
+                    style: t.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(2)),
+                  Text(
+                    driverCount == 0
+                        ? 'Balances, trips and full money history'
+                        : '$driverCount '
+                              '${driverCount == 1 ? 'driver' : 'drivers'}'
+                              '${owingCount == 0 ? ' • all settled' : ' • $owingCount owing'}',
+                    style: t.textTheme.bodySmall?.copyWith(
+                      color: owingCount > 0 ? semantic.warning : subtext,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              FontAwesomeIcons.chevronRight.data,
+              size: context.getRSize(13),
+              color: subtext,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
