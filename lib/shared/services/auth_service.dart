@@ -1194,6 +1194,18 @@ class AuthService extends ValueNotifier<UserData?> {
   /// authoritative writer, the same shape as the delete_business local wipe) so
   /// the member drops out of the active staff list immediately, then schedules a
   /// pull to converge the nulled auth link and any peer state.
+  ///
+  /// **Van-sales offboarding guard (#146, spec §9.5 #20).** Before anything
+  /// else — before the offline check, because the reason matters more than the
+  /// connection — this asserts the target is not still out on a trip and does
+  /// not still carry a driver-ledger balance. A removal nulls their auth link
+  /// and drops the membership, after which no van surface can reach them, so
+  /// the check has to happen here rather than on the screen: this is the only
+  /// path the ordinary Staff screen's Remove button takes, and putting the
+  /// guard behind it is what makes the rule unbypassable.
+  /// [acknowledgedDriverBalance] is the manager's deliberate override for a
+  /// non-zero balance only; an open trip can never be acknowledged away.
+  /// Throws [DriverOffboardingBlockedException] and changes nothing.
   // sync-exempt: §9/#107 — the cloud `remove_staff_member` RPC is the
   // authoritative writer of both the membership status and the auth-link null;
   // the local status mirror reflects a server-already-applied state, so there is
@@ -1202,7 +1214,15 @@ class AuthService extends ValueNotifier<UserData?> {
     required String businessId,
     required String userId,
     required String membershipId,
+    String driverName = 'This driver',
+    bool acknowledgedDriverBalance = false,
   }) async {
+    await _db.vanTripsDao.assertDriverOffboardable(
+      userId,
+      driverName: driverName,
+      acknowledgedBalance: acknowledgedDriverBalance,
+    );
+
     // Block offline up front — removal must be server-confirmed before anything
     // local changes (mirrors [deleteBusinessAndAccount]); never queue it blindly.
     if (!_sync.isOnline.value) {
@@ -1468,6 +1488,13 @@ class AuthService extends ValueNotifier<UserData?> {
   ///
   /// Online-only (like [removeStaffMember] / [deleteBusinessAndAccount]): throws
   /// [StaffResignException] WITHOUT changing local state when offline.
+  ///
+  /// **Van-sales offboarding guard (#146, spec §9.5 #20).** A self-resign is
+  /// the other door out of the business, so it carries the same check — with no
+  /// acknowledgement argument at all. A manager may deliberately let a debt go;
+  /// the person who owes it may not (spec §9.5 #21 is the same principle: a
+  /// driver has no surface that settles their own account). Throws
+  /// [DriverOffboardingBlockedException] and changes nothing.
   // sync-exempt: #117 — the cloud `resign_own_membership` RPC is the
   // authoritative writer of both the membership status and the auth-link null;
   // the local wipe / picker-drop mirrors a server-already-applied state, so there
@@ -1476,6 +1503,12 @@ class AuthService extends ValueNotifier<UserData?> {
     final user = value;
     if (user == null) return;
     final businessId = user.businessId;
+
+    await _db.vanTripsDao.assertDriverOffboardable(
+      user.id,
+      driverName: user.name,
+      selfService: true,
+    );
 
     // Block offline up front — the resign is server-authoritative and the gate
     // must push before we detach; never queue it blindly.

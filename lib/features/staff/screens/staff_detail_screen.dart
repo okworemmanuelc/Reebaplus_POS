@@ -419,33 +419,145 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     );
     if (confirmed != true) return;
 
-    try {
-      await ref.read(authProvider).removeStaffMember(
-            businessId: membership.businessId,
-            userId: membership.userId,
-            membershipId: membership.id,
+    // §9.5 #20 (#146) — a driver may be holding the company's goods on a road,
+    // or owing for goods that already left. `removeStaffMember` runs the guard
+    // itself (it is the only path this button takes, so the rule cannot be
+    // walked around); this loop is what turns an overridable block into a
+    // deliberate, typed decision rather than a dead end.
+    var acknowledgedBalance = false;
+    while (true) {
+      try {
+        await ref
+            .read(authProvider)
+            .removeStaffMember(
+              businessId: membership.businessId,
+              userId: membership.userId,
+              membershipId: membership.id,
+              driverName: user.name,
+              acknowledgedDriverBalance: acknowledgedBalance,
+            );
+        break;
+      } on DriverOffboardingBlockedException catch (e) {
+        if (!mounted) return;
+        if (!e.canAcknowledge) {
+          // An open trip. Nothing to type — go and close it.
+          AppNotification.showError(context, e.message);
+          return;
+        }
+        final acked = await _acknowledgeDriverBalance(user, e);
+        if (acked != true) return;
+        acknowledgedBalance = true;
+        if (!mounted) return;
+        continue;
+      } on StaffRemoveException catch (e) {
+        if (mounted) AppNotification.showError(context, e.message);
+        return;
+      } catch (_) {
+        if (mounted) {
+          AppNotification.showError(
+            context,
+            'Could not remove this staff member. Please try again.',
           );
+        }
+        return;
+      }
+    }
+
+    // The removal is server-confirmed from here on. A failing audit log must
+    // not be reported as a failed removal.
+    try {
       final db = ref.read(databaseProvider);
       await db.activityLogDao.log(
         action: 'staff.remove',
-        description: 'Removed staff member ${user.name}',
+        description: acknowledgedBalance
+            ? 'Removed staff member ${user.name} with an unsettled driver '
+                  'balance (acknowledged)'
+            : 'Removed staff member ${user.name}',
         staffId: currentUser?.id,
       );
-      if (!mounted) return;
-      // The membership is now `removed` and drops out of the active staff list,
-      // so this detail screen would render "not found" — return to the list.
-      Navigator.of(context).pop();
-      AppNotification.showSuccess(context, '${user.name} removed.');
-    } on StaffRemoveException catch (e) {
-      if (mounted) AppNotification.showError(context, e.message);
     } catch (_) {
-      if (mounted) {
-        AppNotification.showError(
-          context,
-          'Could not remove this staff member. Please try again.',
-        );
-      }
+      // swallowed deliberately — see above
     }
+    if (!mounted) return;
+    // The membership is now `removed` and drops out of the active staff list,
+    // so this detail screen would render "not found" — return to the list.
+    Navigator.of(context).pop();
+    AppNotification.showSuccess(context, '${user.name} removed.');
+  }
+
+  /// §9.5 #20 (#146) — the typed acknowledgement that lets a manager remove a
+  /// driver who still has money on their account.
+  ///
+  /// Typed, not tapped, and it asks for the driver's own NAME: the point is to
+  /// make the decision impossible to make by accident, and to put the person it
+  /// is about in front of the manager while they make it. The dialog states the
+  /// exact figure and is explicit that removing them changes nothing about the
+  /// debt — the ledger keeps every row, and the Drivers list keeps showing them,
+  /// badged, until it is settled or written off (spec §9.5 #19).
+  Future<bool?> _acknowledgeDriverBalance(
+    UserData user,
+    DriverOffboardingBlockedException blocked,
+  ) {
+    final controller = TextEditingController();
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final matches =
+                controller.text.trim().toLowerCase() ==
+                user.name.trim().toLowerCase();
+            return AlertDialog(
+              backgroundColor: theme.colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text('Money still on this account'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(blocked.message, style: theme.textTheme.bodyMedium),
+                  SizedBox(height: context.getRSize(12)),
+                  Text(
+                    'Removing them does not clear it. Every entry stays on the '
+                    'record and they keep showing on the Drivers list, marked '
+                    'as removed, until it is settled or written off.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.hintColor,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(16)),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Type ${user.name} to confirm',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: matches ? () => Navigator.pop(ctx, true) : null,
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                  ),
+                  child: const Text('Remove anyway'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   /// One-line summary of the staff member's assigned stores for the header pill.

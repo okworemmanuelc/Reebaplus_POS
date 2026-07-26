@@ -227,6 +227,11 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
             // the price the driver signed for (spec §5.1 / §9.2 #9 — anything
             // the driver charges above it is off-book by design in v1).
             'unitPriceKobo': prices[entry.key] ?? 0,
+            // #146: the receipt surfaces (`ReceiptWidget` and the thermal
+            // builder) both read `price`, in NAIRA. Without it the on-screen
+            // receipt printed every line at zero and the thermal builder threw
+            // on a null cast — a road sale could not be printed at all.
+            'price': (prices[entry.key] ?? 0) / 100.0,
           },
       ];
       final totalKobo = cart.fold<int>(
