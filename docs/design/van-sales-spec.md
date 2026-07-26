@@ -359,7 +359,7 @@ balance          = −loadedValue + goodReturnValue + remitted + writtenOff
 shortageUnits    = loaded − sold − goodReturned − damaged      (per product)
 shortageValue    = Σ shortageUnits × the load price they were loaded at (FIFO)
 damageValue      = Σ damaged qty × its lot's load price
-unremittedCash   = soldValue − remitted                        (floored at 0)
+unremittedCash   = soldValue − remitted
 
 outstanding      = unremittedCash + shortageValue + damageValue − writtenOff
 ```
@@ -367,12 +367,43 @@ outstanding      = unremittedCash + shortageValue + damageValue − writtenOff
 **Tie-out invariant**: `outstanding == −balance`. The fixture suite asserts this
 on every constructed case; if the two ever disagree the function is wrong.
 
+#### The fixed draw order (implementation, #145)
+
+The identities above silently assume **one load price per product per run**.
+A restock at a new price breaks that assumption, so the implemented function
+pins a **fixed FIFO draw order**: units leave a trip's lots as **returns first**
+(both conditions), **then sales**, **then the shortage takes the tail**. That
+makes `loaded = goodReturns + damage + sold + shortage` true *by construction*,
+per product and in total, so the tie-out stays exact even when a mid-run restock
+repriced a product.
+
+A consequence worth naming: `soldValue` is the **accountability** value at load
+price, which is not necessarily what the terminal rang. What was actually rung
+is carried separately as `rungValue` and shown on the reconcile screen — the gap
+is the driver's off-book street markup (§9.2 #9), which v1 does not capture.
+
+#### The three-way split is a waterfall
+
+`unremittedCash` is **not** simply `soldValue − remitted` floored at zero.
+Remitted cash is applied as a waterfall — **road takings first, then damage,
+then shortage** — and a *typed* write-off hits its own bucket, with any excess
+joining the pool. Over-payment surfaces as `residualCredit`. The full identity is:
+
+```
+outstanding = unremitted + damage + shortage − residualCredit == −balance
+```
+
+which stays exact in the cases a naive floor-at-zero silently breaks: a driver
+who over-remits, and a write-off larger than the bucket it names.
+
 ### 6.2 What it also returns
 
 - per-product shortage lines (units + value + the lot prices they draw from),
 - `cogsKobo` = Σ consumed lot units × lot unit cost,
 - `shortageLossKobo` / `damageLossKobo` at **cost** (the P&L legs),
 - `profitKobo` = recovered − COGS − written-off losses at cost,
+- `rungValue` (what the terminal actually took) alongside `soldValue`,
+- `residualCredit` (over-payment),
 - `shellsOut` / `shellsBack` and the difference,
 - `isSettled` (balance == 0).
 
