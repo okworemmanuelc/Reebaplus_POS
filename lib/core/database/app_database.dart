@@ -1412,6 +1412,25 @@ class Orders extends Table {
   TextColumn get confirmedBy => text().nullable().references(Users, #id)();
   IntColumn get crateDepositPaidKobo =>
       integer().withDefault(const Constant(0))();
+
+  /// The van trip this order was rung on (#142, van-sales spec §4.6).
+  ///
+  /// NULL on every ordinary store sale — which is the overwhelming majority of
+  /// rows and the reason this is a nullable tag rather than a join table. It is
+  /// set by [OrdersDao.createOrder] itself, derived from the sale's store, so a
+  /// road sale cannot be written untagged by a caller that forgot.
+  ///
+  /// The tag is what makes van revenue *attributable* — #145's close artifact
+  /// and #147's aggregated "Van Sales" line both scan it. The **exclusion** of
+  /// van orders from per-store figures deliberately does NOT key on it: that
+  /// keys on the store being a van (`VanStores`, #140), because the store is
+  /// the physical fact and the tag is bookkeeping. A report that filtered on
+  /// the tag alone would leak any sale whose tag failed to be written.
+  ///
+  /// `VanTrips` is declared after this table, but drift topologically sorts
+  /// `allSchemaEntities` by FK dependency so `createAll()` emits `van_trips`
+  /// first (the same note `PaymentTransactions.vanTripId` carries).
+  TextColumn get vanTripId => text().nullable().references(VanTrips, #id)();
   DateTimeColumn get completedAt => dateTime().nullable()();
   DateTimeColumn get cancelledAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -2353,7 +2372,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 72;
+  int get schemaVersion => 73;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4973,6 +4992,37 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(stmt);
         }
       }
+
+      if (from < 73) {
+        // ── v73 — Van Sales 3/8: the trip tag on orders (#142, spec §4.6) ──
+        //
+        // `orders` gains ONE nullable column, `van_trip_id`. That is the whole
+        // schema half of the driver terminal: a road sale is an ordinary order
+        // on an ordinary (van) store, and the tag is what later attributes its
+        // revenue to a trip (#145's close artifact, #147's aggregated line).
+        //
+        // Nullable + additive, and `orders` carries no CHECK that mentions it,
+        // so this is a plain ADD COLUMN — no table rebuild (unlike v72's
+        // payment_transactions, whose exactly-one-parent CHECK had to widen).
+        // Every existing order stays NULL, which is exactly right: they were
+        // rung in a shop.
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69/v70/v72 so a DB stepped
+        // back to < 73 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        final hasOrderVanTripId = await customSelect(
+          "SELECT 1 FROM pragma_table_info('orders') "
+          "WHERE name = 'van_trip_id'",
+        ).get();
+        if (hasOrderVanTripId.isEmpty) {
+          await m.addColumn(orders, orders.vanTripId);
+        }
+        // Emitted from the shared `_vanOrderTagIndexStatements` list so a fresh
+        // install and an upgraded device end up byte-identical.
+        await customStatement('DROP INDEX IF EXISTS idx_orders_van_trip');
+        for (final stmt in _vanOrderTagIndexStatements) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -5641,6 +5691,18 @@ const List<String> _vanRemittanceIndexStatements = [
       'ON payment_transactions (business_id, van_trip_id)',
 ];
 
+/// The trip-tagged-order index (#142). Kept out of the two lists above for the
+/// same reason [_vanRemittanceIndexStatements] is kept out of
+/// [_vanSalesHotPathIndexStatements]: those lists are replayed by the v71/v72
+/// upgrade steps, which run BEFORE `orders.van_trip_id` exists. Shared verbatim
+/// by `_postCreateStatements` (fresh install) and the v73 upgrade step, so
+/// onCreate == upgrade — the thing the schema audit compares.
+const List<String> _vanOrderTagIndexStatements = [
+  // A trip's road sales: #145's close artifact sums them, #147's aggregated
+  // "Van Sales" line scans them by period. Both key on the tag.
+  'CREATE INDEX idx_orders_van_trip ON orders (business_id, van_trip_id)',
+];
+
 List<String> get _postCreateStatements {
   final stmts = <String>[];
 
@@ -5698,6 +5760,8 @@ List<String> get _postCreateStatements {
     ..._vanSalesHotPathIndexStatements,
     // v72 (#144 Van Sales) — the remittance payment rows keyed by trip.
     ..._vanRemittanceIndexStatements,
+    // v73 (#142 Van Sales) — road sales keyed by the trip that rang them.
+    ..._vanOrderTagIndexStatements,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',

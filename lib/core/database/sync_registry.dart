@@ -766,10 +766,67 @@ final List<SyncedTable> kSyncRegistry = [
     // Root table (no parent) — NON-resilient, matching historical behaviour.
     restore: Restore.plain((db) => db.customers, CustomerData.fromJson),
   ),
+  // #141 (PRD #139, ADR 0019) — Van Sales. Three tables, in FK order among
+  // themselves: the trip, then its lots, then the ledger rows that reference
+  // both. Their other parents (stores, users, products) are all pulled earlier.
+  //
+  // They sit HERE, ahead of `orders` and `payment_transactions`, because both of
+  // those now carry a `van_trip_id` FK — `payment_transactions` since #144 (the
+  // remittance) and `orders` since #142 (the trip tag). This list is the pull
+  // order, and a child pulled before its parent fails the FK; `orders` and
+  // `payment_transactions` restore RESILIENTLY, so the failure would not be an
+  // error — it would silently DROP a money row on every restore. Trips must
+  // therefore land first.
+  //
+  // van_trips is mutated after insert (the close artifact, #145) so it is a
+  // plain resilient upsert; van_trip_lots are immutable except `qty_remaining`
+  // (the return cursor, #143), likewise a plain upsert. Neither is ever
+  // hard-deleted.
+  SyncedTable(
+    name: 'van_trips',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.vanTrips,
+      VanTripData.fromJson,
+      resilient: true,
+    ),
+  ),
+  SyncedTable(
+    name: 'van_trip_lots',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.vanTripLots,
+      VanTripLotData.fromJson,
+      resilient: true,
+    ),
+  ),
+  // The consignment ledger: append-only, void-by-compensating-row, so the
+  // ledger restore (catch-up insert + targeted void update) and the
+  // `created_at` scrub — the cloud owns created_at and a void re-push that
+  // carried it would trip the immutable-column trigger (P0001) and orphan the
+  // row. See [[project_ledger_void_created_at_scrub]].
+  SyncedTable(
+    name: 'driver_ledger_entries',
+    tenantScoped: true,
+    scrubCreatedAt: true,
+    restore: Restore.ledger(
+      (db) => db.driverLedgerEntries,
+      DriverLedgerEntryData.fromJson,
+      (d) => d.voidedAt,
+      (t, d) => t.id.equals(d.id) & t.voidedAt.isNull(),
+      (d) => DriverLedgerEntriesCompanion(
+        voidedAt: Value(d.voidedAt),
+        voidedBy: Value(d.voidedBy),
+        voidReason: Value(d.voidReason),
+        lastUpdatedAt: Value(d.lastUpdatedAt),
+      ),
+    ),
+  ),
   const SyncedTable(
     name: 'orders',
     tenantScoped: true,
-    // Resilient + §30.8.1 legacy order-number collision heal.
+    // Resilient + §30.8.1 legacy order-number collision heal. FK → van_trips
+    // since #142's trip tag, which is why the van block above precedes this one.
     restore: _restoreOrders,
   ),
   SyncedTable(
@@ -1179,55 +1236,6 @@ final List<SyncedTable> kSyncRegistry = [
     name: 'daily_closings',
     tenantScoped: true,
     restore: _restoreDailyClosings,
-  ),
-  // #141 (PRD #139, ADR 0019) — Van Sales. Three tables, in FK order among
-  // themselves: the trip, then its lots, then the ledger rows that reference
-  // both. Their other parents (stores, users, products) are all pulled far
-  // earlier in this list.
-  //
-  // van_trips is mutated after insert (the close artifact, #145) so it is a
-  // plain resilient upsert; van_trip_lots are immutable except `qty_remaining`
-  // (the return cursor, #143), likewise a plain upsert. Neither is ever
-  // hard-deleted.
-  SyncedTable(
-    name: 'van_trips',
-    tenantScoped: true,
-    restore: Restore.plain(
-      (db) => db.vanTrips,
-      VanTripData.fromJson,
-      resilient: true,
-    ),
-  ),
-  SyncedTable(
-    name: 'van_trip_lots',
-    tenantScoped: true,
-    restore: Restore.plain(
-      (db) => db.vanTripLots,
-      VanTripLotData.fromJson,
-      resilient: true,
-    ),
-  ),
-  // The consignment ledger: append-only, void-by-compensating-row, so the
-  // ledger restore (catch-up insert + targeted void update) and the
-  // `created_at` scrub — the cloud owns created_at and a void re-push that
-  // carried it would trip the immutable-column trigger (P0001) and orphan the
-  // row. See [[project_ledger_void_created_at_scrub]].
-  SyncedTable(
-    name: 'driver_ledger_entries',
-    tenantScoped: true,
-    scrubCreatedAt: true,
-    restore: Restore.ledger(
-      (db) => db.driverLedgerEntries,
-      DriverLedgerEntryData.fromJson,
-      (d) => d.voidedAt,
-      (t, d) => t.id.equals(d.id) & t.voidedAt.isNull(),
-      (d) => DriverLedgerEntriesCompanion(
-        voidedAt: Value(d.voidedAt),
-        voidedBy: Value(d.voidedBy),
-        voidReason: Value(d.voidReason),
-        lastUpdatedAt: Value(d.lastUpdatedAt),
-      ),
-    ),
   ),
   SyncedTable(
     name: 'sessions',

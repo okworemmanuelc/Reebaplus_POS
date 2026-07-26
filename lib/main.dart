@@ -32,6 +32,7 @@ import 'package:reebaplus_pos/features/auth/membership_status_reaction.dart';
 import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/screens/driver_terminal_screen.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
 
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
@@ -657,6 +658,9 @@ class _HomeRouter extends ConsumerWidget {
       subAccess: subAccess,
       subBusiness: subBusiness,
       subThanks: subThanks,
+      // #142 — resolved here (in `build`) so the router rebuilds when the
+      // driver's permissions land, rather than reading a stale one-shot.
+      isDriverTerminal: ref.watch(driverTerminalActiveProvider),
     );
 
     return AnimatedSwitcher(
@@ -677,6 +681,7 @@ class _HomeRouter extends ConsumerWidget {
     required SubscriptionAccess subAccess,
     required BusinessData? subBusiness,
     required SubscriptionThanksService subThanks,
+    required bool isDriverTerminal,
   }) {
     if (user == null) {
       // Still reading SharedPreferences — show branded splash.
@@ -752,6 +757,20 @@ class _HomeRouter extends ConsumerWidget {
     }
     if (subBusiness != null && subThanks.shouldCelebrate(subBusiness)) {
       return ThankYouSubscriptionScreen(business: subBusiness);
+    }
+
+    // #142 (PRD #139 / ADR 0019, van-sales spec §9.2) — a DRIVER never sees the
+    // shop. They get the stripped terminal INSTEAD of [MainLayout], not a mode
+    // of it: that is what makes "no store picker, no registered customer, no
+    // credit, no discount, no crate surfaces" structural rather than a set of
+    // hidden widgets someone can un-hide. It also means a driver cannot reach
+    // Load Van, the reconcile screen or Record Payment — there is no drawer and
+    // no tab bar to reach them from, on top of `Gates.vanManage` refusing them.
+    //
+    // Placed AFTER the subscription gate deliberately: a locked business locks
+    // for everyone, drivers included.
+    if (isDriverTerminal) {
+      return const DriverTerminalScreen();
     }
 
     return const MainLayout();

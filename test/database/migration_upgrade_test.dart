@@ -2034,4 +2034,136 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v72 → v73 (the trip tag on orders, #142)', () {
+    Future<bool> objectExists(AppDatabase db, String type, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='$type' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test('adds orders.van_trip_id + its index; existing shop orders survive '
+        'and stay NULL', () async {
+      final biz = UuidV7.generate();
+      final legacyOrderId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+
+      // Revert the v73 delta: drop the column and its index. `orders` carries
+      // no CHECK mentioning van_trip_id, so unlike v72's payment_transactions
+      // this is a plain DROP COLUMN — no table rebuild either way.
+      await db1.customStatement('DROP INDEX IF EXISTS idx_orders_van_trip');
+      await db1.customStatement('ALTER TABLE orders DROP COLUMN van_trip_id');
+      expect(
+        (await columnsOf(db1, 'orders')).contains('van_trip_id'),
+        isFalse,
+      );
+
+      // A pre-existing shop order on the reverted table — it was rung in a
+      // shop, so NULL is the right answer for it after the upgrade.
+      await db1.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-000001-AAAAAA', 250000, 250000, 'cash', 'completed')",
+        [legacyOrderId, biz],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 72');
+      await db1.close();
+
+      // Re-open → onUpgrade(72 → 73).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect((await columnsOf(db2, 'orders')).contains('van_trip_id'), isTrue);
+      expect(
+        await objectExists(db2, 'index', 'idx_orders_van_trip'),
+        isTrue,
+        reason: '#145 sums a trip\'s road sales and #147 scans them by period; '
+            'both key on this index',
+      );
+
+      final legacy = await db2
+          .customSelect(
+            'SELECT van_trip_id FROM orders WHERE id = ?',
+            variables: [Variable<String>(legacyOrderId)],
+          )
+          .getSingle();
+      expect(legacy.data['van_trip_id'], isNull);
+
+      // And the column really accepts a trip, so #145/#147 have something to
+      // read. (FKs are on, so this also proves van_trips exists first.)
+      final vanId = UuidV7.generate();
+      final driverId = UuidV7.generate();
+      final tripId = UuidV7.generate();
+      final roadOrderId = UuidV7.generate();
+      await db2.customStatement(
+        "INSERT INTO stores (id, business_id, name, kind) "
+        "VALUES (?, ?, 'Van 1', 'van')",
+        [vanId, biz],
+      );
+      await db2.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Driver Dan', '0000')",
+        [driverId, biz],
+      );
+      await db2.customStatement(
+        'INSERT INTO van_trips (id, business_id, van_store_id, driver_user_id, '
+        'source_store_id) VALUES (?, ?, ?, ?, ?)',
+        [tripId, biz, vanId, driverId, vanId],
+      );
+      await db2.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status, store_id, van_trip_id) '
+        "VALUES (?, ?, 'ORD-000002-BBBBBB', 690000, 690000, 'cash', "
+        "'pending', ?, ?)",
+        [roadOrderId, biz, vanId, tripId],
+      );
+      final road = await db2
+          .customSelect(
+            'SELECT van_trip_id FROM orders WHERE id = ?',
+            variables: [Variable<String>(roadOrderId)],
+          )
+          .getSingle();
+      expect(road.data['van_trip_id'], tripId);
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT revert the column — just step user_version back, so the v73
+      // block runs against a schema that already has van_trip_id. The addColumn
+      // guard must skip and the index must be re-emitted, losing nothing.
+      final biz = UuidV7.generate();
+      final orderId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-000003-CCCCCC', 100000, 100000, 'cash', 'completed')",
+        [orderId, biz],
+      );
+      await db1.customStatement('PRAGMA user_version = 72');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect((await columnsOf(db2, 'orders')).contains('van_trip_id'), isTrue);
+      final rows = await db2.customSelect('SELECT id FROM orders').get();
+      expect(rows.map((r) => r.read<String>('id')), [orderId]);
+      expect(await objectExists(db2, 'index', 'idx_orders_van_trip'), isTrue);
+    });
+  });
 }

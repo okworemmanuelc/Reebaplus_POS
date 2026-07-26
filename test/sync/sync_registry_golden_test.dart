@@ -56,6 +56,19 @@ void main() {
     'inventory',
     'cost_batches',
     'customers',
+    // #141 Van Sales: the trip, then its priced load lots, then the ledger rows
+    // that reference both (FK-safe among themselves; stores/users/products are
+    // pulled far earlier).
+    //
+    // #142 MOVED this block from after `daily_closings` to HERE, ahead of
+    // `orders` and `payment_transactions`. Both of those now carry a
+    // `van_trip_id` FK — payment_transactions since #144's remittance, orders
+    // since #142's trip tag — and both restore RESILIENTLY, so a trip arriving
+    // after its child would not raise: it would silently DROP a money row on
+    // every restore. Parents first.
+    'van_trips',
+    'van_trip_lots',
+    'driver_ledger_entries',
     'orders',
     'order_items',
     'order_crate_lines',
@@ -91,12 +104,6 @@ void main() {
     'stock_counts',
     // #174: persisted day close — one snapshot per (business, calendar day).
     'daily_closings',
-    // #141 Van Sales: the trip, then its priced load lots, then the ledger rows
-    // that reference both (FK-safe among themselves; stores/users/products are
-    // pulled far earlier).
-    'van_trips',
-    'van_trip_lots',
-    'driver_ledger_entries',
     'sessions',
     'settings',
   ];
