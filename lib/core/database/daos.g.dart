@@ -1408,6 +1408,7 @@ mixin _$VanTripsDaoMixin on DatabaseAccessor<AppDatabase> {
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ProductsTable get products => attachedDatabase.products;
   $VanTripLotsTable get vanTripLots => attachedDatabase.vanTripLots;
+  $VanReturnEventsTable get vanReturnEvents => attachedDatabase.vanReturnEvents;
   $DriverLedgerEntriesTable get driverLedgerEntries =>
       attachedDatabase.driverLedgerEntries;
   $CustomersTable get customers => attachedDatabase.customers;
@@ -1453,6 +1454,11 @@ class VanTripsDaoManager {
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
   $$VanTripLotsTableTableManager get vanTripLots =>
       $$VanTripLotsTableTableManager(_db.attachedDatabase, _db.vanTripLots);
+  $$VanReturnEventsTableTableManager get vanReturnEvents =>
+      $$VanReturnEventsTableTableManager(
+        _db.attachedDatabase,
+        _db.vanReturnEvents,
+      );
   $$DriverLedgerEntriesTableTableManager get driverLedgerEntries =>
       $$DriverLedgerEntriesTableTableManager(
         _db.attachedDatabase,

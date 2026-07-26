@@ -2166,4 +2166,210 @@ void main() {
       expect(await objectExists(db2, 'index', 'idx_orders_van_trip'), isTrue);
     });
   });
+
+  group('onUpgrade v73 → v74 (van return events, #143)', () {
+    Future<bool> objectExists(AppDatabase db, String type, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='$type' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    /// Reverts the v74 delta: drop the whole table (its indexes and trigger go
+    /// with it). `van_return_events` is a leaf — nothing references it — so no
+    /// other table needs rebuilding, unlike v72's payment_transactions.
+    Future<void> dropReturnEvents(AppDatabase db) async {
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      await db.customStatement('DROP TABLE IF EXISTS van_return_events');
+      await db.customStatement('PRAGMA foreign_keys = ON');
+    }
+
+    test('creates van_return_events with its indexes, bump trigger and money '
+        'CHECKs; existing van data survives', () async {
+      final biz = UuidV7.generate();
+      final vanId = UuidV7.generate();
+      final driverId = UuidV7.generate();
+      final tripId = UuidV7.generate();
+      final productId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO stores (id, business_id, name, kind) "
+        "VALUES (?, ?, 'Van 1', 'van')",
+        [vanId, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Driver Dan', '0000')",
+        [driverId, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO products (id, business_id, name) VALUES (?, ?, 'Star')",
+        [productId, biz],
+      );
+      // A trip written BEFORE the upgrade — it must survive untouched.
+      await db1.customStatement(
+        'INSERT INTO van_trips (id, business_id, van_store_id, driver_user_id, '
+        'source_store_id) VALUES (?, ?, ?, ?, ?)',
+        [tripId, biz, vanId, driverId, vanId],
+      );
+
+      await dropReturnEvents(db1);
+      await db1.customStatement('PRAGMA user_version = 73');
+      await db1.close();
+
+      // Re-open → onUpgrade(73 → 74).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(await objectExists(db2, 'table', 'van_return_events'), isTrue);
+      expect(
+        await columnsOf(db2, 'van_return_events'),
+        containsAll(<String>{
+          'id',
+          'business_id',
+          'trip_id',
+          'product_id',
+          'quantity',
+          'condition',
+          'credit_kobo',
+          'cost_kobo',
+          'shells_back',
+          'crate_shells',
+          'recorded_at',
+          'recorded_by',
+          'created_at',
+          'last_updated_at',
+        }),
+      );
+      // The incremental-pull cursor index + the two per-feature ones + the bump
+      // trigger — all emitted from the same shapes onCreate uses.
+      for (final idx in const [
+        'idx_van_return_events_business_lua',
+        'idx_van_return_events_trip_recorded',
+        'idx_van_return_events_business_trip_condition',
+      ]) {
+        expect(await objectExists(db2, 'index', idx), isTrue, reason: idx);
+      }
+      expect(
+        await objectExists(
+          db2,
+          'trigger',
+          'bump_van_return_events_last_updated_at',
+        ),
+        isTrue,
+      );
+
+      // The pre-existing trip is intact.
+      final trip = await db2
+          .customSelect(
+            'SELECT status FROM van_trips WHERE id = ?',
+            variables: [Variable<String>(tripId)],
+          )
+          .getSingle();
+      expect(trip.data['status'], 'open');
+
+      // A good return writes fine…
+      await db2.customStatement(
+        'INSERT INTO van_return_events (id, business_id, trip_id, product_id, '
+        "quantity, condition, credit_kobo, cost_kobo) "
+        "VALUES (?, ?, ?, ?, 45, 'good', 517500, 450000)",
+        [UuidV7.generate(), biz, tripId, productId],
+      );
+      // …and §5.5's rule is IN THE SCHEMA: a damaged row can never carry a
+      // credit, whatever a future client tries to write.
+      await expectLater(
+        db2.customStatement(
+          'INSERT INTO van_return_events (id, business_id, trip_id, '
+          "product_id, quantity, condition, credit_kobo) "
+          "VALUES (?, ?, ?, ?, 3, 'damaged', 34500)",
+          [UuidV7.generate(), biz, tripId, productId],
+        ),
+        throwsA(anything),
+      );
+      // A damaged row with no credit is fine.
+      await db2.customStatement(
+        'INSERT INTO van_return_events (id, business_id, trip_id, product_id, '
+        "quantity, condition, cost_kobo) "
+        "VALUES (?, ?, ?, ?, 3, 'damaged', 30000)",
+        [UuidV7.generate(), biz, tripId, productId],
+      );
+      final rows = await db2
+          .customSelect('SELECT COUNT(*) AS c FROM van_return_events')
+          .getSingle();
+      expect(rows.read<int>('c'), 2);
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT drop the table — just step user_version back, so the v74 block
+      // runs against a schema that already has it. The guard must skip the
+      // createTable and the indexes must be re-emitted, losing no rows.
+      final biz = UuidV7.generate();
+      final vanId = UuidV7.generate();
+      final driverId = UuidV7.generate();
+      final tripId = UuidV7.generate();
+      final productId = UuidV7.generate();
+      final eventId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO stores (id, business_id, name, kind) "
+        "VALUES (?, ?, 'Van 1', 'van')",
+        [vanId, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Driver Dan', '0000')",
+        [driverId, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO products (id, business_id, name) VALUES (?, ?, 'Star')",
+        [productId, biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO van_trips (id, business_id, van_store_id, driver_user_id, '
+        'source_store_id) VALUES (?, ?, ?, ?, ?)',
+        [tripId, biz, vanId, driverId, vanId],
+      );
+      await db1.customStatement(
+        'INSERT INTO van_return_events (id, business_id, trip_id, product_id, '
+        "quantity, condition, credit_kobo, cost_kobo) "
+        "VALUES (?, ?, ?, ?, 10, 'good', 50000, 10000)",
+        [eventId, biz, tripId, productId],
+      );
+      await db1.customStatement('PRAGMA user_version = 73');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final rows = await db2
+          .customSelect('SELECT id FROM van_return_events')
+          .get();
+      expect(rows.map((r) => r.read<String>('id')), [eventId]);
+      expect(
+        await objectExists(db2, 'index', 'idx_van_return_events_trip_recorded'),
+        isTrue,
+      );
+      expect(
+        await objectExists(
+          db2,
+          'index',
+          'idx_van_return_events_business_trip_condition',
+        ),
+        isTrue,
+      );
+    });
+  });
 }

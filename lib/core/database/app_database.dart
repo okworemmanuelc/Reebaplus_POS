@@ -753,6 +753,36 @@ const String kPaymentTypeVanRemittance = 'van_remittance';
 /// "Cash from drivers" honestly cash-only (#147).
 const List<String> kVanRemittanceMethods = ['cash', 'transfer', 'pos', 'other'];
 
+/// `van_return_events.condition` — the physical state the goods came back in
+/// (#143, van-sales spec §4.5). The two conditions are **different money
+/// events**, not two labels for one:
+///
+///  * [kVanReturnConditionGood] — the units re-enter sellable warehouse stock
+///    carrying the cost they left with, and the driver is CREDITED at the load
+///    price of the lots the return draws down (FIFO, oldest first).
+///  * [kVanReturnConditionDamaged] — no credit (the driver stays liable), the
+///    units never re-enter sellable stock, and the company loss is booked at the
+///    **snapshotted cost**, not the load price: the business lost the goods, not
+///    the margin it never earned (spec §5.5).
+const String kVanReturnConditionGood = 'good';
+const String kVanReturnConditionDamaged = 'damaged';
+
+/// The closed set `van_return_events.condition` may hold. Mirrors the cloud
+/// CHECK.
+const List<String> kVanReturnConditions = [
+  kVanReturnConditionGood,
+  kVanReturnConditionDamaged,
+];
+
+/// The `stock_adjustments.reason` a damaged van return stamps (#143).
+///
+/// Shaped `damage:<key>` so it lands in the app's existing damages roll-up
+/// (`isDamageReason`, which matches the `damage` prefix) rather than inventing a
+/// parallel loss class. A stable machine key, not a display label, so a report
+/// can find these rows exactly — the same convention
+/// `InventoryDao.productDeletedReason` follows.
+const String kVanReturnDamageReason = 'damage:van_return';
+
 /// One van run: `open → closed`, referencing van + driver + source warehouse
 /// (van-sales spec §4.2). The aggregate the whole reconciliation hangs off.
 ///
@@ -913,6 +943,86 @@ class VanTripLots extends Table {
     // most one lot per product (the dispatch collapses duplicate product lines
     // before writing).
     'UNIQUE (dispatch_event_id, product_id)',
+  ];
+}
+
+/// One dated drop-off of goods coming back off a van (#143, van-sales spec
+/// §4.5). Partial or final; a trip may have any number of them.
+///
+/// **The two conditions are different money events.** A `good` return draws the
+/// trip's lots down oldest-first, CREDITS the driver at those lots' load prices,
+/// restores the units to sellable warehouse stock, and re-batches the warehouse
+/// at each drawn lot's SNAPSHOTTED cost — so the goods re-enter carrying the
+/// cost they left with and their next sale books real COGS instead of zero
+/// (ADR 0019 decision 1). A `damaged` return credits NOTHING (the driver stays
+/// liable at load price), never re-enters sellable stock, and books the company
+/// loss at that same snapshotted cost — booking load price would overstate the
+/// loss by a margin the business never earned (spec §5.5).
+///
+/// [creditKobo] and [costKobo] are therefore both **written once, from the lot
+/// snapshots**, never re-derived: #145's close artifact and #147's rollup read
+/// them, and a later cost-price edit must not be able to restate a settled
+/// return.
+@DataClassName('VanReturnEventData')
+class VanReturnEvents extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get tripId => text().references(VanTrips, #id)();
+  TextColumn get productId => text().references(Products, #id)();
+
+  /// Units coming back, as the manager PHYSICALLY COUNTED them. The return form
+  /// never pre-fills a system-derived figure (spec §7.3): with unsynced driver
+  /// sales in flight, "everything the system thinks is left" turns those sales
+  /// into over-returns and misstates the shortage.
+  IntColumn get quantity => integer()();
+
+  /// One of [kVanReturnConditions].
+  TextColumn get condition => text()();
+
+  /// The load-price value credited to the driver — the FIFO sum over the lot
+  /// segments this return consumed (`Σ segment units × that lot's load price`).
+  /// **Always 0 for a damaged return**, enforced by the CHECK below.
+  IntColumn get creditKobo => integer().withDefault(const Constant(0))();
+
+  /// The SNAPSHOTTED cost basis drawn from the same lot segments
+  /// (`Σ segment units × that lot's unit_cost_kobo`). For a good return it is
+  /// what the warehouse re-batches at; for a damaged one it is the company loss.
+  /// 0 only when the consumed lots were themselves uncosted.
+  IntColumn get costKobo => integer().withDefault(const Constant(0))();
+
+  /// Empty-crate shells coming back with this line (spec §11). COUNTING ONLY —
+  /// no deposit money, no crate-pool write.
+  IntColumn get shellsBack => integer().withDefault(const Constant(0))();
+
+  /// Write-only seam for the later crate pass (#207 / Van Sales v2): the crate
+  /// cargo count that carries deposit liability, as distinct from the swap-only
+  /// shell memo above. **No UI writes it in v1** — it exists so the crate pass
+  /// can backfill liability from real history instead of starting blind. Null
+  /// means "never captured", which is deliberately different from 0.
+  IntColumn get crateShells => integer().nullable()();
+
+  DateTimeColumn get recordedAt => dateTime().withDefault(currentDateAndTime)();
+  TextColumn get recordedBy => text().nullable().references(Users, #id)();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'CHECK (quantity > 0)',
+    "CHECK (condition IN ('good','damaged'))",
+    'CHECK (credit_kobo >= 0)',
+    'CHECK (cost_kobo >= 0)',
+    'CHECK (shells_back >= 0)',
+    'CHECK (crate_shells IS NULL OR crate_shells >= 0)',
+    // §5.5, in the schema: a damaged return can never carry a credit. The
+    // driver stays liable for damaged goods, and no code path may quietly
+    // forgive that by writing a non-zero credit on a damaged row.
+    "CHECK (condition = 'good' OR credit_kobo = 0)",
   ];
 }
 
@@ -2270,6 +2380,7 @@ class MigrationEvents extends Table {
     DailyClosings,
     VanTrips,
     VanTripLots,
+    VanReturnEvents,
     DriverLedgerEntries,
     ActivityLogs,
     ErrorLogs,
@@ -2372,7 +2483,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 73;
+  int get schemaVersion => 74;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5023,6 +5134,65 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(stmt);
         }
       }
+
+      if (from < 74) {
+        // ── v74 — Van Sales 4/8: restocks & returns (#143, spec §4.5) ───────
+        //
+        // ONE new synced tenant table, `van_return_events`: a dated drop-off of
+        // goods coming back off a van. It carries BOTH money legs of a return,
+        // each written once from the lot snapshots — `credit_kobo` (the FIFO
+        // load-price value credited to the driver; 0 for damaged, enforced by a
+        // CHECK) and `cost_kobo` (the snapshotted basis the warehouse re-batches
+        // at, or the company loss for damaged goods).
+        //
+        // The RESTOCK half of this slice needs no schema at all: it is the same
+        // dispatch #141 already writes, against an already-open trip, typed
+        // `restock` in the (already fully-declared) driver-ledger type CHECK.
+        // That is the point of declaring the whole enum in v71 — no append-only
+        // ledger rebuild ships here.
+        //
+        // Mirrors supabase/migrations/0165_van_sales_returns.sql. The LUA index
+        // and the bump trigger are emitted with the SAME SQL shapes as the
+        // generic `_postCreateStatements` loops, and the per-feature indexes
+        // come from the shared `_vanReturnIndexStatements` list, so a fresh
+        // install (onCreate) and an upgraded device end up byte-identical — the
+        // thing the schema audit compares.
+        //
+        // Idempotency guard mirrors v45/v46/v68/v71 so a DB stepped back to
+        // < 74 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        final vanReturnsExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='van_return_events'",
+        ).get();
+        if (vanReturnsExists.isEmpty) {
+          await m.createTable(vanReturnEvents);
+          await customStatement(
+            'CREATE INDEX idx_van_return_events_business_lua '
+            'ON van_return_events (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_van_return_events_last_updated_at '
+            'AFTER UPDATE ON van_return_events '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE van_return_events SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+        // Emitted OUTSIDE the guard (v72/v73's shape) so a device stepped back
+        // to < 74 with the table already present still re-emits them and loses
+        // nothing.
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_van_return_events_trip_recorded',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_van_return_events_business_trip_condition',
+        );
+        for (final stmt in _vanReturnIndexStatements) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -5703,6 +5873,22 @@ const List<String> _vanOrderTagIndexStatements = [
   'CREATE INDEX idx_orders_van_trip ON orders (business_id, van_trip_id)',
 ];
 
+/// The van-return indexes (#143). Kept out of the three lists above for the
+/// same reason those are kept apart: each is replayed by an EARLIER upgrade
+/// step, which runs before `van_return_events` exists. Shared verbatim by
+/// `_postCreateStatements` (fresh install) and the v74 upgrade step, so
+/// onCreate == upgrade — the thing the schema audit compares.
+const List<String> _vanReturnIndexStatements = [
+  // A trip's returns in the order they were recorded — the reconcile screen's
+  // list (#145) and the running "what came back" figure both scan this.
+  'CREATE INDEX idx_van_return_events_trip_recorded '
+      'ON van_return_events (trip_id, recorded_at)',
+  // #145's close artifact splits the trip's returns by condition: good returns
+  // are half of `recovered_kobo`, damaged ones are the damage-loss disclosure.
+  'CREATE INDEX idx_van_return_events_business_trip_condition '
+      'ON van_return_events (business_id, trip_id, condition)',
+];
+
 List<String> get _postCreateStatements {
   final stmts = <String>[];
 
@@ -5762,6 +5948,8 @@ List<String> get _postCreateStatements {
     ..._vanRemittanceIndexStatements,
     // v73 (#142 Van Sales) — road sales keyed by the trip that rang them.
     ..._vanOrderTagIndexStatements,
+    // v74 (#143 Van Sales) — a trip's returns, by time and by condition.
+    ..._vanReturnIndexStatements,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',

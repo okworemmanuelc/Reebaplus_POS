@@ -166,6 +166,153 @@ class VanSaleContext {
   const VanSaleContext.van(this.tripId) : isVanSale = true;
 }
 
+/// One line of a return, as the manager **physically counted it** (#143,
+/// van-sales spec §4.5 / §7.3).
+///
+/// There is deliberately no "everything that's left" convenience anywhere near
+/// this class. With unsynced driver sales in flight, a system-derived default
+/// turns those sales into over-returns and misstates the shortage — so the count
+/// is typed, and [VanTripsDao.recordReturn] blocks anything above what is still
+/// out (spec §9.3 #11).
+class VanReturnLine {
+  final String productId;
+
+  /// Units physically counted back in. Must be > 0.
+  final int quantity;
+
+  /// One of [kVanReturnConditions]. `good` credits the driver and restores
+  /// sellable warehouse stock; `damaged` credits NOTHING and books a loss.
+  final String condition;
+
+  /// Empty-crate shells coming back with this line (spec §11 — counting only).
+  final int shellsBack;
+
+  /// Write-only seam for the later crate pass — no UI sets it in v1. Null means
+  /// "never captured", deliberately different from 0.
+  final int? crateShells;
+
+  /// The **client idempotency key** for this line: the `van_return_events.id`
+  /// the row will be written under. Minted ONCE by the caller (when the form
+  /// row is created) and re-used across every retry, so a double-tap or a retry
+  /// after the app was killed mid-write re-uses it and the whole call becomes a
+  /// no-op — never a second credit.
+  ///
+  /// The row's own primary key doubles as the key, so returns need no extra
+  /// column to be replay-safe. Null (the test/ad-hoc path) mints a fresh id and
+  /// gives up the guarantee.
+  final String? eventId;
+
+  const VanReturnLine({
+    required this.productId,
+    required this.quantity,
+    required this.condition,
+    this.shellsBack = 0,
+    this.crateShells,
+    this.eventId,
+  });
+
+  bool get isGood => condition == kVanReturnConditionGood;
+}
+
+/// One lot segment a return consumed — the per-lot record #145 reads.
+///
+/// A return that spans two lots at different costs produces TWO segments, and
+/// both the credit and the warehouse re-batch are computed per segment at that
+/// segment's own figures. Never a blended average (spec §5.2): blending would
+/// put units back into the warehouse queue at a cost they never had, and the
+/// error would only surface as a wrong margin on some later sale.
+class VanLotConsumption {
+  final String lotId;
+  final String productId;
+
+  /// Units drawn from THIS lot.
+  final int quantity;
+
+  /// That lot's load price (the credit basis for a good return).
+  final int loadPriceKobo;
+
+  /// That lot's snapshotted unit cost (the re-batch basis for a good return,
+  /// the loss basis for a damaged one).
+  final int unitCostKobo;
+
+  const VanLotConsumption({
+    required this.lotId,
+    required this.productId,
+    required this.quantity,
+    required this.loadPriceKobo,
+    required this.unitCostKobo,
+  });
+
+  int get creditKobo => quantity * loadPriceKobo;
+  int get costKobo => quantity * unitCostKobo;
+}
+
+/// What recording a return did — or, on an idempotent replay, what it had
+/// already done (#143).
+class VanReturnResult {
+  final String tripId;
+
+  /// The `van_return_events` rows written (one per line), in the caller's line
+  /// order.
+  final List<VanReturnEventData> events;
+
+  /// The lot segments the whole return consumed, oldest lot first. Exposed
+  /// because the per-lot detail is not recoverable from the event rows alone —
+  /// #145's reconcile screen shows which prices a credit drew from.
+  final List<VanLotConsumption> consumed;
+
+  /// Total driver-ledger credit posted (good lines only; damaged credit 0).
+  final int totalCreditKobo;
+
+  /// Total snapshotted cost basis drawn, across BOTH conditions.
+  final int totalCostKobo;
+
+  /// The driver's cross-trip balance AFTER the credits. Negative = still owes.
+  final int driverBalanceKoboAfter;
+
+  /// True when this call found the lines' ids already written and did NOTHING.
+  final bool alreadyApplied;
+
+  const VanReturnResult({
+    required this.tripId,
+    required this.events,
+    required this.consumed,
+    required this.totalCreditKobo,
+    required this.totalCostKobo,
+    required this.driverBalanceKoboAfter,
+    required this.alreadyApplied,
+  });
+}
+
+/// Thrown when a return would send back more of a product than is still out on
+/// the trip (van-sales spec §9.3 #11).
+///
+/// This is the teeth behind the forced physical count: without the block, a
+/// mistyped count silently over-credits the driver and manufactures stock the
+/// warehouse never received. [message] is user-facing copy — the caller shows it
+/// verbatim.
+class VanOverReturnException implements Exception {
+  final String productId;
+
+  /// What the manager typed.
+  final int requested;
+
+  /// What is still out on the trip for that product.
+  final int stillOut;
+
+  final String message;
+
+  const VanOverReturnException({
+    required this.productId,
+    required this.requested,
+    required this.stillOut,
+    required this.message,
+  });
+
+  @override
+  String toString() => message;
+}
+
 /// Thrown when the generic stock-transfer cancel is pointed at a van leg
 /// (van-sales spec §7.2).
 ///
@@ -195,6 +342,7 @@ class VanLegNotCancellableException implements Exception {
   tables: [
     VanTrips,
     VanTripLots,
+    VanReturnEvents,
     DriverLedgerEntries,
     Stores,
     PaymentTransactions,
@@ -365,6 +513,32 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
 
   /// [lotsForTrip] is already ordered oldest dispatch first, so the FIRST lot
   /// seen for a product is the oldest and `putIfAbsent` keeps it.
+  ///
+  /// **Decision (#143, the open question #142 flagged): `qty_remaining` does NOT
+  /// feed this lookup.** Now that returns move the cursor, the road price could
+  /// have been made to skip exhausted lots — "price off the oldest lot that
+  /// still has units on it". It deliberately does not, for three reasons:
+  ///
+  ///  1. *The price is a promise, not a derived figure.* The driver signed for a
+  ///     price at the tailgate. Skipping exhausted lots would let a MANAGER's
+  ///     return entry, recorded on a different device, silently re-price the
+  ///     driver's terminal mid-route — a price change nobody on the road asked
+  ///     for and nobody can see coming.
+  ///  2. *There is no physical fact to anchor it.* Units on a van are fungible.
+  ///     `qty_remaining` says which lot a RETURN CREDIT drew from (a valuation
+  ///     rule), not which crates are still on the shelf. Pricing off it would be
+  ///     reading a bookkeeping cursor as a physical inventory.
+  ///  3. *It would make the tie-out order-dependent.* `soldValue` and
+  ///     `loadedValue` are only comparable (spec §6.1) if one product has one
+  ///     road price for the whole run. A price that moves whenever a return
+  ///     lands makes the same unit worth different amounts depending on when the
+  ///     manager typed the count.
+  ///
+  /// Consequence, stated plainly: if the oldest lot is fully returned and only a
+  /// restock at a NEW price is still on board, the driver keeps selling at the
+  /// old price for the rest of the run. That is stable and explainable — and it
+  /// is the same rule the credit side uses — where a jumping price would be
+  /// neither.
   Map<String, int> _pricesFromLots(List<VanTripLotData> lots) {
     final prices = <String, int>{};
     for (final lot in lots) {
@@ -766,6 +940,627 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       shellsOut: totalShells,
       uncostedProductIds: uncosted,
     );
+  }
+
+  // ── Restock (#143, spec §7 "OPEN · restock") ──────────────────────────────
+
+  /// Load more goods onto an **already-open** trip — the mid-run reload.
+  ///
+  /// A restock is not a different kind of event from a load; it is the SAME
+  /// dispatch against a trip that already exists. It therefore runs through the
+  /// very same [_dispatchLinesOnto] seam — batch draw-down, cost snapshot onto
+  /// a fresh priced lot, warehouse → van move, driver-ledger debit, shell memo —
+  /// with only the ledger [kDriverLedgerTypeRestock] type telling the two apart
+  /// in history. #141 factored that seam out for exactly this reason: a restock
+  /// must not be able to grow a second, subtly different dispatch path that
+  /// forgets (say) the cost snapshot and silently zeroes the trip's COGS.
+  ///
+  /// Each restock is **its own dated event** — a new lot at a possibly new
+  /// price, never a mutation of an existing one (spec §4.3: lots are never
+  /// edited in place except `qty_remaining`). A trip may take any number.
+  ///
+  /// The goods come from the trip's own `source_store_id`: v1 is one warehouse
+  /// per trip (spec §4.2), which is what lets the good-return re-batch and the
+  /// remittance both know where things belong without a per-lot lookup.
+  ///
+  /// **Idempotent on [dispatchEventId]**, identically to [dispatchLoad] — mint
+  /// the key once, before the first attempt, and re-use it across retries.
+  ///
+  /// Throws [StateError] when the trip does not exist, [VanTripNotOpenException]
+  /// when it is already closed (a closed trip is never edited in place, spec
+  /// §9.4 #16), [ArgumentError] on a degenerate load, and
+  /// [InsufficientStockException] when the warehouse cannot cover a line — in
+  /// which case NOTHING is written.
+  Future<VanDispatchResult> restockTrip({
+    required String tripId,
+    required List<VanLoadLine> lines,
+    required String performedBy,
+    required String dispatchEventId,
+    DateTime? dispatchedAt,
+  }) async {
+    final merged = _collapseLines(lines);
+    if (merged.isEmpty) {
+      throw ArgumentError('A restock needs at least one line with a quantity.');
+    }
+
+    // Idempotency probe outside the transaction, same as [dispatchLoad]: the
+    // common replay is a retry of a call that already committed, and it should
+    // cost one indexed read rather than a transaction.
+    final replay = await _existingDispatch(dispatchEventId);
+    if (replay != null) return replay;
+
+    final now = dispatchedAt ?? DateTime.now();
+
+    return transaction(() async {
+      final raced = await _existingDispatch(dispatchEventId);
+      if (raced != null) return raced;
+
+      final trip = await getTrip(tripId);
+      if (trip == null) throw StateError('Trip $tripId not found.');
+      if (trip.status != kVanTripStatusOpen) {
+        throw VanTripNotOpenException(
+          tripId: tripId,
+          message:
+              'This trip is already closed. Load the driver\'s next trip '
+              'instead.',
+        );
+      }
+
+      final applied = await _dispatchLinesOnto(
+        tripId: tripId,
+        vanStoreId: trip.vanStoreId,
+        driverUserId: trip.driverUserId,
+        sourceStoreId: trip.sourceStoreId,
+        lines: merged,
+        performedBy: performedBy,
+        dispatchEventId: dispatchEventId,
+        entryType: kDriverLedgerTypeRestock,
+        now: now,
+      );
+
+      // The shell memo ACCUMULATES onto the trip — a restock adds shells, it
+      // does not restate the run's total.
+      await (update(vanTrips)
+            ..where((t) => t.id.equals(tripId) & whereBusiness(t)))
+          .write(
+            VanTripsCompanion(
+              shellsOut: Value(trip.shellsOut + applied.shellsOut),
+              lastUpdatedAt: Value(DateTime.now()),
+            ),
+          );
+      final tripRow = await (select(
+        vanTrips,
+      )..where((t) => t.id.equals(tripId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert('van_trips', tripRow.toCompanion(true));
+
+      await db.activityLogDao.logActivity(
+        action: 'van.restock',
+        description:
+            'Van restocked with '
+            '${formatCurrency(applied.totalLoadValueKobo / 100)} of goods',
+        staffId: performedBy,
+        storeId: trip.sourceStoreId,
+        entityType: 'van_trip',
+        entityId: tripId,
+      );
+
+      return VanDispatchResult(
+        tripId: tripId,
+        dispatchEventId: dispatchEventId,
+        alreadyApplied: false,
+        lots: applied.lots,
+        totalLoadValueKobo: applied.totalLoadValueKobo,
+        uncostedProductIds: applied.uncostedProductIds,
+      );
+    });
+  }
+
+  // ── Returns (#143, spec §4.5 / §5.2 / §5.5 / §7.3 / §9.3) ─────────────────
+
+  /// Every return recorded on [tripId], oldest first.
+  Future<List<VanReturnEventData>> returnsForTrip(String tripId) {
+    return (select(vanReturnEvents)
+          ..where((r) => whereBusiness(r) & r.tripId.equals(tripId))
+          ..orderBy([
+            (r) => OrderingTerm(expression: r.recordedAt),
+            (r) => OrderingTerm(expression: r.id),
+          ]))
+        .get();
+  }
+
+  /// Live [returnsForTrip] — newest first, for the on-screen list.
+  Stream<List<VanReturnEventData>> watchReturnsForTrip(String tripId) {
+    return (select(vanReturnEvents)
+          ..where((r) => whereBusiness(r) & r.tripId.equals(tripId))
+          ..orderBy([
+            (r) =>
+                OrderingTerm(expression: r.recordedAt, mode: OrderingMode.desc),
+            (r) => OrderingTerm(expression: r.id, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// The COST the whole trip was loaded with — `Σ lot.quantity ×
+  /// lot.unit_cost_kobo`, at the snapshots taken when each lot drove off.
+  ///
+  /// **This is half of #145's COGS.** The other half is the good returns:
+  ///
+  /// ```
+  /// cogs_kobo = loadedCostKoboForTrip(trip)
+  ///           − (returnTotalsForTrip(trip).goodCostKobo)
+  /// ```
+  ///
+  /// which is exactly spec §5.2's `Σ consumed lot units × that lot's unit cost`
+  /// with `consumed = loaded − good returns`, computed per lot rather than
+  /// blended — because each good return's `cost_kobo` is itself the per-segment
+  /// sum of the lots it actually drew. Damaged units stay INSIDE `consumed`
+  /// (the business lost them), so their cost is already in COGS and
+  /// `damage_loss_kobo` is a disclosure figure, never a second subtraction
+  /// (spec §6.3's double-count guard).
+  Future<int> loadedCostKoboForTrip(String tripId) async {
+    final lots = await lotsForTrip(tripId);
+    var total = 0;
+    for (final lot in lots) {
+      total += lot.quantity * lot.unitCostKobo;
+    }
+    return total;
+  }
+
+  /// The trip's returns rolled up the way #145 and #147 need them.
+  ///
+  /// Split by condition because the two are different money events: good returns
+  /// are half of `recovered_kobo` (the other half is remittances) and reduce
+  /// COGS; damaged ones recover nothing and are the `damage_loss_kobo`
+  /// disclosure at cost.
+  Future<
+    ({
+      int goodUnits,
+      int goodCreditKobo,
+      int goodCostKobo,
+      int damagedUnits,
+      int damagedCostKobo,
+      int shellsBack,
+    })
+  >
+  returnTotalsForTrip(String tripId) async {
+    final rows = await returnsForTrip(tripId);
+    var goodUnits = 0;
+    var goodCredit = 0;
+    var goodCost = 0;
+    var damagedUnits = 0;
+    var damagedCost = 0;
+    var shells = 0;
+    for (final r in rows) {
+      shells += r.shellsBack;
+      if (r.condition == kVanReturnConditionGood) {
+        goodUnits += r.quantity;
+        goodCredit += r.creditKobo;
+        goodCost += r.costKobo;
+      } else {
+        damagedUnits += r.quantity;
+        damagedCost += r.costKobo;
+      }
+    }
+    return (
+      goodUnits: goodUnits,
+      goodCreditKobo: goodCredit,
+      goodCostKobo: goodCost,
+      damagedUnits: damagedUnits,
+      damagedCostKobo: damagedCost,
+      shellsBack: shells,
+    );
+  }
+
+  /// productId → units still out on [tripId] (`Σ qty_remaining`).
+  ///
+  /// **The over-return CEILING, never a suggested quantity.** The return form
+  /// must not pre-fill from this — with unsynced driver sales in flight it is
+  /// "what the system thinks is left", which is precisely the figure spec §7.3
+  /// forbids putting in front of a manager. It exists so [recordReturn] can
+  /// reject a count above what physically went out, and so an error message can
+  /// say by how much.
+  Future<Map<String, int>> unitsStillOutForTrip(String tripId) async {
+    final lots = await lotsForTrip(tripId);
+    final out = <String, int>{};
+    for (final lot in lots) {
+      out[lot.productId] = (out[lot.productId] ?? 0) + lot.qtyRemaining;
+    }
+    return out;
+  }
+
+  /// Record goods coming back off a van — **one transaction for every leg**
+  /// (#143, van-sales spec §4.5 / §5.2 / §5.5).
+  ///
+  /// Per line, the trip's lots for that product are drawn down **oldest lot
+  /// first** ([VanTripLots.qtyRemaining] is that cursor) and split into
+  /// [VanLotConsumption] segments. Then, by condition:
+  ///
+  /// **Good** — the money-critical path:
+  ///  1. the driver is CREDITED `Σ segment units × that segment's LOAD PRICE`
+  ///     (spec §9.3 #10 — an item loaded twice at two prices credits at the
+  ///     oldest lot's price first),
+  ///  2. the units go straight back into **sellable** warehouse stock, and
+  ///  3. the warehouse is re-batched **one cost batch PER SEGMENT, each at that
+  ///     segment's own snapshotted `unit_cost_kobo`** — never a blended average.
+  ///     This step is what makes those units' next sale book real COGS instead
+  ///     of zero: without it the goods re-enter cost-less and every later sale
+  ///     of them shows pure margin (ADR 0019 decision 1).
+  ///
+  /// **Damaged** — deliberately asymmetric:
+  ///  * **no credit at all** (`credit_kobo == 0`, enforced by the table CHECK):
+  ///    the driver signed for these goods and still owes for them,
+  ///  * the units **never re-enter sellable stock** — they leave the van and
+  ///    stop there, and
+  ///  * the company loss is booked through the app's existing damage-adjustment
+  ///    pattern at the **snapshotted cost, not the load price** (spec §5.5).
+  ///    Booking load price would overstate the loss by a margin the business
+  ///    never earned. The van store holds no cost batches by design, so the
+  ///    basis is handed to `adjustStock` explicitly rather than drawn from a
+  ///    queue that would answer 0.
+  ///
+  /// Returning **more than is still out** is rejected with
+  /// [VanOverReturnException] and nothing is written (spec §9.3 #11). That block
+  /// is what makes the forced physical count a real control rather than a
+  /// formality.
+  ///
+  /// Idempotent when every line carries a [VanReturnLine.eventId]: the row's own
+  /// primary key is the key, so a retry finds the ids already written and
+  /// returns the original result without crediting twice.
+  ///
+  /// Throws [StateError] when the trip is missing, [VanTripNotOpenException]
+  /// when it is closed (spec §9.3 #13 — a return after close is impossible;
+  /// corrections are compensating ledger entries), and [ArgumentError] on an
+  /// empty/degenerate return or an unknown condition.
+  Future<VanReturnResult> recordReturn({
+    required String tripId,
+    required List<VanReturnLine> lines,
+    required String performedBy,
+    DateTime? recordedAt,
+  }) async {
+    final merged = _collapseReturnLines(lines);
+    if (merged.isEmpty) {
+      throw ArgumentError('A return needs at least one line with a quantity.');
+    }
+
+    final replay = await _existingReturn(tripId, merged);
+    if (replay != null) return replay;
+
+    final now = recordedAt ?? DateTime.now();
+
+    return transaction(() async {
+      final raced = await _existingReturn(tripId, merged);
+      if (raced != null) return raced;
+
+      final trip = await getTrip(tripId);
+      if (trip == null) throw StateError('Trip $tripId not found.');
+      if (trip.status != kVanTripStatusOpen) {
+        throw VanTripNotOpenException(
+          tripId: tripId,
+          message:
+              'This trip is already closed, so nothing can be returned '
+              'against it.',
+        );
+      }
+
+      final events = <VanReturnEventData>[];
+      final consumedAll = <VanLotConsumption>[];
+      var totalCredit = 0;
+      var totalCost = 0;
+      var totalShells = 0;
+
+      for (final line in merged) {
+        // 1. Draw this trip's lots for the product down, OLDEST FIRST. Both
+        //    conditions draw: a damaged unit is off the van too, and its cost
+        //    basis is a lot snapshot exactly like a good one's. Leaving the
+        //    cursor untouched for damage would let the same units be returned
+        //    again as "good" and credited a second time.
+        final segments = await _drawLotsForReturn(
+          tripId: tripId,
+          productId: line.productId,
+          quantity: line.quantity,
+          now: now,
+        );
+        consumedAll.addAll(segments);
+
+        final creditKobo = line.isGood
+            ? segments.fold<int>(0, (sum, s) => sum + s.creditKobo)
+            : 0;
+        final costKobo = segments.fold<int>(0, (sum, s) => sum + s.costKobo);
+
+        // 2. The event row — both money legs written ONCE from the snapshots,
+        //    so a later cost edit can never restate a settled return.
+        final eventId = line.eventId ?? UuidV7.generate();
+        final event = VanReturnEventsCompanion.insert(
+          id: Value(eventId),
+          businessId: requireBusinessId(),
+          tripId: tripId,
+          productId: line.productId,
+          quantity: line.quantity,
+          condition: line.condition,
+          creditKobo: Value(creditKobo),
+          costKobo: Value(costKobo),
+          shellsBack: Value(line.shellsBack),
+          crateShells: Value(line.crateShells),
+          recordedAt: Value(now),
+          recordedBy: Value(performedBy),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await into(vanReturnEvents).insert(event);
+        await db.syncDao.enqueueUpsert('van_return_events', event);
+
+        if (line.isGood) {
+          // 3. Off the van, into SELLABLE warehouse stock — immediately. Both
+          //    legs `trackCost: false`: the van has no queue to draw, and the
+          //    warehouse's inflow is re-batched per segment below, at the costs
+          //    the goods left with (a generic inflow would create ONE batch at
+          //    cost 0 and undo the whole point).
+          await db.inventoryDao.adjustStock(
+            line.productId,
+            trip.vanStoreId,
+            -line.quantity,
+            'Van return — off the van',
+            performedBy,
+            movementType: 'transfer_out',
+            trackCost: false,
+          );
+          // The reason deliberately avoids the word "received": this leg lands
+          // on the WAREHOUSE, which IS inside every per-store figure, and
+          // `isReceiptReason` would file it under "Goods received" — inflating
+          // purchases with goods that were only ever moved. (#141's van-side
+          // leg can say "received" safely because a van store is excluded.)
+          await db.inventoryDao.adjustStock(
+            line.productId,
+            trip.sourceStoreId,
+            line.quantity,
+            'Van return — back in stock',
+            performedBy,
+            movementType: 'transfer_in',
+            trackCost: false,
+          );
+
+          // 4. ONE cost batch PER SEGMENT, each at its own snapshotted cost
+          //    (spec §5.2). A return spanning two lots re-enters the queue as
+          //    two layers, so the next sale of those units draws the cost they
+          //    actually carried rather than an average of two.
+          for (final seg in segments) {
+            await db.costBatchesDao.recordInflowBatch(
+              productId: line.productId,
+              storeId: trip.sourceStoreId,
+              quantity: seg.quantity,
+              costKobo: seg.unitCostKobo,
+              receivedAt: now,
+            );
+          }
+
+          // 5. The ledger CREDIT — this is what moves the running balance the
+          //    moment the return is logged.
+          await db.driverLedgerDao.postEntry(
+            driverUserId: trip.driverUserId,
+            tripId: tripId,
+            type: kDriverLedgerTypeReturnGood,
+            amountKobo: creditKobo,
+            isCredit: true,
+            referenceType: kDriverLedgerRefReturn,
+            referenceId: eventId,
+            activityDate: now,
+            performedBy: performedBy,
+          );
+        } else {
+          // Damaged: off the van and nowhere else. NO warehouse leg, NO cost
+          // batch, NO ledger row — the driver stays liable at load price. The
+          // company loss is booked at the SNAPSHOTTED cost, handed over
+          // explicitly because the van store has no FIFO queue to draw (ADR
+          // 0019) and drawing an empty one would silently book the loss at 0.
+          await db.inventoryDao.adjustStock(
+            line.productId,
+            trip.vanStoreId,
+            -line.quantity,
+            kVanReturnDamageReason,
+            performedBy,
+            trackCost: false,
+            outflowValueKobo: costKobo,
+          );
+        }
+
+        events.add(
+          await (select(
+            vanReturnEvents,
+          )..where((r) => r.id.equals(eventId))).getSingle(),
+        );
+        totalCredit += creditKobo;
+        totalCost += costKobo;
+        totalShells += line.shellsBack;
+      }
+
+      // The shell memo ACCUMULATES onto the trip across every return (spec §11).
+      if (totalShells > 0) {
+        await (update(vanTrips)
+              ..where((t) => t.id.equals(tripId) & whereBusiness(t)))
+            .write(
+              VanTripsCompanion(
+                shellsBack: Value(trip.shellsBack + totalShells),
+                lastUpdatedAt: Value(DateTime.now()),
+              ),
+            );
+        final tripRow = await (select(
+          vanTrips,
+        )..where((t) => t.id.equals(tripId) & whereBusiness(t))).getSingle();
+        await db.syncDao.enqueueUpsert('van_trips', tripRow.toCompanion(true));
+      }
+
+      await db.activityLogDao.logActivity(
+        action: 'van.return',
+        description: totalCredit > 0
+            ? 'Van return recorded — '
+                  '${formatCurrency(totalCredit / 100)} credited to the driver'
+            : 'Damaged van return recorded — no credit',
+        staffId: performedBy,
+        storeId: trip.sourceStoreId,
+        entityType: 'van_trip',
+        entityId: tripId,
+      );
+
+      return VanReturnResult(
+        tripId: tripId,
+        events: events,
+        consumed: consumedAll,
+        totalCreditKobo: totalCredit,
+        totalCostKobo: totalCost,
+        driverBalanceKoboAfter: await db.driverLedgerDao.getBalanceKobo(
+          trip.driverUserId,
+        ),
+        alreadyApplied: false,
+      );
+    });
+  }
+
+  /// Sum duplicate (product, condition) lines into one and drop the degenerate
+  /// ones, preserving first-appearance order. Good and damaged lines of the same
+  /// product stay SEPARATE — they are different money events.
+  List<VanReturnLine> _collapseReturnLines(List<VanReturnLine> lines) {
+    final byKey = <String, VanReturnLine>{};
+    for (final line in lines) {
+      if (!kVanReturnConditions.contains(line.condition)) {
+        throw ArgumentError('Unknown return condition: ${line.condition}');
+      }
+      if (line.quantity <= 0) continue;
+      final key = '${line.productId} ${line.condition}';
+      final existing = byKey[key];
+      byKey[key] = existing == null
+          ? line
+          : VanReturnLine(
+              productId: line.productId,
+              quantity: existing.quantity + line.quantity,
+              condition: line.condition,
+              shellsBack: existing.shellsBack + line.shellsBack,
+              crateShells: line.crateShells ?? existing.crateShells,
+              // The FIRST id wins: it is the one a retry will carry.
+              eventId: existing.eventId ?? line.eventId,
+            );
+    }
+    return byKey.values.toList(growable: false);
+  }
+
+  /// The already-applied result when every id in [lines] is present, or null
+  /// when the return is fresh. Reconstructed from the rows themselves, so it
+  /// survives the app being killed mid-retry and holds no in-memory state.
+  ///
+  /// A PARTIAL match cannot happen — the write is one transaction — so any hit
+  /// means the whole return landed.
+  Future<VanReturnResult?> _existingReturn(
+    String tripId,
+    List<VanReturnLine> lines,
+  ) async {
+    final ids = [
+      for (final l in lines)
+        if (l.eventId != null) l.eventId!,
+    ];
+    if (ids.isEmpty || ids.length != lines.length) return null;
+
+    final rows =
+        await (select(vanReturnEvents)
+              ..where((r) => whereBusiness(r) & r.id.isIn(ids)))
+            .get();
+    if (rows.isEmpty) return null;
+
+    var credit = 0;
+    var cost = 0;
+    for (final r in rows) {
+      credit += r.creditKobo;
+      cost += r.costKobo;
+    }
+    final driverUserId = (await getTrip(tripId))?.driverUserId;
+    return VanReturnResult(
+      tripId: tripId,
+      events: rows,
+      // The per-lot split is not reconstructible from the event rows, and a
+      // replay writes nothing, so there is nothing honest to report here.
+      consumed: const [],
+      totalCreditKobo: credit,
+      totalCostKobo: cost,
+      driverBalanceKoboAfter: driverUserId == null
+          ? 0
+          : await db.driverLedgerDao.getBalanceKobo(driverUserId),
+      alreadyApplied: true,
+    );
+  }
+
+  /// Draw [quantity] units of [productId] off [tripId]'s lots, **oldest lot
+  /// first**, decrementing each lot's `qty_remaining` and returning what each
+  /// segment was worth. **Must** run inside the caller's transaction.
+  ///
+  /// Throws [VanOverReturnException] when the lots cannot cover the count —
+  /// checked BEFORE anything is written, so a rejected return leaves the cursor
+  /// exactly as it found it.
+  Future<List<VanLotConsumption>> _drawLotsForReturn({
+    required String tripId,
+    required String productId,
+    required int quantity,
+    required DateTime now,
+  }) async {
+    final lots =
+        await (select(vanTripLots)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.tripId.equals(tripId) &
+                    t.productId.equals(productId) &
+                    t.qtyRemaining.isBiggerThanValue(0),
+              )
+              ..orderBy([
+                (t) => OrderingTerm(expression: t.dispatchedAt),
+                (t) => OrderingTerm(expression: t.id),
+              ]))
+            .get();
+
+    final stillOut = lots.fold<int>(0, (sum, l) => sum + l.qtyRemaining);
+    if (quantity > stillOut) {
+      throw VanOverReturnException(
+        productId: productId,
+        requested: quantity,
+        stillOut: stillOut,
+        message: stillOut == 0
+            ? 'None of that drink is still out on this trip, so it cannot be '
+                  'returned. Check the count.'
+            : 'Only $stillOut of that drink is still out on this trip — you '
+                  'cannot return $quantity. Check the count.',
+      );
+    }
+
+    final segments = <VanLotConsumption>[];
+    var left = quantity;
+    for (final lot in lots) {
+      if (left <= 0) break;
+      final take = left < lot.qtyRemaining ? left : lot.qtyRemaining;
+      await (update(vanTripLots)
+            ..where((t) => t.id.equals(lot.id) & whereBusiness(t)))
+          .write(
+            VanTripLotsCompanion(
+              qtyRemaining: Value(lot.qtyRemaining - take),
+              lastUpdatedAt: Value(now),
+            ),
+          );
+      final updated = await (select(
+        vanTripLots,
+      )..where((t) => t.id.equals(lot.id))).getSingle();
+      await db.syncDao.enqueueUpsert(
+        'van_trip_lots',
+        updated.toCompanion(true),
+      );
+
+      segments.add(
+        VanLotConsumption(
+          lotId: lot.id,
+          productId: productId,
+          quantity: take,
+          loadPriceKobo: lot.loadPriceKobo,
+          unitCostKobo: lot.unitCostKobo,
+        ),
+      );
+      left -= take;
+    }
+    return segments;
   }
 
   // ── Remittances (#144, spec §4.7 / §5.3, ADR 0019 decision 2) ─────────────

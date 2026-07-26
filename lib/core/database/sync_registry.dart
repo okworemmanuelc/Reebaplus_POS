@@ -800,6 +800,20 @@ final List<SyncedTable> kSyncRegistry = [
       resilient: true,
     ),
   ),
+  // #143 — a trip's returns. A child of van_trips (and products), so it lands
+  // after the two above and before the ledger rows whose `reference_id` points
+  // at it. Insert-only in v1 (a return is never edited; a correction is a new
+  // event), but a plain resilient upsert all the same: a device that restores
+  // the return before its trip must not abort the whole pull.
+  SyncedTable(
+    name: 'van_return_events',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.vanReturnEvents,
+      VanReturnEventData.fromJson,
+      resilient: true,
+    ),
+  ),
   // The consignment ledger: append-only, void-by-compensating-row, so the
   // ledger restore (catch-up insert + targeted void update) and the
   // `created_at` scrub — the cloud owns created_at and a void re-push that
