@@ -1869,6 +1869,74 @@ final vanDriversProvider = Provider<List<UserData>>((ref) {
   return out;
 });
 
+// ── Driver terminal (#142, PRD #139 / ADR 0019, spec §9.2) ──────────────────
+
+/// True when the signed-in user should get the stripped **driver terminal**
+/// instead of the ordinary ten-tab shell.
+///
+/// Two conditions, and both matter:
+///  * they hold `van.sell` — the enforcement, cited as a named gate; and
+///  * they do NOT hold `sales.make` — the discriminator. The seeded Driver role
+///    holds only `van.sell` (0161), while a CEO holds everything. Without the
+///    second clause an owner testing a van would be thrown into a terminal with
+///    no way back to their own business.
+///
+/// Fails CLOSED while permissions are still resolving (`isReady` false → both
+/// gates deny → not a driver → the normal shell), which is the safe direction:
+/// a momentary ordinary POS is recoverable, a momentary lock-out is alarming.
+final driverTerminalActiveProvider = Provider<bool>((ref) {
+  final ctx = ref.watch(gateContextProvider);
+  if (!ctx.isReady) return false;
+  return Gates.vanSell.rule.evaluate(ctx) && !Gates.makeSale.rule.evaluate(ctx);
+});
+
+/// The open trip the signed-in driver is out on, or null when they are at the
+/// yard (spec §9.2 #6 — that null is the terminal's "no open trip" state, and
+/// it is what stops them selling).
+///
+/// Keyed on the DRIVER, not the van: a driver holds at most one open trip
+/// anywhere (`van_trips_one_open_per_driver`), so this resolves without the
+/// terminal having to know which van it is standing on first.
+final currentDriverTripProvider = businessScopedStream<VanTripData?>((
+  ref,
+  db,
+  businessId,
+) {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return Stream<VanTripData?>.value(null);
+  // `openTripForDriver` is a one-shot read; re-run it whenever the trips table
+  // changes so an opened/closed trip lands on the driver's device live.
+  return db.vanTripsDao
+      .watchOpenTrips()
+      .asyncMap((_) => db.vanTripsDao.openTripForDriver(userId));
+}, whenAbsent: null);
+
+/// A trip's road price list: productId → load price (kobo). The driver sells at
+/// the price they signed for, never the catalogue tier (spec §5.1).
+final vanTripLoadPricesProvider =
+    businessScopedStreamFamily<Map<String, int>, String>(
+      (ref, db, businessId, tripId) =>
+          db.vanTripsDao.watchLoadPricesForTrip(tripId),
+      whenAbsent: const {},
+    );
+
+/// A trip's road sales, newest first — the driver's read-only run list.
+final vanTripSalesProvider = businessScopedStreamFamily<List<OrderData>, String>(
+  (ref, db, businessId, tripId) => db.vanTripsDao.watchSalesForTrip(tripId),
+  whenAbsent: const [],
+);
+
+/// A trip's road takings at load price (`soldValue`, spec §6.1).
+///
+/// NOT cash the business holds — a road sale writes no payment row. It is what
+/// the driver has taken in and still owes until a manager records the
+/// remittance (#144).
+final vanTripSoldValueProvider = businessScopedStreamFamily<int, String>(
+  (ref, db, businessId, tripId) =>
+      db.vanTripsDao.watchSoldValueKoboForTrip(tripId),
+  whenAbsent: 0,
+);
+
 /// Display label for the active-store scope (§21.11 supplier accounts and any
 /// other screen that wants to caption the current scope): the locked store's
 /// name, or "All Stores" when nothing is locked.

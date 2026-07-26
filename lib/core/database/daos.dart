@@ -22,6 +22,10 @@ import 'package:reebaplus_pos/core/stores/van_store.dart';
 // follows the CEO-chosen currency. Pure formatting — no provider dependency.
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
+// #142: the driver terminal's run-sales figure must use the canonical revenue
+// predicate, never a bare `status == 'completed'`
+// ([[project_revenue_recognized_at_checkout]]).
+import 'package:reebaplus_pos/shared/models/order_status.dart';
 
 part 'daos.g.dart';
 

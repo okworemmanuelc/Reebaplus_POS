@@ -59,7 +59,7 @@ class CostBackfillOffer {
 /// drawing it down at a sale, and keeping `Products.buyingPriceKobo` as a
 /// derived display cache over it. The costing maths lives in the pure
 /// [fifoDrawDown]; this DAO is only the DB glue around it.
-@DriftAccessor(tables: [CostBatches, Products, OrderItems, Orders])
+@DriftAccessor(tables: [CostBatches, Products, OrderItems, Orders, Stores])
 class CostBatchesDao extends DatabaseAccessor<AppDatabase>
     with _$CostBatchesDaoMixin, BusinessScopedDao<AppDatabase> {
   CostBatchesDao(super.db);
@@ -415,20 +415,34 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
   /// `product_id` match). Whether such a line drew from a now-costed uncosted
   /// batch or from no batch at all (pre-FIFO, migration-era) is immaterial —
   /// both are uncosted history and both restate at [newCostKobo].
+  ///
+  /// **Van lines are fenced out** (#142, van-sales spec §5.6, ADR 0019
+  /// decision 1). A road sale deliberately books no per-sale COGS, so every one
+  /// of its lines sits at `buying_price_kobo == 0` on a recognised order with a
+  /// product — i.e. van lines are *exactly* this gather set, and would be the
+  /// bulk of it for any van-selling business. Restating them would give the road
+  /// per-line COGS **on top of** the trip's close-time COGS, which is computed
+  /// from the lot snapshots (`van_trip_lots.unit_cost_kobo`) — the same goods
+  /// costed twice, against a profit figure the manager already signed off. Van
+  /// cost truth is the snapshot; the batch queue is not allowed a second
+  /// opinion.
   Future<CostBackfillOffer> _planBackfill(
     String productId,
     int newCostKobo,
   ) async {
-    final rows =
-        await (select(orderItems).join([
-          innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
-        ])..where(
-              whereBusiness(orderItems) &
-                  orderItems.productId.equals(productId) &
-                  orderItems.buyingPriceKobo.equals(0) &
-                  orders.status.isIn(const ['pending', 'completed']),
-            ))
-            .get();
+    final query = select(orderItems).join([
+      innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+    ]);
+    var predicate =
+        whereBusiness(orderItems) &
+        orderItems.productId.equals(productId) &
+        orderItems.buyingPriceKobo.equals(0) &
+        orders.status.isIn(const ['pending', 'completed']) &
+        // Belt: the trip tag (#142). Braces: the store, below — because the tag
+        // is bookkeeping and the store is the physical fact.
+        orders.vanTripId.isNull();
+    predicate = predicate & await _notOnAVanStore();
+    final rows = await (query..where(predicate)).get();
 
     final ids = <String>[];
     var units = 0;
@@ -445,6 +459,29 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// `order_items.store_id` is not one of the business's vans (#142, spec §5.6).
+  ///
+  /// Resolved as an id set rather than a join so the same expression works in a
+  /// SELECT-with-join *and* in the `applyCostBackfill` UPDATE, which has no join
+  /// to hang a `stores.kind` predicate on. A business has a handful of vans at
+  /// most; the extra read is one indexed scan on a prompt the user had to tap.
+  /// `Constant(true)` for the overwhelmingly common no-vans case keeps the
+  /// generated SQL identical to what it was before this fence existed.
+  Future<Expression<bool>> _notOnAVanStore() async {
+    final vanIds = await _vanStoreIds();
+    if (vanIds.isEmpty) return const Constant(true);
+    return orderItems.storeId.isNotIn(vanIds);
+  }
+
+  Future<List<String>> _vanStoreIds() async {
+    final rows =
+        await (select(stores)..where(
+              (s) => whereBusiness(s) & s.kind.equals(kStoreKindVan),
+            ))
+            .get();
+    return [for (final s in rows) s.id];
+  }
+
   /// Commit a backfill the user accepted. Restates each still-uncosted line's
   /// snapshot to [CostBackfillOffer.newCostKobo] and re-pushes it, then writes
   /// **one** Activity Log row for the whole backfill. Returns the number of
@@ -457,6 +494,12 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
   /// period** (nothing about the order's timestamp changes). The [description]
   /// is the caller's copy (localized/currency-formatted at the UI, per ADR
   /// 0005); this DAO owns only the atomic restate-and-audit.
+  ///
+  /// The **van fence is re-checked at the row too** (#142, spec §5.6), for the
+  /// same reason the gap check is: an offer built before a store was flipped to
+  /// a van — or an offer handed in by a caller that built it some other way —
+  /// must not be able to restate road lines. The fence is on the WRITE, not only
+  /// on the gather.
   Future<int> applyCostBackfill(
     CostBackfillOffer offer, {
     required String description,
@@ -464,6 +507,7 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
   }) async {
     if (offer.isEmpty) return 0;
     final now = DateTime.now();
+    final notOnAVan = await _notOnAVanStore();
     var restated = 0;
     for (final lineId in offer.lineIds) {
       final n =
@@ -471,7 +515,8 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
                 (t) =>
                     t.id.equals(lineId) &
                     whereBusiness(t) &
-                    t.buyingPriceKobo.equals(0),
+                    t.buyingPriceKobo.equals(0) &
+                    notOnAVan,
               ))
               .write(
                 OrderItemsCompanion(

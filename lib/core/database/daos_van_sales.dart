@@ -134,6 +134,38 @@ class VanTripNotOpenException implements Exception {
   String toString() => message;
 }
 
+/// What a checkout needs to know about the location it is being rung on
+/// (#142, van-sales spec §5.3 / §5.6, ADR 0019 decision 2).
+///
+/// One value answers both questions a sale write has to ask, so they can never
+/// be answered inconsistently:
+///
+///  * [isVanSale] — **suppress the money legs?** A road sale writes no
+///    `payment_transactions` row and books no per-sale COGS. This keys on the
+///    STORE being a van, never on [tripId], because the store is the physical
+///    fact: goods that are on a van are on a van whether or not the bookkeeping
+///    tag was written. A guard that keyed on the tag would let an untagged road
+///    sale inflate "Cash sales" — precisely the failure ADR 0019 exists to stop.
+///  * [tripId] — **what does the order get tagged with?** Attribution only:
+///    #145's close artifact and #147's aggregated "Van Sales" line read it.
+///
+/// The two are deliberately independent. [isVanSale] can be true with a null
+/// [tripId] (a van whose trip is not open) and the sale is still stripped of its
+/// payment row — suppression fails SAFE.
+class VanSaleContext {
+  /// True when the sale is being rung on a van location.
+  final bool isVanSale;
+
+  /// The open trip on that van, or null (not a van, or the van is home).
+  final String? tripId;
+
+  /// An ordinary shop sale: money legs written as usual, no tag.
+  const VanSaleContext.store() : isVanSale = false, tripId = null;
+
+  /// A road sale on a van, optionally attributable to [tripId].
+  const VanSaleContext.van(this.tripId) : isVanSale = true;
+}
+
 /// Thrown when the generic stock-transfer cancel is pointed at a van leg
 /// (van-sales spec §7.2).
 ///
@@ -166,6 +198,7 @@ class VanLegNotCancellableException implements Exception {
     DriverLedgerEntries,
     Stores,
     PaymentTransactions,
+    Orders,
   ],
 )
 class VanTripsDao extends DatabaseAccessor<AppDatabase>
@@ -283,6 +316,94 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
               ..limit(1))
             .getSingleOrNull();
     return row != null && isVanStore(row);
+  }
+
+  /// Resolve what a sale on [storeId] is: an ordinary shop sale, or a road sale
+  /// and which trip it belongs to (#142, spec §5.3).
+  ///
+  /// The ONE seam `OrdersDao.createOrder` consults before it decides whether to
+  /// write a payment row, draw a FIFO cost queue, or stamp a trip tag. It exists
+  /// so the three decisions cannot drift apart: they are all downstream of the
+  /// same two facts, read once, inside the sale transaction.
+  ///
+  /// A null [storeId] (a legacy, store-less order) is never a van.
+  Future<VanSaleContext> saleContextForStore(String? storeId) async {
+    if (storeId == null || storeId.isEmpty) {
+      return const VanSaleContext.store();
+    }
+    if (!await isVanStoreId(storeId)) return const VanSaleContext.store();
+    // A van with no open trip still suppresses the money legs — the stock is on
+    // a van either way, and only the ATTRIBUTION is missing. (The terminal
+    // blocks selling in that state, spec §9.2 #6; this is the write-boundary
+    // backstop for it.)
+    final trip = await openTripForVan(storeId);
+    return VanSaleContext.van(trip?.id);
+  }
+
+  // ── Driver terminal reads (#142, spec §9.2) ──────────────────────────────
+
+  /// The road price list for [tripId]: productId → load price (kobo).
+  ///
+  /// The driver sells at the price they SIGNED FOR, not the catalogue tier
+  /// (spec §5.1 — the load price is "the single valuation for the whole
+  /// reconciliation", so pricing the road off anything else would make sold
+  /// value and loaded value incomparable and break the tie-out).
+  ///
+  /// When a product was loaded twice at two prices (a restock at a new price,
+  /// #143), the **oldest lot's** price wins — the same FIFO rule a good return
+  /// credits at (spec §9.3 #10), so one product has one road price and the two
+  /// halves of the reconciliation agree.
+  Future<Map<String, int>> loadPricesForTrip(String tripId) async {
+    return _pricesFromLots(await lotsForTrip(tripId));
+  }
+
+  /// Live [loadPricesForTrip] — the terminal's price list, which grows the
+  /// moment a restock lands (#143).
+  Stream<Map<String, int>> watchLoadPricesForTrip(String tripId) {
+    return watchLotsForTrip(tripId).map(_pricesFromLots);
+  }
+
+  /// [lotsForTrip] is already ordered oldest dispatch first, so the FIRST lot
+  /// seen for a product is the oldest and `putIfAbsent` keeps it.
+  Map<String, int> _pricesFromLots(List<VanTripLotData> lots) {
+    final prices = <String, int>{};
+    for (final lot in lots) {
+      prices.putIfAbsent(lot.productId, () => lot.loadPriceKobo);
+    }
+    return prices;
+  }
+
+  /// The orders rung on [tripId], newest first — the driver's read-only run
+  /// list, and the set #145's close artifact values as `sold`.
+  ///
+  /// Cancelled/refunded orders are included: the driver sees their whole run,
+  /// and the caller decides what counts as revenue via [orderCountsAsSale]
+  /// (never a `== 'completed'` filter — see
+  /// `[[project_revenue_recognized_at_checkout]]`).
+  Stream<List<OrderData>> watchSalesForTrip(String tripId) {
+    return (select(orders)
+          ..where((o) => whereBusiness(o) & o.vanTripId.equals(tripId))
+          ..orderBy([
+            (o) =>
+                OrderingTerm(expression: o.createdAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// Live road takings for [tripId] — `Σ net_amount_kobo` over its RECOGNISED
+  /// orders (`orderCountsAsSale`), which at load price is `soldValue` in the
+  /// spec's §6.1 identities.
+  ///
+  /// Note what this is NOT: it is not cash the business holds. A road sale
+  /// writes no payment row (ADR 0019 decision 2) — this figure is what the
+  /// driver has taken in on the road and still owes, and it only becomes cash
+  /// when a manager records the remittance (#144).
+  Stream<int> watchSoldValueKoboForTrip(String tripId) {
+    return watchSalesForTrip(tripId).map(
+      (rows) => rows
+          .where((o) => orderCountsAsSale(o.status))
+          .fold<int>(0, (sum, o) => sum + o.netAmountKobo),
+    );
   }
 
   // ── Load-below-cost warning (spec §9.1 #1) ────────────────────────────────

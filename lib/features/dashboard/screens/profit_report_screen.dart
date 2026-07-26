@@ -125,6 +125,13 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       totalSalesKobo: computeTotalSalesKobo(
         orders,
         inSpan: (createdAt) => isDateInPeriod(createdAt, period),
+        // #142 (van-sales spec §8.1) — the SAME van exclusion the Revenue /
+        // COGS / Gross Profit figures above apply. Without it this tile counted
+        // road sales while everything under it did not, and the one screen
+        // contradicted itself. `computeTotalSalesKobo` scopes per LINE store
+        // (and the order's store for the discount), which is what `isNotVan`
+        // takes.
+        inScope: vans.isNotVan,
       ),
     );
   }

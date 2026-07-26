@@ -556,12 +556,36 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       );
       final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
+      // #142 (van-sales spec §5.3 / §5.6, ADR 0019) — is this a ROAD sale?
+      //
+      // Resolved ONCE, here, from the sale's store, and consulted three times
+      // below: it suppresses the payment rows, suppresses the per-sale COGS
+      // draw-down, and supplies the trip tag. Resolving it once is what keeps
+      // those three answers consistent; deriving each independently is how a
+      // van sale ends up half-stripped.
+      //
+      // The sale-level store wins over the line's, matching how `payStoreId`
+      // and the v2 `saleStoreId` are already resolved further down.
+      final resolvedSaleStoreId =
+          storeId ?? (items.isEmpty ? null : items.first.storeId.value);
+      final vanSale = await db.vanTripsDao.saleContextForStore(
+        resolvedSaleStoreId,
+      );
+
       // Order header gets written locally on both paths so the UI flips
       // immediately. The id is the server's idempotency key.
-      final orderWithTime = order.copyWith(
+      var orderWithTime = order.copyWith(
         id: Value(orderId),
         lastUpdatedAt: Value(DateTime.now()),
       );
+      if (vanSale.isVanSale) {
+        // Stamp the trip tag HERE rather than trusting the caller: the terminal
+        // that rings a road sale must not be able to write an unattributable
+        // one by forgetting a parameter (spec §4.6).
+        orderWithTime = orderWithTime.copyWith(
+          vanTripId: Value(vanSale.tripId),
+        );
+      }
       await into(orders).insert(orderWithTime);
 
       // Inventory cache deduction with the stock guard. Done before
@@ -616,6 +640,17 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // server-side), so the client decrements + pushes cost_batches directly.
       // COGS is the local batch-queue view only; units with no batch are
       // uncosted (0), matching the server (see CostBatchesDao.drawDownSale).
+      //
+      // #142 / ADR 0019 decision 1 — a ROAD sale books NO per-sale COGS. Cost
+      // travelled with the load: dispatch drew the warehouse's batches down and
+      // snapshotted the per-unit cost onto `van_trip_lots.unit_cost_kobo`, and
+      // no batch was ever created on the van. Drawing a van-store queue here
+      // would therefore draw nothing (0 COGS, which is merely useless) — and,
+      // worse, it would leave every road line at `buying_price_kobo == 0`, which
+      // is EXACTLY the F5 cost-backfill's gather set. The trip's COGS comes from
+      // the lot snapshots at close (#145); a per-line figure would double-count
+      // against it. Van stock still decrements normally — only the costing is
+      // skipped.
       final costLines = <SaleCostLine>[];
       for (var i = 0; i < items.length; i++) {
         final item = items[i];
@@ -630,7 +665,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           ),
         );
       }
-      final provisionalCogs = await db.costBatchesDao.drawDownSale(costLines);
+      final provisionalCogs = vanSale.isVanSale
+          ? const <int, int>{}
+          : await db.costBatchesDao.drawDownSale(costLines);
       // Re-snapshot the provisional COGS onto the order lines; every downstream
       // write (local order_items and the v1/v2 push payloads) uses these.
       final costedItems = [
@@ -795,6 +832,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           if (orderJson.containsKey('barcode'))
             'p_barcode': orderJson['barcode'],
           if (amountPaidKobo > 0) 'p_payment_method': paymentMethod,
+          // #142 — the trip tag rides the envelope (spec §4.6). It is also the
+          // server's signal to suppress ITS payment row: `pos_record_sale_v2`
+          // mints one server-side, and a road sale must have none on either
+          // path. (0164 fences on the store's `kind = 'van'` too, so a sale that
+          // somehow lost its tag is still stripped — the tag is attribution, the
+          // store is the fact.)
+          if (vanSale.tripId != null) 'p_van_trip_id': vanSale.tripId,
           // The wallet ledger is client-authored on BOTH paths (invariant #3):
           // the full double-entry is posted by _postSaleWalletLegs before this
           // split, so the RPC's wallet branch stays a no-op — no wallet amount is
@@ -869,7 +913,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // `items.first` on an item-less ledger-only order.
       // (v2's pos_record_sale_v2 mints one bundled `sale` row server-side and
       // must mirror this split when it goes live — flagged to the RPC owners.)
-      if (amountPaidKobo > 0) {
+      //
+      // #142 (van-sales spec §5.3, ADR 0019 decision 2) — "cash follows
+      // custody". A ROAD sale writes NONE of the three rows. The driver has the
+      // money in a pocket somewhere on a route; the business does not hold it,
+      // so "Cash sales" must not move. It moves when a manager records the
+      // remittance (#144), which writes a `van_remittance` row store-stamped to
+      // the source warehouse on the day the cash physically arrived.
+      if (amountPaidKobo > 0 && !vanSale.isVanSale) {
         final payStoreId = storeId ?? items.first.storeId.value;
         final depositHeldKobo = crateDepositPaidByManufacturer.values
             .fold<int>(0, (s, v) => s + v)
