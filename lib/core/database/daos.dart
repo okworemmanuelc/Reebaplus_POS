@@ -17,6 +17,10 @@ import 'package:reebaplus_pos/core/database/sync_helpers.dart';
 // asked the right question. They resolve the row and run the ONE predicate
 // rather than comparing `kind` inline.
 import 'package:reebaplus_pos/core/stores/van_store.dart';
+// #144: the van-remittance activity-log line states the amount, and money is
+// rendered through the app-wide formatter (never a hardcoded symbol) so it
+// follows the CEO-chosen currency. Pure formatting — no provider dependency.
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
 
 part 'daos.g.dart';

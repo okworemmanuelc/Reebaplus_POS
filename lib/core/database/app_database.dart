@@ -728,6 +728,31 @@ const List<String> kDriverLedgerRefTypes = [
   kDriverLedgerRefEntry,
 ];
 
+/// `payment_transactions.type` for a driver remittance (#144, spec §4.7).
+///
+/// The ONE moment van money enters the cash books. A road sale writes no
+/// payment row at all (#142), so this row — not the sale — is what the owner's
+/// cash figure counts, and it counts it on the day the money physically
+/// arrived (ADR 0019 decision 2, "cash follows custody").
+///
+/// It is deliberately a type of its own rather than a `sale`: the Daily
+/// Reconciliation's "Cash sales" line stays `sale`-only, and #147 gives these
+/// rows their own **"Cash from drivers"** line. Any report that folds
+/// `van_remittance` into a sales figure is double-counting road revenue that
+/// was already recognised when the driver rang it.
+const String kPaymentTypeVanRemittance = 'van_remittance';
+
+/// The tenders a driver remittance may be recorded under — the same four the
+/// supplier-payment sheet offers, and all valid `payment_transactions.method`
+/// values.
+///
+/// Only `cash` books the ledger row as [kDriverLedgerTypePaymentCash]; the other
+/// three are [kDriverLedgerTypePaymentTransfer], because the DRIVER ledger's
+/// axis is *how the money moved* and the spec models exactly two of those,
+/// while the CASH card's axis is *the tender* and needs all four to keep
+/// "Cash from drivers" honestly cash-only (#147).
+const List<String> kVanRemittanceMethods = ['cash', 'transfer', 'pos', 'other'];
+
 /// One van run: `open → closed`, referencing van + driver + source warehouse
 /// (van-sales spec §4.2). The aggregate the whole reconciliation hangs off.
 ///
@@ -1679,6 +1704,20 @@ class PaymentTransactions extends Table {
       text().nullable().references(WalletTransactions, #id)();
   TextColumn get deliveryId =>
       text().nullable().references(DeliveryReceipts, #id)();
+
+  /// The SIXTH parent (#144, van-sales spec §4.7): the trip a driver remittance
+  /// was recorded against. A remittance has no order, no shipment, no expense
+  /// and no wallet transaction — the trip IS its cause — so the exactly-one-
+  /// parent CHECK had to grow rather than the row being left parentless.
+  ///
+  /// Set on `van_remittance` rows only; null on every other type.
+  ///
+  /// `VanTrips` is listed AFTER this table in the `@DriftDatabase` table list,
+  /// but drift topologically sorts `allSchemaEntities` by FK dependency, so the
+  /// generated `createAll()` now emits `van_trips` first and the parent always
+  /// exists. (That re-sort is why adding this one column produced a large
+  /// generated-file diff: the `$PaymentTransactionsTable` class moved.)
+  TextColumn get vanTripId => text().nullable().references(VanTrips, #id)();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
@@ -1699,14 +1738,24 @@ class PaymentTransactions extends Table {
     // runtime-resolved change (customConstraints is not baked into the generated
     // code); existing installs rebuild the table under the new CHECK via the
     // schemaVersion 64 upgrade step. Mirrors 0153_money_integrity_payments_seam.sql.
+    //
+    // #144 widened it again with `van_remittance` — the driver's cash handed in,
+    // recorded by a manager (ADR 0019 decision 2, "cash follows custody"). It is
+    // deliberately NOT a `sale`: a road sale writes no payment row at all (#142),
+    // so this row is the ONLY time van money enters the cash books, and it must
+    // stay out of "Cash sales" and land on its own "Cash from drivers" line
+    // (#147). Existing installs rebuild the table under the widened CHECK via
+    // the schemaVersion 72 upgrade step. Mirrors 0163_van_sales_remittance.sql.
     "CHECK (type IN "
-        "('sale','purchase','expense','refund','wallet_topup','crate_deposit'))",
+        "('sale','purchase','expense','refund','wallet_topup','crate_deposit',"
+        "'van_remittance'))",
     '''CHECK (
           (CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN shipment_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN expense_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN wallet_txn_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN delivery_id IS NOT NULL THEN 1 ELSE 0 END) = 1
+          (CASE WHEN delivery_id IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN van_trip_id IS NOT NULL THEN 1 ELSE 0 END) = 1
         )''',
   ];
 }
@@ -2304,7 +2353,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 71;
+  int get schemaVersion => 72;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4555,7 +4604,27 @@ class AppDatabase extends _$AppDatabase {
         //     no-delete, now guarding store_id too) and the last_updated_at bump
         //     trigger — emitting the immutable trigger from the single
         //     `_ledgerTables` source so it can't drift from onCreate.
-        await m.alterTable(TableMigration(paymentTransactions));
+        //
+        //     `columnTransformer` — READ THIS BEFORE ADDING A COLUMN TO
+        //     payment_transactions. `TableMigration` rebuilds from the CURRENT
+        //     Drift schema, not from the schema as of v64, so every column the
+        //     table has grown SINCE v64 also appears in the copy's SELECT list.
+        //     A column that does not exist on the v63-shaped table is emitted as
+        //     a bare `"name"` identifier, which SQLite (by its legacy
+        //     double-quote fallback) silently degrades to the STRING 'name' —
+        //     a non-null value in a column that should be NULL. For
+        //     `van_trip_id` (v72, #144) that flipped the exactly-one-parent
+        //     CHECK's sum to 2 and aborted the whole upgrade. Mapping it to NULL
+        //     here says what is true: at v64 this column did not exist, so every
+        //     row being copied has no value for it.
+        await m.alterTable(
+          TableMigration(
+            paymentTransactions,
+            columnTransformer: {
+              paymentTransactions.vanTripId: const Constant<String>(null),
+            },
+          ),
+        );
         await customStatement(
           'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
         );
@@ -4812,6 +4881,96 @@ class AppDatabase extends _$AppDatabase {
           )) {
             await customStatement(stmt);
           }
+        }
+      }
+      if (from < 72) {
+        // v72 (#144 Van Sales 5/8 — driver payments, PRD #139 / ADR 0019,
+        // van-sales spec §4.7 / §5.3). Mirrors
+        // supabase/migrations/0163_van_sales_remittance.sql.
+        //
+        // `payment_transactions` gains a SIXTH parent — `van_trip_id` — and a
+        // seventh `type`, `van_remittance`. Both are the schema half of ADR
+        // 0019's "cash follows custody": a road sale writes NO payment row, so
+        // the manager-recorded remittance is the only moment van money enters
+        // the cash books, and it needs a parent that is neither an order nor an
+        // expense.
+        //
+        // Two CHECKs change (type, and the exactly-one-parent sum), and SQLite
+        // cannot ALTER a CHECK in place, so this is a TABLE REBUILD — the v64
+        // shape, step for step:
+        //   1. ADD the new column first (guarded). drift's TableMigration needs
+        //      a new column to already exist on the old table, or it fills the
+        //      column with the literal column name.
+        //   2. alterTable(TableMigration(...)) rebuilds from the CURRENT Drift
+        //      schema and copies every row 1:1. Both CHECK edits are WIDENINGS
+        //      — a legacy row that satisfied "exactly one of five" still
+        //      satisfies "exactly one of six" (the new column is NULL on every
+        //      copied row) — so the copy can never fail on existing data.
+        //   3. drift re-applies the table's EXISTING indexes but NOT its
+        //      triggers, so DROP-then-CREATE each index (idempotent, same fix as
+        //      the v29/v61/v64 rebuilds) and re-emit the two append-only ledger
+        //      triggers from the single `_ledgerTables` source — which now
+        //      guards `van_trip_id` too — plus the last_updated_at bump trigger.
+        //
+        // Rebuilding an APPEND-ONLY table is only safe because the triggers are
+        // dropped first: `payment_transactions_no_delete` would otherwise abort
+        // drift's copy-and-swap, and `payment_transactions_immutable` would fire
+        // on nothing (the copy is inserts) but must be re-created afterwards or
+        // the ledger silently stops being append-only.
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69/v70 so a DB stepped back to
+        // < 72 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        final hasVanTripId = await customSelect(
+          "SELECT 1 FROM pragma_table_info('payment_transactions') "
+          "WHERE name = 'van_trip_id'",
+        ).get();
+        if (hasVanTripId.isEmpty) {
+          await m.addColumn(paymentTransactions, paymentTransactions.vanTripId);
+        }
+        await m.alterTable(TableMigration(paymentTransactions));
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
+        );
+        await customStatement(
+          'CREATE INDEX idx_payment_transactions_business_lua '
+          'ON payment_transactions (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_txn_business_type',
+        );
+        await customStatement(
+          'CREATE INDEX idx_payment_txn_business_type '
+          'ON payment_transactions (business_id, type, created_at)',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_payment_transactions_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_payment_transactions_last_updated_at '
+          'AFTER UPDATE ON payment_transactions '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE payment_transactions SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+        );
+        for (final stmt in _ledgerTriggerStatements(
+          _ledgerTables.firstWhere((l) => l.table == 'payment_transactions'),
+        )) {
+          await customStatement(stmt);
+        }
+        // The "Cash from drivers" scan (#147) and the per-trip remittance list
+        // both key on van_trip_id. Emitted from the shared
+        // `_vanRemittanceIndexStatements` list so onCreate == upgrade.
+        await customStatement('DROP INDEX IF EXISTS idx_payment_txn_van_trip');
+        for (final stmt in _vanRemittanceIndexStatements) {
+          await customStatement(stmt);
         }
       }
     },
@@ -5362,6 +5521,8 @@ const List<_LedgerImmutability> _ledgerTables = [
     'performed_by',
     'created_at',
   ]),
+  // v72 (#144) added `van_trip_id` — the sixth parent. It is set at insert and
+  // never changes, exactly like the other five, so it joins the immutable set.
   _LedgerImmutability('payment_transactions', [
     'id',
     'business_id',
@@ -5374,6 +5535,7 @@ const List<_LedgerImmutability> _ledgerTables = [
     'expense_id',
     'wallet_txn_id',
     'delivery_id',
+    'van_trip_id',
     'performed_by',
     'created_at',
   ]),
@@ -5466,6 +5628,19 @@ const List<String> _vanSalesHotPathIndexStatements = [
       'ON driver_ledger_entries (business_id, trip_id)',
 ];
 
+/// The van-remittance index (#144). Deliberately NOT part of
+/// [_vanSalesHotPathIndexStatements]: that list is replayed by the v71 upgrade
+/// step, which runs BEFORE `payment_transactions.van_trip_id` exists, so a
+/// payment-table index in it would fail with "no such column" on any device
+/// upgrading through v70 → v71 → v72. Shared verbatim by `_postCreateStatements`
+/// (fresh install) and the v72 rebuild, so onCreate == upgrade.
+const List<String> _vanRemittanceIndexStatements = [
+  // "Cash from drivers" (#147) and a trip's remittance list (#145) both scan
+  // payment rows by trip.
+  'CREATE INDEX idx_payment_txn_van_trip '
+      'ON payment_transactions (business_id, van_trip_id)',
+];
+
 List<String> get _postCreateStatements {
   final stmts = <String>[];
 
@@ -5521,6 +5696,8 @@ List<String> get _postCreateStatements {
     // cursor scan, the dispatch idempotency probe, and the driver-balance /
     // per-trip ledger reads. Kept byte-identical in the v71 upgrade step.
     ..._vanSalesHotPathIndexStatements,
+    // v72 (#144 Van Sales) — the remittance payment rows keyed by trip.
+    ..._vanRemittanceIndexStatements,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',

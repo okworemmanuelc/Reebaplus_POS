@@ -90,6 +90,50 @@ class VanTripAlreadyOpenException implements Exception {
   String toString() => message;
 }
 
+/// What recording a driver's cash handed in did (#144).
+///
+/// Both ids are returned because the two legs are the point: the ledger credit
+/// is what moves the driver's balance toward zero, and the payment row is what
+/// puts the money into the business's cash books. A caller that sees only one
+/// of them is looking at half a remittance.
+class VanRemittanceResult {
+  /// The appended `driver_ledger_entries` row (a CREDIT).
+  final String ledgerEntryId;
+
+  /// The appended `payment_transactions` row, typed `van_remittance` and
+  /// store-stamped to the trip's SOURCE WAREHOUSE.
+  final String paymentTransactionId;
+
+  /// The magnitude recorded (kobo, always > 0).
+  final int amountKobo;
+
+  /// The driver's cross-trip balance AFTER this credit. Negative = still owes.
+  final int driverBalanceKoboAfter;
+
+  const VanRemittanceResult({
+    required this.ledgerEntryId,
+    required this.paymentTransactionId,
+    required this.amountKobo,
+    required this.driverBalanceKoboAfter,
+  });
+}
+
+/// Thrown when a remittance is pointed at a trip that is not open (#144).
+///
+/// A closed trip is never edited in place (spec §9.4 #16); a residual carries
+/// forward on the driver's cross-trip balance and every later correction is a
+/// new signed ledger row, posted by the reconcile slice. [message] is
+/// user-facing copy — the caller shows it verbatim.
+class VanTripNotOpenException implements Exception {
+  final String tripId;
+  final String message;
+
+  const VanTripNotOpenException({required this.tripId, required this.message});
+
+  @override
+  String toString() => message;
+}
+
 /// Thrown when the generic stock-transfer cancel is pointed at a van leg
 /// (van-sales spec §7.2).
 ///
@@ -115,7 +159,15 @@ class VanLegNotCancellableException implements Exception {
 /// the reason they are one transaction: *"if a dispatch ever writes a lot
 /// without drawing the source batches down, that trip's COGS is silently wrong
 /// and nothing downstream will catch it."*
-@DriftAccessor(tables: [VanTrips, VanTripLots, DriverLedgerEntries, Stores])
+@DriftAccessor(
+  tables: [
+    VanTrips,
+    VanTripLots,
+    DriverLedgerEntries,
+    Stores,
+    PaymentTransactions,
+  ],
+)
 class VanTripsDao extends DatabaseAccessor<AppDatabase>
     with _$VanTripsDaoMixin, BusinessScopedDao<AppDatabase> {
   VanTripsDao(super.db);
@@ -593,6 +645,178 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       shellsOut: totalShells,
       uncostedProductIds: uncosted,
     );
+  }
+
+  // ── Remittances (#144, spec §4.7 / §5.3, ADR 0019 decision 2) ─────────────
+
+  /// Every `van_remittance` payment row on [tripId], newest first — what the
+  /// driver has handed in on this run.
+  Stream<List<PaymentTransactionData>> watchRemittancesForTrip(String tripId) {
+    return (select(paymentTransactions)
+          ..where(
+            (p) =>
+                whereBusiness(p) &
+                p.vanTripId.equals(tripId) &
+                p.type.equals(kPaymentTypeVanRemittance),
+          )
+          ..orderBy([(p) => OrderingTerm.desc(p.createdAt)]))
+        .watch();
+  }
+
+  /// The load-price value [tripId] has actually recovered in cash — `Σ` its
+  /// un-voided remittances. #145's close artifact reads it as one half of
+  /// `recovered_kobo` (the other half is good returns).
+  Future<int> remittedKoboForTrip(String tripId) async {
+    final rows =
+        await (select(paymentTransactions)..where(
+              (p) =>
+                  whereBusiness(p) &
+                  p.vanTripId.equals(tripId) &
+                  p.type.equals(kPaymentTypeVanRemittance) &
+                  p.voidedAt.isNull(),
+            ))
+            .get();
+    var total = 0;
+    for (final r in rows) {
+      total += r.amountKobo;
+    }
+    return total;
+  }
+
+  /// Record cash a driver handed in against [tripId] — **both legs, in ONE
+  /// transaction** (#144, van-sales spec §5.3).
+  ///
+  /// The two legs are the whole slice:
+  ///  1. a driver-ledger **credit** (`payment_cash` / `payment_transfer`),
+  ///     which is what moves the balance toward zero, and
+  ///  2. a real `payment_transactions` row typed [kPaymentTypeVanRemittance],
+  ///     `store_id` = the trip's **source warehouse** (never the van), and
+  ///     `van_trip_id` = the trip.
+  ///
+  /// Leg 2 exists because of ADR 0019 decision 2: a road sale writes no payment
+  /// row at all (#142), so this is the ONE moment van money enters the cash
+  /// books. Writing only the ledger credit — which is what the original plan
+  /// did — leaves remitted cash in a ledger the reconciliation never reads, and
+  /// the owner's cash figure never learns the money arrived. They are one
+  /// transaction for the same reason dispatch is: half a remittance is worse
+  /// than none, because it looks settled.
+  ///
+  /// The payment row's `store_id` is the source warehouse and NOT the van: cash
+  /// physically comes back to the yard, and stamping the van would put the money
+  /// on a location that is excluded from every per-store figure — it would
+  /// vanish.
+  ///
+  /// [method] is a `payment_transactions.method` value (`cash` | `transfer` |
+  /// `pos` | `other` from the picker). Only `cash` books the ledger row as
+  /// [kDriverLedgerTypePaymentCash]; every other tender is
+  /// [kDriverLedgerTypePaymentTransfer], because the ledger's axis is *how the
+  /// money moved*, of which the spec models exactly two.
+  ///
+  /// [paidOn] dates BOTH legs (the ledger's `activity_date` and the payment
+  /// row's `created_at`, which is the day "Cash from drivers" counts it on).
+  /// It defaults to now; note the cloud owns `created_at` on push
+  /// (`scrubCreatedAt`), so a back-dated remittance keeps its date locally and
+  /// takes the cloud's arrival stamp after a restore — the same divergence
+  /// every dated payment row on this table already carries.
+  ///
+  /// Throws [ArgumentError] on a non-positive amount or an unknown method,
+  /// [StateError] when the trip does not exist, and [VanTripNotOpenException]
+  /// when it is already closed (spec §9.4 #16 — a closed trip is never edited
+  /// in place).
+  ///
+  /// **A driver can never call this**: the only surface is behind
+  /// `Gates.vanManage`, which a Driver-role user does not hold (spec §9.5 #21).
+  Future<VanRemittanceResult> recordDriverPayment({
+    required String tripId,
+    required int amountKobo,
+    required String method,
+    required String performedBy,
+    DateTime? paidOn,
+    String? receiptPath,
+    String? referenceNote,
+  }) async {
+    if (amountKobo <= 0) {
+      throw ArgumentError('A payment must be greater than zero.');
+    }
+    if (!kVanRemittanceMethods.contains(method)) {
+      throw ArgumentError('Unknown payment method: $method');
+    }
+    final now = paidOn ?? DateTime.now();
+
+    return transaction(() async {
+      final trip = await getTrip(tripId);
+      if (trip == null) {
+        throw StateError('Trip $tripId not found.');
+      }
+      if (trip.status != kVanTripStatusOpen) {
+        throw VanTripNotOpenException(
+          tripId: tripId,
+          message:
+              'This trip is already closed. Record the payment against the '
+              'driver\'s current trip instead.',
+        );
+      }
+
+      // Leg 2 FIRST — the ledger row references it, and a reference to a row
+      // that does not exist yet is how audit trails rot.
+      final paymentId = UuidV7.generate();
+      final payment = PaymentTransactionsCompanion.insert(
+        id: Value(paymentId),
+        businessId: requireBusinessId(),
+        // The SOURCE WAREHOUSE, never the van (see the doc comment).
+        storeId: Value(trip.sourceStoreId),
+        amountKobo: amountKobo,
+        method: method,
+        type: kPaymentTypeVanRemittance,
+        vanTripId: Value(tripId),
+        performedBy: Value(performedBy),
+        // Explicit — this row is dated by the day the money arrived, and the
+        // cash card counts it on its own `created_at`
+        // ([[project_synced_write_explicit_id]]).
+        createdAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await into(paymentTransactions).insert(payment);
+      await db.syncDao.enqueueUpsert('payment_transactions', payment);
+
+      // Leg 1 — the ledger CREDIT that moves the balance toward zero.
+      final ledgerEntryId = await db.driverLedgerDao.postEntry(
+        driverUserId: trip.driverUserId,
+        tripId: tripId,
+        type: method == 'cash'
+            ? kDriverLedgerTypePaymentCash
+            : kDriverLedgerTypePaymentTransfer,
+        amountKobo: amountKobo,
+        isCredit: true,
+        referenceType: kDriverLedgerRefPayment,
+        referenceId: paymentId,
+        activityDate: now,
+        performedBy: performedBy,
+        paymentMethod: method,
+        receiptPath: receiptPath,
+        referenceNote: referenceNote,
+      );
+
+      await db.activityLogDao.logActivity(
+        action: 'van.payment',
+        description:
+            'Driver payment of ${formatCurrency(amountKobo / 100)} '
+            'recorded ($method)',
+        staffId: performedBy,
+        storeId: trip.sourceStoreId,
+        entityType: 'van_trip',
+        entityId: tripId,
+      );
+
+      return VanRemittanceResult(
+        ledgerEntryId: ledgerEntryId,
+        paymentTransactionId: paymentId,
+        amountKobo: amountKobo,
+        driverBalanceKoboAfter: await db.driverLedgerDao.getBalanceKobo(
+          trip.driverUserId,
+        ),
+      );
+    });
   }
 }
 

@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/van_sales/screens/driver_payments_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
@@ -34,7 +35,8 @@ class VanSalesHubScreen extends ConsumerWidget {
         ref.watch(openVanTripsProvider).valueOrNull ?? const <VanTripData>[];
     final balances =
         ref.watch(driverBalancesProvider).valueOrNull ?? const <String, int>{};
-    final users = ref.watch(usersByBusinessProvider).valueOrNull ??
+    final users =
+        ref.watch(usersByBusinessProvider).valueOrNull ??
         const <String, UserData>{};
 
     // Open trip by van id — at most one each, guaranteed by the DAO block and
@@ -61,7 +63,7 @@ class VanSalesHubScreen extends ConsumerWidget {
       subtitle: vans.isEmpty
           ? null
           : '${vans.length} ${vans.length == 1 ? 'van' : 'vans'} • '
-              '${openTrips.length} out',
+                '${openTrips.length} out',
       body: vans.isEmpty
           ? _EmptyState(
               icon: FontAwesomeIcons.truck.data,
@@ -89,16 +91,30 @@ class VanSalesHubScreen extends ConsumerWidget {
                   driverName: trip == null
                       ? null
                       : users[trip.driverUserId]?.name ?? 'Driver',
-                  driverBalanceKobo:
-                      trip == null ? null : balances[trip.driverUserId] ?? 0,
+                  driverBalanceKobo: trip == null
+                      ? null
+                      : balances[trip.driverUserId] ?? 0,
                   onLoad: trip != null
                       ? null
                       : () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => LoadVanScreen(vanStoreId: van.id),
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => LoadVanScreen(vanStoreId: van.id),
+                          ),
+                        ),
+                  onPayments: trip == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DriverPaymentsScreen(
+                              tripId: trip.id,
+                              driverName:
+                                  users[trip.driverUserId]?.name ?? 'Driver',
+                              vanName: van.name,
                             ),
                           ),
+                        ),
                 );
               },
             ),
@@ -114,12 +130,18 @@ class _VanCard extends StatelessWidget {
   final int? driverBalanceKobo;
   final VoidCallback? onLoad;
 
+  /// Opens the trip's money story — the driver's balance, the trip's ledger
+  /// history, and the way to record a payment (#144). Null when the van is
+  /// home: there is no trip to remit against.
+  final VoidCallback? onPayments;
+
   const _VanCard({
     required this.van,
     required this.trip,
     required this.driverName,
     required this.driverBalanceKobo,
     required this.onLoad,
+    required this.onPayments,
   });
 
   @override
@@ -177,12 +199,27 @@ class _VanCard extends StatelessWidget {
               label: (driverBalanceKobo ?? 0) < 0
                   ? 'Owes ${formatCurrency(-(driverBalanceKobo ?? 0) / 100)}'
                   : (driverBalanceKobo ?? 0) == 0
-                      ? 'Settled'
-                      : 'In credit '
-                          '${formatCurrency((driverBalanceKobo ?? 0) / 100)}',
+                  ? 'Settled'
+                  : 'In credit '
+                        '${formatCurrency((driverBalanceKobo ?? 0) / 100)}',
               color: (driverBalanceKobo ?? 0) < 0 ? t.colorScheme.error : null,
             ),
             SizedBox(height: context.getRSize(12)),
+            // #144: recording what the driver has handed in. The button leads
+            // to the trip's money story rather than opening the form straight
+            // away — a manager wants to see the balance before typing a figure.
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onPayments,
+                icon: Icon(
+                  FontAwesomeIcons.moneyBillTransfer.data,
+                  size: context.getRSize(14),
+                ),
+                label: const Text('Driver payments'),
+              ),
+            ),
+            SizedBox(height: context.getRSize(8)),
             Text(
               // The one honest thing to say in this slice: reconcile-and-close
               // is #145. Promising a button that isn't there would be worse.

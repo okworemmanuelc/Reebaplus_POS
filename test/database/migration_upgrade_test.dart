@@ -1729,4 +1729,309 @@ void main() {
       expect(await objectExists(db2, 'table', 'driver_ledger_entries'), isTrue);
     });
   });
+
+  group('onUpgrade v71 → v72 (van remittance: payment_transactions gains a '
+      'sixth parent + a seventh type, #144)', () {
+    Future<bool> objectExists(AppDatabase db, String type, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='$type' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    /// Reverts payment_transactions to its pre-v72 shape: no `van_trip_id`, the
+    /// six-value type CHECK, and the FIVE-way exactly-one-parent CHECK.
+    /// Recreated WITHOUT FKs (mirrors the v61/v64 reverts) so the copy is
+    /// unconstrained; the migration rebuilds the real, FK-carrying table from
+    /// the Drift schema.
+    Future<void> revertPaymentTable(AppDatabase db) async {
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+      );
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+      );
+      await db.customStatement('DROP TABLE IF EXISTS payment_transactions');
+      await db.customStatement(
+        'CREATE TABLE payment_transactions ('
+        'id TEXT NOT NULL PRIMARY KEY, business_id TEXT NOT NULL, '
+        'store_id TEXT, '
+        'amount_kobo INTEGER NOT NULL, method TEXT NOT NULL, type TEXT NOT NULL, '
+        'order_id TEXT, shipment_id TEXT, expense_id TEXT, wallet_txn_id TEXT, '
+        'delivery_id TEXT, performed_by TEXT, voided_at INTEGER, '
+        'voided_by TEXT, void_reason TEXT, '
+        'created_at INTEGER NOT NULL DEFAULT 0, '
+        'last_updated_at INTEGER NOT NULL DEFAULT 0, '
+        "CHECK (method IN ('cash','transfer','card','wallet','pos','other')), "
+        "CHECK (type IN ('sale','purchase','expense','refund','wallet_topup',"
+        "'crate_deposit')), "
+        'CHECK ('
+        '(CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN shipment_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN expense_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN wallet_txn_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN delivery_id IS NOT NULL THEN 1 ELSE 0 END) = 1))',
+      );
+      await db.customStatement('PRAGMA foreign_keys = ON');
+    }
+
+    test('adds van_trip_id, widens both CHECKs, and carries every existing '
+        'payment row through the rebuild untouched', () async {
+      final biz = UuidV7.generate();
+      final orderId = UuidV7.generate();
+      final storeId = UuidV7.generate();
+      final legacySaleId = UuidV7.generate();
+      final depositId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+
+      // Real FK targets that survive the payment_transactions revert (only that
+      // table is dropped and recreated).
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Main')",
+        [storeId, biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-000001-AAAAAA', 100000, 100000, 'cash', 'completed')",
+        [orderId, biz],
+      );
+
+      await revertPaymentTable(db1);
+
+      // Two pre-existing rows of DIFFERENT types, one store-stamped and one
+      // legacy/store-less — the rebuild must carry both through byte for byte.
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, store_id, amount_kobo, method, type, order_id, '
+        ' created_at, last_updated_at) '
+        "VALUES (?, ?, ?, 100000, 'cash', 'sale', ?, 1700000000, 1700000000)",
+        [legacySaleId, biz, storeId, orderId],
+      );
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, amount_kobo, method, type, order_id, '
+        ' created_at, last_updated_at) '
+        "VALUES (?, ?, 5000, 'cash', 'crate_deposit', ?, 1700000001, 1700000001)",
+        [depositId, biz, orderId],
+      );
+
+      // Teeth for the widening: the pre-v72 CHECKs reject BOTH halves of a
+      // remittance — the type and the (absent) column.
+      await expectLater(
+        db1.customStatement(
+          'INSERT INTO payment_transactions '
+          '(id, business_id, amount_kobo, method, type, order_id) '
+          "VALUES (?, ?, 1, 'cash', 'van_remittance', ?)",
+          [UuidV7.generate(), biz, orderId],
+        ),
+        throwsA(anything),
+        reason: 'the pre-v72 6-value type CHECK must reject van_remittance',
+      );
+      expect(
+        (await columnsOf(db1, 'payment_transactions')).contains('van_trip_id'),
+        isFalse,
+      );
+
+      await db1.customStatement('PRAGMA user_version = 71');
+      await db1.close();
+
+      // Re-open → onUpgrade(71 → 72).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      // (1) The column exists.
+      expect(
+        (await columnsOf(db2, 'payment_transactions')).contains('van_trip_id'),
+        isTrue,
+        reason: 'v72 must add payment_transactions.van_trip_id',
+      );
+
+      // (2) EXISTING ROWS SURVIVED — same ids, same amounts, same stores, same
+      //     created_at days, and van_trip_id NULL (never the literal column
+      //     name, which is what a transformer-less copy of a missing column
+      //     produces and what would flip the parent CHECK to 2).
+      final rows = await db2
+          .customSelect(
+            'SELECT id, type, amount_kobo, store_id, order_id, van_trip_id, '
+            '       created_at '
+            'FROM payment_transactions ORDER BY created_at',
+          )
+          .get();
+      expect(rows, hasLength(2), reason: 'the rebuild must lose no rows');
+      expect(rows[0].read<String>('id'), legacySaleId);
+      expect(rows[0].read<String>('type'), 'sale');
+      expect(rows[0].read<int>('amount_kobo'), 100000);
+      expect(rows[0].read<String?>('store_id'), storeId);
+      expect(rows[0].read<String?>('order_id'), orderId);
+      expect(rows[0].read<String?>('van_trip_id'), isNull);
+      expect(rows[1].read<String>('id'), depositId);
+      expect(rows[1].read<String>('type'), 'crate_deposit');
+      expect(rows[1].read<String?>('store_id'), isNull,
+          reason: 'a legacy store-less row stays store-less');
+      expect(rows[1].read<String?>('van_trip_id'), isNull);
+
+      // (3) The widened type CHECK admits a remittance — parented by a trip.
+      final vanStoreId = UuidV7.generate();
+      final driverId = UuidV7.generate();
+      final tripId = UuidV7.generate();
+      await db2.customStatement(
+        "INSERT INTO stores (id, business_id, name, kind) "
+        "VALUES (?, ?, 'Van 1', 'van')",
+        [vanStoreId, biz],
+      );
+      await db2.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Driver Dan', '0000')",
+        [driverId, biz],
+      );
+      await db2.customStatement(
+        'INSERT INTO van_trips '
+        '(id, business_id, van_store_id, driver_user_id, source_store_id) '
+        'VALUES (?, ?, ?, ?, ?)',
+        [tripId, biz, vanStoreId, driverId, storeId],
+      );
+      await db2.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, store_id, amount_kobo, method, type, van_trip_id) '
+        "VALUES (?, ?, ?, 90000000, 'cash', 'van_remittance', ?)",
+        [UuidV7.generate(), biz, storeId, tripId],
+      );
+
+      // (4) …and the parent CHECK is still EXACTLY one, not at-most one.
+      await expectLater(
+        db2.customStatement(
+          'INSERT INTO payment_transactions '
+          '(id, business_id, amount_kobo, method, type) '
+          "VALUES (?, ?, 1, 'cash', 'van_remittance')",
+          [UuidV7.generate(), biz],
+        ),
+        throwsA(anything),
+        reason: 'a parentless payment row must still be rejected',
+      );
+      await expectLater(
+        db2.customStatement(
+          'INSERT INTO payment_transactions '
+          '(id, business_id, amount_kobo, method, type, order_id, van_trip_id) '
+          "VALUES (?, ?, 1, 'cash', 'van_remittance', ?, ?)",
+          [UuidV7.generate(), biz, orderId, tripId],
+        ),
+        throwsA(anything),
+        reason: 'a two-parent payment row must still be rejected',
+      );
+
+      // (5) Append-only triggers + indexes recreated after the rebuild.
+      expect(
+        await objectExists(db2, 'trigger', 'payment_transactions_immutable'),
+        isTrue,
+        reason: 'v72 must recreate the immutable ledger trigger',
+      );
+      expect(
+        await objectExists(db2, 'trigger', 'payment_transactions_no_delete'),
+        isTrue,
+        reason: 'v72 must recreate the no-delete ledger trigger',
+      );
+      expect(
+        await objectExists(
+          db2,
+          'trigger',
+          'bump_payment_transactions_last_updated_at',
+        ),
+        isTrue,
+      );
+      expect(
+        await objectExists(
+          db2,
+          'index',
+          'idx_payment_transactions_business_lua',
+        ),
+        isTrue,
+      );
+      expect(
+        await objectExists(db2, 'index', 'idx_payment_txn_business_type'),
+        isTrue,
+      );
+      expect(
+        await objectExists(db2, 'index', 'idx_payment_txn_van_trip'),
+        isTrue,
+        reason: 'the "Cash from drivers" scan index (#147) must exist',
+      );
+
+      // (6) The immutable trigger now guards van_trip_id, and the ledger still
+      //     refuses deletion.
+      await expectLater(
+        db2.customStatement(
+          'UPDATE payment_transactions SET van_trip_id = ? WHERE id = ?',
+          [tripId, legacySaleId],
+        ),
+        throwsA(anything),
+        reason: 'van_trip_id is immutable after insert (append-only ledger)',
+      );
+      await expectLater(
+        db2.customStatement(
+          'DELETE FROM payment_transactions WHERE id = ?',
+          [legacySaleId],
+        ),
+        throwsA(anything),
+      );
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT revert the table — just step user_version back, so the v72 block
+      // runs against a schema that already has van_trip_id. The addColumn guard
+      // must skip and the rebuild must still succeed, losing nothing.
+      final biz = UuidV7.generate();
+      final orderId = UuidV7.generate();
+      final payId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-000002-BBBBBB', 100000, 100000, 'cash', 'completed')",
+        [orderId, biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, amount_kobo, method, type, order_id) '
+        "VALUES (?, ?, 100000, 'cash', 'sale', ?)",
+        [payId, biz, orderId],
+      );
+      await db1.customStatement('PRAGMA user_version = 71');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(
+        (await columnsOf(db2, 'payment_transactions')).contains('van_trip_id'),
+        isTrue,
+      );
+      final rows = await db2
+          .customSelect('SELECT id FROM payment_transactions')
+          .get();
+      expect(rows.map((r) => r.read<String>('id')), [payId]);
+      expect(
+        await objectExists(db2, 'trigger', 'payment_transactions_immutable'),
+        isTrue,
+      );
+      expect(
+        await objectExists(db2, 'index', 'idx_payment_txn_van_trip'),
+        isTrue,
+      );
+    });
+  });
 }
