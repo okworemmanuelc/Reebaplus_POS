@@ -1815,6 +1815,29 @@ final driverBalanceProvider = businessScopedStreamFamily<int, String>(
   whenAbsent: 0,
 );
 
+/// One trip by id, live — so a screen tracking a trip sees it close under it
+/// rather than acting on a stale status.
+final vanTripProvider = businessScopedStreamFamily<VanTripData?, String>(
+  (ref, db, businessId, tripId) => db.vanTripsDao.watchTrip(tripId),
+  whenAbsent: null,
+);
+
+/// One trip's driver-ledger rows, newest first — the audit list behind the
+/// balance. Every load debit and every remittance credit (#144) appears here,
+/// which is what makes a balance readable as history rather than a number.
+final vanTripLedgerProvider =
+    businessScopedStreamFamily<List<DriverLedgerEntryData>, String>(
+      (ref, db, businessId, tripId) =>
+          db.driverLedgerDao.watchTripHistory(tripId),
+      whenAbsent: const [],
+    );
+
+// The CASH half of a remittance is read through
+// `VanTripsDao.watchRemittancesForTrip` / `remittedKoboForTrip`. No provider
+// wrapper yet: this screen shows the driver LEDGER (where a remittance already
+// appears as a credit), so a second per-trip feed would render the same money
+// twice. #145's reconcile screen is the first real consumer.
+
 /// The business's drivers: active staff whose role slug is `driver` (the role
 /// the cloud seeds per business, 0161). Composed from the existing membership /
 /// role / user providers rather than a new query, so a suspended or removed

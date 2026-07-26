@@ -389,6 +389,7 @@ mixin _$OrdersDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   OrdersDaoManager get managers => OrdersDaoManager(this);
@@ -467,6 +468,8 @@ class OrdersDaoManager {
         _db.attachedDatabase,
         _db.deliveryReceipts,
       );
+  $$VanTripsTableTableManager get vanTrips =>
+      $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -550,6 +553,7 @@ mixin _$PaymentTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   PaymentTransactionsDaoManager get managers =>
@@ -602,6 +606,8 @@ class PaymentTransactionsDaoManager {
         _db.attachedDatabase,
         _db.deliveryReceipts,
       );
+  $$VanTripsTableTableManager get vanTrips =>
+      $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -698,6 +704,7 @@ mixin _$WalletTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   WalletTransactionsDaoManager get managers =>
@@ -750,6 +757,8 @@ class WalletTransactionsDaoManager {
         _db.attachedDatabase,
         _db.deliveryReceipts,
       );
+  $$VanTripsTableTableManager get vanTrips =>
+      $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -1135,6 +1144,7 @@ mixin _$ExpensesDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   ExpensesDaoManager get managers => ExpensesDaoManager(this);
@@ -1188,6 +1198,8 @@ class ExpensesDaoManager {
         _db.attachedDatabase,
         _db.deliveryReceipts,
       );
+  $$VanTripsTableTableManager get vanTrips =>
+      $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -1374,6 +1386,20 @@ mixin _$VanTripsDaoMixin on DatabaseAccessor<AppDatabase> {
   $VanTripLotsTable get vanTripLots => attachedDatabase.vanTripLots;
   $DriverLedgerEntriesTable get driverLedgerEntries =>
       attachedDatabase.driverLedgerEntries;
+  $CustomersTable get customers => attachedDatabase.customers;
+  $OrdersTable get orders => attachedDatabase.orders;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
+  $ExpenseCategoriesTable get expenseCategories =>
+      attachedDatabase.expenseCategories;
+  $ExpensesTable get expenses => attachedDatabase.expenses;
+  $CustomerWalletsTable get customerWallets => attachedDatabase.customerWallets;
+  $WalletTransactionsTable get walletTransactions =>
+      attachedDatabase.walletTransactions;
+  $DriversTable get drivers => attachedDatabase.drivers;
+  $DeliveryReceiptsTable get deliveryReceipts =>
+      attachedDatabase.deliveryReceipts;
+  $PaymentTransactionsTable get paymentTransactions =>
+      attachedDatabase.paymentTransactions;
   VanTripsDaoManager get managers => VanTripsDaoManager(this);
 }
 
@@ -1407,6 +1433,41 @@ class VanTripsDaoManager {
       $$DriverLedgerEntriesTableTableManager(
         _db.attachedDatabase,
         _db.driverLedgerEntries,
+      );
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
+  $$OrdersTableTableManager get orders =>
+      $$OrdersTableTableManager(_db.attachedDatabase, _db.orders);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
+  $$ExpenseCategoriesTableTableManager get expenseCategories =>
+      $$ExpenseCategoriesTableTableManager(
+        _db.attachedDatabase,
+        _db.expenseCategories,
+      );
+  $$ExpensesTableTableManager get expenses =>
+      $$ExpensesTableTableManager(_db.attachedDatabase, _db.expenses);
+  $$CustomerWalletsTableTableManager get customerWallets =>
+      $$CustomerWalletsTableTableManager(
+        _db.attachedDatabase,
+        _db.customerWallets,
+      );
+  $$WalletTransactionsTableTableManager get walletTransactions =>
+      $$WalletTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.walletTransactions,
+      );
+  $$DriversTableTableManager get drivers =>
+      $$DriversTableTableManager(_db.attachedDatabase, _db.drivers);
+  $$DeliveryReceiptsTableTableManager get deliveryReceipts =>
+      $$DeliveryReceiptsTableTableManager(
+        _db.attachedDatabase,
+        _db.deliveryReceipts,
+      );
+  $$PaymentTransactionsTableTableManager get paymentTransactions =>
+      $$PaymentTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.paymentTransactions,
       );
 }
 
