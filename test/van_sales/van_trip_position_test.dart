@@ -536,4 +536,86 @@ void main() {
       _assertInvariants(p, label: 'restated');
     });
   });
+
+  group('spec §9.1 #2 — uncosted goods are disclosed, never silent', () {
+    test('a lot with no cost behind it is counted, and COGS excludes it', () {
+      // The warehouse had no costed batch for these units, so dispatch drew
+      // nothing and stamped unit_cost 0. They are real goods that really left,
+      // and the driver really signed for them at load price — but they cost
+      // the books nothing, so the profit below is NOT ₦115,000 of margin.
+      final p = computeVanTripPosition(
+        lots: [_lot(lotId: 'l1', quantity: 10, unitCostKobo: 0)],
+        sales: [_sale(quantity: 10)],
+        returns: const [],
+        ledger: [
+          _debit(kDriverLedgerTypeLoad, 10 * _loadPrice),
+          _credit(kDriverLedgerTypePaymentCash, 10 * _loadPrice),
+        ],
+      );
+
+      expect(p.uncostedUnits, 10);
+      expect(p.hasUncostedUnits, isTrue);
+      expect(
+        p.cogsKobo,
+        0,
+        reason: 'nothing was drawn, so nothing can be booked as cost',
+      );
+      expect(
+        p.profitKobo,
+        10 * _loadPrice,
+        reason:
+            'the whole recovery reads as profit precisely BECAUSE the cost is '
+            'missing — which is why the screen must say so',
+      );
+      _assertInvariants(p, label: 'uncosted');
+    });
+
+    test('only the uncosted lot counts when a trip mixes both', () {
+      final p = computeVanTripPosition(
+        lots: [
+          _lot(lotId: 'l1', quantity: 6), // costed
+          _lot(lotId: 'l2', quantity: 4, unitCostKobo: 0, dispatchedAt: _wed),
+        ],
+        sales: [_sale(quantity: 10)],
+        returns: const [],
+        ledger: [_debit(kDriverLedgerTypeLoad, 10 * _loadPrice)],
+      );
+
+      expect(p.uncostedUnits, 4);
+      expect(p.cogsKobo, 6 * _unitCost);
+      _assertInvariants(p, label: 'mixed costed/uncosted');
+    });
+
+    test('a fully costed trip discloses nothing', () {
+      final p = computeVanTripPosition(
+        lots: [_lot(lotId: 'l1', quantity: 10)],
+        sales: [_sale(quantity: 10)],
+        returns: const [],
+        ledger: [_debit(kDriverLedgerTypeLoad, 10 * _loadPrice)],
+      );
+
+      expect(p.uncostedUnits, 0);
+      expect(p.hasUncostedUnits, isFalse);
+      _assertInvariants(p, label: 'fully costed');
+    });
+
+    test('units returned good still count — the load was uncosted', () {
+      // The disclosure is about the LOAD, not about what was consumed: a
+      // returned uncosted unit re-batches the warehouse at 0 too, so the
+      // problem follows the goods rather than being cancelled by the return.
+      final p = computeVanTripPosition(
+        lots: [_lot(lotId: 'l1', quantity: 10, unitCostKobo: 0)],
+        sales: const [],
+        returns: [_good(quantity: 10, costKobo: 0)],
+        ledger: [
+          _debit(kDriverLedgerTypeLoad, 10 * _loadPrice),
+          _credit(kDriverLedgerTypeReturnGood, 10 * _loadPrice),
+        ],
+      );
+
+      expect(p.uncostedUnits, 10);
+      expect(p.balanceKobo, 0, reason: 'everything came back — settled');
+      _assertInvariants(p, label: 'uncosted, all returned');
+    });
+  });
 }

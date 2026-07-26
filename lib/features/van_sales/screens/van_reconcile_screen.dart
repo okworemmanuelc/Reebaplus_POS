@@ -111,6 +111,10 @@ class VanReconcileScreen extends ConsumerWidget {
           ],
           SizedBox(height: context.getRSize(16)),
           _ShellMemoCard(position: position),
+          if (position.hasUncostedUnits) ...[
+            SizedBox(height: context.getRSize(16)),
+            _UncostedCard(position: position),
+          ],
           SizedBox(height: context.getRSize(20)),
           if (isOpen) ...[
             _actions(context, ref, trip, position),
@@ -577,6 +581,57 @@ class _ShellMemoCard extends StatelessWidget {
               style: t.textTheme.bodySmall?.copyWith(color: semantic.warning),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The uncosted disclosure (spec §9.1 #2).
+///
+/// Loading goods the warehouse had no costed batch for is allowed — but those
+/// units contribute nothing to COGS, so the profit this screen is about to
+/// persist is overstated by whatever they really cost. The dispatch screen
+/// warns at load time; that warning is long gone by the time anyone closes the
+/// trip, which is the moment the number actually gets believed. So it is
+/// repeated here, next to the figure it undermines.
+///
+/// Deliberately no naira amount: the whole point is that the cost is *unknown*.
+/// Naming a figure would be inventing one.
+class _UncostedCard extends StatelessWidget {
+  final VanTripPosition position;
+
+  const _UncostedCard({required this.position});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final semantic = t.extension<AppSemanticColors>()!;
+    final n = position.uncostedUnits;
+    return _Card(
+      accent: semantic.warning,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Profit is understated',
+            style: t.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(height: context.getRSize(10)),
+          Text(
+            '$n ${n == 1 ? 'unit' : 'units'} on this trip left the store with '
+            'no recorded cost, so nothing was counted against '
+            "${n == 1 ? 'it' : 'them'} here.",
+            style: t.textTheme.bodyMedium,
+          ),
+          SizedBox(height: context.getRSize(6)),
+          Text(
+            'Record what those drinks cost you, then this trip can be '
+            'reconciled again on a true profit.',
+            style: t.textTheme.bodySmall?.copyWith(color: semantic.warning),
+          ),
         ],
       ),
     );

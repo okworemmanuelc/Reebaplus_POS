@@ -196,6 +196,22 @@ class VanTripPosition {
   /// **Disclosure only**, same as [shortageLossKobo].
   final int damageLossKobo;
 
+  /// Units on this trip whose lot carries `unit_cost_kobo == 0` because the
+  /// source warehouse had no costed batch to draw at dispatch (spec §9.1 #2).
+  ///
+  /// Loading uncosted goods is allowed — but it must never be silent. Those
+  /// units contribute **nothing** to [cogsKobo], so this trip's profit is
+  /// **overstated** by whatever they actually cost. Left undisclosed they read
+  /// as free goods and the close artifact reports a profit nobody earned.
+  ///
+  /// This is the trip's arm of the same Uncosted transparency the store-side
+  /// reports use (`ReconData.uncostedItems`). It cannot flow into that bucket
+  /// directly — van orders are excluded from every per-store figure by design
+  /// (§8.1) and road lines deliberately carry `buying_price_kobo == 0` (§5.6) —
+  /// so the disclosure has to live where van P&L lives: here, and on the
+  /// reconcile screen before Confirm.
+  final int uncostedUnits;
+
   /// Load-price value actually recovered: remittances + good returns.
   final int recoveredKobo;
 
@@ -236,6 +252,7 @@ class VanTripPosition {
     required this.cogsKobo,
     required this.shortageLossKobo,
     required this.damageLossKobo,
+    this.uncostedUnits = 0,
     required this.recoveredKobo,
     required this.profitKobo,
     required this.shellsOut,
@@ -264,6 +281,12 @@ class VanTripPosition {
   /// True when anything at all is still unsettled — the reconcile screen's
   /// "this trip will close with a balance" condition.
   bool get hasResidual => balanceKobo != 0;
+
+  /// True when any of this trip's goods left the warehouse with no recorded
+  /// cost, so [cogsKobo] is understated and [profitKobo] overstated by an
+  /// unknown amount. The reconcile screen must say so before Confirm — see
+  /// [uncostedUnits].
+  bool get hasUncostedUnits => uncostedUnits > 0;
 }
 
 // ── The computation ──────────────────────────────────────────────────────────
@@ -338,6 +361,7 @@ VanTripPosition computeVanTripPosition({
   var loadedUnits = 0;
   var loadedValueKobo = 0;
   var loadedCostKobo = 0;
+  var uncostedUnits = 0;
   var soldUnits = 0;
   var soldValueKobo = 0;
   var damageValueKobo = 0;
@@ -356,6 +380,10 @@ VanTripPosition computeVanTripPosition({
       productLoadedUnits += lot.quantity;
       loadedValueKobo += lot.quantity * lot.loadPriceKobo;
       loadedCostKobo += lot.quantity * lot.unitCostKobo;
+      // §9.1 #2 — a lot dispatched with no costed batch behind it contributes
+      // nothing to COGS. Count the units so close can disclose it rather than
+      // report a profit that is really just missing cost.
+      if (lot.unitCostKobo == 0) uncostedUnits += lot.quantity;
     }
     loadedUnits += productLoadedUnits;
 
@@ -487,6 +515,7 @@ VanTripPosition computeVanTripPosition({
     cogsKobo: cogsKobo,
     shortageLossKobo: shortageLossKobo,
     damageLossKobo: damageLossKobo,
+    uncostedUnits: uncostedUnits,
     recoveredKobo: recoveredKobo,
     // recovered − cogs. The loss lines are NOT subtracted again: the shortage
     // and damaged units are inside `consumed`, so their cost is already in
