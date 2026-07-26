@@ -2338,6 +2338,28 @@ class SupabaseSyncService {
       // purposes; the deferred set lives in its own pref and the
       // SyncIssues "Catching up" card surfaces it independently.
       await prefs.setInt(_consecutiveFailuresKey(businessId), 0);
+      // #145 (van-sales spec §9.4 #15) — a pull is exactly where a road sale
+      // that was rung before a trip closed finally lands. Restate the affected
+      // closed trips here: the compensating ledger pair, the artifact
+      // correction and ONE audit row, posted by the system. "Audited, never
+      // prompted" — a manager who closed a trip on Thursday cannot answer a
+      // question about a sale that arrived on Friday.
+      //
+      // Deliberately non-fatal: a sweep failure must never fail a pull that
+      // otherwise succeeded, and the next pull retries it (the drift is
+      // measured against durable state, so nothing is lost by skipping a run).
+      try {
+        final restated = await _db.vanTripsDao
+            .restateClosedTripsWithLateSales();
+        if (restated > 0) {
+          debugPrint(
+            '[SyncService] van: restated $restated closed trip(s) after a '
+            'late-arriving road sale',
+          );
+        }
+      } catch (e) {
+        debugPrint('[SyncService] van restatement sweep skipped: $e');
+      }
       pullStatus.value = pullStatus.value.copyWith(stage: PullStage.completed);
     } catch (e, st) {
       debugPrint('[SyncService] pullChanges failed: $e\n$st');

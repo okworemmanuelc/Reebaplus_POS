@@ -201,6 +201,13 @@ class _DailyReconciliationDetailScreenState
             SizedBox(height: context.spacingM),
           ],
           _salesCard(context, theme, d, delta: comparison?.totalSales),
+          // #147 — the van channel, as one aggregated block. Rendered only when
+          // the period actually saw van activity, so a business with no vans
+          // reads exactly as it did before.
+          if (d.van.hasActivity) ...[
+            SizedBox(height: context.spacingM),
+            _vanSalesCard(context, theme, d, isCeo: isCeo),
+          ],
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
             _plCard(context, theme, d, delta: comparison?.netProfit),
@@ -426,6 +433,70 @@ class _DailyReconciliationDetailScreenState
   /// cash expenses + cash supplier payments out. **Business-wide** (the
   /// payment_transactions ledger has no store) and **not a counted drawer**:
   /// there is no opening float to add this to (Hard Rule #8). CEO-only.
+  /// Van Sales — the road channel's whole contribution to the period (#147,
+  /// van-sales spec §8.2, ADR 0019 decision 3).
+  ///
+  /// One aggregated revenue line and no detail: the per-order story lives on
+  /// the driver profile, and a closing report that listed every road sale would
+  /// bury the shop's own day. Profit is **read from each closed trip's
+  /// persisted artifact**, never re-derived — and when a trip is still out, the
+  /// card prints the caveat instead of a figure, because revenue was recognised
+  /// at the sale and profit is only decided at the close.
+  Widget _vanSalesCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    required bool isCeo,
+  }) {
+    final van = d.van;
+    final semantic = theme.extension<AppSemanticColors>()!;
+    return _card(
+      context,
+      theme,
+      'Van sales',
+      FontAwesomeIcons.truck.data,
+      semantic.info,
+      [
+        _line(
+          context,
+          theme,
+          'Van sales (all trips)',
+          formatCurrency(van.salesKobo / 100.0),
+          strong: true,
+        ),
+        _line(context, theme, 'Cash from drivers',
+            formatCurrency(van.remittedKobo / 100.0)),
+        if (isCeo) ...[
+          _divider(theme),
+          _line(context, theme, 'Cost of goods gone (closed trips)',
+              formatCurrency(van.cogsKobo / 100.0)),
+          _line(
+            context,
+            theme,
+            'Van profit (closed trips)',
+            formatCurrency(van.profitKobo / 100.0),
+            strong: true,
+            color: van.profitKobo >= 0 ? semantic.success : theme.colorScheme.error,
+          ),
+        ],
+        if (van.hasOpenTripCaveat) ...[
+          const SizedBox(height: 6),
+          Text(
+            van.caveatLine((v) => formatCurrency(v)),
+            style: context.bodySmall.copyWith(color: semantic.warning),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'Road sales are counted through the warehouse each van loaded from, '
+          'and are kept out of every per-store figure. Profit is booked when '
+          'the trip is reconciled and closed.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+    );
+  }
+
   Widget _cashFlowCard(
     BuildContext context,
     ThemeData theme,
@@ -446,6 +517,14 @@ class _DailyReconciliationDetailScreenState
             '+ ${formatCurrency(d.cashSalesKobo / 100.0)}'),
         _line(context, theme, 'Debts collected (cash)',
             '+ ${formatCurrency(d.cashDebtsCollectedKobo / 100.0)}'),
+        // #147 — "Cash from drivers": remittances, on the day the money
+        // arrived. Beside Cash sales, never inside it: a road sale wrote no
+        // payment row at all (ADR 0019 decision 2), so this is the one moment
+        // van money enters the cash books, and folding it into Cash sales would
+        // double-count revenue the driver already rang.
+        if (d.cashFromDriversKobo != 0)
+          _line(context, theme, 'Cash from drivers',
+              '+ ${formatCurrency(d.cashFromDriversKobo / 100.0)}'),
         _line(context, theme, 'Cash in',
             formatCurrency(d.cashInKobo / 100.0), strong: true),
         _divider(theme),
@@ -1098,6 +1177,19 @@ class _DailyReconciliationDetailScreenState
       ],
       if (d.vatEnabled)
         ['VAT due (${d.vatRateLabel}%, ${d.vatBasisLabel})', money(d.vatKobo)],
+      // #147 — the van card's lines, in the same order the card renders them.
+      // Emitted only when the period saw van activity, so an export from a
+      // business with no vans is byte-identical to before.
+      if (d.van.hasActivity) ...[
+        ['Van sales (all trips)', money(d.van.salesKobo)],
+        ['Cash from drivers', money(d.van.remittedKobo)],
+        if (isCeo) ...[
+          ['Van cost of goods gone (closed trips)', money(d.van.cogsKobo)],
+          ['Van profit (closed trips)', money(d.van.profitKobo)],
+        ],
+        if (d.van.hasOpenTripCaveat)
+          ['Van revenue awaiting trip close', money(d.van.openRevenueKobo)],
+      ],
       if (isCeo) ...[
         // Net result for this period (flow) — mirrors _netResultCard.
         ['Inventory on hand (at cost)', money(d.inventoryOnHandKobo)],
@@ -1141,6 +1233,8 @@ class _DailyReconciliationDetailScreenState
         // Cash flow (business-wide) — mirrors _cashFlowCard.
         ['Cash sales', money(d.cashSalesKobo)],
         ['Debts collected (cash)', money(d.cashDebtsCollectedKobo)],
+        if (d.cashFromDriversKobo != 0)
+          ['Cash from drivers', money(d.cashFromDriversKobo)],
         ['Refunds paid (cash)', money(d.cashRefundsKobo)],
         ['Expenses paid (cash)', money(d.cashExpensesKobo)],
         ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],

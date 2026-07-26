@@ -783,6 +783,30 @@ const List<String> kVanReturnConditions = [
 /// `InventoryDao.productDeletedReason` follows.
 const String kVanReturnDamageReason = 'damage:van_return';
 
+/// The `stock_adjustments.reason` trip close stamps when it clears a van of the
+/// goods that never came back (#145, van-sales spec §6.1 "shortage").
+///
+/// A shortage is stock the van's inventory row still carries: those units were
+/// never sold (no sale left the van) and never returned (no return event). If
+/// close left them there, the van would hold phantom goods forever — inflating
+/// All-Stores inventory value and business worth, which DO count van stock as
+/// company stock (spec §4.1) — while the close artifact's COGS already treats
+/// them as gone.
+///
+/// Deliberately NOT a `damage:` reason: the shortage may be entirely the
+/// driver's liability (spec §5.5 — an un-written-off shortage books no company
+/// loss), and it is the CLOSE ARTIFACT, never the store damages roll-up, that
+/// discloses it. A van store is outside `reconStoreFilter` anyway, so these rows
+/// reach no per-store figure either way; the machine key exists so the movement
+/// is identifiable rather than anonymous.
+const String kVanCloseShortageReason = 'van_shortage:trip_closed';
+
+/// How many days an open trip may run before the Van Sales hub nags about it
+/// (spec §9.4 #17). Revenue is recognised while a trip lingers and cost is not
+/// booked until it closes, so a forgotten trip quietly separates the two — the
+/// nag is what stops that from being invisible.
+const int kVanStaleTripDays = 3;
+
 /// One van run: `open → closed`, referencing van + driver + source warehouse
 /// (van-sales spec §4.2). The aggregate the whole reconciliation hangs off.
 ///
