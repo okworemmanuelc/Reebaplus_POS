@@ -66,8 +66,12 @@ void main() {
     // since #142's trip tag — and both restore RESILIENTLY, so a trip arriving
     // after its child would not raise: it would silently DROP a money row on
     // every restore. Parents first.
+    // #143 inserted `van_return_events` between the lots and the ledger: its
+    // parent is `van_trips` (above it) and the ledger rows that reference a
+    // return event come after it.
     'van_trips',
     'van_trip_lots',
+    'van_return_events',
     'driver_ledger_entries',
     'orders',
     'order_items',
@@ -145,8 +149,11 @@ void main() {
     // #174: persisted day close snapshot.
     'daily_closings',
     // #141 Van Sales: trip aggregate, priced load lots, consignment ledger.
+    // #143 added the dated return events (good = credit + re-batch, damaged =
+    // loss at snapshotted cost).
     'van_trips',
     'van_trip_lots',
+    'van_return_events',
     'driver_ledger_entries',
     'expense_categories',
     'expenses',

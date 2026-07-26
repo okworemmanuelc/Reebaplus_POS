@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_payments_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// The Van Sales hub (#141, PRD #139 / ADR 0019) — the manager's way in to the
@@ -115,6 +116,33 @@ class VanSalesHubScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
+                  // #143 — the two mid-run events. Both only exist while the
+                  // van is out: a restock loads onto an OPEN trip, and there is
+                  // nothing to return against a van at the yard.
+                  onRestock: trip == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => LoadVanScreen(
+                              vanStoreId: van.id,
+                              trip: trip,
+                            ),
+                          ),
+                        ),
+                  onReturn: trip == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => VanReturnScreen(
+                              trip: trip,
+                              driverName:
+                                  users[trip.driverUserId]?.name ?? 'Driver',
+                              vanName: van.name,
+                            ),
+                          ),
+                        ),
                 );
               },
             ),
@@ -135,6 +163,14 @@ class _VanCard extends StatelessWidget {
   /// home: there is no trip to remit against.
   final VoidCallback? onPayments;
 
+  /// Loads MORE onto the open trip (#143). Null when the van is home — a
+  /// restock needs a trip to restock onto; loading a parked van opens one.
+  final VoidCallback? onRestock;
+
+  /// Records goods coming back off the open trip (#143). Null when the van is
+  /// home.
+  final VoidCallback? onReturn;
+
   const _VanCard({
     required this.van,
     required this.trip,
@@ -142,6 +178,8 @@ class _VanCard extends StatelessWidget {
     required this.driverBalanceKobo,
     required this.onLoad,
     required this.onPayments,
+    required this.onRestock,
+    required this.onReturn,
   });
 
   @override
@@ -205,6 +243,35 @@ class _VanCard extends StatelessWidget {
               color: (driverBalanceKobo ?? 0) < 0 ? t.colorScheme.error : null,
             ),
             SizedBox(height: context.getRSize(12)),
+            // #143: the two mid-run events. Side by side because they are the
+            // pair a manager reaches for at the tailgate — more goods out, or
+            // goods back — and both move the balance the moment they are logged.
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onRestock,
+                    icon: Icon(
+                      FontAwesomeIcons.boxesPacking.data,
+                      size: context.getRSize(14),
+                    ),
+                    label: const Text('Restock'),
+                  ),
+                ),
+                SizedBox(width: context.getRSize(10)),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onReturn,
+                    icon: Icon(
+                      FontAwesomeIcons.arrowRotateLeft.data,
+                      size: context.getRSize(14),
+                    ),
+                    label: const Text('Returns'),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: context.getRSize(10)),
             // #144: recording what the driver has handed in. The button leads
             // to the trip's money story rather than opening the form straight
             // away — a manager wants to see the balance before typing a figure.

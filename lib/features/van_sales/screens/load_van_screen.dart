@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -38,7 +39,8 @@ class _DraftLine {
   int get valueKobo => quantity * loadPriceKobo;
 }
 
-/// Load Van (#141, PRD #139 / ADR 0019, van-sales spec §4.2–§4.4, §9.1).
+/// Load Van (#141, PRD #139 / ADR 0019, van-sales spec §4.2–§4.4, §9.1) — and,
+/// with [trip] supplied, **Restock** the same van mid-run (#143).
 ///
 /// Pick a driver, a source warehouse, and the drinks going on board — each at a
 /// **load price defaulting to the retail tier and editable per line**, because
@@ -46,15 +48,27 @@ class _DraftLine {
 /// reconciliation, agreed at the tailgate, not whatever the catalogue says
 /// later.
 ///
-/// Dispatch is one transaction in [VanTripsDao.dispatchLoad] and is **idempotent
-/// on a key this screen mints ONCE** ([_dispatchEventId]) — so a double-tap or a
-/// retry after a slow write can never debit the driver twice.
+/// **Restock is the same screen deliberately.** A restock is not a different
+/// kind of event: it is the same dispatch against a trip that already exists
+/// (spec §7). Giving it its own screen would mean a second below-cost warning, a
+/// second uncosted disclosure and a second shell-memo field, each free to drift
+/// from this one. Only two things change in restock mode: the driver and the
+/// source warehouse are FIXED by the open trip (v1 is one warehouse per trip),
+/// and the write goes to [VanTripsDao.restockTrip] instead of `dispatchLoad`.
+///
+/// Dispatch is one transaction and is **idempotent on a key this screen mints
+/// ONCE** ([_dispatchEventId]) — so a double-tap or a retry after a slow write
+/// can never debit the driver twice.
 class LoadVanScreen extends ConsumerStatefulWidget {
   /// The van being loaded — always supplied by the Van Sales hub, because a van
   /// appears in no ordinary store picker (#140).
   final String vanStoreId;
 
-  const LoadVanScreen({super.key, required this.vanStoreId});
+  /// The open trip to RESTOCK (#143), or null to open a fresh one. When set,
+  /// the driver and the source warehouse are read from it rather than picked.
+  final VanTripData? trip;
+
+  const LoadVanScreen({super.key, required this.vanStoreId, this.trip});
 
   @override
   ConsumerState<LoadVanScreen> createState() => _LoadVanScreenState();
@@ -64,6 +78,9 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
   UserData? _driver;
   StoreData? _sourceStore;
   final List<_DraftLine> _lines = [];
+
+  /// True when this is a mid-run restock onto an already-open trip.
+  bool get _isRestock => widget.trip != null;
 
   /// The idempotency key for THIS dispatch (spec §7.1). Minted once, when the
   /// screen opens, and re-used across every retry — that is the whole contract.
@@ -94,7 +111,22 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
         ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[],
       );
       final drivers = ref.read(vanDriversProvider);
+      final trip = widget.trip;
       setState(() {
+        if (trip != null) {
+          // Restock: both axes are decided by the trip already on the road.
+          // Reading them from the trip (not a picker) is what stops a restock
+          // silently loading from a second warehouse, which v1 does not model.
+          final users =
+              ref.read(usersByBusinessProvider).valueOrNull ??
+              const <String, UserData>{};
+          _driver = users[trip.driverUserId];
+          for (final s in ref.read(allStoresProvider).valueOrNull ??
+              const <StoreData>[]) {
+            if (s.id == trip.sourceStoreId) _sourceStore = s;
+          }
+          return;
+        }
         if (warehouses.length == 1) _sourceStore = warehouses.first;
         if (drivers.length == 1) _driver = drivers.first;
       });
@@ -229,25 +261,34 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
 
     setState(() => _submitting = true);
     try {
-      final result =
-          await ref.read(databaseProvider).vanTripsDao.dispatchLoad(
-                vanStoreId: widget.vanStoreId,
-                driverUserId: driver.id,
-                sourceStoreId: source.id,
-                performedBy: currentUser.id,
-                // The same key on every attempt — the idempotency contract.
-                dispatchEventId: _dispatchEventId,
-                lines: _lines
-                    .map(
-                      (l) => VanLoadLine(
-                        productId: l.product.product.id,
-                        quantity: l.quantity,
-                        loadPriceKobo: l.loadPriceKobo,
-                        shellsOut: l.shellsOut,
-                      ),
-                    )
-                    .toList(growable: false),
-              );
+      final dao = ref.read(databaseProvider).vanTripsDao;
+      final lines = _lines
+          .map(
+            (l) => VanLoadLine(
+              productId: l.product.product.id,
+              quantity: l.quantity,
+              loadPriceKobo: l.loadPriceKobo,
+              shellsOut: l.shellsOut,
+            ),
+          )
+          .toList(growable: false);
+      // Both branches carry the SAME key on every attempt — the idempotency
+      // contract (spec §7.1). A restock is the same dispatch onto an open trip.
+      final result = _isRestock
+          ? await dao.restockTrip(
+              tripId: widget.trip!.id,
+              lines: lines,
+              performedBy: currentUser.id,
+              dispatchEventId: _dispatchEventId,
+            )
+          : await dao.dispatchLoad(
+              vanStoreId: widget.vanStoreId,
+              driverUserId: driver.id,
+              sourceStoreId: source.id,
+              performedBy: currentUser.id,
+              dispatchEventId: _dispatchEventId,
+              lines: lines,
+            );
       if (!mounted) return;
 
       // §9.1 #2 — an uncosted load is allowed, but it is DISCLOSED. Left
@@ -263,12 +304,20 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
       AppNotification.showSuccess(
         context,
         result.alreadyApplied
-            ? 'This load was already sent.'
+            ? _isRestock
+                  ? 'This restock was already sent.'
+                  : 'This load was already sent.'
+            : _isRestock
+            ? '${driver.name} signed for '
+                  '${formatCurrency(result.totalLoadValueKobo / 100)} more.'
             : '${driver.name} signed for '
-                '${formatCurrency(result.totalLoadValueKobo / 100)}.',
+                  '${formatCurrency(result.totalLoadValueKobo / 100)}.',
       );
       Navigator.pop(context);
     } on VanTripAlreadyOpenException catch (e) {
+      if (!mounted) return;
+      AppNotification.showError(context, e.message);
+    } on VanTripNotOpenException catch (e) {
       if (!mounted) return;
       AppNotification.showError(context, e.message);
     } on InsufficientStockException catch (_) {
@@ -309,7 +358,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
             .toList();
 
     return GlassyScaffold(
-      title: 'Load Van',
+      title: _isRestock ? 'Restock Van' : 'Load Van',
       subtitle: vanName,
       body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
@@ -321,47 +370,59 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppDropdown<UserData>(
-              labelText: 'Driver',
-              hintText: drivers.isEmpty
-                  ? 'No staff have the Driver role yet'
-                  : 'Who is taking it out?',
-              value: _driver,
-              prefixIcon: Icon(
-                FontAwesomeIcons.userTie.data,
-                size: 14,
-                color: _subtext,
+            if (_isRestock)
+              // Both axes are FIXED by the open trip, so they are stated, not
+              // offered: a restock goes to the driver who is out, from the
+              // warehouse the trip loads from (one per trip in v1, spec §4.2).
+              _FixedTripCard(
+                driverName: _driver?.name ?? 'Driver',
+                sourceName: _sourceStore?.name ?? 'Warehouse',
+              )
+            else ...[
+              AppDropdown<UserData>(
+                labelText: 'Driver',
+                hintText: drivers.isEmpty
+                    ? 'No staff have the Driver role yet'
+                    : 'Who is taking it out?',
+                value: _driver,
+                prefixIcon: Icon(
+                  FontAwesomeIcons.userTie.data,
+                  size: 14,
+                  color: _subtext,
+                ),
+                items: drivers
+                    .map((d) => DropdownMenuItem(value: d, child: Text(d.name)))
+                    .toList(),
+                onChanged: (v) => setState(() => _driver = v),
               ),
-              items: drivers
-                  .map((d) => DropdownMenuItem(value: d, child: Text(d.name)))
-                  .toList(),
-              onChanged: (v) => setState(() => _driver = v),
-            ),
-            SizedBox(height: context.getRSize(16)),
+              SizedBox(height: context.getRSize(16)),
 
-            AppDropdown<StoreData>(
-              labelText: 'Load from',
-              hintText: 'Which store are the drinks coming out of?',
-              value: _sourceStore,
-              prefixIcon: Icon(
-                FontAwesomeIcons.warehouse.data,
-                size: 14,
-                color: _subtext,
+              AppDropdown<StoreData>(
+                labelText: 'Load from',
+                hintText: 'Which store are the drinks coming out of?',
+                value: _sourceStore,
+                prefixIcon: Icon(
+                  FontAwesomeIcons.warehouse.data,
+                  size: 14,
+                  color: _subtext,
+                ),
+                items: warehouses
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
+                    .toList(),
+                onChanged: (v) => setState(() {
+                  _sourceStore = v;
+                  // The lines were priced and stocked against the old store.
+                  _lines.clear();
+                  _belowCost = const {};
+                }),
               ),
-              items: warehouses
-                  .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
-                  .toList(),
-              onChanged: (v) => setState(() {
-                _sourceStore = v;
-                // The lines were priced and stocked against the old store.
-                _lines.clear();
-                _belowCost = const {};
-              }),
-            ),
+            ],
             SizedBox(height: context.getRSize(20)),
 
             Text(
-              'What is going on board',
+              _isRestock
+                  ? 'What is going on board now'
+                  : 'What is going on board',
               style: t.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -431,13 +492,81 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
             SizedBox(height: context.getRSize(20)),
 
             AppButton(
-              text: _submitting ? 'Sending…' : 'Dispatch Load',
+              text: _submitting
+                  ? 'Sending…'
+                  : _isRestock
+                  ? 'Send Restock'
+                  : 'Dispatch Load',
               icon: FontAwesomeIcons.truckFast.data,
               onPressed: _submitting ? null : _dispatch,
               isFullWidth: true,
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Restock mode: the driver and warehouse the open trip already decided,
+/// stated rather than offered.
+class _FixedTripCard extends StatelessWidget {
+  final String driverName;
+  final String sourceName;
+
+  const _FixedTripCard({required this.driverName, required this.sourceName});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.getRSize(14)),
+      decoration: BoxDecoration(
+        color: t.colorScheme.surface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+        border: Border.all(color: t.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                FontAwesomeIcons.userTie.data,
+                size: context.getRSize(12),
+                color: subtext,
+              ),
+              SizedBox(width: context.getRSize(8)),
+              Expanded(
+                child: Text(
+                  driverName,
+                  style: t.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: context.getRSize(6)),
+          Row(
+            children: [
+              Icon(
+                FontAwesomeIcons.warehouse.data,
+                size: context.getRSize(12),
+                color: subtext,
+              ),
+              SizedBox(width: context.getRSize(8)),
+              Expanded(
+                child: Text(
+                  'Loading from $sourceName',
+                  style: t.textTheme.bodySmall?.copyWith(color: subtext),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -1832,6 +1832,19 @@ final vanTripLedgerProvider =
       whenAbsent: const [],
     );
 
+/// One trip's recorded returns, newest first (#143).
+///
+/// The reason the return screen shows this list at all: a return is a physical
+/// count typed by hand, so the one thing a manager needs after logging one is
+/// proof of what has already been logged — a duplicate entry is otherwise
+/// invisible until close.
+final vanTripReturnsProvider =
+    businessScopedStreamFamily<List<VanReturnEventData>, String>(
+      (ref, db, businessId, tripId) =>
+          db.vanTripsDao.watchReturnsForTrip(tripId),
+      whenAbsent: const [],
+    );
+
 // The CASH half of a remittance is read through
 // `VanTripsDao.watchRemittancesForTrip` / `remittedKoboForTrip`. No provider
 // wrapper yet: this screen shows the driver LEDGER (where a remittance already

@@ -229,6 +229,16 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// Stock, which writes its own receipt-dated batch (double-batching would
   /// drift the queue). [inflowReceivedAt] is the FIFO ordering key for an
   /// increase's batch (defaults to now).
+  ///
+  /// [outflowValueKobo] is the **decrease** counterpart of [inflowUnitCostKobo]:
+  /// the total cost (kobo) to snapshot onto the `stock_adjustments` row when the
+  /// caller — not this store's FIFO queue — is the authority on what the loss
+  /// cost. Exactly one caller today: a damaged van return (#143), whose goods
+  /// sit on a VAN store that deliberately holds no cost batches at all (ADR
+  /// 0019 — the load lot's snapshot is the van's cost truth). Drawing that
+  /// store's empty queue would book the loss at 0 and understate it silently.
+  /// When supplied it WINS: no draw-down runs, and `unit_cost_kobo` is
+  /// `round(value / |delta|)` — the same blend a multi-batch draw-down produces.
   Future<void> adjustStock(
     String productId,
     String storeId,
@@ -239,6 +249,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     String? refId,
     int? inflowUnitCostKobo,
     DateTime? inflowReceivedAt,
+    int? outflowValueKobo,
     bool trackCost = true,
   }) async {
     if (delta == 0) return;
@@ -353,7 +364,12 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         // (uncosted), exactly like a sale. Skipped when [trackCost] is false.
         int? snapshotUnitCostKobo;
         int? snapshotValueKobo;
-        if (trackCost && delta < 0) {
+        if (delta < 0 && outflowValueKobo != null) {
+          // The caller holds the cost basis (a van lot's snapshot, #143). No
+          // draw-down: the store this outflow leaves has no queue to draw.
+          snapshotValueKobo = outflowValueKobo < 0 ? 0 : outflowValueKobo;
+          snapshotUnitCostKobo = (snapshotValueKobo / -delta).round();
+        } else if (trackCost && delta < 0) {
           final drawnKobo = await db.costBatchesDao.drawDownOutflow(
             productId,
             storeId,
