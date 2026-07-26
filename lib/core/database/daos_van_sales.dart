@@ -396,6 +396,23 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// Every trip in the business, open and closed, newest first.
+  ///
+  /// The closing report's feed (#147). It needs the WHOLE set, not just the
+  /// open ones: a road sale is attributed to the period through its trip's
+  /// `source_store_id` (the van it was rung on is outside every store scope),
+  /// and van profit is `Σ profit_kobo` over the trips that CLOSED in the
+  /// period — which are, by definition, no longer open.
+  Stream<List<VanTripData>> watchAllTrips() {
+    return (select(vanTrips)
+          ..where(whereBusiness)
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.openedAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
   /// Every trip (open and closed) for one van, newest first.
   Stream<List<VanTripData>> watchTripsForVan(String vanStoreId) {
     return (select(vanTrips)
@@ -1734,6 +1751,512 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       );
     });
   }
+
+  // ── Reconcile & close (#145, spec §5.5 / §6 / §9.4, ADR 0019 decision 3) ──
+
+  /// The recognised road-sale LINES on [tripId] — the `sold` side of the
+  /// position, at line granularity.
+  ///
+  /// Lines rather than orders because the valuation is per product: the pure
+  /// function attributes each sold unit to the lot it was loaded on, which an
+  /// order total cannot do. Recognition uses [orderCountsAsSale], never a
+  /// `== 'completed'` filter (`[[project_revenue_recognized_at_checkout]]`), so
+  /// a cancelled road sale drops out and its units become shortage again —
+  /// which is exactly right: the goods came back onto the van.
+  ///
+  /// Quick-sale lines (no `product_id`) are skipped: they cannot be attributed
+  /// to a lot, and the driver terminal prices exclusively off the trip's load
+  /// price list, so a road quick sale is not reachable in v1.
+  Future<List<VanPositionSaleLine>> saleLinesForTrip(String tripId) async {
+    final tripOrders =
+        await (select(orders)
+              ..where((o) => whereBusiness(o) & o.vanTripId.equals(tripId)))
+            .get();
+    final recognised = {
+      for (final o in tripOrders)
+        if (orderCountsAsSale(o.status)) o.id,
+    };
+    if (recognised.isEmpty) return const <VanPositionSaleLine>[];
+
+    final items =
+        await (db.select(db.orderItems)..where(
+              (i) =>
+                  whereBusiness(i) &
+                  i.orderId.isIn(recognised) &
+                  i.productId.isNotNull(),
+            ))
+            .get();
+    return [
+      for (final i in items)
+        VanPositionSaleLine(
+          productId: i.productId!,
+          quantity: i.quantity,
+          rungValueKobo: i.totalKobo,
+        ),
+    ];
+  }
+
+  /// [tripId]'s whole position — the ONE read every reconcile surface uses.
+  ///
+  /// A thin assembler over [computeVanTripPosition]: it fetches the four inputs
+  /// and hands them over as values. All the math (including the
+  /// `outstanding == −balance` tie-out) lives in the pure function, so the
+  /// reconcile screen, the close write and the fixture suite are all looking at
+  /// the same arithmetic.
+  Future<VanTripPosition> positionForTrip(String tripId) async {
+    final trip = await getTrip(tripId);
+    final lots = await lotsForTrip(tripId);
+    final returnRows = await returnsForTrip(tripId);
+    final ledgerRows = await db.driverLedgerDao.entriesForTrip(tripId);
+    final sales = await saleLinesForTrip(tripId);
+
+    return computeVanTripPosition(
+      lots: [
+        for (final l in lots)
+          VanPositionLot(
+            lotId: l.id,
+            productId: l.productId,
+            quantity: l.quantity,
+            loadPriceKobo: l.loadPriceKobo,
+            unitCostKobo: l.unitCostKobo,
+            dispatchedAt: l.dispatchedAt,
+          ),
+      ],
+      sales: sales,
+      returns: [
+        for (final r in returnRows)
+          VanPositionReturn(
+            productId: r.productId,
+            quantity: r.quantity,
+            condition: r.condition,
+            creditKobo: r.creditKobo,
+            costKobo: r.costKobo,
+          ),
+      ],
+      ledger: [
+        for (final e in ledgerRows)
+          VanPositionLedgerEntry(
+            type: e.type,
+            signedAmountKobo: e.signedAmountKobo,
+          ),
+      ],
+      shellsOut: trip?.shellsOut ?? 0,
+      shellsBack: trip?.shellsBack ?? 0,
+    );
+  }
+
+  /// Live [positionForTrip] — the reconcile screen's whole feed.
+  ///
+  /// Merged from every table that can move the position, because a manager
+  /// standing at the tailgate logs a return, records a payment and posts a
+  /// write-off in one sitting and must see each one land. A screen that watched
+  /// only one of them would show a stale settlement at the exact moment the
+  /// decision is made.
+  Stream<VanTripPosition> watchPositionForTrip(String tripId) {
+    return Rx.merge<void>([
+      watchTrip(tripId).map((_) {}),
+      watchLotsForTrip(tripId).map((_) {}),
+      watchReturnsForTrip(tripId).map((_) {}),
+      watchSalesForTrip(tripId).map((_) {}),
+      db.driverLedgerDao.watchTripHistory(tripId).map((_) {}),
+    ]).debounceTime(const Duration(milliseconds: 40)).asyncMap((_) {
+      return positionForTrip(tripId);
+    });
+  }
+
+  /// Live [pendingSaleEnvelopeCountForTrip] — re-read whenever this device's
+  /// outbox moves, so the close warning clears the moment the last road sale
+  /// goes up.
+  Stream<int> watchPendingSaleEnvelopesForTrip(String tripId) {
+    return db.syncDao.watchPendingCount().asyncMap(
+      (_) => pendingSaleEnvelopeCountForTrip(tripId),
+    );
+  }
+
+  /// Forgive part of what a driver owes — the deliberate, audited escape hatch
+  /// (#145, spec §5.5).
+  ///
+  /// **A write-off is dual-valued, and only ONE of the two legs is a write.**
+  ///
+  ///  * The **driver-ledger credit** is at **load price** — that is the debt
+  ///    being forgiven, and it is what this method appends.
+  ///  * The **company loss** is at the **snapshotted cost** and is already
+  ///    booked. For damage it was booked when the damaged return was recorded
+  ///    (#143's valued outflow); for shortage it is booked when close clears the
+  ///    van. Either way those units are inside `consumed`, so their cost is
+  ///    already inside `cogs_kobo` — the artifact's `shortage_loss_kobo` /
+  ///    `damage_loss_kobo` are DISCLOSURE fields that say how much of COGS the
+  ///    loss accounts for. Booking a second loss here would double-count it,
+  ///    and booking the loss at load price would overstate it by a margin the
+  ///    business never earned.
+  ///
+  /// [type] must be [kDriverLedgerTypeShortageWriteoff] or
+  /// [kDriverLedgerTypeDamageWriteoff]. Throws [VanTripNotOpenException] on a
+  /// closed trip (spec §9.4 #16 — corrections after close are compensating
+  /// entries, posted through the restatement path, not new write-offs).
+  Future<String> postWriteOff({
+    required String tripId,
+    required String type,
+    required int amountKobo,
+    required String performedBy,
+    String? reason,
+    DateTime? postedAt,
+  }) async {
+    if (type != kDriverLedgerTypeShortageWriteoff &&
+        type != kDriverLedgerTypeDamageWriteoff) {
+      throw ArgumentError('Not a write-off ledger type: $type');
+    }
+    if (amountKobo <= 0) {
+      throw ArgumentError('A write-off must be greater than zero.');
+    }
+    final now = postedAt ?? DateTime.now();
+
+    return transaction(() async {
+      final trip = await getTrip(tripId);
+      if (trip == null) throw StateError('Trip $tripId not found.');
+      if (trip.status != kVanTripStatusOpen) {
+        throw VanTripNotOpenException(
+          tripId: tripId,
+          message:
+              'This trip is already closed, so nothing more can be written '
+              'off against it.',
+        );
+      }
+
+      final entryId = await db.driverLedgerDao.postEntry(
+        driverUserId: trip.driverUserId,
+        tripId: tripId,
+        type: type,
+        amountKobo: amountKobo,
+        isCredit: true,
+        referenceType: kDriverLedgerRefTrip,
+        referenceId: tripId,
+        activityDate: now,
+        performedBy: performedBy,
+        referenceNote: reason,
+      );
+
+      await db.activityLogDao.logActivity(
+        action: type == kDriverLedgerTypeShortageWriteoff
+            ? 'van.writeoff.shortage'
+            : 'van.writeoff.damage',
+        description:
+            '${formatCurrency(amountKobo / 100)} written off for the driver'
+            '${(reason ?? '').isEmpty ? '' : ' — $reason'}',
+        staffId: performedBy,
+        storeId: trip.sourceStoreId,
+        entityType: 'van_trip',
+        entityId: tripId,
+      );
+      return entryId;
+    });
+  }
+
+  /// How many of THIS DEVICE's road sales for [tripId] are still un-synced —
+  /// the close-vs-outbox barrier's signal (spec §7.4 / §9.4).
+  ///
+  /// **What it honestly is, and is not.** A device can only see its own outbox;
+  /// the driver's `sync_queue` lives on the driver's phone and the device
+  /// registry is cloud-only analytics, not synced. So this is the count of
+  /// `pos_record_sale_v2` envelopes for orders tagged to this trip that this
+  /// device has not yet pushed — exactly right when the manager reconciles on
+  /// the van's own device (a van is single-device by design, spec §12), and
+  /// honestly silent otherwise. The reconcile screen pairs it with the device's
+  /// total pending-outbox count so the warning never claims knowledge it does
+  /// not have.
+  ///
+  /// Reuses [SyncDao.saleEnvelopeState] rather than a second envelope lookup,
+  /// so "is this sale up?" has one definition in the codebase.
+  Future<int> pendingSaleEnvelopeCountForTrip(String tripId) async {
+    final tripOrders =
+        await (select(orders)
+              ..where((o) => whereBusiness(o) & o.vanTripId.equals(tripId)))
+            .get();
+    var pending = 0;
+    for (final o in tripOrders) {
+      final state = await db.syncDao.saleEnvelopeState(o.id);
+      if (state == SaleEnvelopeState.pending) pending++;
+    }
+    return pending;
+  }
+
+  /// Open trips that have been out for [days] or more (spec §9.4 #17).
+  ///
+  /// Revenue is recognised the moment a driver rings a sale, but cost is not
+  /// booked until the trip closes — so a forgotten trip quietly separates the
+  /// two, month after month. The nag is what makes that visible.
+  Future<List<VanTripData>> staleOpenTrips({
+    int days = kVanStaleTripDays,
+    DateTime? asOf,
+  }) async {
+    final cutoff = (asOf ?? DateTime.now()).subtract(Duration(days: days));
+    return (select(vanTrips)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.status.equals(kVanTripStatusOpen) &
+                t.openedAt.isSmallerThanValue(cutoff),
+          )
+          ..orderBy([(t) => OrderingTerm(expression: t.openedAt)]))
+        .get();
+  }
+
+  /// Reconcile [tripId] and close it — the trip's last write (#145).
+  ///
+  /// What close persists is an **artifact**, not a screen calculation (ADR 0019
+  /// decision 3): COGS, recovered value, the write-off legs, the loss
+  /// disclosures and profit go onto `van_trips` and the closing report READS
+  /// them. Re-deriving van profit later would let a subsequent cost edit or a
+  /// late sale silently restate a settled trip; persisting it makes any
+  /// restatement visible instead (`restated_at`, plus an audit row).
+  ///
+  /// Three things happen, in one transaction:
+  ///
+  ///  1. **The van is cleared of its shortage.** Those units are still on the
+  ///     van's inventory row — they were never sold and never returned — while
+  ///     the artifact's COGS already treats them as gone. Left behind they are
+  ///     phantom goods inflating All-Stores inventory value and business worth
+  ///     (which DO count van stock, spec §4.1). They leave at the SNAPSHOTTED
+  ///     cost, handed over explicitly because a van store holds no FIFO queue.
+  ///  2. **The artifact is written** and the status flips.
+  ///  3. **A residual is allowed.** Close never blocks on a non-zero balance
+  ///     (spec §9.4 #14): the trip is flagged [VanTrips.closedWithBalance] and
+  ///     the residual carries forward on the driver's CROSS-TRIP balance, which
+  ///     is the person's, not the run's. A perfectly settled trip closes at 0.
+  ///
+  /// Throws [StateError] when the trip is missing and [VanTripNotOpenException]
+  /// when it is already closed (a double-tap on Confirm must not restate a
+  /// settled trip).
+  Future<VanTripCloseResult> closeTrip({
+    required String tripId,
+    required String performedBy,
+    DateTime? closedAt,
+  }) async {
+    final now = closedAt ?? DateTime.now();
+
+    return transaction(() async {
+      final trip = await getTrip(tripId);
+      if (trip == null) throw StateError('Trip $tripId not found.');
+      if (trip.status != kVanTripStatusOpen) {
+        throw VanTripNotOpenException(
+          tripId: tripId,
+          message: 'This trip has already been closed.',
+        );
+      }
+
+      final position = await positionForTrip(tripId);
+
+      // 1. Clear the van of what never came back. Clamped to what the van
+      //    actually holds: a road sale that synced between the position read
+      //    and this write would otherwise drive the van negative.
+      for (final line in position.shortages) {
+        if (line.units <= 0) continue;
+        final onHand = await db.stockLedgerDao.getCurrentStock(
+          line.productId,
+          trip.vanStoreId,
+        );
+        final remove = line.units < onHand ? line.units : onHand;
+        if (remove <= 0) continue;
+        final costBasis = line.units == 0
+            ? 0
+            : (line.costKobo * remove / line.units).round();
+        await db.inventoryDao.adjustStock(
+          line.productId,
+          trip.vanStoreId,
+          -remove,
+          kVanCloseShortageReason,
+          performedBy,
+          trackCost: false,
+          outflowValueKobo: costBasis,
+        );
+      }
+
+      // 2. The artifact.
+      await (update(vanTrips)
+            ..where((t) => t.id.equals(tripId) & whereBusiness(t)))
+          .write(
+            VanTripsCompanion(
+              status: const Value(kVanTripStatusClosed),
+              closedAt: Value(now),
+              closedBy: Value(performedBy),
+              closedWithBalance: Value(position.hasResidual),
+              cogsKobo: Value(position.cogsKobo),
+              recoveredKobo: Value(position.recoveredKobo),
+              unremittedKobo: Value(position.unremittedCashKobo),
+              shortageWriteoffKobo: Value(position.shortageWriteoffKobo),
+              damageWriteoffKobo: Value(position.damageWriteoffKobo),
+              shortageLossKobo: Value(position.shortageLossKobo),
+              damageLossKobo: Value(position.damageLossKobo),
+              profitKobo: Value(position.profitKobo),
+              lastUpdatedAt: Value(DateTime.now()),
+            ),
+          );
+      final closed = await (select(
+        vanTrips,
+      )..where((t) => t.id.equals(tripId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert('van_trips', closed.toCompanion(true));
+
+      await db.activityLogDao.logActivity(
+        action: 'van.trip.closed',
+        description: position.hasResidual
+            ? 'Trip closed with '
+                  '${formatCurrency(position.outstandingKobo.abs() / 100)} '
+                  '${position.outstandingKobo > 0 ? 'still owed' : 'in credit'}'
+                  ' — profit ${formatCurrency(position.profitKobo / 100)}'
+            : 'Trip closed settled — profit '
+                  '${formatCurrency(position.profitKobo / 100)}',
+        staffId: performedBy,
+        storeId: trip.sourceStoreId,
+        entityType: 'van_trip',
+        entityId: tripId,
+      );
+
+      return VanTripCloseResult(trip: closed, position: position);
+    });
+  }
+
+  /// Post-close restatement for a road sale that synced late (spec §9.4 #15).
+  ///
+  /// The pattern is **audited, never prompted**: a manager who closed a trip on
+  /// Thursday cannot answer a question about a sale that arrived on Friday, so
+  /// the system posts the correction itself and leaves a trail.
+  ///
+  /// What the late sale actually changes: units that were counted as SHORTAGE
+  /// (driver liable for the goods) are now SOLD (driver liable for the cash).
+  /// At load price those are the same amount, so the compensating **pair** —
+  /// a shortage-reversal credit and an unremitted-cash debit — nets to zero on
+  /// the balance by design. Its job is the audit trail and the artifact
+  /// correction, not a balance move. COGS, recovered value and profit are
+  /// untouched: `cogs = loadedCost − goodReturnCost` and
+  /// `recovered = remitted + goodReturns` neither of which a sale moves.
+  ///
+  /// **Idempotent without a new column**: the drift is measured against the
+  /// artifact's own `unremitted_kobo`, and restating rewrites it — so a second
+  /// call finds zero drift and writes nothing. Symmetric, too: a road sale
+  /// CANCELLED after close drives the drift negative and the pair flips.
+  ///
+  /// Returns the kobo restated (signed), or 0 when there was nothing to do.
+  Future<int> restateClosedTrip(String tripId, {DateTime? at}) async {
+    final trip = await getTrip(tripId);
+    if (trip == null || trip.status != kVanTripStatusClosed) return 0;
+
+    final live = await positionForTrip(tripId);
+    final drift = live.unremittedCashKobo - trip.unremittedKobo;
+    if (drift == 0) return 0;
+
+    final now = at ?? DateTime.now();
+    final magnitude = drift.abs();
+
+    return transaction(() async {
+      // The pair. Both rows are `restatement`-typed and reference the trip, so
+      // the driver's history reads as one correction rather than two mystery
+      // movements.
+      await db.driverLedgerDao.postEntry(
+        driverUserId: trip.driverUserId,
+        tripId: tripId,
+        type: kDriverLedgerTypeRestatement,
+        amountKobo: magnitude,
+        isCredit: drift > 0,
+        referenceType: kDriverLedgerRefTrip,
+        referenceId: tripId,
+        activityDate: now,
+        performedBy: trip.closedBy,
+        referenceNote: drift > 0
+            ? 'Shortage reversed — a road sale arrived after close'
+            : 'Shortage restored — a road sale was cancelled after close',
+      );
+      await db.driverLedgerDao.postEntry(
+        driverUserId: trip.driverUserId,
+        tripId: tripId,
+        type: kDriverLedgerTypeRestatement,
+        amountKobo: magnitude,
+        isCredit: drift < 0,
+        referenceType: kDriverLedgerRefTrip,
+        referenceId: tripId,
+        activityDate: now,
+        performedBy: trip.closedBy,
+        referenceNote: drift > 0
+            ? 'Road takings not yet handed in'
+            : 'Road takings reversed',
+      );
+
+      await (update(vanTrips)
+            ..where((t) => t.id.equals(tripId) & whereBusiness(t)))
+          .write(
+            VanTripsCompanion(
+              unremittedKobo: Value(live.unremittedCashKobo),
+              // The reclassified units are no longer shortage, so the shortage
+              // disclosure shrinks. COGS/recovered/profit do not move.
+              shortageLossKobo: Value(live.shortageLossKobo),
+              restatedAt: Value(now),
+              restatedReason: Value(
+                drift > 0
+                    ? 'A road sale synced after this trip was closed.'
+                    : 'A road sale was cancelled after this trip was closed.',
+              ),
+              lastUpdatedAt: Value(DateTime.now()),
+            ),
+          );
+      final restated = await (select(
+        vanTrips,
+      )..where((t) => t.id.equals(tripId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert('van_trips', restated.toCompanion(true));
+
+      // ONE rolled-up audit row for the whole correction — the manager is
+      // informed, not interrogated.
+      await db.activityLogDao.logActivity(
+        action: 'van.trip.restated',
+        description:
+            'Closed trip restated by ${formatCurrency(magnitude / 100)} — '
+            '${drift > 0 ? 'a road sale arrived after close' : 'a road sale was cancelled after close'}',
+        staffId: trip.closedBy,
+        storeId: trip.sourceStoreId,
+        entityType: 'van_trip',
+        entityId: tripId,
+      );
+      return drift;
+    });
+  }
+
+  /// Sweep every closed trip for late-arriving road sales (spec §9.4 #15).
+  ///
+  /// Runs after a pull, where late sales actually land. Bounded to trips closed
+  /// within [withinDays] so the sweep stays O(recent) rather than O(history) —
+  /// a sale that syncs a month after its trip closed is a sync fault, not a
+  /// reconciliation event. Returns the number of trips restated.
+  Future<int> restateClosedTripsWithLateSales({
+    int withinDays = 30,
+    DateTime? asOf,
+  }) async {
+    final since = (asOf ?? DateTime.now()).subtract(Duration(days: withinDays));
+    final recent =
+        await (select(vanTrips)..where(
+              (t) =>
+                  whereBusiness(t) &
+                  t.status.equals(kVanTripStatusClosed) &
+                  t.closedAt.isBiggerThanValue(since),
+            ))
+            .get();
+    var restated = 0;
+    for (final t in recent) {
+      if (await restateClosedTrip(t.id, at: asOf) != 0) restated++;
+    }
+    return restated;
+  }
+}
+
+/// What closing a trip produced (#145).
+class VanTripCloseResult {
+  /// The closed row, artifact and all — exactly what the closing report reads.
+  final VanTripData trip;
+
+  /// The position the artifact was written from, so the caller can show the
+  /// settlement it just froze without a second read.
+  final VanTripPosition position;
+
+  const VanTripCloseResult({required this.trip, required this.position});
+
+  bool get closedWithBalance => trip.closedWithBalance;
 }
 
 /// The driver consignment ledger (#141, van-sales spec §4.4).

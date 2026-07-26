@@ -20,6 +20,15 @@
 // leaks into `totalSalesKobo` is exactly the kind of half-fix a per-figure test
 // misses.
 //
+// **Re-pointed by #147**, which added the aggregated "Van Sales" line. The
+// exclusion claim is unchanged and un-weakened — road sales still move no
+// figure the owner reads. What is NEW is the other half, and it is asserted
+// here rather than only in `recon_van_rollup_test.dart`, because the two claims
+// are only meaningful together: excluded from every per-store total, AND
+// visible on its own line. Excluded-and-invisible was the bug ADR 0019 decision
+// 3 exists to fix ("the van was a channel whose entire P&L contribution was
+// revenue"); excluded-and-visible is the fix.
+//
 // ADR 0019 on why the window mattered: shipping the exclusions last "guarantees
 // five slices during which every road sale inflates All-Stores revenue with zero
 // cost against it".
@@ -164,17 +173,59 @@ Map<String, int> _figures(ReconData d) => {
   'totalOwedKobo': d.totalOwedKobo,
 };
 
+/// The trip the road sales belong to. #147 attributes van revenue through the
+/// trip's SOURCE WAREHOUSE — the order's own store is the van, which is in no
+/// scope at all — so the trip row has to be in the fixture for the van line to
+/// exist. Its absence is why this file's figure set stayed byte-identical.
+VanTripData _tripRow({
+  String status = kVanTripStatusOpen,
+  DateTime? closedAt,
+  int profitKobo = 0,
+}) => VanTripData(
+  id: _trip,
+  businessId: _biz,
+  vanStoreId: _van,
+  driverUserId: 'driver-1',
+  sourceStoreId: _warehouse,
+  status: status,
+  openedAt: DateTime(2026, 7, 20),
+  openedBy: null,
+  closedAt: closedAt,
+  closedBy: null,
+  closedWithBalance: false,
+  shellsOut: 0,
+  shellsBack: 0,
+  restatedAt: null,
+  restatedReason: null,
+  cogsKobo: 0,
+  recoveredKobo: 0,
+  unremittedKobo: 0,
+  shortageWriteoffKobo: 0,
+  damageWriteoffKobo: 0,
+  shortageLossKobo: 0,
+  damageLossKobo: 0,
+  profitKobo: profitKobo,
+  createdAt: DateTime(2026, 7, 20),
+  lastUpdatedAt: DateTime(2026, 7, 20),
+);
+
 Future<ReconData> computeWith(
   WidgetTester tester,
   List<OrderWithItems> orders, {
   String? lockedStoreId,
+  List<VanTripData> trips = const [],
 }) async {
+  // Tear the previous ProviderScope down first: two computes in one test would
+  // otherwise share a container and the second could read the first's stream
+  // value, which would make a comparison test pass vacuously.
+  await tester.pumpWidget(const SizedBox.shrink());
   late ReconData out;
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         currentBusinessIdProvider.overrideWithValue(null),
         allOrdersProvider.overrideWith((ref) => Stream.value(orders)),
+        allVanTripsProvider.overrideWith((ref) => Stream.value(trips)),
         // reconStoreFilter's four inputs.
         selectableStoresProvider.overrideWithValue([_store(_warehouse)]),
         canViewAllStoresProvider.overrideWithValue(true),
@@ -230,9 +281,15 @@ void main() {
 
   group('the reconciliation (All Stores, CEO)', () {
     testWidgets('road sales move NO figure the owner reads', (tester) async {
-      final without = _figures(await computeWith(tester, [shopSale]));
+      final without = _figures(
+        await computeWith(tester, [shopSale], trips: [_tripRow()]),
+      );
       final with_ = _figures(
-        await computeWith(tester, [shopSale, roadSale, roadSale2]),
+        await computeWith(
+          tester,
+          [shopSale, roadSale, roadSale2],
+          trips: [_tripRow()],
+        ),
       );
 
       expect(
@@ -244,6 +301,45 @@ void main() {
             'exclusion is missing from that bucket — and because road sales '
             'carry no COGS, the leak reports at 100% margin.',
       );
+    });
+
+    testWidgets('…and they DO show up on the aggregated Van Sales line',
+        (tester) async {
+      // #147 — the other half of the claim above. Excluded from the totals is
+      // only correct if the channel is visible somewhere; excluded AND
+      // invisible is the bug ADR 0019 decision 3 exists to fix.
+      final d = await computeWith(
+        tester,
+        [shopSale, roadSale, roadSale2],
+        trips: [_tripRow()],
+      );
+
+      expect(d.van.salesKobo, 60 * 1150000 + 30 * 1150000);
+      expect(d.van.hasActivity, isTrue);
+      // The trip is still out, so profit is NOT booked and the report says so
+      // instead of implying the road channel earned nothing.
+      expect(d.van.profitKobo, 0);
+      expect(d.van.hasOpenTripCaveat, isTrue);
+      expect(d.van.openRevenueKobo, 60 * 1150000 + 30 * 1150000);
+    });
+
+    testWidgets('profit arrives only when the trip closes', (tester) async {
+      final d = await computeWith(
+        tester,
+        [shopSale, roadSale, roadSale2],
+        trips: [
+          _tripRow(
+            status: kVanTripStatusClosed,
+            closedAt: DateTime(2026, 7, 26, 18),
+            profitKobo: 46750000,
+          ),
+        ],
+      );
+
+      expect(d.van.profitKobo, 46750000);
+      expect(d.van.hasOpenTripCaveat, isFalse);
+      // Still not folded into the store's own P&L — it is its own line.
+      expect(d.netProfitKobo, shopSale.order.netAmountKobo - 5 * 1000000);
     });
 
     testWidgets('the first road sale of the business leaks nothing either',

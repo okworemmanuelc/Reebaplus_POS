@@ -344,6 +344,86 @@ class ReconShortLine {
   final int diff;
 }
 
+/// The van channel's contribution to one period's closing report (#147,
+/// van-sales spec §8.2, ADR 0019 decision 3).
+///
+/// Four figures and a caveat, all **additive**: nothing here changes an
+/// existing line, because van orders are already excluded from every per-store
+/// figure (#140/#142) and `van_remittance` lands in no existing payment bucket
+/// (#144). This exists so the road channel stops being invisible, not so it can
+/// be mixed back in.
+///
+/// **Every field is optional-defaulted on purpose.** When the crate pass (#207)
+/// lands it adds `depositsHeldKobo` here and no call site changes — the same
+/// additive shape `ReconData`'s own #176 fields use.
+class ReconVanRollup {
+  const ReconVanRollup({
+    this.salesKobo = 0,
+    this.remittedKobo = 0,
+    this.cashRemittedKobo = 0,
+    this.profitKobo = 0,
+    this.cogsKobo = 0,
+    this.openRevenueKobo = 0,
+    this.openTripCount = 0,
+    this.closedTripCount = 0,
+  });
+
+  /// **Van Sales (aggregated)** — the period's road revenue at load price,
+  /// attributed through each trip's SOURCE WAREHOUSE. One line, no detail: the
+  /// per-order story stays on the driver profile.
+  final int salesKobo;
+
+  /// Everything drivers handed in this period, any tender — the money that
+  /// actually arrived. Counted on each payment row's own `created_at`, like
+  /// every other line in the cash card.
+  final int remittedKobo;
+
+  /// The CASH-tender subset of [remittedKobo] — the "Cash from drivers" line,
+  /// and the only part that belongs in a cash-MOVEMENT figure. A bank transfer
+  /// is real money but it never touches the drawer.
+  final int cashRemittedKobo;
+
+  /// **Van profit (closed trips)** — `Σ profit_kobo` over the trips whose
+  /// `closed_at` falls in the period, read straight off the persisted close
+  /// artifact. **Never re-derived**: a trip's profit is a settlement outcome
+  /// decided by a manager's write-off calls at a moment in time, and
+  /// re-deriving it later would let a cost edit silently restate a settled trip
+  /// (ADR 0019's rejected alternative #3).
+  final int profitKobo;
+
+  /// The same closed trips' `Σ cogs_kobo`, so the report can show what the
+  /// profit is net of without a second read.
+  final int cogsKobo;
+
+  /// Road revenue in the period belonging to trips that have NOT closed —
+  /// the caveat's figure. Revenue is recognised at the sale, profit at the
+  /// close, so a trip open across a month boundary genuinely splits (spec
+  /// §9.4 #18); the caveat is what stops that from looking like a mistake.
+  final int openRevenueKobo;
+
+  final int openTripCount;
+  final int closedTripCount;
+
+  /// True when anything van-related happened in the period — the card's render
+  /// condition.
+  bool get hasActivity =>
+      salesKobo != 0 ||
+      remittedKobo != 0 ||
+      profitKobo != 0 ||
+      openTripCount != 0 ||
+      closedTripCount != 0;
+
+  /// True when the report must print the open-trip caveat instead of implying
+  /// the period's van profit is complete.
+  bool get hasOpenTripCaveat => openRevenueKobo != 0;
+
+  /// The caveat, verbatim (spec §5.4 / §8.2). Takes the app-wide money
+  /// formatter so the sentence follows the CEO-chosen currency.
+  String caveatLine(String Function(num) formatMoney) =>
+      '${formatMoney(openRevenueKobo / 100)} van revenue awaiting trip close — '
+      'profit not yet booked.';
+}
+
 class ReconData {
   ReconData({
     required this.totalRevenueKobo,
@@ -414,6 +494,9 @@ class ReconData {
     this.stockCountAdjustmentsKobo = 0,
     this.stockDeletionsKobo = 0,
     this.vatBasis = VatBasis.inclusive,
+    // #147 — the van channel's rollup. Optional-defaulted like the #170/#176
+    // additions above, so every existing construction site stays valid.
+    this.van = const ReconVanRollup(),
   });
 
   final int totalRevenueKobo;
@@ -573,6 +656,10 @@ class ReconData {
   final int stockCountAdjustmentsKobo; // daily-count reconciliation adjustments
   final int stockDeletionsKobo; // product-delete write-offs (#170 #7c)
 
+  /// The van channel's four report lines (#147). Purely additive — see
+  /// [ReconVanRollup].
+  final ReconVanRollup van;
+
   final List<({String name, int qty})> topItems;
   final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
 
@@ -613,7 +700,22 @@ class ReconData {
       crateDamageDepositKobo;
 
   // ── Cash-flow summary getters (ADR 0014) ─────────────────────────────────
-  int get cashInKobo => cashSalesKobo + cashDebtsCollectedKobo;
+  /// **Cash from drivers** (#147, spec §8.2) — the period's cash-tender
+  /// `van_remittance` rows, on the day the money arrived.
+  ///
+  /// It is IN [cashInKobo] and it is a separate line from "Cash sales", and
+  /// both facts matter. A road sale writes no payment row at all (ADR 0019
+  /// decision 2), so this is the one moment van money enters the cash books —
+  /// leaving it out would understate the drawer by every naira a driver handed
+  /// in, which is the failure the whole decision exists to fix. Folding it INTO
+  /// "Cash sales" would be the opposite failure: it would double-count road
+  /// revenue that was already recognised when the driver rang it. It behaves
+  /// exactly like [cashDebtsCollectedKobo] — a debt settled in cash, not a new
+  /// sale.
+  int get cashFromDriversKobo => van.cashRemittedKobo;
+
+  int get cashInKobo =>
+      cashSalesKobo + cashDebtsCollectedKobo + cashFromDriversKobo;
   int get cashOutKobo =>
       cashRefundsKobo + cashExpensesKobo + cashSupplierPaidKobo;
   /// Expected net cash movement for the period (in − out). Not a cash balance —
@@ -1307,6 +1409,70 @@ ReconData computeReconData(
   // this is Total (gross) revenue minus the costed-line revenue.
   final uncostedTakingsKobo = totalRevenueKobo - costedRevenueKobo;
 
+  // ── The van channel's rollup (#147, spec §8.2) ───────────────────────────
+  // Four additive lines. Every one of them is attributed through the trip's
+  // SOURCE WAREHOUSE, never the van: a van fails `inScope` by construction
+  // (#140), so an order or a payment that only knew its own store would be
+  // invisible on every scope including All Stores.
+  final vanTrips = ref.watch(allVanTripsProvider).valueOrNull ?? const [];
+  final tripById = {for (final t in vanTrips) t.id: t};
+
+  var vanSalesKobo = 0;
+  var vanOpenRevenueKobo = 0;
+  final openTrips = <String>{};
+  for (final o in orders) {
+    final tripId = o.order.vanTripId;
+    if (tripId == null) continue;
+    if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
+      continue;
+    }
+    final trip = tripById[tripId];
+    if (trip == null || !inScope(trip.sourceStoreId)) continue;
+    // The order's own net is the road-takings figure the trip reconciles
+    // against (`watchSoldValueKoboForTrip` uses the same basis), and a road
+    // sale carries no discount in v1.
+    vanSalesKobo += o.order.netAmountKobo;
+    // "Open in the period": still open, or closed only AFTER this period ended
+    // — the month-straddling case (spec §9.4 #18). Revenue lands in the ring
+    // month, profit in the close month, and the caveat says so.
+    final closedAfterPeriod =
+        trip.closedAt == null ||
+        (endExclusive != null && !trip.closedAt!.isBefore(endExclusive));
+    if (closedAfterPeriod) {
+      vanOpenRevenueKobo += o.order.netAmountKobo;
+      openTrips.add(tripId);
+    }
+  }
+
+  // Profit is READ from the persisted close artifact, never re-derived (ADR
+  // 0019 decision 3). A trip closed in the period contributes its whole
+  // artifact, including revenue it rang in an earlier month — that is what
+  // "profit at close" means.
+  var vanProfitKobo = 0;
+  var vanCogsKobo = 0;
+  var closedTripCount = 0;
+  for (final t in vanTrips) {
+    final closedAt = t.closedAt;
+    if (closedAt == null || !inSpan(closedAt)) continue;
+    if (!inScope(t.sourceStoreId)) continue;
+    vanProfitKobo += t.profitKobo;
+    vanCogsKobo += t.cogsKobo;
+    closedTripCount++;
+  }
+
+  // Cash from drivers: the period's `van_remittance` rows, on their OWN
+  // created_at day, scoped by `store_id` — which #144 stamps to the source
+  // warehouse precisely so this passes the ordinary store filter.
+  var vanRemittedKobo = 0;
+  var vanCashRemittedKobo = 0;
+  for (final p in payments) {
+    if (p.voidedAt != null) continue;
+    if (p.type != kPaymentTypeVanRemittance) continue;
+    if (!inSpan(p.createdAt) || !inScope(p.storeId)) continue;
+    vanRemittedKobo += p.amountKobo;
+    if (p.method.toLowerCase() == 'cash') vanCashRemittedKobo += p.amountKobo;
+  }
+
   return ReconData(
     totalRevenueKobo: totalRevenueKobo,
     costedRevenueKobo: costedRevenueKobo,
@@ -1373,6 +1539,17 @@ ReconData computeReconData(
     stockTransfersKobo: stockTransfersKobo,
     stockCountAdjustmentsKobo: stockCountAdjustmentsKobo,
     stockDeletionsKobo: stockDeletionsKobo,
+    // #147 — the van channel's four additive lines.
+    van: ReconVanRollup(
+      salesKobo: vanSalesKobo,
+      remittedKobo: vanRemittedKobo,
+      cashRemittedKobo: vanCashRemittedKobo,
+      profitKobo: vanProfitKobo,
+      cogsKobo: vanCogsKobo,
+      openRevenueKobo: vanOpenRevenueKobo,
+      openTripCount: openTrips.length,
+      closedTripCount: closedTripCount,
+    ),
   );
 }
 
@@ -1385,6 +1562,24 @@ ReconData computeReconData(
 /// are frozen — the point-in-time "…now" figures (business worth, empties held,
 /// on-hand) are deliberately excluded: they are meant to reflect the present, so
 /// badging them against a past review would be noise, not signal.
+///
+/// **#147 adds NO van field here, deliberately.** The three van figures each
+/// fail the test this set applies:
+///
+///  * **Van profit is already a persisted artifact.** `van_trips.profit_kobo`
+///    is frozen at close and a restatement is already visible (`restated_at`
+///    plus an audit row). Freezing a second copy in `daily_closings` would put
+///    the same settled number in two places — the "two queues, two opinions"
+///    failure ADR 0019 exists to avoid — and the delta badge would report a
+///    restatement that the trip row already discloses better.
+///  * **Van revenue on an open trip is EXPECTED to move.** That is what the
+///    caveat line says out loud. Badging it as "changed since review" would
+///    turn a designed behaviour into a recurring alarm.
+///  * **Cash from drivers needs no new field**: it is inside [ReconData.cashInKobo]
+///    and [ReconData.netCashMovementKobo], both of which are already frozen
+///    here — so a remittance that lands after a day was reviewed badges the
+///    cash card exactly like any other late cash movement, with no schema
+///    change and no migration.
 DailyClosingFigures dailyClosingFiguresFrom(ReconData d) => DailyClosingFigures(
   // #176 — freeze the unified NET headline (item lines − discounts), so the
   // Sales-card delta badge compares the SAME "Total Sales" the card displays.

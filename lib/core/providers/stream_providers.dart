@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 import 'package:reebaplus_pos/shared/models/activity_log.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
@@ -1785,6 +1786,18 @@ final openVanTripsProvider = businessScopedStream<List<VanTripData>>(
   whenAbsent: const [],
 );
 
+/// Every trip in the business, open and closed, newest first.
+///
+/// The closing report's van feed (#147, spec §8.2). Three of its four lines
+/// need trips that are NOT open: revenue is attributed through each trip's
+/// `source_store_id` (a van is outside every store scope, so the order alone
+/// cannot be placed), profit comes from trips that closed in the period, and
+/// the caveat is what is left over.
+final allVanTripsProvider = businessScopedStream<List<VanTripData>>(
+  (ref, db, businessId) => db.vanTripsDao.watchAllTrips(),
+  whenAbsent: const [],
+);
+
 /// Every trip (open and closed) for one van, newest first.
 final vanTripsForVanProvider =
     businessScopedStreamFamily<List<VanTripData>, String>(
@@ -1937,6 +1950,31 @@ final vanTripLoadPricesProvider =
 final vanTripSalesProvider = businessScopedStreamFamily<List<OrderData>, String>(
   (ref, db, businessId, tripId) => db.vanTripsDao.watchSalesForTrip(tripId),
   whenAbsent: const [],
+);
+
+/// A trip's whole reconciliation position, live (#145, spec §6).
+///
+/// The reconcile screen's single source: balance, the three-way breakdown,
+/// per-product shortage, lot-cost COGS and the shell memo all come from one
+/// pure computation, so the figure a manager confirms against is provably the
+/// figure the close writes.
+final vanTripPositionProvider =
+    businessScopedStreamFamily<VanTripPosition?, String>(
+      (ref, db, businessId, tripId) =>
+          db.vanTripsDao.watchPositionForTrip(tripId),
+      whenAbsent: null,
+    );
+
+/// How many of THIS device's road sales for a trip are still un-synced — the
+/// close-vs-outbox barrier (#145, spec §7.4).
+///
+/// You do not assign blame from an incomplete picture: while a sale is still in
+/// the outbox its units read as shortage, and closing would make the driver
+/// liable for goods they already sold.
+final vanTripPendingSalesProvider = businessScopedStreamFamily<int, String>(
+  (ref, db, businessId, tripId) =>
+      db.vanTripsDao.watchPendingSaleEnvelopesForTrip(tripId),
+  whenAbsent: 0,
 );
 
 /// A trip's road takings at load price (`soldValue`, spec §6.1).

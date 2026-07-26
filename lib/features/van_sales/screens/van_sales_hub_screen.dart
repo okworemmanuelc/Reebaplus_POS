@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_payments_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
@@ -143,6 +144,20 @@ class VanSalesHubScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
+                  // #145 — the way in to reconcile and close.
+                  onReconcile: trip == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => VanReconcileScreen(
+                              tripId: trip.id,
+                              driverName:
+                                  users[trip.driverUserId]?.name ?? 'Driver',
+                              vanName: van.name,
+                            ),
+                          ),
+                        ),
                 );
               },
             ),
@@ -171,6 +186,10 @@ class _VanCard extends StatelessWidget {
   /// home.
   final VoidCallback? onReturn;
 
+  /// Opens Reconcile & close (#145) — the trip's whole position and the way to
+  /// end the run. Null when the van is home: there is nothing to reconcile.
+  final VoidCallback? onReconcile;
+
   const _VanCard({
     required this.van,
     required this.trip,
@@ -180,7 +199,15 @@ class _VanCard extends StatelessWidget {
     required this.onPayments,
     required this.onRestock,
     required this.onReturn,
+    required this.onReconcile,
   });
+
+  /// True when this trip has been out longer than the nag window (spec §9.4
+  /// #17). Revenue is recognised while a trip lingers and its cost is not
+  /// booked until close, so a forgotten trip quietly separates the two.
+  bool get _isStale =>
+      trip != null &&
+      DateTime.now().difference(trip!.openedAt).inDays >= kVanStaleTripDays;
 
   @override
   Widget build(BuildContext context) {
@@ -286,13 +313,45 @@ class _VanCard extends StatelessWidget {
                 label: const Text('Driver payments'),
               ),
             ),
-            SizedBox(height: context.getRSize(8)),
-            Text(
-              // The one honest thing to say in this slice: reconcile-and-close
-              // is #145. Promising a button that isn't there would be worse.
-              'Reconcile and close arrives with the trip-close step.',
-              style: t.textTheme.bodySmall?.copyWith(color: subtext),
+            SizedBox(height: context.getRSize(10)),
+            // #145 — the end of the run. A filled button because it is the one
+            // action that finishes something; the rest keep a trip going.
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onReconcile,
+                icon: Icon(
+                  FontAwesomeIcons.flagCheckered.data,
+                  size: context.getRSize(14),
+                ),
+                label: const Text('Reconcile & close'),
+              ),
             ),
+            if (_isStale) ...[
+              SizedBox(height: context.getRSize(10)),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    FontAwesomeIcons.triangleExclamation.data,
+                    size: context.getRSize(12),
+                    color: semantic.warning,
+                  ),
+                  SizedBox(width: context.getRSize(8)),
+                  Expanded(
+                    child: Text(
+                      'Out for '
+                      '${DateTime.now().difference(trip!.openedAt).inDays} days. '
+                      'Sales on this trip are counted already, but the profit '
+                      'is not booked until you close it.',
+                      style: t.textTheme.bodySmall?.copyWith(
+                        color: semantic.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ] else
             SizedBox(
               width: double.infinity,
