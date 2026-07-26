@@ -1443,7 +1443,12 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
 
   /// Cancel an in-transit transfer and restore the source inventory.
   ///
-  /// Throws [StateError] if the transfer is not in_transit.
+  /// Throws [StateError] if the transfer is not in_transit, and
+  /// [VanLegNotCancellableException] when either endpoint is a van (#141,
+  /// van-sales spec §7.2): a van leg is bound to a trip and a driver-ledger
+  /// debit that this path knows nothing about, so cancelling it here would put
+  /// the goods back on paper while the driver stayed debited for them.
+  /// Corrections to a van load are **return events, not cancels**.
   Future<void> cancelTransfer({
     required String transferId,
     required String cancelledBy,
@@ -1456,6 +1461,20 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
 
       if (transfer == null) {
         throw StateError('Transfer $transferId not found.');
+      }
+      // §7.2 — the write-boundary refusal. A van load writes no
+      // `stock_transfers` header of its own (the lot IS the leg), so this can
+      // only fire on a legacy or hand-made transfer that names a van; refusing
+      // is still the right answer, and it is the guard that keeps the rule true
+      // if a later slice ever does give a van leg a header.
+      for (final endpoint in [transfer.fromLocationId, transfer.toLocationId]) {
+        if (await db.vanTripsDao.isVanStoreId(endpoint)) {
+          throw const VanLegNotCancellableException(
+            'A van load can\'t be cancelled here. Record what came back as a '
+            'return on the trip instead — that credits the driver and puts the '
+            'stock back with the cost it left with.',
+          );
+        }
       }
       if (transfer.status != 'in_transit') {
         throw StateError(

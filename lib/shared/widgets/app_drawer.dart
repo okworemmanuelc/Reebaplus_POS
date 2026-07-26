@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/features/subscription/widgets/subscription_badge.d
 import 'package:reebaplus_pos/features/settings/screens/staff_settings_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/screens/van_sales_hub_screen.dart';
 import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
@@ -431,6 +432,20 @@ class AppDrawer extends ConsumerWidget {
             'Stores',
             active: activeRoute == 'store',
             onTap: () => _navigateTo(context, ref, 'store'),
+          ),
+        // Van Sales (#141) — CEO + Manager (`van.manage`). Hidden entirely for
+        // everyone else (hard rule #7 — hide, don't grey out), which includes
+        // the Driver: a driver holds `van.sell` and sells from the terminal,
+        // and never reaches the manager side that records their own payments
+        // (van-sales spec §9.5 #21). A pushed screen, like Staff Management.
+        if (Gates.vanManage.allows(ref))
+          _navItem(
+            context,
+            FontAwesomeIcons.truck.data,
+            'Van Sales',
+            active: false,
+            onTap: () =>
+                _pushRoute(context, ref, const VanSalesHubScreen()),
           ),
         SizedBox(height: context.getRSize(12)),
         Divider(color: t.dividerColor),

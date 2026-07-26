@@ -91,6 +91,12 @@ void main() {
     'stock_counts',
     // #174: persisted day close — one snapshot per (business, calendar day).
     'daily_closings',
+    // #141 Van Sales: the trip, then its priced load lots, then the ledger rows
+    // that reference both (FK-safe among themselves; stores/users/products are
+    // pulled far earlier).
+    'van_trips',
+    'van_trip_lots',
+    'driver_ledger_entries',
     'sessions',
     'settings',
   ];
@@ -131,6 +137,10 @@ void main() {
     'stock_counts',
     // #174: persisted day close snapshot.
     'daily_closings',
+    // #141 Van Sales: trip aggregate, priced load lots, consignment ledger.
+    'van_trips',
+    'van_trip_lots',
+    'driver_ledger_entries',
     'expense_categories',
     'expenses',
     'expense_budgets',
@@ -229,6 +239,9 @@ void main() {
     'supplier_ledger_entries',
     'crate_ledger',
     'supplier_crate_ledger',
+    // #141: the driver consignment ledger — append-only, void by an
+    // opposite-sign compensating row, so the same created_at trap applies.
+    'driver_ledger_entries',
   };
 
   // 6) The hard-delete tables (the two former switches, one set now).

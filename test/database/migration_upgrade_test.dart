@@ -1534,4 +1534,199 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v70 → v71 (van trips, priced lots, driver ledger, #141)',
+      () {
+    Future<bool> objectExists(AppDatabase db, String type, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='$type' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    // Reverts the whole v71 delta: the three tables (their indexes and triggers
+    // drop with them). Children first — FKs are off, but dropping in FK order
+    // keeps the intent readable.
+    Future<void> dropVanTables(AppDatabase db) async {
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      await db.customStatement('DROP TABLE IF EXISTS driver_ledger_entries');
+      await db.customStatement('DROP TABLE IF EXISTS van_trip_lots');
+      await db.customStatement('DROP TABLE IF EXISTS van_trips');
+      await db.customStatement('PRAGMA foreign_keys = ON');
+    }
+
+    test('creates all three tables with their sync indexes + bump triggers',
+        () async {
+      final db1 = await openAndInit();
+      expect(await objectExists(db1, 'table', 'van_trips'), isTrue,
+          reason: 'onCreate should create the table');
+      await dropVanTables(db1);
+      expect(await objectExists(db1, 'table', 'van_trips'), isFalse);
+      await db1.customStatement('PRAGMA user_version = 70');
+      await db1.close();
+
+      // Re-open → onUpgrade(70 → 71).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      for (final t in const [
+        'van_trips',
+        'van_trip_lots',
+        'driver_ledger_entries',
+      ]) {
+        expect(await objectExists(db2, 'table', t), isTrue,
+            reason: 'v71 must create $t');
+        expect(
+          await objectExists(db2, 'index', 'idx_${t}_business_lua'),
+          isTrue,
+          reason: 'v71 must create $t\'s (business_id, last_updated_at) index',
+        );
+        expect(
+          await objectExists(db2, 'trigger', 'bump_${t}_last_updated_at'),
+          isTrue,
+          reason: 'v71 must create $t\'s last_updated_at bump trigger',
+        );
+      }
+
+      // The per-feature indexes (the two open-trip probes, the FIFO cursor, the
+      // idempotency probe, the ledger reads).
+      for (final idx in const [
+        'idx_van_trips_business_van_status',
+        'idx_van_trips_business_driver_status',
+        'idx_van_trip_lots_trip_dispatched',
+        'idx_van_trip_lots_dispatch_event',
+        'idx_driver_ledger_business_driver_time',
+        'idx_driver_ledger_business_trip',
+      ]) {
+        expect(await objectExists(db2, 'index', idx), isTrue,
+            reason: 'v71 must create $idx');
+      }
+    });
+
+    test('the close-artifact columns ship NOW so #145 needs no migration',
+        () async {
+      final db1 = await openAndInit();
+      await dropVanTables(db1);
+      await db1.customStatement('PRAGMA user_version = 70');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(
+        await columnsOf(db2, 'van_trips'),
+        containsAll(<String>{
+          'cogs_kobo',
+          'recovered_kobo',
+          'unremitted_kobo',
+          'shortage_writeoff_kobo',
+          'damage_writeoff_kobo',
+          'shortage_loss_kobo',
+          'damage_loss_kobo',
+          'profit_kobo',
+          'closed_with_balance',
+          'closed_at',
+          'closed_by',
+          'restated_at',
+          'restated_reason',
+          'shells_out',
+          'shells_back',
+        }),
+      );
+      // The lot's cost snapshot + FIFO cursor + idempotency key.
+      expect(
+        await columnsOf(db2, 'van_trip_lots'),
+        containsAll(<String>{
+          'unit_cost_kobo',
+          'qty_remaining',
+          'dispatch_event_id',
+          'shells_out',
+          'load_price_kobo',
+        }),
+      );
+    });
+
+    test('driver_ledger_entries is append-only after the upgrade (immutable + '
+        'no-delete triggers, emitted from the shared _ledgerTables entry)',
+        () async {
+      final db1 = await openAndInit();
+      await dropVanTables(db1);
+      await db1.customStatement('PRAGMA user_version = 70');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(
+        await objectExists(db2, 'trigger', 'driver_ledger_entries_immutable'),
+        isTrue,
+      );
+      expect(
+        await objectExists(db2, 'trigger', 'driver_ledger_entries_no_delete'),
+        isTrue,
+      );
+
+      // And they actually bite: an amount edit and a delete both abort.
+      final biz = UuidV7.generate();
+      final userId = UuidV7.generate();
+      final entryId = UuidV7.generate();
+      await db2.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db2.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Driver Dan', '0000')",
+        [userId, biz],
+      );
+      await db2.customStatement(
+        'INSERT INTO driver_ledger_entries '
+        '(id, business_id, driver_user_id, type, amount_kobo, '
+        ' signed_amount_kobo, reference_type, activity_date) '
+        "VALUES (?, ?, ?, 'load', 500000, -500000, 'van_trip_lot', 0)",
+        [entryId, biz, userId],
+      );
+
+      await expectLater(
+        db2.customStatement(
+          'UPDATE driver_ledger_entries SET amount_kobo = 1 WHERE id = ?',
+          [entryId],
+        ),
+        throwsA(anything),
+        reason: 'an amount edit must abort — corrections are compensating rows',
+      );
+      await expectLater(
+        db2.customStatement(
+          'DELETE FROM driver_ledger_entries WHERE id = ?',
+          [entryId],
+        ),
+        throwsA(anything),
+        reason: 'deletion must abort — the ledger is append-only',
+      );
+      // Voiding IS allowed (the void columns are outside the immutable set).
+      await db2.customStatement(
+        "UPDATE driver_ledger_entries SET voided_at = 1, void_reason = 'oops' "
+        'WHERE id = ?',
+        [entryId],
+      );
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT drop the tables — just step user_version back, so the v71 block
+      // runs against a schema that already has them. The existence guard must
+      // make it a no-op rather than a "table already exists" crash.
+      final db1 = await openAndInit();
+      await db1.customStatement('PRAGMA user_version = 70');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await objectExists(db2, 'table', 'van_trips'), isTrue);
+      expect(await objectExists(db2, 'table', 'van_trip_lots'), isTrue);
+      expect(await objectExists(db2, 'table', 'driver_ledger_entries'), isTrue);
+    });
+  });
 }

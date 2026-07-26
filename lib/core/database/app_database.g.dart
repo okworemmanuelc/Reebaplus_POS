@@ -30728,6 +30728,3358 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
   }
 }
 
+class $VanTripsTable extends VanTrips
+    with TableInfo<$VanTripsTable, VanTripData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VanTripsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _vanStoreIdMeta = const VerificationMeta(
+    'vanStoreId',
+  );
+  @override
+  late final GeneratedColumn<String> vanStoreId = GeneratedColumn<String>(
+    'van_store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _driverUserIdMeta = const VerificationMeta(
+    'driverUserId',
+  );
+  @override
+  late final GeneratedColumn<String> driverUserId = GeneratedColumn<String>(
+    'driver_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _sourceStoreIdMeta = const VerificationMeta(
+    'sourceStoreId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceStoreId = GeneratedColumn<String>(
+    'source_store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kVanTripStatusOpen),
+  );
+  static const VerificationMeta _openedAtMeta = const VerificationMeta(
+    'openedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
+    'opened_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _openedByMeta = const VerificationMeta(
+    'openedBy',
+  );
+  @override
+  late final GeneratedColumn<String> openedBy = GeneratedColumn<String>(
+    'opened_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _closedByMeta = const VerificationMeta(
+    'closedBy',
+  );
+  @override
+  late final GeneratedColumn<String> closedBy = GeneratedColumn<String>(
+    'closed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _closedWithBalanceMeta = const VerificationMeta(
+    'closedWithBalance',
+  );
+  @override
+  late final GeneratedColumn<bool> closedWithBalance = GeneratedColumn<bool>(
+    'closed_with_balance',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("closed_with_balance" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _shellsOutMeta = const VerificationMeta(
+    'shellsOut',
+  );
+  @override
+  late final GeneratedColumn<int> shellsOut = GeneratedColumn<int>(
+    'shells_out',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shellsBackMeta = const VerificationMeta(
+    'shellsBack',
+  );
+  @override
+  late final GeneratedColumn<int> shellsBack = GeneratedColumn<int>(
+    'shells_back',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _restatedAtMeta = const VerificationMeta(
+    'restatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> restatedAt = GeneratedColumn<DateTime>(
+    'restated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _restatedReasonMeta = const VerificationMeta(
+    'restatedReason',
+  );
+  @override
+  late final GeneratedColumn<String> restatedReason = GeneratedColumn<String>(
+    'restated_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cogsKoboMeta = const VerificationMeta(
+    'cogsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cogsKobo = GeneratedColumn<int>(
+    'cogs_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _recoveredKoboMeta = const VerificationMeta(
+    'recoveredKobo',
+  );
+  @override
+  late final GeneratedColumn<int> recoveredKobo = GeneratedColumn<int>(
+    'recovered_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _unremittedKoboMeta = const VerificationMeta(
+    'unremittedKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unremittedKobo = GeneratedColumn<int>(
+    'unremitted_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shortageWriteoffKoboMeta =
+      const VerificationMeta('shortageWriteoffKobo');
+  @override
+  late final GeneratedColumn<int> shortageWriteoffKobo = GeneratedColumn<int>(
+    'shortage_writeoff_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _damageWriteoffKoboMeta =
+      const VerificationMeta('damageWriteoffKobo');
+  @override
+  late final GeneratedColumn<int> damageWriteoffKobo = GeneratedColumn<int>(
+    'damage_writeoff_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shortageLossKoboMeta = const VerificationMeta(
+    'shortageLossKobo',
+  );
+  @override
+  late final GeneratedColumn<int> shortageLossKobo = GeneratedColumn<int>(
+    'shortage_loss_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _damageLossKoboMeta = const VerificationMeta(
+    'damageLossKobo',
+  );
+  @override
+  late final GeneratedColumn<int> damageLossKobo = GeneratedColumn<int>(
+    'damage_loss_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _profitKoboMeta = const VerificationMeta(
+    'profitKobo',
+  );
+  @override
+  late final GeneratedColumn<int> profitKobo = GeneratedColumn<int>(
+    'profit_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    vanStoreId,
+    driverUserId,
+    sourceStoreId,
+    status,
+    openedAt,
+    openedBy,
+    closedAt,
+    closedBy,
+    closedWithBalance,
+    shellsOut,
+    shellsBack,
+    restatedAt,
+    restatedReason,
+    cogsKobo,
+    recoveredKobo,
+    unremittedKobo,
+    shortageWriteoffKobo,
+    damageWriteoffKobo,
+    shortageLossKobo,
+    damageLossKobo,
+    profitKobo,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'van_trips';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VanTripData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('van_store_id')) {
+      context.handle(
+        _vanStoreIdMeta,
+        vanStoreId.isAcceptableOrUnknown(
+          data['van_store_id']!,
+          _vanStoreIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_vanStoreIdMeta);
+    }
+    if (data.containsKey('driver_user_id')) {
+      context.handle(
+        _driverUserIdMeta,
+        driverUserId.isAcceptableOrUnknown(
+          data['driver_user_id']!,
+          _driverUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_driverUserIdMeta);
+    }
+    if (data.containsKey('source_store_id')) {
+      context.handle(
+        _sourceStoreIdMeta,
+        sourceStoreId.isAcceptableOrUnknown(
+          data['source_store_id']!,
+          _sourceStoreIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceStoreIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('opened_at')) {
+      context.handle(
+        _openedAtMeta,
+        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
+      );
+    }
+    if (data.containsKey('opened_by')) {
+      context.handle(
+        _openedByMeta,
+        openedBy.isAcceptableOrUnknown(data['opened_by']!, _openedByMeta),
+      );
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
+    if (data.containsKey('closed_by')) {
+      context.handle(
+        _closedByMeta,
+        closedBy.isAcceptableOrUnknown(data['closed_by']!, _closedByMeta),
+      );
+    }
+    if (data.containsKey('closed_with_balance')) {
+      context.handle(
+        _closedWithBalanceMeta,
+        closedWithBalance.isAcceptableOrUnknown(
+          data['closed_with_balance']!,
+          _closedWithBalanceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shells_out')) {
+      context.handle(
+        _shellsOutMeta,
+        shellsOut.isAcceptableOrUnknown(data['shells_out']!, _shellsOutMeta),
+      );
+    }
+    if (data.containsKey('shells_back')) {
+      context.handle(
+        _shellsBackMeta,
+        shellsBack.isAcceptableOrUnknown(data['shells_back']!, _shellsBackMeta),
+      );
+    }
+    if (data.containsKey('restated_at')) {
+      context.handle(
+        _restatedAtMeta,
+        restatedAt.isAcceptableOrUnknown(data['restated_at']!, _restatedAtMeta),
+      );
+    }
+    if (data.containsKey('restated_reason')) {
+      context.handle(
+        _restatedReasonMeta,
+        restatedReason.isAcceptableOrUnknown(
+          data['restated_reason']!,
+          _restatedReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cogs_kobo')) {
+      context.handle(
+        _cogsKoboMeta,
+        cogsKobo.isAcceptableOrUnknown(data['cogs_kobo']!, _cogsKoboMeta),
+      );
+    }
+    if (data.containsKey('recovered_kobo')) {
+      context.handle(
+        _recoveredKoboMeta,
+        recoveredKobo.isAcceptableOrUnknown(
+          data['recovered_kobo']!,
+          _recoveredKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('unremitted_kobo')) {
+      context.handle(
+        _unremittedKoboMeta,
+        unremittedKobo.isAcceptableOrUnknown(
+          data['unremitted_kobo']!,
+          _unremittedKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shortage_writeoff_kobo')) {
+      context.handle(
+        _shortageWriteoffKoboMeta,
+        shortageWriteoffKobo.isAcceptableOrUnknown(
+          data['shortage_writeoff_kobo']!,
+          _shortageWriteoffKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('damage_writeoff_kobo')) {
+      context.handle(
+        _damageWriteoffKoboMeta,
+        damageWriteoffKobo.isAcceptableOrUnknown(
+          data['damage_writeoff_kobo']!,
+          _damageWriteoffKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shortage_loss_kobo')) {
+      context.handle(
+        _shortageLossKoboMeta,
+        shortageLossKobo.isAcceptableOrUnknown(
+          data['shortage_loss_kobo']!,
+          _shortageLossKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('damage_loss_kobo')) {
+      context.handle(
+        _damageLossKoboMeta,
+        damageLossKobo.isAcceptableOrUnknown(
+          data['damage_loss_kobo']!,
+          _damageLossKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('profit_kobo')) {
+      context.handle(
+        _profitKoboMeta,
+        profitKobo.isAcceptableOrUnknown(data['profit_kobo']!, _profitKoboMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VanTripData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VanTripData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      vanStoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_store_id'],
+      )!,
+      driverUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}driver_user_id'],
+      )!,
+      sourceStoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_store_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      openedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}opened_at'],
+      )!,
+      openedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opened_by'],
+      ),
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
+      closedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}closed_by'],
+      ),
+      closedWithBalance: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}closed_with_balance'],
+      )!,
+      shellsOut: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shells_out'],
+      )!,
+      shellsBack: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shells_back'],
+      )!,
+      restatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}restated_at'],
+      ),
+      restatedReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}restated_reason'],
+      ),
+      cogsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cogs_kobo'],
+      )!,
+      recoveredKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}recovered_kobo'],
+      )!,
+      unremittedKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unremitted_kobo'],
+      )!,
+      shortageWriteoffKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shortage_writeoff_kobo'],
+      )!,
+      damageWriteoffKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}damage_writeoff_kobo'],
+      )!,
+      shortageLossKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shortage_loss_kobo'],
+      )!,
+      damageLossKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}damage_loss_kobo'],
+      )!,
+      profitKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}profit_kobo'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VanTripsTable createAlias(String alias) {
+    return $VanTripsTable(attachedDatabase, alias);
+  }
+}
+
+class VanTripData extends DataClass implements Insertable<VanTripData> {
+  final String id;
+  final String businessId;
+
+  /// The van. A `stores` row with `kind = 'van'` (#140).
+  final String vanStoreId;
+
+  /// The driver — a `users` row holding the seeded Driver role. Deliberately
+  /// NOT the dormant legacy `drivers` table, which is a different axis and is
+  /// left untouched (spec §14).
+  final String driverUserId;
+
+  /// The warehouse this trip loads from. One warehouse per trip in v1, so the
+  /// remittance (#144) and the good-return re-batch (#143) both know where the
+  /// money and the goods belong without a per-lot lookup.
+  final String sourceStoreId;
+  final String status;
+  final DateTime openedAt;
+  final String? openedBy;
+  final DateTime? closedAt;
+  final String? closedBy;
+
+  /// True when the trip closed with a residual the driver still owes (spec
+  /// §9.4 #14) — the residual carries forward on their cross-trip balance.
+  final bool closedWithBalance;
+
+  /// Empty-crate shell memo counts (spec §11). COUNTING ONLY in v1 — no money,
+  /// no `crate_ledger` writes, no crate-pool balance change. They exist so the
+  /// later crate pass inherits history instead of starting blind.
+  final int shellsOut;
+  final int shellsBack;
+
+  /// Set when a late-syncing road sale forces a post-close restatement (spec
+  /// §9.4 #15). Written by #145.
+  final DateTime? restatedAt;
+  final String? restatedReason;
+  final int cogsKobo;
+  final int recoveredKobo;
+  final int unremittedKobo;
+  final int shortageWriteoffKobo;
+  final int damageWriteoffKobo;
+  final int shortageLossKobo;
+  final int damageLossKobo;
+  final int profitKobo;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const VanTripData({
+    required this.id,
+    required this.businessId,
+    required this.vanStoreId,
+    required this.driverUserId,
+    required this.sourceStoreId,
+    required this.status,
+    required this.openedAt,
+    this.openedBy,
+    this.closedAt,
+    this.closedBy,
+    required this.closedWithBalance,
+    required this.shellsOut,
+    required this.shellsBack,
+    this.restatedAt,
+    this.restatedReason,
+    required this.cogsKobo,
+    required this.recoveredKobo,
+    required this.unremittedKobo,
+    required this.shortageWriteoffKobo,
+    required this.damageWriteoffKobo,
+    required this.shortageLossKobo,
+    required this.damageLossKobo,
+    required this.profitKobo,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['van_store_id'] = Variable<String>(vanStoreId);
+    map['driver_user_id'] = Variable<String>(driverUserId);
+    map['source_store_id'] = Variable<String>(sourceStoreId);
+    map['status'] = Variable<String>(status);
+    map['opened_at'] = Variable<DateTime>(openedAt);
+    if (!nullToAbsent || openedBy != null) {
+      map['opened_by'] = Variable<String>(openedBy);
+    }
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    if (!nullToAbsent || closedBy != null) {
+      map['closed_by'] = Variable<String>(closedBy);
+    }
+    map['closed_with_balance'] = Variable<bool>(closedWithBalance);
+    map['shells_out'] = Variable<int>(shellsOut);
+    map['shells_back'] = Variable<int>(shellsBack);
+    if (!nullToAbsent || restatedAt != null) {
+      map['restated_at'] = Variable<DateTime>(restatedAt);
+    }
+    if (!nullToAbsent || restatedReason != null) {
+      map['restated_reason'] = Variable<String>(restatedReason);
+    }
+    map['cogs_kobo'] = Variable<int>(cogsKobo);
+    map['recovered_kobo'] = Variable<int>(recoveredKobo);
+    map['unremitted_kobo'] = Variable<int>(unremittedKobo);
+    map['shortage_writeoff_kobo'] = Variable<int>(shortageWriteoffKobo);
+    map['damage_writeoff_kobo'] = Variable<int>(damageWriteoffKobo);
+    map['shortage_loss_kobo'] = Variable<int>(shortageLossKobo);
+    map['damage_loss_kobo'] = Variable<int>(damageLossKobo);
+    map['profit_kobo'] = Variable<int>(profitKobo);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  VanTripsCompanion toCompanion(bool nullToAbsent) {
+    return VanTripsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      vanStoreId: Value(vanStoreId),
+      driverUserId: Value(driverUserId),
+      sourceStoreId: Value(sourceStoreId),
+      status: Value(status),
+      openedAt: Value(openedAt),
+      openedBy: openedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(openedBy),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      closedBy: closedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedBy),
+      closedWithBalance: Value(closedWithBalance),
+      shellsOut: Value(shellsOut),
+      shellsBack: Value(shellsBack),
+      restatedAt: restatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(restatedAt),
+      restatedReason: restatedReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(restatedReason),
+      cogsKobo: Value(cogsKobo),
+      recoveredKobo: Value(recoveredKobo),
+      unremittedKobo: Value(unremittedKobo),
+      shortageWriteoffKobo: Value(shortageWriteoffKobo),
+      damageWriteoffKobo: Value(damageWriteoffKobo),
+      shortageLossKobo: Value(shortageLossKobo),
+      damageLossKobo: Value(damageLossKobo),
+      profitKobo: Value(profitKobo),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory VanTripData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VanTripData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      vanStoreId: serializer.fromJson<String>(json['vanStoreId']),
+      driverUserId: serializer.fromJson<String>(json['driverUserId']),
+      sourceStoreId: serializer.fromJson<String>(json['sourceStoreId']),
+      status: serializer.fromJson<String>(json['status']),
+      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
+      openedBy: serializer.fromJson<String?>(json['openedBy']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      closedBy: serializer.fromJson<String?>(json['closedBy']),
+      closedWithBalance: serializer.fromJson<bool>(json['closedWithBalance']),
+      shellsOut: serializer.fromJson<int>(json['shellsOut']),
+      shellsBack: serializer.fromJson<int>(json['shellsBack']),
+      restatedAt: serializer.fromJson<DateTime?>(json['restatedAt']),
+      restatedReason: serializer.fromJson<String?>(json['restatedReason']),
+      cogsKobo: serializer.fromJson<int>(json['cogsKobo']),
+      recoveredKobo: serializer.fromJson<int>(json['recoveredKobo']),
+      unremittedKobo: serializer.fromJson<int>(json['unremittedKobo']),
+      shortageWriteoffKobo: serializer.fromJson<int>(
+        json['shortageWriteoffKobo'],
+      ),
+      damageWriteoffKobo: serializer.fromJson<int>(json['damageWriteoffKobo']),
+      shortageLossKobo: serializer.fromJson<int>(json['shortageLossKobo']),
+      damageLossKobo: serializer.fromJson<int>(json['damageLossKobo']),
+      profitKobo: serializer.fromJson<int>(json['profitKobo']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'vanStoreId': serializer.toJson<String>(vanStoreId),
+      'driverUserId': serializer.toJson<String>(driverUserId),
+      'sourceStoreId': serializer.toJson<String>(sourceStoreId),
+      'status': serializer.toJson<String>(status),
+      'openedAt': serializer.toJson<DateTime>(openedAt),
+      'openedBy': serializer.toJson<String?>(openedBy),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'closedBy': serializer.toJson<String?>(closedBy),
+      'closedWithBalance': serializer.toJson<bool>(closedWithBalance),
+      'shellsOut': serializer.toJson<int>(shellsOut),
+      'shellsBack': serializer.toJson<int>(shellsBack),
+      'restatedAt': serializer.toJson<DateTime?>(restatedAt),
+      'restatedReason': serializer.toJson<String?>(restatedReason),
+      'cogsKobo': serializer.toJson<int>(cogsKobo),
+      'recoveredKobo': serializer.toJson<int>(recoveredKobo),
+      'unremittedKobo': serializer.toJson<int>(unremittedKobo),
+      'shortageWriteoffKobo': serializer.toJson<int>(shortageWriteoffKobo),
+      'damageWriteoffKobo': serializer.toJson<int>(damageWriteoffKobo),
+      'shortageLossKobo': serializer.toJson<int>(shortageLossKobo),
+      'damageLossKobo': serializer.toJson<int>(damageLossKobo),
+      'profitKobo': serializer.toJson<int>(profitKobo),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  VanTripData copyWith({
+    String? id,
+    String? businessId,
+    String? vanStoreId,
+    String? driverUserId,
+    String? sourceStoreId,
+    String? status,
+    DateTime? openedAt,
+    Value<String?> openedBy = const Value.absent(),
+    Value<DateTime?> closedAt = const Value.absent(),
+    Value<String?> closedBy = const Value.absent(),
+    bool? closedWithBalance,
+    int? shellsOut,
+    int? shellsBack,
+    Value<DateTime?> restatedAt = const Value.absent(),
+    Value<String?> restatedReason = const Value.absent(),
+    int? cogsKobo,
+    int? recoveredKobo,
+    int? unremittedKobo,
+    int? shortageWriteoffKobo,
+    int? damageWriteoffKobo,
+    int? shortageLossKobo,
+    int? damageLossKobo,
+    int? profitKobo,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => VanTripData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    vanStoreId: vanStoreId ?? this.vanStoreId,
+    driverUserId: driverUserId ?? this.driverUserId,
+    sourceStoreId: sourceStoreId ?? this.sourceStoreId,
+    status: status ?? this.status,
+    openedAt: openedAt ?? this.openedAt,
+    openedBy: openedBy.present ? openedBy.value : this.openedBy,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    closedBy: closedBy.present ? closedBy.value : this.closedBy,
+    closedWithBalance: closedWithBalance ?? this.closedWithBalance,
+    shellsOut: shellsOut ?? this.shellsOut,
+    shellsBack: shellsBack ?? this.shellsBack,
+    restatedAt: restatedAt.present ? restatedAt.value : this.restatedAt,
+    restatedReason: restatedReason.present
+        ? restatedReason.value
+        : this.restatedReason,
+    cogsKobo: cogsKobo ?? this.cogsKobo,
+    recoveredKobo: recoveredKobo ?? this.recoveredKobo,
+    unremittedKobo: unremittedKobo ?? this.unremittedKobo,
+    shortageWriteoffKobo: shortageWriteoffKobo ?? this.shortageWriteoffKobo,
+    damageWriteoffKobo: damageWriteoffKobo ?? this.damageWriteoffKobo,
+    shortageLossKobo: shortageLossKobo ?? this.shortageLossKobo,
+    damageLossKobo: damageLossKobo ?? this.damageLossKobo,
+    profitKobo: profitKobo ?? this.profitKobo,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  VanTripData copyWithCompanion(VanTripsCompanion data) {
+    return VanTripData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      vanStoreId: data.vanStoreId.present
+          ? data.vanStoreId.value
+          : this.vanStoreId,
+      driverUserId: data.driverUserId.present
+          ? data.driverUserId.value
+          : this.driverUserId,
+      sourceStoreId: data.sourceStoreId.present
+          ? data.sourceStoreId.value
+          : this.sourceStoreId,
+      status: data.status.present ? data.status.value : this.status,
+      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
+      openedBy: data.openedBy.present ? data.openedBy.value : this.openedBy,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      closedBy: data.closedBy.present ? data.closedBy.value : this.closedBy,
+      closedWithBalance: data.closedWithBalance.present
+          ? data.closedWithBalance.value
+          : this.closedWithBalance,
+      shellsOut: data.shellsOut.present ? data.shellsOut.value : this.shellsOut,
+      shellsBack: data.shellsBack.present
+          ? data.shellsBack.value
+          : this.shellsBack,
+      restatedAt: data.restatedAt.present
+          ? data.restatedAt.value
+          : this.restatedAt,
+      restatedReason: data.restatedReason.present
+          ? data.restatedReason.value
+          : this.restatedReason,
+      cogsKobo: data.cogsKobo.present ? data.cogsKobo.value : this.cogsKobo,
+      recoveredKobo: data.recoveredKobo.present
+          ? data.recoveredKobo.value
+          : this.recoveredKobo,
+      unremittedKobo: data.unremittedKobo.present
+          ? data.unremittedKobo.value
+          : this.unremittedKobo,
+      shortageWriteoffKobo: data.shortageWriteoffKobo.present
+          ? data.shortageWriteoffKobo.value
+          : this.shortageWriteoffKobo,
+      damageWriteoffKobo: data.damageWriteoffKobo.present
+          ? data.damageWriteoffKobo.value
+          : this.damageWriteoffKobo,
+      shortageLossKobo: data.shortageLossKobo.present
+          ? data.shortageLossKobo.value
+          : this.shortageLossKobo,
+      damageLossKobo: data.damageLossKobo.present
+          ? data.damageLossKobo.value
+          : this.damageLossKobo,
+      profitKobo: data.profitKobo.present
+          ? data.profitKobo.value
+          : this.profitKobo,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanTripData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('vanStoreId: $vanStoreId, ')
+          ..write('driverUserId: $driverUserId, ')
+          ..write('sourceStoreId: $sourceStoreId, ')
+          ..write('status: $status, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('openedBy: $openedBy, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('closedWithBalance: $closedWithBalance, ')
+          ..write('shellsOut: $shellsOut, ')
+          ..write('shellsBack: $shellsBack, ')
+          ..write('restatedAt: $restatedAt, ')
+          ..write('restatedReason: $restatedReason, ')
+          ..write('cogsKobo: $cogsKobo, ')
+          ..write('recoveredKobo: $recoveredKobo, ')
+          ..write('unremittedKobo: $unremittedKobo, ')
+          ..write('shortageWriteoffKobo: $shortageWriteoffKobo, ')
+          ..write('damageWriteoffKobo: $damageWriteoffKobo, ')
+          ..write('shortageLossKobo: $shortageLossKobo, ')
+          ..write('damageLossKobo: $damageLossKobo, ')
+          ..write('profitKobo: $profitKobo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    businessId,
+    vanStoreId,
+    driverUserId,
+    sourceStoreId,
+    status,
+    openedAt,
+    openedBy,
+    closedAt,
+    closedBy,
+    closedWithBalance,
+    shellsOut,
+    shellsBack,
+    restatedAt,
+    restatedReason,
+    cogsKobo,
+    recoveredKobo,
+    unremittedKobo,
+    shortageWriteoffKobo,
+    damageWriteoffKobo,
+    shortageLossKobo,
+    damageLossKobo,
+    profitKobo,
+    createdAt,
+    lastUpdatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VanTripData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.vanStoreId == this.vanStoreId &&
+          other.driverUserId == this.driverUserId &&
+          other.sourceStoreId == this.sourceStoreId &&
+          other.status == this.status &&
+          other.openedAt == this.openedAt &&
+          other.openedBy == this.openedBy &&
+          other.closedAt == this.closedAt &&
+          other.closedBy == this.closedBy &&
+          other.closedWithBalance == this.closedWithBalance &&
+          other.shellsOut == this.shellsOut &&
+          other.shellsBack == this.shellsBack &&
+          other.restatedAt == this.restatedAt &&
+          other.restatedReason == this.restatedReason &&
+          other.cogsKobo == this.cogsKobo &&
+          other.recoveredKobo == this.recoveredKobo &&
+          other.unremittedKobo == this.unremittedKobo &&
+          other.shortageWriteoffKobo == this.shortageWriteoffKobo &&
+          other.damageWriteoffKobo == this.damageWriteoffKobo &&
+          other.shortageLossKobo == this.shortageLossKobo &&
+          other.damageLossKobo == this.damageLossKobo &&
+          other.profitKobo == this.profitKobo &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class VanTripsCompanion extends UpdateCompanion<VanTripData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> vanStoreId;
+  final Value<String> driverUserId;
+  final Value<String> sourceStoreId;
+  final Value<String> status;
+  final Value<DateTime> openedAt;
+  final Value<String?> openedBy;
+  final Value<DateTime?> closedAt;
+  final Value<String?> closedBy;
+  final Value<bool> closedWithBalance;
+  final Value<int> shellsOut;
+  final Value<int> shellsBack;
+  final Value<DateTime?> restatedAt;
+  final Value<String?> restatedReason;
+  final Value<int> cogsKobo;
+  final Value<int> recoveredKobo;
+  final Value<int> unremittedKobo;
+  final Value<int> shortageWriteoffKobo;
+  final Value<int> damageWriteoffKobo;
+  final Value<int> shortageLossKobo;
+  final Value<int> damageLossKobo;
+  final Value<int> profitKobo;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const VanTripsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.vanStoreId = const Value.absent(),
+    this.driverUserId = const Value.absent(),
+    this.sourceStoreId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.openedBy = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.closedBy = const Value.absent(),
+    this.closedWithBalance = const Value.absent(),
+    this.shellsOut = const Value.absent(),
+    this.shellsBack = const Value.absent(),
+    this.restatedAt = const Value.absent(),
+    this.restatedReason = const Value.absent(),
+    this.cogsKobo = const Value.absent(),
+    this.recoveredKobo = const Value.absent(),
+    this.unremittedKobo = const Value.absent(),
+    this.shortageWriteoffKobo = const Value.absent(),
+    this.damageWriteoffKobo = const Value.absent(),
+    this.shortageLossKobo = const Value.absent(),
+    this.damageLossKobo = const Value.absent(),
+    this.profitKobo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VanTripsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String vanStoreId,
+    required String driverUserId,
+    required String sourceStoreId,
+    this.status = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.openedBy = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.closedBy = const Value.absent(),
+    this.closedWithBalance = const Value.absent(),
+    this.shellsOut = const Value.absent(),
+    this.shellsBack = const Value.absent(),
+    this.restatedAt = const Value.absent(),
+    this.restatedReason = const Value.absent(),
+    this.cogsKobo = const Value.absent(),
+    this.recoveredKobo = const Value.absent(),
+    this.unremittedKobo = const Value.absent(),
+    this.shortageWriteoffKobo = const Value.absent(),
+    this.damageWriteoffKobo = const Value.absent(),
+    this.shortageLossKobo = const Value.absent(),
+    this.damageLossKobo = const Value.absent(),
+    this.profitKobo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       vanStoreId = Value(vanStoreId),
+       driverUserId = Value(driverUserId),
+       sourceStoreId = Value(sourceStoreId);
+  static Insertable<VanTripData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? vanStoreId,
+    Expression<String>? driverUserId,
+    Expression<String>? sourceStoreId,
+    Expression<String>? status,
+    Expression<DateTime>? openedAt,
+    Expression<String>? openedBy,
+    Expression<DateTime>? closedAt,
+    Expression<String>? closedBy,
+    Expression<bool>? closedWithBalance,
+    Expression<int>? shellsOut,
+    Expression<int>? shellsBack,
+    Expression<DateTime>? restatedAt,
+    Expression<String>? restatedReason,
+    Expression<int>? cogsKobo,
+    Expression<int>? recoveredKobo,
+    Expression<int>? unremittedKobo,
+    Expression<int>? shortageWriteoffKobo,
+    Expression<int>? damageWriteoffKobo,
+    Expression<int>? shortageLossKobo,
+    Expression<int>? damageLossKobo,
+    Expression<int>? profitKobo,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (vanStoreId != null) 'van_store_id': vanStoreId,
+      if (driverUserId != null) 'driver_user_id': driverUserId,
+      if (sourceStoreId != null) 'source_store_id': sourceStoreId,
+      if (status != null) 'status': status,
+      if (openedAt != null) 'opened_at': openedAt,
+      if (openedBy != null) 'opened_by': openedBy,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (closedBy != null) 'closed_by': closedBy,
+      if (closedWithBalance != null) 'closed_with_balance': closedWithBalance,
+      if (shellsOut != null) 'shells_out': shellsOut,
+      if (shellsBack != null) 'shells_back': shellsBack,
+      if (restatedAt != null) 'restated_at': restatedAt,
+      if (restatedReason != null) 'restated_reason': restatedReason,
+      if (cogsKobo != null) 'cogs_kobo': cogsKobo,
+      if (recoveredKobo != null) 'recovered_kobo': recoveredKobo,
+      if (unremittedKobo != null) 'unremitted_kobo': unremittedKobo,
+      if (shortageWriteoffKobo != null)
+        'shortage_writeoff_kobo': shortageWriteoffKobo,
+      if (damageWriteoffKobo != null)
+        'damage_writeoff_kobo': damageWriteoffKobo,
+      if (shortageLossKobo != null) 'shortage_loss_kobo': shortageLossKobo,
+      if (damageLossKobo != null) 'damage_loss_kobo': damageLossKobo,
+      if (profitKobo != null) 'profit_kobo': profitKobo,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VanTripsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? vanStoreId,
+    Value<String>? driverUserId,
+    Value<String>? sourceStoreId,
+    Value<String>? status,
+    Value<DateTime>? openedAt,
+    Value<String?>? openedBy,
+    Value<DateTime?>? closedAt,
+    Value<String?>? closedBy,
+    Value<bool>? closedWithBalance,
+    Value<int>? shellsOut,
+    Value<int>? shellsBack,
+    Value<DateTime?>? restatedAt,
+    Value<String?>? restatedReason,
+    Value<int>? cogsKobo,
+    Value<int>? recoveredKobo,
+    Value<int>? unremittedKobo,
+    Value<int>? shortageWriteoffKobo,
+    Value<int>? damageWriteoffKobo,
+    Value<int>? shortageLossKobo,
+    Value<int>? damageLossKobo,
+    Value<int>? profitKobo,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return VanTripsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      vanStoreId: vanStoreId ?? this.vanStoreId,
+      driverUserId: driverUserId ?? this.driverUserId,
+      sourceStoreId: sourceStoreId ?? this.sourceStoreId,
+      status: status ?? this.status,
+      openedAt: openedAt ?? this.openedAt,
+      openedBy: openedBy ?? this.openedBy,
+      closedAt: closedAt ?? this.closedAt,
+      closedBy: closedBy ?? this.closedBy,
+      closedWithBalance: closedWithBalance ?? this.closedWithBalance,
+      shellsOut: shellsOut ?? this.shellsOut,
+      shellsBack: shellsBack ?? this.shellsBack,
+      restatedAt: restatedAt ?? this.restatedAt,
+      restatedReason: restatedReason ?? this.restatedReason,
+      cogsKobo: cogsKobo ?? this.cogsKobo,
+      recoveredKobo: recoveredKobo ?? this.recoveredKobo,
+      unremittedKobo: unremittedKobo ?? this.unremittedKobo,
+      shortageWriteoffKobo: shortageWriteoffKobo ?? this.shortageWriteoffKobo,
+      damageWriteoffKobo: damageWriteoffKobo ?? this.damageWriteoffKobo,
+      shortageLossKobo: shortageLossKobo ?? this.shortageLossKobo,
+      damageLossKobo: damageLossKobo ?? this.damageLossKobo,
+      profitKobo: profitKobo ?? this.profitKobo,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (vanStoreId.present) {
+      map['van_store_id'] = Variable<String>(vanStoreId.value);
+    }
+    if (driverUserId.present) {
+      map['driver_user_id'] = Variable<String>(driverUserId.value);
+    }
+    if (sourceStoreId.present) {
+      map['source_store_id'] = Variable<String>(sourceStoreId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (openedAt.present) {
+      map['opened_at'] = Variable<DateTime>(openedAt.value);
+    }
+    if (openedBy.present) {
+      map['opened_by'] = Variable<String>(openedBy.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (closedBy.present) {
+      map['closed_by'] = Variable<String>(closedBy.value);
+    }
+    if (closedWithBalance.present) {
+      map['closed_with_balance'] = Variable<bool>(closedWithBalance.value);
+    }
+    if (shellsOut.present) {
+      map['shells_out'] = Variable<int>(shellsOut.value);
+    }
+    if (shellsBack.present) {
+      map['shells_back'] = Variable<int>(shellsBack.value);
+    }
+    if (restatedAt.present) {
+      map['restated_at'] = Variable<DateTime>(restatedAt.value);
+    }
+    if (restatedReason.present) {
+      map['restated_reason'] = Variable<String>(restatedReason.value);
+    }
+    if (cogsKobo.present) {
+      map['cogs_kobo'] = Variable<int>(cogsKobo.value);
+    }
+    if (recoveredKobo.present) {
+      map['recovered_kobo'] = Variable<int>(recoveredKobo.value);
+    }
+    if (unremittedKobo.present) {
+      map['unremitted_kobo'] = Variable<int>(unremittedKobo.value);
+    }
+    if (shortageWriteoffKobo.present) {
+      map['shortage_writeoff_kobo'] = Variable<int>(shortageWriteoffKobo.value);
+    }
+    if (damageWriteoffKobo.present) {
+      map['damage_writeoff_kobo'] = Variable<int>(damageWriteoffKobo.value);
+    }
+    if (shortageLossKobo.present) {
+      map['shortage_loss_kobo'] = Variable<int>(shortageLossKobo.value);
+    }
+    if (damageLossKobo.present) {
+      map['damage_loss_kobo'] = Variable<int>(damageLossKobo.value);
+    }
+    if (profitKobo.present) {
+      map['profit_kobo'] = Variable<int>(profitKobo.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanTripsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('vanStoreId: $vanStoreId, ')
+          ..write('driverUserId: $driverUserId, ')
+          ..write('sourceStoreId: $sourceStoreId, ')
+          ..write('status: $status, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('openedBy: $openedBy, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('closedWithBalance: $closedWithBalance, ')
+          ..write('shellsOut: $shellsOut, ')
+          ..write('shellsBack: $shellsBack, ')
+          ..write('restatedAt: $restatedAt, ')
+          ..write('restatedReason: $restatedReason, ')
+          ..write('cogsKobo: $cogsKobo, ')
+          ..write('recoveredKobo: $recoveredKobo, ')
+          ..write('unremittedKobo: $unremittedKobo, ')
+          ..write('shortageWriteoffKobo: $shortageWriteoffKobo, ')
+          ..write('damageWriteoffKobo: $damageWriteoffKobo, ')
+          ..write('shortageLossKobo: $shortageLossKobo, ')
+          ..write('damageLossKobo: $damageLossKobo, ')
+          ..write('profitKobo: $profitKobo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $VanTripLotsTable extends VanTripLots
+    with TableInfo<$VanTripLotsTable, VanTripLotData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VanTripLotsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _tripIdMeta = const VerificationMeta('tripId');
+  @override
+  late final GeneratedColumn<String> tripId = GeneratedColumn<String>(
+    'trip_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_trips (id)',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _quantityMeta = const VerificationMeta(
+    'quantity',
+  );
+  @override
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _qtyRemainingMeta = const VerificationMeta(
+    'qtyRemaining',
+  );
+  @override
+  late final GeneratedColumn<int> qtyRemaining = GeneratedColumn<int>(
+    'qty_remaining',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _loadPriceKoboMeta = const VerificationMeta(
+    'loadPriceKobo',
+  );
+  @override
+  late final GeneratedColumn<int> loadPriceKobo = GeneratedColumn<int>(
+    'load_price_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _unitCostKoboMeta = const VerificationMeta(
+    'unitCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unitCostKobo = GeneratedColumn<int>(
+    'unit_cost_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _dispatchedAtMeta = const VerificationMeta(
+    'dispatchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dispatchedAt = GeneratedColumn<DateTime>(
+    'dispatched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _dispatchEventIdMeta = const VerificationMeta(
+    'dispatchEventId',
+  );
+  @override
+  late final GeneratedColumn<String> dispatchEventId = GeneratedColumn<String>(
+    'dispatch_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _shellsOutMeta = const VerificationMeta(
+    'shellsOut',
+  );
+  @override
+  late final GeneratedColumn<int> shellsOut = GeneratedColumn<int>(
+    'shells_out',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    tripId,
+    productId,
+    quantity,
+    qtyRemaining,
+    loadPriceKobo,
+    unitCostKobo,
+    dispatchedAt,
+    dispatchEventId,
+    shellsOut,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'van_trip_lots';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VanTripLotData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('trip_id')) {
+      context.handle(
+        _tripIdMeta,
+        tripId.isAcceptableOrUnknown(data['trip_id']!, _tripIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tripIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('quantity')) {
+      context.handle(
+        _quantityMeta,
+        quantity.isAcceptableOrUnknown(data['quantity']!, _quantityMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_quantityMeta);
+    }
+    if (data.containsKey('qty_remaining')) {
+      context.handle(
+        _qtyRemainingMeta,
+        qtyRemaining.isAcceptableOrUnknown(
+          data['qty_remaining']!,
+          _qtyRemainingMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_qtyRemainingMeta);
+    }
+    if (data.containsKey('load_price_kobo')) {
+      context.handle(
+        _loadPriceKoboMeta,
+        loadPriceKobo.isAcceptableOrUnknown(
+          data['load_price_kobo']!,
+          _loadPriceKoboMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_loadPriceKoboMeta);
+    }
+    if (data.containsKey('unit_cost_kobo')) {
+      context.handle(
+        _unitCostKoboMeta,
+        unitCostKobo.isAcceptableOrUnknown(
+          data['unit_cost_kobo']!,
+          _unitCostKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dispatched_at')) {
+      context.handle(
+        _dispatchedAtMeta,
+        dispatchedAt.isAcceptableOrUnknown(
+          data['dispatched_at']!,
+          _dispatchedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dispatch_event_id')) {
+      context.handle(
+        _dispatchEventIdMeta,
+        dispatchEventId.isAcceptableOrUnknown(
+          data['dispatch_event_id']!,
+          _dispatchEventIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_dispatchEventIdMeta);
+    }
+    if (data.containsKey('shells_out')) {
+      context.handle(
+        _shellsOutMeta,
+        shellsOut.isAcceptableOrUnknown(data['shells_out']!, _shellsOutMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VanTripLotData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VanTripLotData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      tripId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}trip_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      qtyRemaining: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}qty_remaining'],
+      )!,
+      loadPriceKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}load_price_kobo'],
+      )!,
+      unitCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_kobo'],
+      )!,
+      dispatchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}dispatched_at'],
+      )!,
+      dispatchEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dispatch_event_id'],
+      )!,
+      shellsOut: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shells_out'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VanTripLotsTable createAlias(String alias) {
+    return $VanTripLotsTable(attachedDatabase, alias);
+  }
+}
+
+class VanTripLotData extends DataClass implements Insertable<VanTripLotData> {
+  final String id;
+  final String businessId;
+  final String tripId;
+  final String productId;
+
+  /// Units dispatched on this line. Immutable.
+  final int quantity;
+
+  /// The FIFO draw-down cursor for return credits (#143): a good return credits
+  /// at the OLDEST remaining lot's price first and decrements this.
+  final int qtyRemaining;
+
+  /// Per unit — what the driver is accountable for. Defaults to the retail tier
+  /// at the picker and is editable per line before dispatch. The single
+  /// valuation for the whole reconciliation.
+  final int loadPriceKobo;
+
+  /// Per unit, **snapshotted at dispatch** from the warehouse's FIFO draw-down.
+  /// `0` ONLY when the source batches were genuinely uncosted — such a lot is
+  /// flagged and flows into the app's existing Uncosted transparency bucket; it
+  /// must never silently become free goods (spec §9.1 #2).
+  final int unitCostKobo;
+  final DateTime dispatchedAt;
+
+  /// The **client idempotency key** for the dispatch event that created this
+  /// lot (spec §7.1). One dispatch = one id across all its lines; a retry after
+  /// a timeout or a double-tap re-uses it and the whole write is a no-op —
+  /// never a second ledger debit. The `UNIQUE (dispatch_event_id, product_id)`
+  /// below makes that contract enforceable rather than merely intended.
+  final String dispatchEventId;
+
+  /// Empty-crate shell memo count for this line (spec §11). Counting only.
+  final int shellsOut;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const VanTripLotData({
+    required this.id,
+    required this.businessId,
+    required this.tripId,
+    required this.productId,
+    required this.quantity,
+    required this.qtyRemaining,
+    required this.loadPriceKobo,
+    required this.unitCostKobo,
+    required this.dispatchedAt,
+    required this.dispatchEventId,
+    required this.shellsOut,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['trip_id'] = Variable<String>(tripId);
+    map['product_id'] = Variable<String>(productId);
+    map['quantity'] = Variable<int>(quantity);
+    map['qty_remaining'] = Variable<int>(qtyRemaining);
+    map['load_price_kobo'] = Variable<int>(loadPriceKobo);
+    map['unit_cost_kobo'] = Variable<int>(unitCostKobo);
+    map['dispatched_at'] = Variable<DateTime>(dispatchedAt);
+    map['dispatch_event_id'] = Variable<String>(dispatchEventId);
+    map['shells_out'] = Variable<int>(shellsOut);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  VanTripLotsCompanion toCompanion(bool nullToAbsent) {
+    return VanTripLotsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      tripId: Value(tripId),
+      productId: Value(productId),
+      quantity: Value(quantity),
+      qtyRemaining: Value(qtyRemaining),
+      loadPriceKobo: Value(loadPriceKobo),
+      unitCostKobo: Value(unitCostKobo),
+      dispatchedAt: Value(dispatchedAt),
+      dispatchEventId: Value(dispatchEventId),
+      shellsOut: Value(shellsOut),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory VanTripLotData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VanTripLotData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      tripId: serializer.fromJson<String>(json['tripId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      qtyRemaining: serializer.fromJson<int>(json['qtyRemaining']),
+      loadPriceKobo: serializer.fromJson<int>(json['loadPriceKobo']),
+      unitCostKobo: serializer.fromJson<int>(json['unitCostKobo']),
+      dispatchedAt: serializer.fromJson<DateTime>(json['dispatchedAt']),
+      dispatchEventId: serializer.fromJson<String>(json['dispatchEventId']),
+      shellsOut: serializer.fromJson<int>(json['shellsOut']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'tripId': serializer.toJson<String>(tripId),
+      'productId': serializer.toJson<String>(productId),
+      'quantity': serializer.toJson<int>(quantity),
+      'qtyRemaining': serializer.toJson<int>(qtyRemaining),
+      'loadPriceKobo': serializer.toJson<int>(loadPriceKobo),
+      'unitCostKobo': serializer.toJson<int>(unitCostKobo),
+      'dispatchedAt': serializer.toJson<DateTime>(dispatchedAt),
+      'dispatchEventId': serializer.toJson<String>(dispatchEventId),
+      'shellsOut': serializer.toJson<int>(shellsOut),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  VanTripLotData copyWith({
+    String? id,
+    String? businessId,
+    String? tripId,
+    String? productId,
+    int? quantity,
+    int? qtyRemaining,
+    int? loadPriceKobo,
+    int? unitCostKobo,
+    DateTime? dispatchedAt,
+    String? dispatchEventId,
+    int? shellsOut,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => VanTripLotData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    tripId: tripId ?? this.tripId,
+    productId: productId ?? this.productId,
+    quantity: quantity ?? this.quantity,
+    qtyRemaining: qtyRemaining ?? this.qtyRemaining,
+    loadPriceKobo: loadPriceKobo ?? this.loadPriceKobo,
+    unitCostKobo: unitCostKobo ?? this.unitCostKobo,
+    dispatchedAt: dispatchedAt ?? this.dispatchedAt,
+    dispatchEventId: dispatchEventId ?? this.dispatchEventId,
+    shellsOut: shellsOut ?? this.shellsOut,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  VanTripLotData copyWithCompanion(VanTripLotsCompanion data) {
+    return VanTripLotData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      tripId: data.tripId.present ? data.tripId.value : this.tripId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      qtyRemaining: data.qtyRemaining.present
+          ? data.qtyRemaining.value
+          : this.qtyRemaining,
+      loadPriceKobo: data.loadPriceKobo.present
+          ? data.loadPriceKobo.value
+          : this.loadPriceKobo,
+      unitCostKobo: data.unitCostKobo.present
+          ? data.unitCostKobo.value
+          : this.unitCostKobo,
+      dispatchedAt: data.dispatchedAt.present
+          ? data.dispatchedAt.value
+          : this.dispatchedAt,
+      dispatchEventId: data.dispatchEventId.present
+          ? data.dispatchEventId.value
+          : this.dispatchEventId,
+      shellsOut: data.shellsOut.present ? data.shellsOut.value : this.shellsOut,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanTripLotData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('tripId: $tripId, ')
+          ..write('productId: $productId, ')
+          ..write('quantity: $quantity, ')
+          ..write('qtyRemaining: $qtyRemaining, ')
+          ..write('loadPriceKobo: $loadPriceKobo, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
+          ..write('dispatchedAt: $dispatchedAt, ')
+          ..write('dispatchEventId: $dispatchEventId, ')
+          ..write('shellsOut: $shellsOut, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    tripId,
+    productId,
+    quantity,
+    qtyRemaining,
+    loadPriceKobo,
+    unitCostKobo,
+    dispatchedAt,
+    dispatchEventId,
+    shellsOut,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VanTripLotData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.tripId == this.tripId &&
+          other.productId == this.productId &&
+          other.quantity == this.quantity &&
+          other.qtyRemaining == this.qtyRemaining &&
+          other.loadPriceKobo == this.loadPriceKobo &&
+          other.unitCostKobo == this.unitCostKobo &&
+          other.dispatchedAt == this.dispatchedAt &&
+          other.dispatchEventId == this.dispatchEventId &&
+          other.shellsOut == this.shellsOut &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class VanTripLotsCompanion extends UpdateCompanion<VanTripLotData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> tripId;
+  final Value<String> productId;
+  final Value<int> quantity;
+  final Value<int> qtyRemaining;
+  final Value<int> loadPriceKobo;
+  final Value<int> unitCostKobo;
+  final Value<DateTime> dispatchedAt;
+  final Value<String> dispatchEventId;
+  final Value<int> shellsOut;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const VanTripLotsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.tripId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.quantity = const Value.absent(),
+    this.qtyRemaining = const Value.absent(),
+    this.loadPriceKobo = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
+    this.dispatchedAt = const Value.absent(),
+    this.dispatchEventId = const Value.absent(),
+    this.shellsOut = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VanTripLotsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String tripId,
+    required String productId,
+    required int quantity,
+    required int qtyRemaining,
+    required int loadPriceKobo,
+    this.unitCostKobo = const Value.absent(),
+    this.dispatchedAt = const Value.absent(),
+    required String dispatchEventId,
+    this.shellsOut = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       tripId = Value(tripId),
+       productId = Value(productId),
+       quantity = Value(quantity),
+       qtyRemaining = Value(qtyRemaining),
+       loadPriceKobo = Value(loadPriceKobo),
+       dispatchEventId = Value(dispatchEventId);
+  static Insertable<VanTripLotData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? tripId,
+    Expression<String>? productId,
+    Expression<int>? quantity,
+    Expression<int>? qtyRemaining,
+    Expression<int>? loadPriceKobo,
+    Expression<int>? unitCostKobo,
+    Expression<DateTime>? dispatchedAt,
+    Expression<String>? dispatchEventId,
+    Expression<int>? shellsOut,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (tripId != null) 'trip_id': tripId,
+      if (productId != null) 'product_id': productId,
+      if (quantity != null) 'quantity': quantity,
+      if (qtyRemaining != null) 'qty_remaining': qtyRemaining,
+      if (loadPriceKobo != null) 'load_price_kobo': loadPriceKobo,
+      if (unitCostKobo != null) 'unit_cost_kobo': unitCostKobo,
+      if (dispatchedAt != null) 'dispatched_at': dispatchedAt,
+      if (dispatchEventId != null) 'dispatch_event_id': dispatchEventId,
+      if (shellsOut != null) 'shells_out': shellsOut,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VanTripLotsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? tripId,
+    Value<String>? productId,
+    Value<int>? quantity,
+    Value<int>? qtyRemaining,
+    Value<int>? loadPriceKobo,
+    Value<int>? unitCostKobo,
+    Value<DateTime>? dispatchedAt,
+    Value<String>? dispatchEventId,
+    Value<int>? shellsOut,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return VanTripLotsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      tripId: tripId ?? this.tripId,
+      productId: productId ?? this.productId,
+      quantity: quantity ?? this.quantity,
+      qtyRemaining: qtyRemaining ?? this.qtyRemaining,
+      loadPriceKobo: loadPriceKobo ?? this.loadPriceKobo,
+      unitCostKobo: unitCostKobo ?? this.unitCostKobo,
+      dispatchedAt: dispatchedAt ?? this.dispatchedAt,
+      dispatchEventId: dispatchEventId ?? this.dispatchEventId,
+      shellsOut: shellsOut ?? this.shellsOut,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (tripId.present) {
+      map['trip_id'] = Variable<String>(tripId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (quantity.present) {
+      map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (qtyRemaining.present) {
+      map['qty_remaining'] = Variable<int>(qtyRemaining.value);
+    }
+    if (loadPriceKobo.present) {
+      map['load_price_kobo'] = Variable<int>(loadPriceKobo.value);
+    }
+    if (unitCostKobo.present) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo.value);
+    }
+    if (dispatchedAt.present) {
+      map['dispatched_at'] = Variable<DateTime>(dispatchedAt.value);
+    }
+    if (dispatchEventId.present) {
+      map['dispatch_event_id'] = Variable<String>(dispatchEventId.value);
+    }
+    if (shellsOut.present) {
+      map['shells_out'] = Variable<int>(shellsOut.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanTripLotsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('tripId: $tripId, ')
+          ..write('productId: $productId, ')
+          ..write('quantity: $quantity, ')
+          ..write('qtyRemaining: $qtyRemaining, ')
+          ..write('loadPriceKobo: $loadPriceKobo, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
+          ..write('dispatchedAt: $dispatchedAt, ')
+          ..write('dispatchEventId: $dispatchEventId, ')
+          ..write('shellsOut: $shellsOut, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DriverLedgerEntriesTable extends DriverLedgerEntries
+    with TableInfo<$DriverLedgerEntriesTable, DriverLedgerEntryData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DriverLedgerEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _driverUserIdMeta = const VerificationMeta(
+    'driverUserId',
+  );
+  @override
+  late final GeneratedColumn<String> driverUserId = GeneratedColumn<String>(
+    'driver_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _tripIdMeta = const VerificationMeta('tripId');
+  @override
+  late final GeneratedColumn<String> tripId = GeneratedColumn<String>(
+    'trip_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_trips (id)',
+    ),
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountKoboMeta = const VerificationMeta(
+    'amountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> amountKobo = GeneratedColumn<int>(
+    'amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signedAmountKoboMeta = const VerificationMeta(
+    'signedAmountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> signedAmountKobo = GeneratedColumn<int>(
+    'signed_amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _referenceTypeMeta = const VerificationMeta(
+    'referenceType',
+  );
+  @override
+  late final GeneratedColumn<String> referenceType = GeneratedColumn<String>(
+    'reference_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _referenceIdMeta = const VerificationMeta(
+    'referenceId',
+  );
+  @override
+  late final GeneratedColumn<String> referenceId = GeneratedColumn<String>(
+    'reference_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paymentMethodMeta = const VerificationMeta(
+    'paymentMethod',
+  );
+  @override
+  late final GeneratedColumn<String> paymentMethod = GeneratedColumn<String>(
+    'payment_method',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _receiptPathMeta = const VerificationMeta(
+    'receiptPath',
+  );
+  @override
+  late final GeneratedColumn<String> receiptPath = GeneratedColumn<String>(
+    'receipt_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _referenceNoteMeta = const VerificationMeta(
+    'referenceNote',
+  );
+  @override
+  late final GeneratedColumn<String> referenceNote = GeneratedColumn<String>(
+    'reference_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _activityDateMeta = const VerificationMeta(
+    'activityDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> activityDate = GeneratedColumn<DateTime>(
+    'activity_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _performedByMeta = const VerificationMeta(
+    'performedBy',
+  );
+  @override
+  late final GeneratedColumn<String> performedBy = GeneratedColumn<String>(
+    'performed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _voidedAtMeta = const VerificationMeta(
+    'voidedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> voidedAt = GeneratedColumn<DateTime>(
+    'voided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _voidedByMeta = const VerificationMeta(
+    'voidedBy',
+  );
+  @override
+  late final GeneratedColumn<String> voidedBy = GeneratedColumn<String>(
+    'voided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _voidReasonMeta = const VerificationMeta(
+    'voidReason',
+  );
+  @override
+  late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
+    'void_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    driverUserId,
+    tripId,
+    type,
+    amountKobo,
+    signedAmountKobo,
+    referenceType,
+    referenceId,
+    paymentMethod,
+    receiptPath,
+    referenceNote,
+    activityDate,
+    performedBy,
+    voidedAt,
+    voidedBy,
+    voidReason,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'driver_ledger_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DriverLedgerEntryData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('driver_user_id')) {
+      context.handle(
+        _driverUserIdMeta,
+        driverUserId.isAcceptableOrUnknown(
+          data['driver_user_id']!,
+          _driverUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_driverUserIdMeta);
+    }
+    if (data.containsKey('trip_id')) {
+      context.handle(
+        _tripIdMeta,
+        tripId.isAcceptableOrUnknown(data['trip_id']!, _tripIdMeta),
+      );
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('amount_kobo')) {
+      context.handle(
+        _amountKoboMeta,
+        amountKobo.isAcceptableOrUnknown(data['amount_kobo']!, _amountKoboMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountKoboMeta);
+    }
+    if (data.containsKey('signed_amount_kobo')) {
+      context.handle(
+        _signedAmountKoboMeta,
+        signedAmountKobo.isAcceptableOrUnknown(
+          data['signed_amount_kobo']!,
+          _signedAmountKoboMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signedAmountKoboMeta);
+    }
+    if (data.containsKey('reference_type')) {
+      context.handle(
+        _referenceTypeMeta,
+        referenceType.isAcceptableOrUnknown(
+          data['reference_type']!,
+          _referenceTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_referenceTypeMeta);
+    }
+    if (data.containsKey('reference_id')) {
+      context.handle(
+        _referenceIdMeta,
+        referenceId.isAcceptableOrUnknown(
+          data['reference_id']!,
+          _referenceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payment_method')) {
+      context.handle(
+        _paymentMethodMeta,
+        paymentMethod.isAcceptableOrUnknown(
+          data['payment_method']!,
+          _paymentMethodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('receipt_path')) {
+      context.handle(
+        _receiptPathMeta,
+        receiptPath.isAcceptableOrUnknown(
+          data['receipt_path']!,
+          _receiptPathMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reference_note')) {
+      context.handle(
+        _referenceNoteMeta,
+        referenceNote.isAcceptableOrUnknown(
+          data['reference_note']!,
+          _referenceNoteMeta,
+        ),
+      );
+    }
+    if (data.containsKey('activity_date')) {
+      context.handle(
+        _activityDateMeta,
+        activityDate.isAcceptableOrUnknown(
+          data['activity_date']!,
+          _activityDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_activityDateMeta);
+    }
+    if (data.containsKey('performed_by')) {
+      context.handle(
+        _performedByMeta,
+        performedBy.isAcceptableOrUnknown(
+          data['performed_by']!,
+          _performedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('voided_at')) {
+      context.handle(
+        _voidedAtMeta,
+        voidedAt.isAcceptableOrUnknown(data['voided_at']!, _voidedAtMeta),
+      );
+    }
+    if (data.containsKey('voided_by')) {
+      context.handle(
+        _voidedByMeta,
+        voidedBy.isAcceptableOrUnknown(data['voided_by']!, _voidedByMeta),
+      );
+    }
+    if (data.containsKey('void_reason')) {
+      context.handle(
+        _voidReasonMeta,
+        voidReason.isAcceptableOrUnknown(data['void_reason']!, _voidReasonMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DriverLedgerEntryData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DriverLedgerEntryData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      driverUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}driver_user_id'],
+      )!,
+      tripId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}trip_id'],
+      ),
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      amountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_kobo'],
+      )!,
+      signedAmountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_amount_kobo'],
+      )!,
+      referenceType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_type'],
+      )!,
+      referenceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_id'],
+      ),
+      paymentMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_method'],
+      ),
+      receiptPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}receipt_path'],
+      ),
+      referenceNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_note'],
+      ),
+      activityDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}activity_date'],
+      )!,
+      performedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}performed_by'],
+      ),
+      voidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}voided_at'],
+      ),
+      voidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}voided_by'],
+      ),
+      voidReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_reason'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DriverLedgerEntriesTable createAlias(String alias) {
+    return $DriverLedgerEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class DriverLedgerEntryData extends DataClass
+    implements Insertable<DriverLedgerEntryData> {
+  final String id;
+  final String businessId;
+
+  /// The balance axis — a driver's balance is CROSS-TRIP, so a residual from a
+  /// closed trip follows them onto the next one.
+  final String driverUserId;
+
+  /// Nullable only for a cross-trip correction; normally set.
+  final String? tripId;
+
+  /// One of [kDriverLedgerTypes] — the EVENT, not the sign.
+  final String type;
+
+  /// Always >= 0. The sign lives in [signedAmountKobo].
+  final int amountKobo;
+
+  /// Debits negative, credits positive. Balance = SUM of this column.
+  final int signedAmountKobo;
+
+  /// One of [kDriverLedgerRefTypes] + the causing row's id, so a balance line
+  /// traces back to the lot / return / payment that moved it.
+  final String referenceType;
+  final String? referenceId;
+
+  /// Remittance proof (#144), mirroring the supplier payment flow.
+  /// [receiptPath] is a DEVICE-LOCAL file path — the string syncs, the image
+  /// does not.
+  final String? paymentMethod;
+  final String? receiptPath;
+  final String? referenceNote;
+
+  /// Dispatch date (load) | paid-on date (remittance) | recorded date (return).
+  final DateTime activityDate;
+  final String? performedBy;
+  final DateTime? voidedAt;
+  final String? voidedBy;
+  final String? voidReason;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const DriverLedgerEntryData({
+    required this.id,
+    required this.businessId,
+    required this.driverUserId,
+    this.tripId,
+    required this.type,
+    required this.amountKobo,
+    required this.signedAmountKobo,
+    required this.referenceType,
+    this.referenceId,
+    this.paymentMethod,
+    this.receiptPath,
+    this.referenceNote,
+    required this.activityDate,
+    this.performedBy,
+    this.voidedAt,
+    this.voidedBy,
+    this.voidReason,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['driver_user_id'] = Variable<String>(driverUserId);
+    if (!nullToAbsent || tripId != null) {
+      map['trip_id'] = Variable<String>(tripId);
+    }
+    map['type'] = Variable<String>(type);
+    map['amount_kobo'] = Variable<int>(amountKobo);
+    map['signed_amount_kobo'] = Variable<int>(signedAmountKobo);
+    map['reference_type'] = Variable<String>(referenceType);
+    if (!nullToAbsent || referenceId != null) {
+      map['reference_id'] = Variable<String>(referenceId);
+    }
+    if (!nullToAbsent || paymentMethod != null) {
+      map['payment_method'] = Variable<String>(paymentMethod);
+    }
+    if (!nullToAbsent || receiptPath != null) {
+      map['receipt_path'] = Variable<String>(receiptPath);
+    }
+    if (!nullToAbsent || referenceNote != null) {
+      map['reference_note'] = Variable<String>(referenceNote);
+    }
+    map['activity_date'] = Variable<DateTime>(activityDate);
+    if (!nullToAbsent || performedBy != null) {
+      map['performed_by'] = Variable<String>(performedBy);
+    }
+    if (!nullToAbsent || voidedAt != null) {
+      map['voided_at'] = Variable<DateTime>(voidedAt);
+    }
+    if (!nullToAbsent || voidedBy != null) {
+      map['voided_by'] = Variable<String>(voidedBy);
+    }
+    if (!nullToAbsent || voidReason != null) {
+      map['void_reason'] = Variable<String>(voidReason);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  DriverLedgerEntriesCompanion toCompanion(bool nullToAbsent) {
+    return DriverLedgerEntriesCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      driverUserId: Value(driverUserId),
+      tripId: tripId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tripId),
+      type: Value(type),
+      amountKobo: Value(amountKobo),
+      signedAmountKobo: Value(signedAmountKobo),
+      referenceType: Value(referenceType),
+      referenceId: referenceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceId),
+      paymentMethod: paymentMethod == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethod),
+      receiptPath: receiptPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(receiptPath),
+      referenceNote: referenceNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceNote),
+      activityDate: Value(activityDate),
+      performedBy: performedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(performedBy),
+      voidedAt: voidedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidedAt),
+      voidedBy: voidedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidedBy),
+      voidReason: voidReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidReason),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory DriverLedgerEntryData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DriverLedgerEntryData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      driverUserId: serializer.fromJson<String>(json['driverUserId']),
+      tripId: serializer.fromJson<String?>(json['tripId']),
+      type: serializer.fromJson<String>(json['type']),
+      amountKobo: serializer.fromJson<int>(json['amountKobo']),
+      signedAmountKobo: serializer.fromJson<int>(json['signedAmountKobo']),
+      referenceType: serializer.fromJson<String>(json['referenceType']),
+      referenceId: serializer.fromJson<String?>(json['referenceId']),
+      paymentMethod: serializer.fromJson<String?>(json['paymentMethod']),
+      receiptPath: serializer.fromJson<String?>(json['receiptPath']),
+      referenceNote: serializer.fromJson<String?>(json['referenceNote']),
+      activityDate: serializer.fromJson<DateTime>(json['activityDate']),
+      performedBy: serializer.fromJson<String?>(json['performedBy']),
+      voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
+      voidedBy: serializer.fromJson<String?>(json['voidedBy']),
+      voidReason: serializer.fromJson<String?>(json['voidReason']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'driverUserId': serializer.toJson<String>(driverUserId),
+      'tripId': serializer.toJson<String?>(tripId),
+      'type': serializer.toJson<String>(type),
+      'amountKobo': serializer.toJson<int>(amountKobo),
+      'signedAmountKobo': serializer.toJson<int>(signedAmountKobo),
+      'referenceType': serializer.toJson<String>(referenceType),
+      'referenceId': serializer.toJson<String?>(referenceId),
+      'paymentMethod': serializer.toJson<String?>(paymentMethod),
+      'receiptPath': serializer.toJson<String?>(receiptPath),
+      'referenceNote': serializer.toJson<String?>(referenceNote),
+      'activityDate': serializer.toJson<DateTime>(activityDate),
+      'performedBy': serializer.toJson<String?>(performedBy),
+      'voidedAt': serializer.toJson<DateTime?>(voidedAt),
+      'voidedBy': serializer.toJson<String?>(voidedBy),
+      'voidReason': serializer.toJson<String?>(voidReason),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  DriverLedgerEntryData copyWith({
+    String? id,
+    String? businessId,
+    String? driverUserId,
+    Value<String?> tripId = const Value.absent(),
+    String? type,
+    int? amountKobo,
+    int? signedAmountKobo,
+    String? referenceType,
+    Value<String?> referenceId = const Value.absent(),
+    Value<String?> paymentMethod = const Value.absent(),
+    Value<String?> receiptPath = const Value.absent(),
+    Value<String?> referenceNote = const Value.absent(),
+    DateTime? activityDate,
+    Value<String?> performedBy = const Value.absent(),
+    Value<DateTime?> voidedAt = const Value.absent(),
+    Value<String?> voidedBy = const Value.absent(),
+    Value<String?> voidReason = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => DriverLedgerEntryData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    driverUserId: driverUserId ?? this.driverUserId,
+    tripId: tripId.present ? tripId.value : this.tripId,
+    type: type ?? this.type,
+    amountKobo: amountKobo ?? this.amountKobo,
+    signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
+    referenceType: referenceType ?? this.referenceType,
+    referenceId: referenceId.present ? referenceId.value : this.referenceId,
+    paymentMethod: paymentMethod.present
+        ? paymentMethod.value
+        : this.paymentMethod,
+    receiptPath: receiptPath.present ? receiptPath.value : this.receiptPath,
+    referenceNote: referenceNote.present
+        ? referenceNote.value
+        : this.referenceNote,
+    activityDate: activityDate ?? this.activityDate,
+    performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
+    voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
+    voidReason: voidReason.present ? voidReason.value : this.voidReason,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  DriverLedgerEntryData copyWithCompanion(DriverLedgerEntriesCompanion data) {
+    return DriverLedgerEntryData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      driverUserId: data.driverUserId.present
+          ? data.driverUserId.value
+          : this.driverUserId,
+      tripId: data.tripId.present ? data.tripId.value : this.tripId,
+      type: data.type.present ? data.type.value : this.type,
+      amountKobo: data.amountKobo.present
+          ? data.amountKobo.value
+          : this.amountKobo,
+      signedAmountKobo: data.signedAmountKobo.present
+          ? data.signedAmountKobo.value
+          : this.signedAmountKobo,
+      referenceType: data.referenceType.present
+          ? data.referenceType.value
+          : this.referenceType,
+      referenceId: data.referenceId.present
+          ? data.referenceId.value
+          : this.referenceId,
+      paymentMethod: data.paymentMethod.present
+          ? data.paymentMethod.value
+          : this.paymentMethod,
+      receiptPath: data.receiptPath.present
+          ? data.receiptPath.value
+          : this.receiptPath,
+      referenceNote: data.referenceNote.present
+          ? data.referenceNote.value
+          : this.referenceNote,
+      activityDate: data.activityDate.present
+          ? data.activityDate.value
+          : this.activityDate,
+      performedBy: data.performedBy.present
+          ? data.performedBy.value
+          : this.performedBy,
+      voidedAt: data.voidedAt.present ? data.voidedAt.value : this.voidedAt,
+      voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
+      voidReason: data.voidReason.present
+          ? data.voidReason.value
+          : this.voidReason,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DriverLedgerEntryData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('driverUserId: $driverUserId, ')
+          ..write('tripId: $tripId, ')
+          ..write('type: $type, ')
+          ..write('amountKobo: $amountKobo, ')
+          ..write('signedAmountKobo: $signedAmountKobo, ')
+          ..write('referenceType: $referenceType, ')
+          ..write('referenceId: $referenceId, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('receiptPath: $receiptPath, ')
+          ..write('referenceNote: $referenceNote, ')
+          ..write('activityDate: $activityDate, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    driverUserId,
+    tripId,
+    type,
+    amountKobo,
+    signedAmountKobo,
+    referenceType,
+    referenceId,
+    paymentMethod,
+    receiptPath,
+    referenceNote,
+    activityDate,
+    performedBy,
+    voidedAt,
+    voidedBy,
+    voidReason,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DriverLedgerEntryData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.driverUserId == this.driverUserId &&
+          other.tripId == this.tripId &&
+          other.type == this.type &&
+          other.amountKobo == this.amountKobo &&
+          other.signedAmountKobo == this.signedAmountKobo &&
+          other.referenceType == this.referenceType &&
+          other.referenceId == this.referenceId &&
+          other.paymentMethod == this.paymentMethod &&
+          other.receiptPath == this.receiptPath &&
+          other.referenceNote == this.referenceNote &&
+          other.activityDate == this.activityDate &&
+          other.performedBy == this.performedBy &&
+          other.voidedAt == this.voidedAt &&
+          other.voidedBy == this.voidedBy &&
+          other.voidReason == this.voidReason &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class DriverLedgerEntriesCompanion
+    extends UpdateCompanion<DriverLedgerEntryData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> driverUserId;
+  final Value<String?> tripId;
+  final Value<String> type;
+  final Value<int> amountKobo;
+  final Value<int> signedAmountKobo;
+  final Value<String> referenceType;
+  final Value<String?> referenceId;
+  final Value<String?> paymentMethod;
+  final Value<String?> receiptPath;
+  final Value<String?> referenceNote;
+  final Value<DateTime> activityDate;
+  final Value<String?> performedBy;
+  final Value<DateTime?> voidedAt;
+  final Value<String?> voidedBy;
+  final Value<String?> voidReason;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const DriverLedgerEntriesCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.driverUserId = const Value.absent(),
+    this.tripId = const Value.absent(),
+    this.type = const Value.absent(),
+    this.amountKobo = const Value.absent(),
+    this.signedAmountKobo = const Value.absent(),
+    this.referenceType = const Value.absent(),
+    this.referenceId = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    this.receiptPath = const Value.absent(),
+    this.referenceNote = const Value.absent(),
+    this.activityDate = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.voidedAt = const Value.absent(),
+    this.voidedBy = const Value.absent(),
+    this.voidReason = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DriverLedgerEntriesCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String driverUserId,
+    this.tripId = const Value.absent(),
+    required String type,
+    required int amountKobo,
+    required int signedAmountKobo,
+    required String referenceType,
+    this.referenceId = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    this.receiptPath = const Value.absent(),
+    this.referenceNote = const Value.absent(),
+    required DateTime activityDate,
+    this.performedBy = const Value.absent(),
+    this.voidedAt = const Value.absent(),
+    this.voidedBy = const Value.absent(),
+    this.voidReason = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       driverUserId = Value(driverUserId),
+       type = Value(type),
+       amountKobo = Value(amountKobo),
+       signedAmountKobo = Value(signedAmountKobo),
+       referenceType = Value(referenceType),
+       activityDate = Value(activityDate);
+  static Insertable<DriverLedgerEntryData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? driverUserId,
+    Expression<String>? tripId,
+    Expression<String>? type,
+    Expression<int>? amountKobo,
+    Expression<int>? signedAmountKobo,
+    Expression<String>? referenceType,
+    Expression<String>? referenceId,
+    Expression<String>? paymentMethod,
+    Expression<String>? receiptPath,
+    Expression<String>? referenceNote,
+    Expression<DateTime>? activityDate,
+    Expression<String>? performedBy,
+    Expression<DateTime>? voidedAt,
+    Expression<String>? voidedBy,
+    Expression<String>? voidReason,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (driverUserId != null) 'driver_user_id': driverUserId,
+      if (tripId != null) 'trip_id': tripId,
+      if (type != null) 'type': type,
+      if (amountKobo != null) 'amount_kobo': amountKobo,
+      if (signedAmountKobo != null) 'signed_amount_kobo': signedAmountKobo,
+      if (referenceType != null) 'reference_type': referenceType,
+      if (referenceId != null) 'reference_id': referenceId,
+      if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (receiptPath != null) 'receipt_path': receiptPath,
+      if (referenceNote != null) 'reference_note': referenceNote,
+      if (activityDate != null) 'activity_date': activityDate,
+      if (performedBy != null) 'performed_by': performedBy,
+      if (voidedAt != null) 'voided_at': voidedAt,
+      if (voidedBy != null) 'voided_by': voidedBy,
+      if (voidReason != null) 'void_reason': voidReason,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DriverLedgerEntriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? driverUserId,
+    Value<String?>? tripId,
+    Value<String>? type,
+    Value<int>? amountKobo,
+    Value<int>? signedAmountKobo,
+    Value<String>? referenceType,
+    Value<String?>? referenceId,
+    Value<String?>? paymentMethod,
+    Value<String?>? receiptPath,
+    Value<String?>? referenceNote,
+    Value<DateTime>? activityDate,
+    Value<String?>? performedBy,
+    Value<DateTime?>? voidedAt,
+    Value<String?>? voidedBy,
+    Value<String?>? voidReason,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return DriverLedgerEntriesCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      driverUserId: driverUserId ?? this.driverUserId,
+      tripId: tripId ?? this.tripId,
+      type: type ?? this.type,
+      amountKobo: amountKobo ?? this.amountKobo,
+      signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
+      referenceType: referenceType ?? this.referenceType,
+      referenceId: referenceId ?? this.referenceId,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      receiptPath: receiptPath ?? this.receiptPath,
+      referenceNote: referenceNote ?? this.referenceNote,
+      activityDate: activityDate ?? this.activityDate,
+      performedBy: performedBy ?? this.performedBy,
+      voidedAt: voidedAt ?? this.voidedAt,
+      voidedBy: voidedBy ?? this.voidedBy,
+      voidReason: voidReason ?? this.voidReason,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (driverUserId.present) {
+      map['driver_user_id'] = Variable<String>(driverUserId.value);
+    }
+    if (tripId.present) {
+      map['trip_id'] = Variable<String>(tripId.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (amountKobo.present) {
+      map['amount_kobo'] = Variable<int>(amountKobo.value);
+    }
+    if (signedAmountKobo.present) {
+      map['signed_amount_kobo'] = Variable<int>(signedAmountKobo.value);
+    }
+    if (referenceType.present) {
+      map['reference_type'] = Variable<String>(referenceType.value);
+    }
+    if (referenceId.present) {
+      map['reference_id'] = Variable<String>(referenceId.value);
+    }
+    if (paymentMethod.present) {
+      map['payment_method'] = Variable<String>(paymentMethod.value);
+    }
+    if (receiptPath.present) {
+      map['receipt_path'] = Variable<String>(receiptPath.value);
+    }
+    if (referenceNote.present) {
+      map['reference_note'] = Variable<String>(referenceNote.value);
+    }
+    if (activityDate.present) {
+      map['activity_date'] = Variable<DateTime>(activityDate.value);
+    }
+    if (performedBy.present) {
+      map['performed_by'] = Variable<String>(performedBy.value);
+    }
+    if (voidedAt.present) {
+      map['voided_at'] = Variable<DateTime>(voidedAt.value);
+    }
+    if (voidedBy.present) {
+      map['voided_by'] = Variable<String>(voidedBy.value);
+    }
+    if (voidReason.present) {
+      map['void_reason'] = Variable<String>(voidReason.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DriverLedgerEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('driverUserId: $driverUserId, ')
+          ..write('tripId: $tripId, ')
+          ..write('type: $type, ')
+          ..write('amountKobo: $amountKobo, ')
+          ..write('signedAmountKobo: $signedAmountKobo, ')
+          ..write('referenceType: $referenceType, ')
+          ..write('referenceId: $referenceId, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('receiptPath: $receiptPath, ')
+          ..write('referenceNote: $referenceNote, ')
+          ..write('activityDate: $activityDate, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ActivityLogsTable extends ActivityLogs
     with TableInfo<$ActivityLogsTable, ActivityLogData> {
   @override
@@ -40755,6 +44107,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $PaymentTransactionsTable(this);
   late final $StockCountsTable stockCounts = $StockCountsTable(this);
   late final $DailyClosingsTable dailyClosings = $DailyClosingsTable(this);
+  late final $VanTripsTable vanTrips = $VanTripsTable(this);
+  late final $VanTripLotsTable vanTripLots = $VanTripLotsTable(this);
+  late final $DriverLedgerEntriesTable driverLedgerEntries =
+      $DriverLedgerEntriesTable(this);
   late final $ActivityLogsTable activityLogs = $ActivityLogsTable(this);
   late final $ErrorLogsTable errorLogs = $ErrorLogsTable(this);
   late final $NotificationsTable notifications = $NotificationsTable(this);
@@ -40796,6 +44152,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final DailyClosingsDao dailyClosingsDao = DailyClosingsDao(
+    this as AppDatabase,
+  );
+  late final VanTripsDao vanTripsDao = VanTripsDao(this as AppDatabase);
+  late final DriverLedgerDao driverLedgerDao = DriverLedgerDao(
     this as AppDatabase,
   );
   late final SyncDao syncDao = SyncDao(this as AppDatabase);
@@ -40921,6 +44281,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     paymentTransactions,
     stockCounts,
     dailyClosings,
+    vanTrips,
+    vanTripLots,
+    driverLedgerEntries,
     activityLogs,
     errorLogs,
     notifications,
@@ -41874,6 +45237,72 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_dailyClosingsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanTripsTable, List<VanTripData>>
+  _vanTripsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTrips,
+    aliasName: $_aliasNameGenerator(db.businesses.id, db.vanTrips.businessId),
+  );
+
+  $$VanTripsTableProcessedTableManager get vanTripsRefs {
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanTripLotsTable, List<VanTripLotData>>
+  _vanTripLotsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTripLots,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.vanTripLots.businessId,
+    ),
+  );
+
+  $$VanTripLotsTableProcessedTableManager get vanTripLotsRefs {
+    final manager = $$VanTripLotsTableTableManager(
+      $_db,
+      $_db.vanTripLots,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripLotsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $DriverLedgerEntriesTable,
+    List<DriverLedgerEntryData>
+  >
+  _driverLedgerEntriesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.driverLedgerEntries,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.driverLedgerEntries.businessId,
+        ),
+      );
+
+  $$DriverLedgerEntriesTableProcessedTableManager get driverLedgerEntriesRefs {
+    final manager = $$DriverLedgerEntriesTableTableManager(
+      $_db,
+      $_db.driverLedgerEntries,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _driverLedgerEntriesRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -43259,6 +46688,81 @@ class $$BusinessesTableFilterComposer
           }) => $$DailyClosingsTableFilterComposer(
             $db: $db,
             $table: $db.dailyClosings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanTripsRefs(
+    Expression<bool> Function($$VanTripsTableFilterComposer f) f,
+  ) {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanTripLotsRefs(
+    Expression<bool> Function($$VanTripLotsTableFilterComposer f) f,
+  ) {
+    final $$VanTripLotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> driverLedgerEntriesRefs(
+    Expression<bool> Function($$DriverLedgerEntriesTableFilterComposer f) f,
+  ) {
+    final $$DriverLedgerEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.driverLedgerEntries,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DriverLedgerEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.driverLedgerEntries,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -44796,6 +48300,82 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> vanTripsRefs<T extends Object>(
+    Expression<T> Function($$VanTripsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> vanTripLotsRefs<T extends Object>(
+    Expression<T> Function($$VanTripLotsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripLotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> driverLedgerEntriesRefs<T extends Object>(
+    Expression<T> Function($$DriverLedgerEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$DriverLedgerEntriesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.driverLedgerEntries,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DriverLedgerEntriesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.driverLedgerEntries,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> activityLogsRefs<T extends Object>(
     Expression<T> Function($$ActivityLogsTableAnnotationComposer a) f,
   ) {
@@ -45204,6 +48784,9 @@ class $$BusinessesTableTableManager
             bool paymentTransactionsRefs,
             bool stockCountsRefs,
             bool dailyClosingsRefs,
+            bool vanTripsRefs,
+            bool vanTripLotsRefs,
+            bool driverLedgerEntriesRefs,
             bool activityLogsRefs,
             bool errorLogsRefs,
             bool notificationsRefs,
@@ -45357,6 +48940,9 @@ class $$BusinessesTableTableManager
                 paymentTransactionsRefs = false,
                 stockCountsRefs = false,
                 dailyClosingsRefs = false,
+                vanTripsRefs = false,
+                vanTripLotsRefs = false,
+                driverLedgerEntriesRefs = false,
                 activityLogsRefs = false,
                 errorLogsRefs = false,
                 notificationsRefs = false,
@@ -45416,6 +49002,9 @@ class $$BusinessesTableTableManager
                     if (paymentTransactionsRefs) db.paymentTransactions,
                     if (stockCountsRefs) db.stockCounts,
                     if (dailyClosingsRefs) db.dailyClosings,
+                    if (vanTripsRefs) db.vanTrips,
+                    if (vanTripLotsRefs) db.vanTripLots,
+                    if (driverLedgerEntriesRefs) db.driverLedgerEntries,
                     if (activityLogsRefs) db.activityLogs,
                     if (errorLogsRefs) db.errorLogs,
                     if (notificationsRefs) db.notifications,
@@ -46274,6 +49863,69 @@ class $$BusinessesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (vanTripsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          VanTripData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._vanTripsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanTripLotsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          VanTripLotData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._vanTripLotsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripLotsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (driverLedgerEntriesRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          DriverLedgerEntryData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._driverLedgerEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).driverLedgerEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (activityLogsRefs)
                         await $_getPrefetchedData<
                           BusinessData,
@@ -46629,6 +50281,9 @@ typedef $$BusinessesTableProcessedTableManager =
         bool paymentTransactionsRefs,
         bool stockCountsRefs,
         bool dailyClosingsRefs,
+        bool vanTripsRefs,
+        bool vanTripLotsRefs,
+        bool driverLedgerEntriesRefs,
         bool activityLogsRefs,
         bool errorLogsRefs,
         bool notificationsRefs,
@@ -57385,6 +61040,24 @@ final class $$ProductsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$VanTripLotsTable, List<VanTripLotData>>
+  _vanTripLotsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTripLots,
+    aliasName: $_aliasNameGenerator(db.products.id, db.vanTripLots.productId),
+  );
+
+  $$VanTripLotsTableProcessedTableManager get vanTripLotsRefs {
+    final manager = $$VanTripLotsTableTableManager(
+      $_db,
+      $_db.vanTripLots,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripLotsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$ProductsTableFilterComposer
@@ -57868,6 +61541,31 @@ class $$ProductsTableFilterComposer
           }) => $$PurchaseItemsTableFilterComposer(
             $db: $db,
             $table: $db.purchaseItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanTripLotsRefs(
+    Expression<bool> Function($$VanTripLotsTableFilterComposer f) f,
+  ) {
+    final $$VanTripLotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -58608,6 +62306,31 @@ class $$ProductsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> vanTripLotsRefs<T extends Object>(
+    Expression<T> Function($$VanTripLotsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripLotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProductsTableTableManager
@@ -58638,6 +62361,7 @@ class $$ProductsTableTableManager
             bool stockAdjustmentRequestsRefs,
             bool orderItemsRefs,
             bool purchaseItemsRefs,
+            bool vanTripLotsRefs,
           })
         > {
   $$ProductsTableTableManager(_$AppDatabase db, $ProductsTable table)
@@ -58819,6 +62543,7 @@ class $$ProductsTableTableManager
                 stockAdjustmentRequestsRefs = false,
                 orderItemsRefs = false,
                 purchaseItemsRefs = false,
+                vanTripLotsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -58832,6 +62557,7 @@ class $$ProductsTableTableManager
                     if (stockAdjustmentRequestsRefs) db.stockAdjustmentRequests,
                     if (orderItemsRefs) db.orderItems,
                     if (purchaseItemsRefs) db.purchaseItems,
+                    if (vanTripLotsRefs) db.vanTripLots,
                   ],
                   addJoins:
                       <
@@ -59108,6 +62834,27 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (vanTripLotsRefs)
+                        await $_getPrefetchedData<
+                          ProductData,
+                          $ProductsTable,
+                          VanTripLotData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._vanTripLotsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripLotsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -59143,6 +62890,7 @@ typedef $$ProductsTableProcessedTableManager =
         bool stockAdjustmentRequestsRefs,
         bool orderItemsRefs,
         bool purchaseItemsRefs,
+        bool vanTripLotsRefs,
       })
     >;
 typedef $$PriceListsTableCreateCompanionBuilder =
@@ -83841,6 +87589,3052 @@ typedef $$DailyClosingsTableProcessedTableManager =
         bool reviewedBy,
       })
     >;
+typedef $$VanTripsTableCreateCompanionBuilder =
+    VanTripsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String vanStoreId,
+      required String driverUserId,
+      required String sourceStoreId,
+      Value<String> status,
+      Value<DateTime> openedAt,
+      Value<String?> openedBy,
+      Value<DateTime?> closedAt,
+      Value<String?> closedBy,
+      Value<bool> closedWithBalance,
+      Value<int> shellsOut,
+      Value<int> shellsBack,
+      Value<DateTime?> restatedAt,
+      Value<String?> restatedReason,
+      Value<int> cogsKobo,
+      Value<int> recoveredKobo,
+      Value<int> unremittedKobo,
+      Value<int> shortageWriteoffKobo,
+      Value<int> damageWriteoffKobo,
+      Value<int> shortageLossKobo,
+      Value<int> damageLossKobo,
+      Value<int> profitKobo,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$VanTripsTableUpdateCompanionBuilder =
+    VanTripsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> vanStoreId,
+      Value<String> driverUserId,
+      Value<String> sourceStoreId,
+      Value<String> status,
+      Value<DateTime> openedAt,
+      Value<String?> openedBy,
+      Value<DateTime?> closedAt,
+      Value<String?> closedBy,
+      Value<bool> closedWithBalance,
+      Value<int> shellsOut,
+      Value<int> shellsBack,
+      Value<DateTime?> restatedAt,
+      Value<String?> restatedReason,
+      Value<int> cogsKobo,
+      Value<int> recoveredKobo,
+      Value<int> unremittedKobo,
+      Value<int> shortageWriteoffKobo,
+      Value<int> damageWriteoffKobo,
+      Value<int> shortageLossKobo,
+      Value<int> damageLossKobo,
+      Value<int> profitKobo,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$VanTripsTableReferences
+    extends BaseReferences<_$AppDatabase, $VanTripsTable, VanTripData> {
+  $$VanTripsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.vanTrips.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _vanStoreIdTable(_$AppDatabase db) => db.stores
+      .createAlias($_aliasNameGenerator(db.vanTrips.vanStoreId, db.stores.id));
+
+  $$StoresTableProcessedTableManager get vanStoreId {
+    final $_column = $_itemColumn<String>('van_store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanStoreIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _driverUserIdTable(_$AppDatabase db) => db.users
+      .createAlias($_aliasNameGenerator(db.vanTrips.driverUserId, db.users.id));
+
+  $$UsersTableProcessedTableManager get driverUserId {
+    final $_column = $_itemColumn<String>('driver_user_id')!;
+
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_driverUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _sourceStoreIdTable(_$AppDatabase db) =>
+      db.stores.createAlias(
+        $_aliasNameGenerator(db.vanTrips.sourceStoreId, db.stores.id),
+      );
+
+  $$StoresTableProcessedTableManager get sourceStoreId {
+    final $_column = $_itemColumn<String>('source_store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_sourceStoreIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _openedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.vanTrips.openedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get openedBy {
+    final $_column = $_itemColumn<String>('opened_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_openedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _closedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.vanTrips.closedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get closedBy {
+    final $_column = $_itemColumn<String>('closed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_closedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$VanTripLotsTable, List<VanTripLotData>>
+  _vanTripLotsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTripLots,
+    aliasName: $_aliasNameGenerator(db.vanTrips.id, db.vanTripLots.tripId),
+  );
+
+  $$VanTripLotsTableProcessedTableManager get vanTripLotsRefs {
+    final manager = $$VanTripLotsTableTableManager(
+      $_db,
+      $_db.vanTripLots,
+    ).filter((f) => f.tripId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripLotsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $DriverLedgerEntriesTable,
+    List<DriverLedgerEntryData>
+  >
+  _driverLedgerEntriesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.driverLedgerEntries,
+        aliasName: $_aliasNameGenerator(
+          db.vanTrips.id,
+          db.driverLedgerEntries.tripId,
+        ),
+      );
+
+  $$DriverLedgerEntriesTableProcessedTableManager get driverLedgerEntriesRefs {
+    final manager = $$DriverLedgerEntriesTableTableManager(
+      $_db,
+      $_db.driverLedgerEntries,
+    ).filter((f) => f.tripId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _driverLedgerEntriesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$VanTripsTableFilterComposer
+    extends Composer<_$AppDatabase, $VanTripsTable> {
+  $$VanTripsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get closedWithBalance => $composableBuilder(
+    column: $table.closedWithBalance,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shellsOut => $composableBuilder(
+    column: $table.shellsOut,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get restatedAt => $composableBuilder(
+    column: $table.restatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get restatedReason => $composableBuilder(
+    column: $table.restatedReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cogsKobo => $composableBuilder(
+    column: $table.cogsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get recoveredKobo => $composableBuilder(
+    column: $table.recoveredKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unremittedKobo => $composableBuilder(
+    column: $table.unremittedKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shortageWriteoffKobo => $composableBuilder(
+    column: $table.shortageWriteoffKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get damageWriteoffKobo => $composableBuilder(
+    column: $table.damageWriteoffKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shortageLossKobo => $composableBuilder(
+    column: $table.shortageLossKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get damageLossKobo => $composableBuilder(
+    column: $table.damageLossKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get profitKobo => $composableBuilder(
+    column: $table.profitKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get vanStoreId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get driverUserId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get sourceStoreId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sourceStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get openedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get closedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> vanTripLotsRefs(
+    Expression<bool> Function($$VanTripLotsTableFilterComposer f) f,
+  ) {
+    final $$VanTripLotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.tripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> driverLedgerEntriesRefs(
+    Expression<bool> Function($$DriverLedgerEntriesTableFilterComposer f) f,
+  ) {
+    final $$DriverLedgerEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.driverLedgerEntries,
+      getReferencedColumn: (t) => t.tripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DriverLedgerEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.driverLedgerEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$VanTripsTableOrderingComposer
+    extends Composer<_$AppDatabase, $VanTripsTable> {
+  $$VanTripsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get closedWithBalance => $composableBuilder(
+    column: $table.closedWithBalance,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shellsOut => $composableBuilder(
+    column: $table.shellsOut,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get restatedAt => $composableBuilder(
+    column: $table.restatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get restatedReason => $composableBuilder(
+    column: $table.restatedReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cogsKobo => $composableBuilder(
+    column: $table.cogsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get recoveredKobo => $composableBuilder(
+    column: $table.recoveredKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unremittedKobo => $composableBuilder(
+    column: $table.unremittedKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shortageWriteoffKobo => $composableBuilder(
+    column: $table.shortageWriteoffKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get damageWriteoffKobo => $composableBuilder(
+    column: $table.damageWriteoffKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shortageLossKobo => $composableBuilder(
+    column: $table.shortageLossKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get damageLossKobo => $composableBuilder(
+    column: $table.damageLossKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get profitKobo => $composableBuilder(
+    column: $table.profitKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get vanStoreId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get driverUserId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get sourceStoreId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sourceStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get openedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get closedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanTripsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VanTripsTable> {
+  $$VanTripsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get openedAt =>
+      $composableBuilder(column: $table.openedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get closedWithBalance => $composableBuilder(
+    column: $table.closedWithBalance,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shellsOut =>
+      $composableBuilder(column: $table.shellsOut, builder: (column) => column);
+
+  GeneratedColumn<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get restatedAt => $composableBuilder(
+    column: $table.restatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get restatedReason => $composableBuilder(
+    column: $table.restatedReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cogsKobo =>
+      $composableBuilder(column: $table.cogsKobo, builder: (column) => column);
+
+  GeneratedColumn<int> get recoveredKobo => $composableBuilder(
+    column: $table.recoveredKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unremittedKobo => $composableBuilder(
+    column: $table.unremittedKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shortageWriteoffKobo => $composableBuilder(
+    column: $table.shortageWriteoffKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get damageWriteoffKobo => $composableBuilder(
+    column: $table.damageWriteoffKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shortageLossKobo => $composableBuilder(
+    column: $table.shortageLossKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get damageLossKobo => $composableBuilder(
+    column: $table.damageLossKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get profitKobo => $composableBuilder(
+    column: $table.profitKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get vanStoreId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get driverUserId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get sourceStoreId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sourceStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get openedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get closedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> vanTripLotsRefs<T extends Object>(
+    Expression<T> Function($$VanTripLotsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripLotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.tripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> driverLedgerEntriesRefs<T extends Object>(
+    Expression<T> Function($$DriverLedgerEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$DriverLedgerEntriesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.driverLedgerEntries,
+          getReferencedColumn: (t) => t.tripId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DriverLedgerEntriesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.driverLedgerEntries,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$VanTripsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VanTripsTable,
+          VanTripData,
+          $$VanTripsTableFilterComposer,
+          $$VanTripsTableOrderingComposer,
+          $$VanTripsTableAnnotationComposer,
+          $$VanTripsTableCreateCompanionBuilder,
+          $$VanTripsTableUpdateCompanionBuilder,
+          (VanTripData, $$VanTripsTableReferences),
+          VanTripData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool vanStoreId,
+            bool driverUserId,
+            bool sourceStoreId,
+            bool openedBy,
+            bool closedBy,
+            bool vanTripLotsRefs,
+            bool driverLedgerEntriesRefs,
+          })
+        > {
+  $$VanTripsTableTableManager(_$AppDatabase db, $VanTripsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VanTripsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VanTripsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VanTripsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> vanStoreId = const Value.absent(),
+                Value<String> driverUserId = const Value.absent(),
+                Value<String> sourceStoreId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<String?> openedBy = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<String?> closedBy = const Value.absent(),
+                Value<bool> closedWithBalance = const Value.absent(),
+                Value<int> shellsOut = const Value.absent(),
+                Value<int> shellsBack = const Value.absent(),
+                Value<DateTime?> restatedAt = const Value.absent(),
+                Value<String?> restatedReason = const Value.absent(),
+                Value<int> cogsKobo = const Value.absent(),
+                Value<int> recoveredKobo = const Value.absent(),
+                Value<int> unremittedKobo = const Value.absent(),
+                Value<int> shortageWriteoffKobo = const Value.absent(),
+                Value<int> damageWriteoffKobo = const Value.absent(),
+                Value<int> shortageLossKobo = const Value.absent(),
+                Value<int> damageLossKobo = const Value.absent(),
+                Value<int> profitKobo = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanTripsCompanion(
+                id: id,
+                businessId: businessId,
+                vanStoreId: vanStoreId,
+                driverUserId: driverUserId,
+                sourceStoreId: sourceStoreId,
+                status: status,
+                openedAt: openedAt,
+                openedBy: openedBy,
+                closedAt: closedAt,
+                closedBy: closedBy,
+                closedWithBalance: closedWithBalance,
+                shellsOut: shellsOut,
+                shellsBack: shellsBack,
+                restatedAt: restatedAt,
+                restatedReason: restatedReason,
+                cogsKobo: cogsKobo,
+                recoveredKobo: recoveredKobo,
+                unremittedKobo: unremittedKobo,
+                shortageWriteoffKobo: shortageWriteoffKobo,
+                damageWriteoffKobo: damageWriteoffKobo,
+                shortageLossKobo: shortageLossKobo,
+                damageLossKobo: damageLossKobo,
+                profitKobo: profitKobo,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String vanStoreId,
+                required String driverUserId,
+                required String sourceStoreId,
+                Value<String> status = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<String?> openedBy = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<String?> closedBy = const Value.absent(),
+                Value<bool> closedWithBalance = const Value.absent(),
+                Value<int> shellsOut = const Value.absent(),
+                Value<int> shellsBack = const Value.absent(),
+                Value<DateTime?> restatedAt = const Value.absent(),
+                Value<String?> restatedReason = const Value.absent(),
+                Value<int> cogsKobo = const Value.absent(),
+                Value<int> recoveredKobo = const Value.absent(),
+                Value<int> unremittedKobo = const Value.absent(),
+                Value<int> shortageWriteoffKobo = const Value.absent(),
+                Value<int> damageWriteoffKobo = const Value.absent(),
+                Value<int> shortageLossKobo = const Value.absent(),
+                Value<int> damageLossKobo = const Value.absent(),
+                Value<int> profitKobo = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanTripsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                vanStoreId: vanStoreId,
+                driverUserId: driverUserId,
+                sourceStoreId: sourceStoreId,
+                status: status,
+                openedAt: openedAt,
+                openedBy: openedBy,
+                closedAt: closedAt,
+                closedBy: closedBy,
+                closedWithBalance: closedWithBalance,
+                shellsOut: shellsOut,
+                shellsBack: shellsBack,
+                restatedAt: restatedAt,
+                restatedReason: restatedReason,
+                cogsKobo: cogsKobo,
+                recoveredKobo: recoveredKobo,
+                unremittedKobo: unremittedKobo,
+                shortageWriteoffKobo: shortageWriteoffKobo,
+                damageWriteoffKobo: damageWriteoffKobo,
+                shortageLossKobo: shortageLossKobo,
+                damageLossKobo: damageLossKobo,
+                profitKobo: profitKobo,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VanTripsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                vanStoreId = false,
+                driverUserId = false,
+                sourceStoreId = false,
+                openedBy = false,
+                closedBy = false,
+                vanTripLotsRefs = false,
+                driverLedgerEntriesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (vanTripLotsRefs) db.vanTripLots,
+                    if (driverLedgerEntriesRefs) db.driverLedgerEntries,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._businessIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (vanStoreId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanStoreId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._vanStoreIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._vanStoreIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (driverUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.driverUserId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._driverUserIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._driverUserIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (sourceStoreId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.sourceStoreId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._sourceStoreIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._sourceStoreIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (openedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.openedBy,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._openedByTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._openedByTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (closedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.closedBy,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._closedByTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._closedByTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (vanTripLotsRefs)
+                        await $_getPrefetchedData<
+                          VanTripData,
+                          $VanTripsTable,
+                          VanTripLotData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanTripsTableReferences
+                              ._vanTripLotsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanTripsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripLotsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tripId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (driverLedgerEntriesRefs)
+                        await $_getPrefetchedData<
+                          VanTripData,
+                          $VanTripsTable,
+                          DriverLedgerEntryData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanTripsTableReferences
+                              ._driverLedgerEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanTripsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).driverLedgerEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tripId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$VanTripsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VanTripsTable,
+      VanTripData,
+      $$VanTripsTableFilterComposer,
+      $$VanTripsTableOrderingComposer,
+      $$VanTripsTableAnnotationComposer,
+      $$VanTripsTableCreateCompanionBuilder,
+      $$VanTripsTableUpdateCompanionBuilder,
+      (VanTripData, $$VanTripsTableReferences),
+      VanTripData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool vanStoreId,
+        bool driverUserId,
+        bool sourceStoreId,
+        bool openedBy,
+        bool closedBy,
+        bool vanTripLotsRefs,
+        bool driverLedgerEntriesRefs,
+      })
+    >;
+typedef $$VanTripLotsTableCreateCompanionBuilder =
+    VanTripLotsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String tripId,
+      required String productId,
+      required int quantity,
+      required int qtyRemaining,
+      required int loadPriceKobo,
+      Value<int> unitCostKobo,
+      Value<DateTime> dispatchedAt,
+      required String dispatchEventId,
+      Value<int> shellsOut,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$VanTripLotsTableUpdateCompanionBuilder =
+    VanTripLotsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> tripId,
+      Value<String> productId,
+      Value<int> quantity,
+      Value<int> qtyRemaining,
+      Value<int> loadPriceKobo,
+      Value<int> unitCostKobo,
+      Value<DateTime> dispatchedAt,
+      Value<String> dispatchEventId,
+      Value<int> shellsOut,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$VanTripLotsTableReferences
+    extends BaseReferences<_$AppDatabase, $VanTripLotsTable, VanTripLotData> {
+  $$VanTripLotsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.vanTripLots.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanTripsTable _tripIdTable(_$AppDatabase db) => db.vanTrips
+      .createAlias($_aliasNameGenerator(db.vanTripLots.tripId, db.vanTrips.id));
+
+  $$VanTripsTableProcessedTableManager get tripId {
+    final $_column = $_itemColumn<String>('trip_id')!;
+
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tripIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.vanTripLots.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$VanTripLotsTableFilterComposer
+    extends Composer<_$AppDatabase, $VanTripLotsTable> {
+  $$VanTripLotsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get quantity => $composableBuilder(
+    column: $table.quantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get loadPriceKobo => $composableBuilder(
+    column: $table.loadPriceKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dispatchedAt => $composableBuilder(
+    column: $table.dispatchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dispatchEventId => $composableBuilder(
+    column: $table.dispatchEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shellsOut => $composableBuilder(
+    column: $table.shellsOut,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableFilterComposer get tripId {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanTripLotsTableOrderingComposer
+    extends Composer<_$AppDatabase, $VanTripLotsTable> {
+  $$VanTripLotsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get quantity => $composableBuilder(
+    column: $table.quantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get loadPriceKobo => $composableBuilder(
+    column: $table.loadPriceKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dispatchedAt => $composableBuilder(
+    column: $table.dispatchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dispatchEventId => $composableBuilder(
+    column: $table.dispatchEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shellsOut => $composableBuilder(
+    column: $table.shellsOut,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableOrderingComposer get tripId {
+    final $$VanTripsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanTripLotsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VanTripLotsTable> {
+  $$VanTripLotsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get quantity =>
+      $composableBuilder(column: $table.quantity, builder: (column) => column);
+
+  GeneratedColumn<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get loadPriceKobo => $composableBuilder(
+    column: $table.loadPriceKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get dispatchedAt => $composableBuilder(
+    column: $table.dispatchedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dispatchEventId => $composableBuilder(
+    column: $table.dispatchEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shellsOut =>
+      $composableBuilder(column: $table.shellsOut, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableAnnotationComposer get tripId {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanTripLotsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VanTripLotsTable,
+          VanTripLotData,
+          $$VanTripLotsTableFilterComposer,
+          $$VanTripLotsTableOrderingComposer,
+          $$VanTripLotsTableAnnotationComposer,
+          $$VanTripLotsTableCreateCompanionBuilder,
+          $$VanTripLotsTableUpdateCompanionBuilder,
+          (VanTripLotData, $$VanTripLotsTableReferences),
+          VanTripLotData,
+          PrefetchHooks Function({bool businessId, bool tripId, bool productId})
+        > {
+  $$VanTripLotsTableTableManager(_$AppDatabase db, $VanTripLotsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VanTripLotsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VanTripLotsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VanTripLotsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> tripId = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<int> quantity = const Value.absent(),
+                Value<int> qtyRemaining = const Value.absent(),
+                Value<int> loadPriceKobo = const Value.absent(),
+                Value<int> unitCostKobo = const Value.absent(),
+                Value<DateTime> dispatchedAt = const Value.absent(),
+                Value<String> dispatchEventId = const Value.absent(),
+                Value<int> shellsOut = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanTripLotsCompanion(
+                id: id,
+                businessId: businessId,
+                tripId: tripId,
+                productId: productId,
+                quantity: quantity,
+                qtyRemaining: qtyRemaining,
+                loadPriceKobo: loadPriceKobo,
+                unitCostKobo: unitCostKobo,
+                dispatchedAt: dispatchedAt,
+                dispatchEventId: dispatchEventId,
+                shellsOut: shellsOut,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String tripId,
+                required String productId,
+                required int quantity,
+                required int qtyRemaining,
+                required int loadPriceKobo,
+                Value<int> unitCostKobo = const Value.absent(),
+                Value<DateTime> dispatchedAt = const Value.absent(),
+                required String dispatchEventId,
+                Value<int> shellsOut = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanTripLotsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                tripId: tripId,
+                productId: productId,
+                quantity: quantity,
+                qtyRemaining: qtyRemaining,
+                loadPriceKobo: loadPriceKobo,
+                unitCostKobo: unitCostKobo,
+                dispatchedAt: dispatchedAt,
+                dispatchEventId: dispatchEventId,
+                shellsOut: shellsOut,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VanTripLotsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({businessId = false, tripId = false, productId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$VanTripLotsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$VanTripLotsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (tripId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.tripId,
+                                    referencedTable:
+                                        $$VanTripLotsTableReferences
+                                            ._tripIdTable(db),
+                                    referencedColumn:
+                                        $$VanTripLotsTableReferences
+                                            ._tripIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$VanTripLotsTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$VanTripLotsTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$VanTripLotsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VanTripLotsTable,
+      VanTripLotData,
+      $$VanTripLotsTableFilterComposer,
+      $$VanTripLotsTableOrderingComposer,
+      $$VanTripLotsTableAnnotationComposer,
+      $$VanTripLotsTableCreateCompanionBuilder,
+      $$VanTripLotsTableUpdateCompanionBuilder,
+      (VanTripLotData, $$VanTripLotsTableReferences),
+      VanTripLotData,
+      PrefetchHooks Function({bool businessId, bool tripId, bool productId})
+    >;
+typedef $$DriverLedgerEntriesTableCreateCompanionBuilder =
+    DriverLedgerEntriesCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String driverUserId,
+      Value<String?> tripId,
+      required String type,
+      required int amountKobo,
+      required int signedAmountKobo,
+      required String referenceType,
+      Value<String?> referenceId,
+      Value<String?> paymentMethod,
+      Value<String?> receiptPath,
+      Value<String?> referenceNote,
+      required DateTime activityDate,
+      Value<String?> performedBy,
+      Value<DateTime?> voidedAt,
+      Value<String?> voidedBy,
+      Value<String?> voidReason,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$DriverLedgerEntriesTableUpdateCompanionBuilder =
+    DriverLedgerEntriesCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> driverUserId,
+      Value<String?> tripId,
+      Value<String> type,
+      Value<int> amountKobo,
+      Value<int> signedAmountKobo,
+      Value<String> referenceType,
+      Value<String?> referenceId,
+      Value<String?> paymentMethod,
+      Value<String?> receiptPath,
+      Value<String?> referenceNote,
+      Value<DateTime> activityDate,
+      Value<String?> performedBy,
+      Value<DateTime?> voidedAt,
+      Value<String?> voidedBy,
+      Value<String?> voidReason,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$DriverLedgerEntriesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $DriverLedgerEntriesTable,
+          DriverLedgerEntryData
+        > {
+  $$DriverLedgerEntriesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.driverLedgerEntries.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _driverUserIdTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(db.driverLedgerEntries.driverUserId, db.users.id),
+      );
+
+  $$UsersTableProcessedTableManager get driverUserId {
+    final $_column = $_itemColumn<String>('driver_user_id')!;
+
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_driverUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanTripsTable _tripIdTable(_$AppDatabase db) =>
+      db.vanTrips.createAlias(
+        $_aliasNameGenerator(db.driverLedgerEntries.tripId, db.vanTrips.id),
+      );
+
+  $$VanTripsTableProcessedTableManager? get tripId {
+    final $_column = $_itemColumn<String>('trip_id');
+    if ($_column == null) return null;
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tripIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _performedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(db.driverLedgerEntries.performedBy, db.users.id),
+      );
+
+  $$UsersTableProcessedTableManager? get performedBy {
+    final $_column = $_itemColumn<String>('performed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_performedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _voidedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.driverLedgerEntries.voidedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get voidedBy {
+    final $_column = $_itemColumn<String>('voided_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_voidedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$DriverLedgerEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $DriverLedgerEntriesTable> {
+  $$DriverLedgerEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get receiptPath => $composableBuilder(
+    column: $table.receiptPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceNote => $composableBuilder(
+    column: $table.referenceNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get activityDate => $composableBuilder(
+    column: $table.activityDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get voidedAt => $composableBuilder(
+    column: $table.voidedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get driverUserId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableFilterComposer get tripId {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get performedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get voidedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DriverLedgerEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DriverLedgerEntriesTable> {
+  $$DriverLedgerEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get receiptPath => $composableBuilder(
+    column: $table.receiptPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceNote => $composableBuilder(
+    column: $table.referenceNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get activityDate => $composableBuilder(
+    column: $table.activityDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get voidedAt => $composableBuilder(
+    column: $table.voidedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get driverUserId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableOrderingComposer get tripId {
+    final $$VanTripsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get performedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get voidedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DriverLedgerEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DriverLedgerEntriesTable> {
+  $$DriverLedgerEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get receiptPath => $composableBuilder(
+    column: $table.receiptPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get referenceNote => $composableBuilder(
+    column: $table.referenceNote,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get activityDate => $composableBuilder(
+    column: $table.activityDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get voidedAt =>
+      $composableBuilder(column: $table.voidedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get driverUserId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableAnnotationComposer get tripId {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get performedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get voidedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DriverLedgerEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DriverLedgerEntriesTable,
+          DriverLedgerEntryData,
+          $$DriverLedgerEntriesTableFilterComposer,
+          $$DriverLedgerEntriesTableOrderingComposer,
+          $$DriverLedgerEntriesTableAnnotationComposer,
+          $$DriverLedgerEntriesTableCreateCompanionBuilder,
+          $$DriverLedgerEntriesTableUpdateCompanionBuilder,
+          (DriverLedgerEntryData, $$DriverLedgerEntriesTableReferences),
+          DriverLedgerEntryData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool driverUserId,
+            bool tripId,
+            bool performedBy,
+            bool voidedBy,
+          })
+        > {
+  $$DriverLedgerEntriesTableTableManager(
+    _$AppDatabase db,
+    $DriverLedgerEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DriverLedgerEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DriverLedgerEntriesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$DriverLedgerEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> driverUserId = const Value.absent(),
+                Value<String?> tripId = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<int> amountKobo = const Value.absent(),
+                Value<int> signedAmountKobo = const Value.absent(),
+                Value<String> referenceType = const Value.absent(),
+                Value<String?> referenceId = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                Value<String?> receiptPath = const Value.absent(),
+                Value<String?> referenceNote = const Value.absent(),
+                Value<DateTime> activityDate = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime?> voidedAt = const Value.absent(),
+                Value<String?> voidedBy = const Value.absent(),
+                Value<String?> voidReason = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DriverLedgerEntriesCompanion(
+                id: id,
+                businessId: businessId,
+                driverUserId: driverUserId,
+                tripId: tripId,
+                type: type,
+                amountKobo: amountKobo,
+                signedAmountKobo: signedAmountKobo,
+                referenceType: referenceType,
+                referenceId: referenceId,
+                paymentMethod: paymentMethod,
+                receiptPath: receiptPath,
+                referenceNote: referenceNote,
+                activityDate: activityDate,
+                performedBy: performedBy,
+                voidedAt: voidedAt,
+                voidedBy: voidedBy,
+                voidReason: voidReason,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String driverUserId,
+                Value<String?> tripId = const Value.absent(),
+                required String type,
+                required int amountKobo,
+                required int signedAmountKobo,
+                required String referenceType,
+                Value<String?> referenceId = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                Value<String?> receiptPath = const Value.absent(),
+                Value<String?> referenceNote = const Value.absent(),
+                required DateTime activityDate,
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime?> voidedAt = const Value.absent(),
+                Value<String?> voidedBy = const Value.absent(),
+                Value<String?> voidReason = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DriverLedgerEntriesCompanion.insert(
+                id: id,
+                businessId: businessId,
+                driverUserId: driverUserId,
+                tripId: tripId,
+                type: type,
+                amountKobo: amountKobo,
+                signedAmountKobo: signedAmountKobo,
+                referenceType: referenceType,
+                referenceId: referenceId,
+                paymentMethod: paymentMethod,
+                receiptPath: receiptPath,
+                referenceNote: referenceNote,
+                activityDate: activityDate,
+                performedBy: performedBy,
+                voidedAt: voidedAt,
+                voidedBy: voidedBy,
+                voidReason: voidReason,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$DriverLedgerEntriesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                driverUserId = false,
+                tripId = false,
+                performedBy = false,
+                voidedBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (driverUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.driverUserId,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._driverUserIdTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._driverUserIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (tripId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.tripId,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._tripIdTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._tripIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (performedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.performedBy,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._performedByTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._performedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (voidedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.voidedBy,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._voidedByTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._voidedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$DriverLedgerEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DriverLedgerEntriesTable,
+      DriverLedgerEntryData,
+      $$DriverLedgerEntriesTableFilterComposer,
+      $$DriverLedgerEntriesTableOrderingComposer,
+      $$DriverLedgerEntriesTableAnnotationComposer,
+      $$DriverLedgerEntriesTableCreateCompanionBuilder,
+      $$DriverLedgerEntriesTableUpdateCompanionBuilder,
+      (DriverLedgerEntryData, $$DriverLedgerEntriesTableReferences),
+      DriverLedgerEntryData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool driverUserId,
+        bool tripId,
+        bool performedBy,
+        bool voidedBy,
+      })
+    >;
 typedef $$ActivityLogsTableCreateCompanionBuilder =
     ActivityLogsCompanion Function({
       Value<String> id,
@@ -92827,6 +99621,12 @@ class $AppDatabaseManager {
       $$StockCountsTableTableManager(_db, _db.stockCounts);
   $$DailyClosingsTableTableManager get dailyClosings =>
       $$DailyClosingsTableTableManager(_db, _db.dailyClosings);
+  $$VanTripsTableTableManager get vanTrips =>
+      $$VanTripsTableTableManager(_db, _db.vanTrips);
+  $$VanTripLotsTableTableManager get vanTripLots =>
+      $$VanTripLotsTableTableManager(_db, _db.vanTripLots);
+  $$DriverLedgerEntriesTableTableManager get driverLedgerEntries =>
+      $$DriverLedgerEntriesTableTableManager(_db, _db.driverLedgerEntries);
   $$ActivityLogsTableTableManager get activityLogs =>
       $$ActivityLogsTableTableManager(_db, _db.activityLogs);
   $$ErrorLogsTableTableManager get errorLogs =>

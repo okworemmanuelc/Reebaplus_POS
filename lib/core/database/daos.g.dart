@@ -1361,6 +1361,83 @@ class UserStoresDaoManager {
       $$UserStoresTableTableManager(_db.attachedDatabase, _db.userStores);
 }
 
+mixin _$VanTripsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $UsersTable get users => attachedDatabase.users;
+  $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
+  $CategoriesTable get categories => attachedDatabase.categories;
+  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $ProductsTable get products => attachedDatabase.products;
+  $VanTripLotsTable get vanTripLots => attachedDatabase.vanTripLots;
+  $DriverLedgerEntriesTable get driverLedgerEntries =>
+      attachedDatabase.driverLedgerEntries;
+  VanTripsDaoManager get managers => VanTripsDaoManager(this);
+}
+
+class VanTripsDaoManager {
+  final _$VanTripsDaoMixin _db;
+  VanTripsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$VanTripsTableTableManager get vanTrips =>
+      $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
+  $$CategoriesTableTableManager get categories =>
+      $$CategoriesTableTableManager(_db.attachedDatabase, _db.categories);
+  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
+      $$CrateSizeGroupsTableTableManager(
+        _db.attachedDatabase,
+        _db.crateSizeGroups,
+      );
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$ProductsTableTableManager get products =>
+      $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$VanTripLotsTableTableManager get vanTripLots =>
+      $$VanTripLotsTableTableManager(_db.attachedDatabase, _db.vanTripLots);
+  $$DriverLedgerEntriesTableTableManager get driverLedgerEntries =>
+      $$DriverLedgerEntriesTableTableManager(
+        _db.attachedDatabase,
+        _db.driverLedgerEntries,
+      );
+}
+
+mixin _$DriverLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $UsersTable get users => attachedDatabase.users;
+  $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
+  $DriverLedgerEntriesTable get driverLedgerEntries =>
+      attachedDatabase.driverLedgerEntries;
+  DriverLedgerDaoManager get managers => DriverLedgerDaoManager(this);
+}
+
+class DriverLedgerDaoManager {
+  final _$DriverLedgerDaoMixin _db;
+  DriverLedgerDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$VanTripsTableTableManager get vanTrips =>
+      $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
+  $$DriverLedgerEntriesTableTableManager get driverLedgerEntries =>
+      $$DriverLedgerEntriesTableTableManager(
+        _db.attachedDatabase,
+        _db.driverLedgerEntries,
+      );
+}
+
 mixin _$PermissionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $PermissionsTable get permissions => attachedDatabase.permissions;
   PermissionsDaoManager get managers => PermissionsDaoManager(this);
