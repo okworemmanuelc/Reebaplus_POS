@@ -180,6 +180,14 @@ class OrderCommands {
   /// used to run them in (the modal wrote crate returns, then `markCompleted`
   /// ran separately). A crate-settle failure aborts before the flip, exactly as
   /// before. [crateReturns] is empty for a non-crate order (straight flip).
+  ///
+  /// **ONE transaction (#188).** Settlement and the flip commit together or not
+  /// at all, and the order-status re-read happens INSIDE that transaction. They
+  /// used to be two independent transactions, so a flip that failed after the
+  /// settlement committed (`_enqueueFullOrder` throws on missing tenant context)
+  /// left the order `pending` with its deposit already settled — and the next
+  /// Confirm on the SAME device settled it a second time. Now the settlement
+  /// rolls back with the flip and the next Confirm starts from a clean slate.
   Future<void> confirm(
     String orderId,
     String staffId, {
@@ -188,15 +196,26 @@ class OrderCommands {
     List<CrateReturnLine> crateReturns = const [],
     bool refundAsCash = false,
   }) async {
-    await _settleCrateReturns(
-      orderId: orderId,
-      staffId: staffId,
-      customerId: customerId,
-      storeId: storeId,
-      crateReturns: crateReturns,
-      refundAsCash: refundAsCash,
-    );
-    await _ordersDao.markCompleted(orderId, staffId);
+    await _db.transaction(() async {
+      // Idempotency guard 1 of 2, #171 — the CONVERGED double-Confirm: a prior
+      // Confirm (this device or a peer whose `completed` has since been pulled)
+      // already settled this order. Re-read INSIDE the transaction and skip both
+      // halves. It cannot close the both-devices-offline case — each reads
+      // `pending` — which is what guard 2 (the per-(order, manufacturer) claim in
+      // [_settleCrateReturns]) and the deterministic leg ids are for.
+      final order = await _ordersDao.findById(orderId);
+      if (order == null || order.status != 'pending') return;
+
+      await _settleCrateReturns(
+        orderId: orderId,
+        staffId: staffId,
+        customerId: customerId,
+        storeId: storeId,
+        crateReturns: crateReturns,
+        refundAsCash: refundAsCash,
+      );
+      await _ordersDao.markCompleted(orderId, staffId);
+    });
   }
 
   /// The crate-return settlement half of **Confirm**, moved off the UI
@@ -204,7 +223,11 @@ class OrderCommands {
   /// counts). Physical empties come back regardless; money-track brands settle
   /// the held deposit (refund / forfeit / shortfall), crate-track brands net the
   /// issued balance. Walk-ins record only physical stock. Preserves the modal's
-  /// exact per-row logic and transaction shape.
+  /// exact per-row logic.
+  ///
+  /// Runs INSIDE [confirm]'s single transaction, which also holds the
+  /// order-status re-read and the status flip (#188) — so a settlement that
+  /// half-succeeds leaves nothing behind.
   Future<void> _settleCrateReturns({
     required String orderId,
     required String staffId,
@@ -215,17 +238,11 @@ class OrderCommands {
   }) async {
     if (crateReturns.isEmpty) return;
 
-    // Idempotency (#171): a prior Confirm already flipped this order to
-    // `completed` and settled its crate returns once. Re-read the status and
-    // skip the WHOLE settlement (physical empties, crate-track netting, AND
-    // money-track deposit settlement) when the order is no longer pending — so a
-    // second Confirm from another device never double-credits the empties pool or
-    // double-settles the deposit. `markCompleted` re-checks the same precondition
-    // inside its own transaction; `settleCrateDepositReturn` guards itself too.
-    final order = await _ordersDao.findById(orderId);
-    if (order == null || order.status != 'pending') return;
-
     // Walk-in customer: just record physical stock returns (no wallet/ledger).
+    // There is no `order_crate_lines` row to claim for a walk-in (createOrder
+    // writes them only for a registered customer), so the pool credit's
+    // deterministic id — keyed on (order, manufacturer) via [orderId] — is what
+    // keeps a two-device offline Confirm from crediting the pool twice.
     if (customerId == null || customerId.isEmpty) {
       for (final line in crateReturns) {
         if (line.manufacturerId.isEmpty) continue;
@@ -233,53 +250,77 @@ class OrderCommands {
           line.manufacturerId,
           line.returnedCrates,
           storeId: storeId,
+          orderId: orderId,
         );
       }
       return;
     }
 
-    await _db.transaction(() async {
-      for (final line in crateReturns) {
-        if (line.manufacturerId.isEmpty) continue;
+    for (final line in crateReturns) {
+      if (line.manufacturerId.isEmpty) continue;
+      // Nothing to settle: a crate-track brand with no crates counted back
+      // writes no row at all. Claiming it would burn the pair's settlement slot
+      // on a no-op and deny a later, corrected count.
+      if (!line.isMoneyTrack && line.returnedCrates <= 0) continue;
 
-        // 1. Physical crate stock comes back regardless of how it's settled.
-        if (line.returnedCrates > 0) {
-          await _db.inventoryDao.addEmptyCrates(
-            line.manufacturerId,
-            line.returnedCrates,
-            storeId: storeId,
-          );
-        }
+      // Idempotency guard 2 of 2, #188 (PRD #155 US 14) — the PARTITIONED
+      // double-Confirm. Claim this (order, manufacturer) pair's settlement slot
+      // and skip the WHOLE pair when a prior Confirm already holds it: physical
+      // empties, crate-track netting, AND the money-track deposit. Unlike the
+      // status re-read in [confirm], this survives convergence — the claim rides
+      // the `order_crate_lines` row both devices already share.
+      final hasClaim = await _db.orderCrateLinesDao.claimSettlement(
+        orderId: orderId,
+        manufacturerId: line.manufacturerId,
+        settledBy: staffId,
+      );
+      if (!hasClaim) continue;
 
-        if (line.isMoneyTrack) {
-          // §13.4 money-track: the obligation lived in the credit balance as a
-          // held deposit — settle it in money (refund / forfeit / shortfall).
-          // No crate balance was issued for this brand, so DON'T touch the
-          // crate ledger (that would create a phantom credit).
-          await _ordersDao.settleCrateDepositReturn(
-            customerId: customerId,
-            manufacturerId: line.manufacturerId,
-            orderId: orderId,
-            takenCrates: line.takenCrates,
-            returnedCrates: line.returnedCrates,
-            rateKobo: line.rateKobo,
-            paidKobo: line.paidKobo,
-            refundAsCash: refundAsCash,
-            performedBy: staffId,
-          );
-        } else if (line.returnedCrates > 0) {
-          // crate-track (no deposit): net the issued balance. Leftover (taken −
-          // returned) stays as crate debt on the crates tab.
-          await _db.cratePoolDao.recordCrateReturnByCustomer(
-            customerId: customerId,
-            manufacturerId: line.manufacturerId,
-            quantity: line.returnedCrates,
-            performedBy: staffId,
-            orderId: orderId,
-          );
-        }
+      // 1. Physical crate stock comes back regardless of how it's settled.
+      if (line.returnedCrates > 0) {
+        await _db.inventoryDao.addEmptyCrates(
+          line.manufacturerId,
+          line.returnedCrates,
+          storeId: storeId,
+          orderId: orderId,
+        );
       }
-    });
+
+      if (line.isMoneyTrack) {
+        // §13.4 money-track: the obligation lived in the credit balance as a
+        // held deposit — settle it in money (refund / forfeit / shortfall).
+        // No crate balance was issued for this brand, so DON'T touch the
+        // crate ledger (that would create a phantom credit).
+        await _ordersDao.settleCrateDepositReturn(
+          customerId: customerId,
+          manufacturerId: line.manufacturerId,
+          orderId: orderId,
+          takenCrates: line.takenCrates,
+          returnedCrates: line.returnedCrates,
+          rateKobo: line.rateKobo,
+          paidKobo: line.paidKobo,
+          refundAsCash: refundAsCash,
+          performedBy: staffId,
+        );
+      } else if (line.returnedCrates > 0) {
+        // crate-track (no deposit): net the issued balance. Leftover (taken −
+        // returned) stays as crate debt on the crates tab. The ledger id is
+        // DETERMINISTIC per (order, manufacturer) for the same reason the money
+        // legs are (#188) — a partitioned second Confirm must not net twice.
+        await _db.cratePoolDao.recordCrateReturnByCustomer(
+          customerId: customerId,
+          manufacturerId: line.manufacturerId,
+          quantity: line.returnedCrates,
+          performedBy: staffId,
+          orderId: orderId,
+          ledgerId: OrdersDao.settlementLegId(
+            orderId: orderId,
+            manufacturerId: line.manufacturerId,
+            referenceType: 'crate_track_return',
+          ),
+        );
+      }
+    }
   }
 
   /// **Cancel** / refund an order (§19.7): reverses stock, payments, and the

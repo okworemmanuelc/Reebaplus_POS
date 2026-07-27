@@ -2372,4 +2372,129 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v74 → v75 (the crate-settlement claim, #188)', () {
+    // Seeds a business + a crate line on the reverted (pre-v75) table and
+    // returns (businessId, crateLineId).
+    Future<(String, String)> seedLegacyCrateLine(AppDatabase db) async {
+      final biz = UuidV7.generate();
+      final mfrId = UuidV7.generate();
+      final orderId = UuidV7.generate();
+      final lineId = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db.customStatement(
+        "INSERT INTO manufacturers (id, business_id, name) "
+        "VALUES (?, ?, 'Star')",
+        [mfrId, biz],
+      );
+      await db.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-000188-AAAAAA', 750000, 750000, 'cash', 'completed')",
+        [orderId, biz],
+      );
+      await db.customStatement(
+        'INSERT INTO order_crate_lines (id, business_id, order_id, '
+        'manufacturer_id, crates_taken, deposit_rate_kobo, deposit_paid_kobo) '
+        'VALUES (?, ?, ?, ?, 5, 50000, 250000)',
+        [lineId, biz, orderId, mfrId],
+      );
+      return (biz, lineId);
+    }
+
+    test('adds order_crate_lines.settled_at + settled_by; legacy lines survive '
+        'and stay NULL', () async {
+      final db1 = await openAndInit();
+      // Revert the v75 delta. `order_crate_lines` carries no CHECK mentioning
+      // either column, so — like v73's orders.van_trip_id — this is a plain DROP
+      // COLUMN with no table rebuild either way.
+      await db1
+          .customStatement('ALTER TABLE order_crate_lines DROP COLUMN settled_at');
+      await db1
+          .customStatement('ALTER TABLE order_crate_lines DROP COLUMN settled_by');
+      final reverted = await columnsOf(db1, 'order_crate_lines');
+      expect(reverted.contains('settled_at'), isFalse);
+      expect(reverted.contains('settled_by'), isFalse);
+
+      // A crate line settled BEFORE the claim column existed. NULL is the right
+      // answer for it: its order is already `completed`, so Confirm's status
+      // re-read still guards it and no second settlement can reach it.
+      final (biz, legacyLineId) = await seedLegacyCrateLine(db1);
+
+      await db1.customStatement('PRAGMA user_version = 74');
+      await db1.close();
+
+      // Re-open → onUpgrade(74 → 75).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final upgraded = await columnsOf(db2, 'order_crate_lines');
+      expect(upgraded.contains('settled_at'), isTrue);
+      expect(upgraded.contains('settled_by'), isTrue);
+
+      final legacy = await db2
+          .customSelect(
+            'SELECT settled_at, settled_by FROM order_crate_lines WHERE id = ?',
+            variables: [Variable<String>(legacyLineId)],
+          )
+          .getSingle();
+      expect(legacy.data['settled_at'], isNull);
+      expect(legacy.data['settled_by'], isNull);
+
+      // The claim really is writable, and `settled_by` really is an FK to users
+      // — the whole point of the column is that a stamped pair is skippable.
+      final staffId = UuidV7.generate();
+      await db2.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Conf', '0000')",
+        [staffId, biz],
+      );
+      await db2.customStatement(
+        'UPDATE order_crate_lines SET settled_at = ?, settled_by = ? '
+        'WHERE id = ?',
+        [DateTime.now().millisecondsSinceEpoch ~/ 1000, staffId, legacyLineId],
+      );
+      final claimed = await db2
+          .customSelect(
+            'SELECT settled_by FROM order_crate_lines WHERE id = ?',
+            variables: [Variable<String>(legacyLineId)],
+          )
+          .getSingle();
+      expect(claimed.data['settled_by'], staffId);
+      // FKs are ON, so an unknown confirmer must be refused.
+      await expectLater(
+        db2.customStatement(
+          'UPDATE order_crate_lines SET settled_by = ? WHERE id = ?',
+          [UuidV7.generate(), legacyLineId],
+        ),
+        throwsA(anything),
+      );
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT drop the columns — just step user_version back, so the v75 block
+      // runs against a schema that already has both. Each per-column
+      // pragma_table_info guard must skip, losing no rows. This is also the
+      // shape a device upgrading from < 37 hits: v37 `createTable`s the table
+      // from the CURRENT Drift schema, so it arrives at v75 already complete.
+      final db1 = await openAndInit();
+      final (_, lineId) = await seedLegacyCrateLine(db1);
+      await db1.customStatement('PRAGMA user_version = 74');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final cols = await columnsOf(db2, 'order_crate_lines');
+      expect(cols.contains('settled_at'), isTrue);
+      expect(cols.contains('settled_by'), isTrue);
+      final rows =
+          await db2.customSelect('SELECT id FROM order_crate_lines').get();
+      expect(rows.map((r) => r.read<String>('id')), [lineId]);
+    });
+  });
 }

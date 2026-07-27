@@ -1517,6 +1517,26 @@ class OrderCrateLines extends Table {
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
 
+  /// **The settlement claim (#188, PRD #155 US 14).** Stamped — inside the ONE
+  /// Confirm transaction — the moment this `(order, manufacturer)` pair's crate
+  /// returns are settled (physical empties, crate-track netting, AND the
+  /// money-track deposit). A stamped line is SKIPPED by a later Confirm, so the
+  /// deposit can never be refunded twice and the empties pool can never be
+  /// credited twice for the same pair.
+  ///
+  /// The status re-read on `orders` alone could not close this: it only catches
+  /// the CONVERGED case (the second device has already pulled `completed`). Two
+  /// devices both offline each read `pending`, so the per-pair claim — which
+  /// rides the same natural-key row both devices already share, and therefore
+  /// converges through the `order_crate_lines` dedup restore — is what makes the
+  /// settlement idempotent ACROSS devices. Nullable: every pre-v75 row, and
+  /// every still-unsettled line, is NULL.
+  DateTimeColumn get settledAt => dateTime().nullable()();
+
+  /// Who won the settlement claim (the confirmer). Recorded alongside
+  /// [settledAt] for audit; never used to gate anything.
+  TextColumn get settledBy => text().nullable().references(Users, #id)();
+
   @override
   Set<Column> get primaryKey => {id};
 
@@ -2522,7 +2542,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 74;
+  int get schemaVersion => 75;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5230,6 +5250,54 @@ class AppDatabase extends _$AppDatabase {
         );
         for (final stmt in _vanReturnIndexStatements) {
           await customStatement(stmt);
+        }
+      }
+
+      if (from < 75) {
+        // ── v75 — the crate-settlement claim (#188, PRD #155 US 14) ─────────
+        //
+        // `order_crate_lines` gains TWO nullable columns, `settled_at` and
+        // `settled_by`: the per-`(order, manufacturer)` record that this pair's
+        // crate returns have already been settled. Confirm stamps them inside
+        // the ONE transaction that also flips the order, and SKIPS a stamped
+        // line — so the held deposit cannot be refunded twice and the empties
+        // pool cannot be credited twice for the same pair.
+        //
+        // The pre-existing `orders.status` re-read only closed the CONVERGED
+        // double-Confirm (device B had already pulled `completed`). Two devices
+        // BOTH offline each read `pending`; the claim rides the natural-key row
+        // they already share, so it converges through the `order_crate_lines`
+        // dedup restore and closes the partition case too.
+        //
+        // Nullable + additive, and `order_crate_lines` carries no CHECK that
+        // mentions either column, so this is a plain ADD COLUMN — no table
+        // rebuild (v73's shape, not v72's). Every existing row stays NULL, which
+        // is exactly right: an unsettled line and a line settled before this
+        // column existed are both "no claim recorded", and the `orders.status`
+        // re-read still guards the already-completed ones.
+        //
+        // `settled_by` is a nullable FK with no default, which is the one shape
+        // SQLite's ALTER TABLE ADD COLUMN accepts while `PRAGMA foreign_keys`
+        // is ON (the added column must default to NULL).
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69/v70/v72/v73 so a DB stepped
+        // back to < 75 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        // It is per-column on purpose: v37 `createTable`s `order_crate_lines`
+        // from the CURRENT Drift schema, so a device upgrading from < 37 already
+        // has both columns and must not re-add either.
+        final hasSettledAt = await customSelect(
+          "SELECT 1 FROM pragma_table_info('order_crate_lines') "
+          "WHERE name = 'settled_at'",
+        ).get();
+        if (hasSettledAt.isEmpty) {
+          await m.addColumn(orderCrateLines, orderCrateLines.settledAt);
+        }
+        final hasSettledBy = await customSelect(
+          "SELECT 1 FROM pragma_table_info('order_crate_lines') "
+          "WHERE name = 'settled_by'",
+        ).get();
+        if (hasSettledBy.isEmpty) {
+          await m.addColumn(orderCrateLines, orderCrateLines.settledBy);
         }
       }
     },
