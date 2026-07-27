@@ -1971,9 +1971,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               // stops counting toward stock totals. #170 #7c: the write-off draws
               // the FIFO cost batches down and SNAPSHOTS the value, returning the
               // total so the delete is booked with a VISIBLE value instead of the
-              // value silently vanishing. Best-effort — a failure here must not
-              // block the soft-delete + activity log.
-              var writtenOffKobo = 0;
+              // value silently vanishing.
+              //
+              // #193: the write-off is a PRECONDITION of the delete, not a
+              // best-effort side errand. It used to be swallowed — the product was
+              // soft-deleted anyway, and its remaining stock value was orphaned:
+              // no write-off row, and the deleted product is filtered out of every
+              // cost lookup, so the loss became unreportable. So a failure here
+              // aborts: the product stays, the dialog stays open, and the user can
+              // retry rather than lose the value silently.
+              final int writtenOffKobo;
               try {
                 writtenOffKobo = await db.inventoryDao.writeOffAllStockForDelete(
                   productId,
@@ -1985,7 +1992,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   st,
                   context: 'inventory.product_detail.delete_stock_zero',
                 );
-                debugPrint('Delete stock-zeroing error: $e');
+                if (!context.mounted) return;
+                AppNotification.showError(
+                  context,
+                  'Could not write off the remaining stock, so $productName was '
+                  'not deleted. Please try again.',
+                );
+                return;
               }
               try {
                 await db.catalogDao.softDeleteProduct(productId);

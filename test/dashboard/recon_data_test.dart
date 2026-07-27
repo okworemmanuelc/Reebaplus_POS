@@ -87,6 +87,8 @@ ReconData recon({
   int stockTransfersKobo = 0,
   int stockCountAdjustmentsKobo = 0,
   int stockDeletionsKobo = 0,
+  // #193 — deleted-product write-off booked as a loss.
+  int deletionCostKobo = 0,
 }) {
   return ReconData(
     totalRevenueKobo: totalRevenueKobo < 0 ? costedRevenueKobo : totalRevenueKobo,
@@ -152,6 +154,7 @@ ReconData recon({
     stockTransfersKobo: stockTransfersKobo,
     stockCountAdjustmentsKobo: stockCountAdjustmentsKobo,
     stockDeletionsKobo: stockDeletionsKobo,
+    deletionCostKobo: deletionCostKobo,
   );
 }
 
@@ -681,6 +684,82 @@ void main() {
       expect(recon(stockTransfersKobo: 1).hasStockFlow, isTrue);
       expect(recon(stockCountAdjustmentsKobo: 1).hasStockFlow, isTrue);
       expect(recon(stockDeletionsKobo: 1).hasStockFlow, isTrue);
+    });
+  });
+
+  // ── #193: the delete write-off is a LOSS, not just a stock-card note ───────
+  group('ReconData — product-delete write-off counts as a loss (#193)', () {
+    test('net profit drops by the write-off, alongside damages', () {
+      final withoutWriteOff = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        damageCostKobo: 2000,
+      );
+      final withWriteOff = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        damageCostKobo: 2000,
+        deletionCostKobo: 12000,
+      );
+      // 40,000 − 2,000 = 38,000 before; the write-off nets out 12,000 more.
+      expect(withoutWriteOff.netProfitKobo, 38000);
+      expect(withWriteOff.netProfitKobo, 26000);
+      expect(
+        withoutWriteOff.netProfitKobo - withWriteOff.netProfitKobo,
+        12000,
+      );
+    });
+
+    test('the period net result drops by the write-off too', () {
+      final withoutWriteOff =
+          recon(inventoryOnHandKobo: 500000, damageCostKobo: 2000);
+      final withWriteOff = recon(
+        inventoryOnHandKobo: 500000,
+        damageCostKobo: 2000,
+        deletionCostKobo: 12000,
+      );
+      expect(withoutWriteOff.periodNetResultKobo, 498000);
+      expect(withWriteOff.periodNetResultKobo, 486000);
+    });
+
+    test('gross profit and gross margin are untouched (it is not a COGS line)',
+        () {
+      final d = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        deletionCostKobo: 12000,
+      );
+      expect(d.grossProfitKobo, 40000);
+      expect(d.grossMarginPct, '40.0');
+    });
+
+    test('the count-reconciled profit carries the write-off through', () {
+      final d = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        deletionCostKobo: 12000,
+        hasStockCount: true,
+        shortageCostKobo: 1000,
+      );
+      // 40,000 − 12,000 = 28,000 net profit, then − 1,000 count variance.
+      expect(d.netProfitKobo, 28000);
+      expect(d.integrityAdjustedProfitKobo, 27000);
+    });
+
+    test('the P&L loss does NOT disturb the stock card or its flow equation',
+        () {
+      // The two figures are deliberately independent (ADR 0014: the card stays
+      // on current cost so its closing identity ties; the loss surfaces use the
+      // write-time snapshot). Booking the loss must not move a single stock term.
+      final d = recon(
+        stockOpeningKobo: 100000,
+        stockCogsKobo: 20000,
+        stockExpectedClosingKobo: 80000,
+        deletionCostKobo: 12000,
+      );
+      expect(d.stockDerivedClosingKobo, 80000);
+      expect(d.stockDerivedClosingKobo, d.stockExpectedClosingKobo);
+      expect(d.stockOpeningKobo, 100000);
     });
   });
 
