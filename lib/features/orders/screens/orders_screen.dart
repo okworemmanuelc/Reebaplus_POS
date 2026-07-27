@@ -543,17 +543,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       data: (stats) {
         final statItems = [
           _StatItem(label: 'Cancelled', value: '${stats.count}', color: danger),
-          if (canSeeMoney)
+          // #196 — "Refunds Issued" now shows the MONEY handed back on these
+          // orders (un-voided `payment_transactions.type == 'refund'` rows,
+          // the same basis as the Daily Reconciliation), not a count of the
+          // retired `refunded` status that nothing writes — which is why it read
+          // 0 forever. Because it became a naira figure it moved inside the
+          // see-money gate, next to the other money tiles.
+          if (canSeeMoney) ...[
             _StatItem(
               label: 'Value Forfeited',
               value: formatCurrency(stats.totalAmountKobo / 100.0),
               color: danger,
             ),
-          _StatItem(
-            label: 'Refunds Issued',
-            value: '${stats.refundedCount}',
-            color: blueMain,
-          ),
+            _StatItem(
+              label: 'Refunds Issued',
+              value: formatCurrency(stats.refundsIssuedKobo / 100.0),
+              color: blueMain,
+            ),
+          ],
         ];
 
         if (stateAsync.isLoading) {
@@ -2079,6 +2086,11 @@ class _StatusBadge extends StatelessWidget {
         icon = FontAwesomeIcons.check.data;
         label = 'DONE';
         break;
+      // LEGACY ROWS ONLY (#196): `refunded` is a retired status — refunds have
+      // been `payment_transactions` rows since PRD #155 and nothing writes it
+      // any more. The branch stays because the Cancelled tab still LISTS
+      // historic orders that carry it (see the DAO's legacy tolerance), and
+      // badging one "CANCELLED" would misstate what happened to the money.
       case 'refunded':
         color = blueMain;
         icon = FontAwesomeIcons.rotateLeft.data;

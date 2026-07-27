@@ -195,7 +195,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
     final Expression<bool> statusPredicate;
     if (status == 'cancelled') {
-      // Refunded orders represent reversed sales and are grouped under the Cancelled tab.
+      // LEGACY TOLERANCE (#196): `refunded` is a RETIRED status — nothing has
+      // written it since PRD #155 moved refunds to `payment_transactions` rows.
+      // Kept on purpose: a historic row that carries it IS a reversed sale, so
+      // it keeps showing on the Cancelled tab instead of vanishing from history.
       statusPredicate = orders.status.isIn(const ['cancelled', 'refunded']);
     } else {
       statusPredicate = orders.status.equals(status);
@@ -318,7 +321,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
     final Expression<bool> statusPredicate;
     if (status == 'cancelled') {
-      // Refunded orders represent reversed sales and are grouped under the Cancelled tab.
+      // LEGACY TOLERANCE (#196): `refunded` is a RETIRED status — nothing has
+      // written it since PRD #155 moved refunds to `payment_transactions` rows.
+      // Kept on purpose: a historic row that carries it IS a reversed sale, so
+      // it keeps showing on the Cancelled tab instead of vanishing from history.
       statusPredicate = orders.status.isIn(const ['cancelled', 'refunded']);
     } else {
       statusPredicate = orders.status.equals(status);
@@ -420,7 +426,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
     final Expression<bool> statusPredicate;
     if (status == 'cancelled') {
-      // Refunded orders represent reversed sales and are grouped under the Cancelled tab.
+      // LEGACY TOLERANCE (#196): `refunded` is a RETIRED status — nothing has
+      // written it since PRD #155 moved refunds to `payment_transactions` rows.
+      // Kept on purpose: a historic row that carries it IS a reversed sale, so
+      // it keeps showing on the Cancelled tab instead of vanishing from history.
       statusPredicate = orders.status.isIn(const ['cancelled', 'refunded']);
     } else {
       statusPredicate = orders.status.equals(status);
@@ -463,11 +472,42 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final amountSum = orders.netAmountKobo.sum();
     final paidSum = orders.amountPaidKobo.sum();
     final depositSum = orders.crateDepositPaidKobo.sum();
-    const refundedCol = CustomExpression<int>(
-      "SUM(CASE WHEN orders.status = 'refunded' THEN 1 ELSE 0 END)",
+    // #196 (PRD #155, slice #172) — "Refunds Issued" is the MONEY handed back on
+    // the orders in view, read from the append-only payment ledger (un-voided
+    // `payment_transactions.type == 'refund'`). It used to be
+    // `SUM(CASE WHEN orders.status = 'refunded' THEN 1 ELSE 0 END)` — a COUNT of
+    // a status nothing has written since refunds became payment rows, so the
+    // tile showed 0 forever (the PRD's own opening complaint). Same basis the
+    // Daily Reconciliation's Refunds line uses (`recon_data.dart`).
+    //
+    // A CORRELATED SCALAR SUBQUERY, deliberately not a join: an order can carry
+    // several refund rows (a re-cancel, a legacy bundled row), and joining them
+    // would duplicate the order row and silently inflate `countCol` /
+    // `amountSum` / `paidSum` with it. `watchedTables` is what makes the stream
+    // re-emit when a refund row lands without the order header also changing.
+    //
+    // Keyed on the refund row's `order_id`, so the tab's store / date / search
+    // filters apply to the refund figure for free and the number always
+    // describes the list underneath it. A crate-deposit refund settled at
+    // Confirm links via its wallet txn instead (payment_transactions allows
+    // exactly one parent) and belongs to a COMPLETED order, so it is out of the
+    // Cancelled tab's scope by construction; the reconciliation is the
+    // business-wide view of every refund.
+    final refundsIssuedCol = CustomExpression<int>(
+      'SUM(COALESCE((SELECT SUM(pt.amount_kobo) FROM payment_transactions pt '
+      'WHERE pt.order_id = orders.id '
+      'AND pt.business_id = orders.business_id '
+      "AND pt.type = 'refund' AND pt.voided_at IS NULL), 0))",
+      watchedTables: [paymentTransactions],
     );
 
-    query.addColumns([countCol, amountSum, paidSum, depositSum, refundedCol]);
+    query.addColumns([
+      countCol,
+      amountSum,
+      paidSum,
+      depositSum,
+      refundsIssuedCol,
+    ]);
 
     return query.watchSingle().map((row) {
       return OrdersStats(
@@ -475,7 +515,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         totalAmountKobo: row.read(amountSum) ?? 0,
         amountPaidKobo: row.read(paidSum) ?? 0,
         crateDepositPaidKobo: row.read(depositSum) ?? 0,
-        refundedCount: row.read(refundedCol) ?? 0,
+        refundsIssuedKobo: row.read(refundsIssuedCol) ?? 0,
       );
     });
   }
@@ -1989,14 +2029,21 @@ class OrdersStats {
   final int totalAmountKobo;
   final int amountPaidKobo;
   final int crateDepositPaidKobo;
-  final int refundedCount;
+
+  /// Money actually handed back on the orders in this view — the sum of the
+  /// un-voided `payment_transactions.type == 'refund'` rows keyed to them
+  /// (#196). Replaces the pre-#155 `refundedCount`, a count of
+  /// `orders.status == 'refunded'` that nothing has written since refunds became
+  /// payment rows, so it read 0 forever. Money, so a UI that shows it must be
+  /// behind the same see-money gate as the other money figures here.
+  final int refundsIssuedKobo;
 
   const OrdersStats({
     required this.count,
     required this.totalAmountKobo,
     required this.amountPaidKobo,
     required this.crateDepositPaidKobo,
-    required this.refundedCount,
+    required this.refundsIssuedKobo,
   });
 
   factory OrdersStats.empty() => const OrdersStats(
@@ -2004,7 +2051,7 @@ class OrdersStats {
         totalAmountKobo: 0,
         amountPaidKobo: 0,
         crateDepositPaidKobo: 0,
-        refundedCount: 0,
+        refundsIssuedKobo: 0,
       );
 }
 
