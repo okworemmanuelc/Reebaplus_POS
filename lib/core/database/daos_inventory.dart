@@ -578,15 +578,22 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// receive-delivery and crate-return flows to credit the physical pool of
   /// returnable crates held against a manufacturer. Delegates to the Crate Pool
   /// seam (#157).
+  ///
+  /// [orderId] identifies the ORDER the crates came back against, when there is
+  /// one (Confirm's crate returns). It makes the credit idempotent across
+  /// offline devices — see [CratePoolDao.addEmptiesToPool] (#188). An order-less
+  /// credit (manual return, delivery) omits it.
   Future<void> addEmptyCrates(
     String manufacturerId,
     int quantity, {
     String? storeId,
+    String? orderId,
   }) async {
     await db.cratePoolDao.addEmptiesToPool(
       manufacturerId,
       quantity,
       storeId: storeId,
+      orderId: orderId,
     );
   }
 
