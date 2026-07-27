@@ -71,32 +71,6 @@ int lineConcessionKobo({
   return (cataloguePriceKobo - unitPriceKobo) * quantity;
 }
 
-/// A period's total catalogue-price concession (#200 / US 32) — the sum of
-/// [lineConcessionKobo] over every line of every order that counts as a sale.
-/// Scoped by [inSpan] / [inScope] exactly like [computeTotalSalesKobo], so the
-/// figure sits beside the sales/margin numbers on the same basis.
-int computeCatalogueConcessionKobo(
-  Iterable<OrderWithItems> orders, {
-  bool Function(DateTime createdAt) inSpan = _always,
-  bool Function(String? storeId) inScope = _anyStore,
-}) {
-  var total = 0;
-  for (final o in orders) {
-    if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
-      continue;
-    }
-    for (final line in o.items) {
-      if (!inScope(line.item.storeId)) continue;
-      total += lineConcessionKobo(
-        cataloguePriceKobo: line.item.cataloguePriceKobo,
-        unitPriceKobo: line.item.unitPriceKobo,
-        quantity: line.item.quantity,
-      );
-    }
-  }
-  return total;
-}
-
 /// The goods-paid-now vs on-credit split of ONE order's contribution to Total
 /// Sales (#176 / PRD #155 story 29). [goodsNet] is the order's Total-Sales share
 /// (scoped item lines − scoped discount); [amountPaid] is what was tendered;

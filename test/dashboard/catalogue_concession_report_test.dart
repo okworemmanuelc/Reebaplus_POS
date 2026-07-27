@@ -7,8 +7,14 @@
 // write and the cloud RPC parity (0160) all landed under #176/#183, but nothing
 // in the app ever READ the column: `rg cataloguePriceKobo lib` returned the
 // schema and the write and nothing else, so the give-away stayed invisible and
-// the story was unmet. These tests pin the reader's money math — the two pure
-// helpers the Profit report accumulates per line and per period.
+// the story was unmet. These tests pin the reader's money math — the pure
+// per-line helper the Profit report accumulates once per sold line.
+//
+// Period-level behaviour (a cancelled order is not a sale, the period filter,
+// the van exclusion, per-line store scope) is deliberately NOT retested here:
+// the Profit report reaches the concession through the SAME loop and the SAME
+// guards that already gate its revenue and COGS, so that is pre-existing shared
+// behaviour, not anything this story introduced.
 //
 // A concession is NOT `orders.discount_kobo` (§13.3): that discount is explicit,
 // order-level, and already netted out of Total Sales. A concession is the quiet
@@ -17,78 +23,13 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
-
-DateTime _day(int d) => DateTime(2026, 7, d);
-
-/// One order whose lines are `(qty, chargedKobo, cataloguePriceKobo?)`.
-/// A null catalogue price is what the writer stores when the line went out AT
-/// list price (and for product-less quick sales) — i.e. "no concession", never
-/// "unknown".
-OrderWithItems _order({
-  required String status,
-  required DateTime createdAt,
-  required List<(int qty, int chargedKobo, int? catalogueKobo)> lines,
-  String? storeId = 's1',
-  bool uncosted = false,
-}) {
-  final gross = lines.fold<int>(0, (s, l) => s + l.$1 * l.$2);
-  final orderId = 'o-${createdAt.day}-${lines.length}-$storeId-$status';
-  final order = OrderData(
-    id: orderId,
-    businessId: 'b1',
-    orderNumber: 'ORD-$orderId',
-    customerId: null,
-    totalAmountKobo: gross,
-    discountKobo: 0,
-    netAmountKobo: gross,
-    amountPaidKobo: gross,
-    paymentType: 'cash',
-    status: status,
-    riderName: 'Pick-up Order',
-    cancellationReason: null,
-    barcode: null,
-    staffId: null,
-    storeId: storeId,
-    confirmedBy: null,
-    crateDepositPaidKobo: 0,
-    completedAt: null,
-    cancelledAt: null,
-    createdAt: createdAt,
-    lastUpdatedAt: createdAt,
-  );
-  return OrderWithItems(
-    order,
-    [
-      for (var i = 0; i < lines.length; i++)
-        OrderItemDataWithProductData(
-          OrderItemData(
-            id: '$orderId-$i',
-            businessId: 'b1',
-            orderId: orderId,
-            productId: 'p$i',
-            storeId: storeId ?? 's1',
-            quantity: lines[i].$1,
-            unitPriceKobo: lines[i].$2,
-            // An uncosted line is one whose buying price was never recorded.
-            buyingPriceKobo: uncosted ? 0 : 5000,
-            totalKobo: lines[i].$1 * lines[i].$2,
-            cataloguePriceKobo: lines[i].$3,
-            priceSnapshot: null,
-            createdAt: createdAt,
-            lastUpdatedAt: createdAt,
-          ),
-          null,
-        ),
-    ],
-    null,
-  );
-}
 
 void main() {
   group('lineConcessionKobo — one sold line', () {
     test('no catalogue price means no concession (sold at list)', () {
+      // The writer stores the catalogue price ONLY when the till overrode it, so
+      // NULL means "went out at list", never "unknown".
       expect(
         lineConcessionKobo(
           cataloguePriceKobo: null,
@@ -124,6 +65,23 @@ void main() {
       );
     });
 
+    test('takes no buying price, so an UNCOSTED line is valued identically', () {
+      // The Profit report excludes lines with no recorded buying price from
+      // revenue / COGS / margin, and accumulates the concession BEFORE that skip.
+      // This helper's signature is what makes that safe: cost is not an input, so
+      // a price cut on an uncosted line cannot be valued differently from the
+      // same cut on a costed one — and cannot be silently dropped, which would
+      // hide exactly the give-away this story exists to surface.
+      expect(
+        lineConcessionKobo(
+          cataloguePriceKobo: 50000,
+          unitPriceKobo: 40000,
+          quantity: 2,
+        ),
+        20000,
+      );
+    });
+
     test('a zero-quantity line contributes nothing', () {
       expect(
         lineConcessionKobo(
@@ -133,113 +91,6 @@ void main() {
         ),
         0,
       );
-    });
-  });
-
-  group('computeCatalogueConcessionKobo — a period', () {
-    test('sums every discounted line and ignores the at-list ones', () {
-      final o = _order(
-        status: 'pending',
-        createdAt: _day(10),
-        lines: [
-          (2, 85000, 100000), // ₦300 below list
-          (1, 50000, null), // at list — no concession
-          (4, 20000, 25000), // ₦200 below list
-        ],
-      );
-      expect(computeCatalogueConcessionKobo([o]), 30000 + 20000);
-    });
-
-    test('an uncosted line\'s concession still counts', () {
-      // The Profit report EXCLUDES uncosted lines from revenue/COGS/margin, but a
-      // price cut on one is still a price cut — dropping it would leave exactly
-      // the give-away this story exists to surface invisible.
-      final uncosted = _order(
-        status: 'pending',
-        createdAt: _day(10),
-        lines: [(2, 40000, 50000)],
-        uncosted: true,
-      );
-      expect(computeCatalogueConcessionKobo([uncosted]), 20000);
-    });
-
-    test('a cancelled order is not a sale, so it gives nothing away', () {
-      final live = _order(
-        status: 'pending',
-        createdAt: _day(10),
-        lines: [(1, 85000, 100000)],
-      );
-      final dead = _order(
-        status: 'cancelled',
-        createdAt: _day(10),
-        lines: [(1, 85000, 100000)],
-      );
-      expect(computeCatalogueConcessionKobo([live, dead]), 15000);
-    });
-
-    test('respects the period filter', () {
-      final inSpan = _order(
-        status: 'pending',
-        createdAt: _day(10),
-        lines: [(1, 85000, 100000)],
-      );
-      final outOfSpan = _order(
-        status: 'pending',
-        createdAt: _day(20),
-        lines: [(1, 60000, 100000)],
-      );
-      expect(
-        computeCatalogueConcessionKobo(
-          [inSpan, outOfSpan],
-          inSpan: (createdAt) => createdAt.day == 10,
-        ),
-        15000,
-      );
-    });
-
-    test('respects the store filter, per line', () {
-      final mine = _order(
-        status: 'pending',
-        createdAt: _day(10),
-        lines: [(1, 85000, 100000)],
-        storeId: 's1',
-      );
-      final theirs = _order(
-        status: 'pending',
-        createdAt: _day(10),
-        lines: [(1, 60000, 100000)],
-        storeId: 's2',
-      );
-      expect(
-        computeCatalogueConcessionKobo(
-          [mine, theirs],
-          inScope: (storeId) => storeId == 's1',
-        ),
-        15000,
-      );
-    });
-
-    test('a period with no overridden price reports nothing', () {
-      final o = _order(
-        status: 'pending',
-        createdAt: _day(10),
-        lines: [(3, 100000, null)],
-      );
-      expect(computeCatalogueConcessionKobo([o]), 0);
-    });
-
-    test('a markup nets against a give-away, and the sign says which won', () {
-      final below = _order(
-        status: 'pending',
-        createdAt: _day(10),
-        lines: [(1, 90000, 100000)], // ₦100 given away
-      );
-      final above = _order(
-        status: 'pending',
-        createdAt: _day(11),
-        lines: [(1, 130000, 100000)], // ₦300 over list
-      );
-      expect(computeCatalogueConcessionKobo([below, above]), -20000);
     });
   });
 }

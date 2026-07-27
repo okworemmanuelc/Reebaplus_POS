@@ -716,7 +716,31 @@ class ReconData {
   // true residual [stockOtherMovementsKobo] they partition what used to be one
   // "Other movements" line, and still fold into [stockDerivedClosingKobo].
   final int stockTransfersKobo; // transfer_in / transfer_out legs
-  final int stockCountAdjustmentsKobo; // daily-count reconciliation adjustments
+
+  /// Daily-count reconciliation adjustments, at CURRENT cost — deliberately a
+  /// different basis from the P&L's [shortageCostKobo], which #182 moved onto the
+  /// #170 write-time snapshot. #200 asked whether this line should follow it. It
+  /// must not, on its own, for three reasons in ascending weight:
+  ///
+  ///  1. This term is built from **void-filtered** `stock_transactions`, while
+  ///     the snapshot lives on `stock_adjustments`, which has **no void column**.
+  ///     Reaching across would need the void filter carried over by hand (the
+  ///     adjustment id is already joined for the reason, so it is *possible*) —
+  ///     get it wrong and a VOIDED count correction contributes money with no
+  ///     matching units. That money-vs-units divergence is #186's subject.
+  ///  2. [stockDamagesKobo] has the identical property, so converting only this
+  ///     line would put two bases inside ONE card.
+  ///  3. Decisive: the flow equation ties to the perpetual system figure **by
+  ///     construction** only while every term shares one basis (opening is the
+  ///     rewind of the period's deltas — see [stockDerivedClosingKobo]). Swap one
+  ///     term and the rendered column stops adding up to Expected closing, which
+  ///     is a worse report failure than the one being fixed.
+  ///
+  /// So the card keeps one basis and now SAYS so, on screen and in the export:
+  /// one event reports two labelled figures instead of two silent ones. A real
+  /// basis change has to convert the whole card at once — #186.
+  final int stockCountAdjustmentsKobo;
+
   final int stockDeletionsKobo; // product-delete write-offs (#170 #7c)
 
   // ── #200 / PRD #155 US 20: label the current-cost fallback ────────────────
@@ -733,11 +757,6 @@ class ReconData {
   /// Rows inside [shortageCostKobo] valued at today's cost (no write-time
   /// snapshot). 0 = the whole shortage/variance figure is frozen.
   final int legacyValuedShortageRows;
-
-  /// True when any loss figure on the report leans on the current-cost fallback,
-  /// i.e. a footnote is owed. See [legacyValuedDamageRows].
-  bool get hasLegacyValuedLosses =>
-      legacyValuedDamageRows > 0 || legacyValuedShortageRows > 0;
 
   /// The van channel's four report lines (#147). Purely additive — see
   /// [ReconVanRollup].
@@ -1209,21 +1228,7 @@ ReconData computeReconData(
     stockDamagesKobo += (damagedUnits[pid] ?? 0) * cost;
     stockExpiredKobo += (expiredUnits[pid] ?? 0) * cost;
     stockTransfersKobo += (transfersDelta[pid] ?? 0) * cost;
-    // #200 — deliberately STAYS at current cost, unlike the P&L's
-    // [shortageCostKobo] (#182, write-time snapshot). Three reasons, in order of
-    // weight: (1) this term is void-filtered `stock_transactions`, while the
-    // snapshot lives on `stock_adjustments`, which has NO void column — pulling
-    // the snapshot in here would let a VOIDED count correction contribute money
-    // with no matching units, a new money defect (that money-vs-units basis
-    // divergence is #186's subject); (2) the flow equation ties to the perpetual
-    // system figure BY CONSTRUCTION only while every term shares one basis —
-    // swapping one term makes the rendered column stop adding up to Expected
-    // closing; (3) [stockDamagesKobo] two lines up has the identical property, so
-    // converting only this line would put two bases inside ONE card. The user-
-    // visible half of the complaint is answered instead by stating the basis on
-    // the card and in the export (see `daily_reconciliation_detail_screen`), so
-    // one event now reports two LABELLED figures rather than two silent ones. A
-    // real basis change has to convert the whole card at once — #186.
+    // #200 — stays at CURRENT cost on purpose; see [stockCountAdjustmentsKobo].
     stockCountAdjustmentsKobo += (countAdjDelta[pid] ?? 0) * cost;
     stockDeletionsKobo += (deletionsDelta[pid] ?? 0) * cost;
     stockOtherMovementsKobo += (otherDelta[pid] ?? 0) * cost;

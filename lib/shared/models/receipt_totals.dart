@@ -26,6 +26,22 @@ class ReceiptTotals {
   final int depositKobo;
 
   /// What the customer settles: goods − discount + deposit.
+  ///
+  /// This is the printed block's own arithmetic, so it is what a customer adding
+  /// the lines up gets. It equals the recorded `orders.total_amount_kobo` for
+  /// every receipt built by [receiptTotalsFromOrder] — by construction, since
+  /// that factory derives [subtotalKobo] from it.
+  ///
+  /// **The checkout path does NOT route its printed total through here** (it
+  /// prints the live payable it charged), because the cart subtracts one more
+  /// term that never reaches paper: `customerCrateCredit` in
+  /// `cart_screen.dart`'s `tot = sub − discounts − credit`. That term is dead —
+  /// `Customer.emptyCratesBalance` is hardcoded `const {}` at every construction
+  /// site, so the credit is always 0 and the printed block does tie today — and
+  /// #202 removes the block outright. If anyone ever revives customer crate
+  /// credit, it needs its OWN printed line here; silently folding it into the
+  /// total would reintroduce exactly the "total is lower than the subtotal with
+  /// nothing explaining it" defect #200 fixed.
   int get totalKobo => subtotalKobo - discountKobo + depositKobo;
 }
 
