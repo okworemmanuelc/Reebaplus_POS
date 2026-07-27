@@ -6,12 +6,14 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/uncosted_receive_warning.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -184,6 +186,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       totalUnits: totalUnits,
       invoiceTotalKobo: invoiceTotalKobo,
       storeName: _storeName(),
+      uncostedItemCount: notifier.uncostedLineCount,
     );
     if (confirmed != true) return;
 
@@ -238,8 +241,10 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     required int totalUnits,
     required int invoiceTotalKobo,
     required String storeName,
+    required int uncostedItemCount,
   }) {
     final theme = Theme.of(context);
+    final semantic = theme.extension<AppSemanticColors>()!;
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -263,6 +268,23 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            // The Uncosted disclosure is repeated at the last moment, next to
+            // the total it undermines (#199). Still non-blocking — Confirm is
+            // right there.
+            if (uncostedItemCount > 0) ...[
+              SizedBox(height: context.getRSize(8)),
+              Text(
+                'It excludes $uncostedItemCount '
+                '${uncostedItemCount == 1 ? 'item' : 'items'} with no recorded '
+                'buying price, so nothing is owed for '
+                '${uncostedItemCount == 1 ? 'it' : 'them'} and '
+                '${uncostedItemCount == 1 ? 'it' : 'they'} will show no profit '
+                'when sold.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: semantic.warning,
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
@@ -323,6 +345,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final subtext = theme.textTheme.bodySmall?.color;
 
     final totalValueStr = formatCurrency(notifier.invoiceTotalKobo / 100);
+    final uncostedLineCount = notifier.uncostedLineCount;
 
     // Empties are grouped by manufacturer: one row per manufacturer, with the
     // full crates received summed across all of its bottle + trackEmpties lines.
@@ -405,6 +428,19 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                     ),
                   ),
                   SizedBox(height: context.getRSize(12)),
+
+                  // Uncosted disclosure (#199 / PRD #155 US 37) — sits directly
+                  // under the Invoice Total because that is the figure it
+                  // undermines: a line with no buying price contributes nothing
+                  // to it, so no payable is raised and the units later sell at
+                  // 0 COGS. Informational only; Confirm Receipt stays enabled.
+                  if (uncostedLineCount > 0) ...[
+                    UncostedReceiveWarning(
+                      itemCount: uncostedLineCount,
+                      unitCount: notifier.uncostedUnits,
+                    ),
+                    SizedBox(height: context.getRSize(12)),
+                  ],
 
                   // Stocking into: destination store (the receipt commits stock
                   // to THIS store). Defaults to the active store; the user can
