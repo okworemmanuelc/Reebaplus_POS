@@ -1577,6 +1577,16 @@ class Orders extends Table {
   @override
   List<String> get customConstraints => [
     "CHECK (payment_type IN ('cash','transfer','card','wallet','credit','mixed'))",
+    // `refunded` is a RETIRED status (PRD #155 / #196) — refunds are
+    // `payment_transactions.type == 'refund'` rows now, and no client path, RPC
+    // or web write produces it any more. The CHECK deliberately stays PERMISSIVE
+    // rather than being tightened to 3 values: historic local rows (and cloud
+    // rows pulled from before the change) can still carry it, and a stricter
+    // CHECK would abort the very table-rebuild migration that has to re-insert
+    // them, then reject the pull page that restores them (23514) — a hard
+    // failure in exchange for no behavioural gain, since the value is inert.
+    // Reads tolerate it explicitly (see `OrdersDao`'s legacy-tolerance
+    // predicates); nothing writes it.
     "CHECK (status IN ('pending','completed','cancelled','refunded'))",
     'UNIQUE (business_id, order_number)',
   ];

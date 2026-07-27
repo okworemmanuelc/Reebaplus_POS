@@ -210,6 +210,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       case 'completed':
         return BadgeVariant.green;
       case 'cancelled':
+      // LEGACY ROWS ONLY (#196): `refunded` is a retired status (PRD #155 moved
+      // refunds to `payment_transactions`); nothing writes it, but a historic
+      // order that carries it still renders in this customer's history and reads
+      // as a reversed sale, so it keeps the reversed-sale badge.
       case 'refunded':
         return BadgeVariant.red;
       default:
