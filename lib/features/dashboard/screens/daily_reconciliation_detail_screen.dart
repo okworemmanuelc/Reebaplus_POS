@@ -434,6 +434,16 @@ class _DailyReconciliationDetailScreenState
             'Crate deposit loss',
             '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}',
           ),
+        // #193 — stock written off because its product was deleted. One family
+        // with Damages: value the business paid for and no longer has, so it is
+        // netted out of the result rather than only noted on the stock card.
+        if (d.deletionCostKobo > 0)
+          _line(
+            context,
+            theme,
+            'Product deletions (at cost)',
+            '− ${formatCurrency(d.deletionCostKobo / 100.0)}',
+          ),
         _divider(theme),
         _line(
           context,
@@ -1256,6 +1266,14 @@ class _DailyReconciliationDetailScreenState
         ['Damages (at cost)', money(d.damageCostKobo)],
         if (d.crateDamageDepositKobo > 0)
           ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
+        // #193 — the deleted-product write-off as a loss, beside Damages, at the
+        // write-time snapshot. The stock-card row further down is the SAME event
+        // on that card's current-cost basis (ADR 0014), so it is disambiguated as
+        // "(stock, at cost)" exactly as Damages already is. Conditional like the
+        // crate row above, so an export from a business that deleted nothing is
+        // byte-identical to before.
+        if (d.deletionCostKobo > 0)
+          ['Product deletions (at cost)', money(d.deletionCostKobo)],
         ['Stock shortages (at cost)', money(d.shortageCostKobo)],
         ['Net result for period', money(d.periodNetResultKobo)],
         // Profit & Loss — mirrors _plCard.
@@ -1304,7 +1322,7 @@ class _DailyReconciliationDetailScreenState
         ['Expired (at cost)', money(d.stockExpiredKobo)],
         ['Store transfers (at cost)', money(d.stockTransfersKobo)],
         ['Count corrections (at cost)', money(d.stockCountAdjustmentsKobo)],
-        ['Product deletions (at cost)', money(d.stockDeletionsKobo)],
+        ['Product deletions (stock, at cost)', money(d.stockDeletionsKobo)],
         ['Other stock movements (at cost)', money(d.stockOtherMovementsKobo)],
         ['Expected closing (at cost)', money(d.stockExpectedClosingKobo)],
         ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],
