@@ -232,9 +232,11 @@ int countShortageLossKobo(
   required bool Function(String?) inScope,
 }) {
   var total = 0;
-  for (final a in adjustments) {
-    if (!isCountReconciliationReason(a.reason) || a.quantityDiff >= 0) continue;
-    if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
+  for (final a in countShortageRows(
+    adjustments,
+    inSpan: inSpan,
+    inScope: inScope,
+  )) {
     final units = -a.quantityDiff;
     total += lossValueKobo(
       a.valueKobo,
@@ -244,6 +246,63 @@ int countShortageLossKobo(
   }
   return total;
 }
+
+/// The count-reconciliation SHORTAGE rows inside [inSpan] + [inScope] — the one
+/// definition of "which rows are a count shortage", so the money
+/// ([countShortageLossKobo]) and the footnote that discloses how it was valued
+/// ([legacyValuedRowCount]) can never disagree about the row set they describe.
+Iterable<StockAdjustmentData> countShortageRows(
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) => _lossRows(
+  adjustments,
+  isLoss: isCountReconciliationReason,
+  inSpan: inSpan,
+  inScope: inScope,
+);
+
+/// The damage/loss rows inside [inSpan] + [inScope] — the [countShortageRows]
+/// twin for the Damages figure, so its money and its footnote also describe one
+/// row set. Disjoint from [countShortageRows] by reason, so a loss is never
+/// counted as both.
+Iterable<StockAdjustmentData> damageLossRows(
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) => _lossRows(
+  adjustments,
+  isLoss: isDamageReason,
+  inSpan: inSpan,
+  inScope: inScope,
+);
+
+/// A loss is a DECREASE whose reason [isLoss] classifies, inside span + scope.
+Iterable<StockAdjustmentData> _lossRows(
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(String) isLoss,
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) => adjustments.where(
+  (a) =>
+      isLoss(a.reason) &&
+      a.quantityDiff < 0 &&
+      inSpan(a.createdAt) &&
+      inScope(a.storeId),
+);
+
+/// How many of [rows] were valued at TODAY's cost rather than at the cost drawn
+/// when they were written — i.e. how many carry no `value_kobo` snapshot and so
+/// took [lossValueKobo]'s legacy fallback (#200 / PRD #155 US 20).
+///
+/// #170 made every new loss snapshot its own cost, but rows written before it
+/// only ever recorded a quantity. Their money therefore moves whenever someone
+/// edits the product's buying price — the one case where a past loss figure is
+/// NOT frozen. The story asked for that fallback to be *labelled*, not just
+/// documented, so this count drives the report footnote. Zero means every row in
+/// the figure carries its own write-time cost and the figure cannot be restated.
+int legacyValuedRowCount(Iterable<StockAdjustmentData> rows) =>
+    rows.where((a) => a.valueKobo == null).length;
 
 // ── Expense date basis (#155 US 34 / #198) ───────────────────────────────────
 //
@@ -605,6 +664,10 @@ class ReconData {
     this.stockTransfersKobo = 0,
     this.stockCountAdjustmentsKobo = 0,
     this.stockDeletionsKobo = 0,
+    // #200 / US 20 — the two legacy-valuation row counts that drive the
+    // "valued at today's cost" footnotes. Optional-defaulted like the above.
+    this.legacyValuedDamageRows = 0,
+    this.legacyValuedShortageRows = 0,
     // #193 — the same write-off money as a positive P&L loss magnitude.
     this.deletionCostKobo = 0,
     this.vatBasis = VatBasis.inclusive,
@@ -767,8 +830,47 @@ class ReconData {
   // true residual [stockOtherMovementsKobo] they partition what used to be one
   // "Other movements" line, and still fold into [stockDerivedClosingKobo].
   final int stockTransfersKobo; // transfer_in / transfer_out legs
-  final int stockCountAdjustmentsKobo; // daily-count reconciliation adjustments
+
+  /// Daily-count reconciliation adjustments, at CURRENT cost — deliberately a
+  /// different basis from the P&L's [shortageCostKobo], which #182 moved onto the
+  /// #170 write-time snapshot. #200 asked whether this line should follow it. It
+  /// must not, on its own, for three reasons in ascending weight:
+  ///
+  ///  1. This term is built from **void-filtered** `stock_transactions`, while
+  ///     the snapshot lives on `stock_adjustments`, which has **no void column**.
+  ///     Reaching across would need the void filter carried over by hand (the
+  ///     adjustment id is already joined for the reason, so it is *possible*) —
+  ///     get it wrong and a VOIDED count correction contributes money with no
+  ///     matching units. That money-vs-units divergence is #186's subject.
+  ///  2. [stockDamagesKobo] has the identical property, so converting only this
+  ///     line would put two bases inside ONE card.
+  ///  3. Decisive: the flow equation ties to the perpetual system figure **by
+  ///     construction** only while every term shares one basis (opening is the
+  ///     rewind of the period's deltas — see [stockDerivedClosingKobo]). Swap one
+  ///     term and the rendered column stops adding up to Expected closing, which
+  ///     is a worse report failure than the one being fixed.
+  ///
+  /// So the card keeps one basis and now SAYS so, on screen and in the export:
+  /// one event reports two labelled figures instead of two silent ones. A real
+  /// basis change has to convert the whole card at once — #186.
+  final int stockCountAdjustmentsKobo;
+
   final int stockDeletionsKobo; // product-delete write-offs (#170 #7c)
+
+  // ── #200 / PRD #155 US 20: label the current-cost fallback ────────────────
+  // #170 froze every new loss at the cost it actually drew, so a later
+  // buying-price edit can't restate it. Rows written BEFORE #170 recorded only a
+  // quantity, so they still fall back to today's cost ([lossValueKobo]) — the
+  // one case where a past loss figure is NOT frozen. That was documented in
+  // dartdoc only; these counts put it on the report, where the person reading
+  // the money can see it.
+  /// Rows inside [damageCostKobo] valued at today's cost (no write-time
+  /// snapshot). 0 = the whole Damages figure is frozen.
+  final int legacyValuedDamageRows;
+
+  /// Rows inside [shortageCostKobo] valued at today's cost (no write-time
+  /// snapshot). 0 = the whole shortage/variance figure is frozen.
+  final int legacyValuedShortageRows;
 
   /// The product-delete write-off booked as a period LOSS (#193) — the cost of
   /// stock still on the shelf when a product was deleted, valued at the FIFO
@@ -1291,6 +1393,7 @@ ReconData computeReconData(
     stockDamagesKobo += (damagedUnits[pid] ?? 0) * cost;
     stockExpiredKobo += (expiredUnits[pid] ?? 0) * cost;
     stockTransfersKobo += (transfersDelta[pid] ?? 0) * cost;
+    // #200 — stays at CURRENT cost on purpose; see [stockCountAdjustmentsKobo].
     stockCountAdjustmentsKobo += (countAdjDelta[pid] ?? 0) * cost;
     stockDeletionsKobo += (deletionsDelta[pid] ?? 0) * cost;
     stockOtherMovementsKobo += (otherDelta[pid] ?? 0) * cost;
@@ -1333,9 +1436,13 @@ ReconData computeReconData(
   var damageCostKobo = 0;
   var damageRetailKobo = 0;
   var crateDamageDepositKobo = 0;
-  for (final a in adjustments) {
-    if (!isDamageReason(a.reason) || a.quantityDiff >= 0) continue;
-    if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
+  final damageRows =
+      damageLossRows(adjustments, inSpan: inSpan, inScope: inScope).toList();
+  // #200 / US 20 — how many of those rows take the current-cost fallback, so the
+  // report can LABEL them instead of the fallback living only in dartdoc. Read
+  // off the SAME row list the money below sums, so the two cannot drift.
+  final legacyValuedDamageRows = legacyValuedRowCount(damageRows);
+  for (final a in damageRows) {
     final units = -a.quantityDiff;
     final p = productById[a.productId];
     damageUnits += units;
@@ -1423,6 +1530,11 @@ ReconData computeReconData(
     productById: productById,
     inSpan: inSpan,
     inScope: inScope,
+  );
+  // #200 / US 20 — how many of those rows had NO snapshot and so were valued at
+  // today's cost. Drives the report footnote that labels the fallback.
+  final legacyValuedShortageRows = legacyValuedRowCount(
+    countShortageRows(adjustments, inSpan: inSpan, inScope: inScope),
   );
 
   // ── Supplier ledger flows (CEO only) ─────────────────────────────────────
@@ -1731,6 +1843,9 @@ ReconData computeReconData(
     stockTransfersKobo: stockTransfersKobo,
     stockCountAdjustmentsKobo: stockCountAdjustmentsKobo,
     stockDeletionsKobo: stockDeletionsKobo,
+    // #200 / US 20 — the legacy-valuation disclosure counts.
+    legacyValuedDamageRows: legacyValuedDamageRows,
+    legacyValuedShortageRows: legacyValuedShortageRows,
     // #193 — the same write-off, as the positive P&L loss magnitude.
     deletionCostKobo: deletionCostKobo,
     // #147 — the van channel's four additive lines.
