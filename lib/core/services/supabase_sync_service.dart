@@ -1738,6 +1738,15 @@ class SupabaseSyncService {
           List<dynamic>.from(walletCompens),
         );
       }
+      // pos_cancel_order (v2): the cancel also restores each sale line's consumed
+      // cost LAYER as a fresh cost_batches row (#201, migration 0169) — the
+      // server is the sole author on this path (the client's own #170 #7c restore
+      // is v1-only), and since #187 / 0167 the recost replay no longer rebuilds
+      // `qty_remaining`, so nothing else would bring those units' cost back.
+      final costBatches = map['cost_batches'];
+      if (costBatches is List && costBatches.isNotEmpty) {
+        await _restoreTableData('cost_batches', List<dynamic>.from(costBatches));
+      }
 
       // pos_create_customer (v2): server returns the canonical customer +
       // customer_wallet rows. Mirror their last_updated_at locally so the
@@ -1786,6 +1795,20 @@ class SupabaseSyncService {
         await _restoreTableData('payment_transactions', [
           Map<String, dynamic>.from(paymentTxn),
         ]);
+      }
+      // pos_record_sale_v2 (#201, migration 0169): the tender is SPLIT by money
+      // type, so one sale can mint up to three payment rows (goods `sale`,
+      // `crate_deposit`, `wallet_topup`). The singular key above carries only the
+      // goods row — kept for envelope compatibility — so restore the whole array
+      // too, or the deposit / top-up rows would exist only in the cloud until the
+      // next pull (the v2 path pre-inserts NO payment row locally). Idempotent
+      // with the singular handler: the same row upserts twice, unchanged.
+      final paymentTxns = map['payment_transactions'];
+      if (paymentTxns is List && paymentTxns.isNotEmpty) {
+        await _restoreTableData(
+          'payment_transactions',
+          List<dynamic>.from(paymentTxns),
+        );
       }
 
       // pos_record_expense (v2): server returns canonical expense and

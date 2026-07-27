@@ -59,6 +59,11 @@ void main() {
       await del('stock_transactions', 'product_id', id);
       await del('stock_adjustments', 'product_id', id);
       await del('inventory', 'product_id', id);
+      // #201 / migration 0169: an approved INCREASE now creates a Cost Batch on
+      // the RPC arm too (it used to move no cost at all). The batch FKs the
+      // product, and `del` swallows 23503 — so without this the product delete
+      // would silently fail and leak a row every run.
+      await del('cost_batches', 'product_id', id);
       await del('products', 'id', id);
     }
     if (storeId != null) await del('stores', 'id', storeId!);

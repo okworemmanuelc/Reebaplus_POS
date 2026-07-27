@@ -11,11 +11,22 @@ import '../../helpers/test_business_fixture.dart';
 /// Tier-2 integration tests for the v2 pos_cancel_order RPC. Hits real
 /// dev Supabase. Auto-skipped when env vars are absent.
 ///
+/// Since #201 / migration 0169 the cancel implements the #155 rule: it APPENDS
+/// one dated compensating row per reversible original and mutates nothing — no
+/// in-place void, deposits and top-ups reversed in their own money families
+/// (never as `refund`), every wallet leg reversed, and the drawn cost layer
+/// restored. These tests pin that rule; they will FAIL against a cloud that
+/// predates 0169 (which voided the originals and posted a full-amount `refund`
+/// for every row).
+///
 /// Note on cleanup:
 ///   * `stock_transactions`, `payment_transactions`, `wallet_transactions`,
 ///     `crate_ledger`, and `activity_logs` are append-only — the cancel
-///     RPC voids the originals AND inserts compensating rows. None of
-///     those rows can be deleted via REST. They leak per test.
+///     RPC inserts compensating rows. None of those rows can be deleted via
+///     REST. They leak per test. Since 0169 a cancel also inserts one
+///     `cost_batches` row per line; those leak too, which is harmless here —
+///     the store and product are created once in `setUpAll` and are themselves
+///     left behind, so nothing FK-blocks on them.
 ///   * `orders` and `order_items` are deletable in principle, but FK
 ///     references from the append-only ledgers (NO ACTION) block them.
 ///     They also leak.
@@ -205,10 +216,11 @@ void main() {
       expect(compStx['quantity_delta'], 2);
       expect(compStx['order_id'], s.orderId);
 
+      // #201 — nothing is voided in place any more; the key is retained for
+      // envelope compatibility and is always empty.
       final voided = map['voided_payments'] as List;
-      expect(voided, hasLength(1));
-      expect((voided.first as Map)['id'], s.paymentId);
-      expect((voided.first as Map)['voided_at'], isNotNull);
+      expect(voided, isEmpty,
+          reason: 'the append-only rule (#172): originals are never mutated');
 
       final refunds = map['refund_payments'] as List;
       expect(refunds, hasLength(1));
@@ -216,19 +228,30 @@ void main() {
       expect(refund['type'], 'refund');
       expect(refund['amount_kobo'], 200000);
       expect(refund['order_id'], s.orderId);
+      expect(refund['void_reason'], 'order_cancelled: customer changed mind',
+          reason: 'the correction reason is recorded on the compensating row');
 
       final compens = map['wallet_compensations'] as List;
       expect(compens, isEmpty,
-          reason: 'no wallet debit on this order, so nothing to compensate');
+          reason: 'no wallet leg on this order, so nothing to compensate');
 
-      // Cloud-side verification: original payment voided, refund row exists,
-      // sale stock_tx unchanged but a "return" row appeared.
+      final restoredBatches = map['cost_batches'] as List;
+      expect(restoredBatches, hasLength(1),
+          reason: 'one restored cost layer per sale line (#170 #7c / 0167)');
+      expect((restoredBatches.first as Map)['qty_remaining'], 2);
+
+      // Cloud-side verification: the ORIGINAL payment is untouched, a dated
+      // refund row was appended, sale stock_tx unchanged but a "return" appeared.
       final cloudPayments = await clients.adminClient
           .from('payment_transactions')
           .select()
           .eq('order_id', s.orderId);
       expect(cloudPayments, hasLength(2),
-          reason: 'one sale (voided) + one refund');
+          reason: 'one sale (intact) + one compensating refund');
+      final original = (cloudPayments as List).firstWhere(
+          (p) => (p as Map)['id'] == s.paymentId) as Map;
+      expect(original['voided_at'], isNull,
+          reason: 'no in-place void — the sale day is never rewritten');
 
       final cloudStx = await clients.adminClient
           .from('stock_transactions')
@@ -261,8 +284,10 @@ void main() {
       expect(second['stock_transactions'], isEmpty);
       expect(second['voided_payments'], isEmpty);
       expect(second['refund_payments'], isEmpty);
+      expect(second['cost_batches'], isEmpty,
+          reason: 'a replay must not append a second restored cost layer');
 
-      // Cloud invariant: still one sale + one return, one voided sale-pay
+      // Cloud invariant: still one sale + one return, one intact sale-pay
       // + one refund. No duplicates.
       final cloudStx = await clients.adminClient
           .from('stock_transactions')

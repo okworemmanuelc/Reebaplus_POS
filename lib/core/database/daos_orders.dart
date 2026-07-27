@@ -626,6 +626,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     return db.transaction(() async {
       final orderId = order.id.present ? order.id.value : UuidV7.generate();
 
+      // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate). The money
+      // rules themselves are now at parity: migration 0169 (#201) gave
+      // `pos_record_sale_v2` the #175 three-way tender split and the #169
+      // `store_id` stamp, so flipping this flag no longer silently re-bundles
+      // crate deposits and overpayments into "Cash sales". That parity holds only
+      // while 0169 is DEPLOYED — flipping the flag against a cloud that predates
+      // it reintroduces the single bundled, store-less `sale` row.
       final flagValue = await db.systemConfigDao.get(
         'feature.domain_rpcs_v2.record_sale',
       );
@@ -986,8 +993,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // cash, so no row is written (and `depositHeld ≤ paid` ⇒ all three are 0
       // anyway) — matching the pre-#175 single-row behaviour and never touching
       // `items.first` on an item-less ledger-only order.
-      // (v2's pos_record_sale_v2 mints one bundled `sale` row server-side and
-      // must mirror this split when it goes live — flagged to the RPC owners.)
+      // (This same split now exists on the v2 path: migration 0169 (#201) gave
+      // `pos_record_sale_v2` the same three-way rule and `store_id` stamp — ADR
+      // 0009, two implementations, one contract. It used to mint ONE bundled,
+      // store-less `sale` row. The one figure the two paths can still disagree
+      // on is a sale that applies a customer CRATE CREDIT: the cart subtracts it
+      // from `totalAmountKobo` but the envelope forwards only the per-line
+      // discount sum, so the server's goods cap is higher by the credit. That is
+      // an older v2-envelope gap — it already moves the order header's own
+      // `net_amount_kobo` — and 0169's header records it as a follow-up.)
       //
       // #142 (van-sales spec §5.3, ADR 0019 decision 2) — "cash follows
       // custody". A ROAD sale writes NONE of the three rows. The driver has the
@@ -1422,6 +1436,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String reason,
     String staffId,
   ) async {
+    // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate), and not
+    // before migration 0169 is DEPLOYED. #201 rewrote `pos_cancel_order` to the
+    // rules below — compensating rows only, deposits and top-ups reversed in
+    // their own families, every wallet leg reversed, the cost layer restored.
+    // Against a cloud that predates 0169 this flag posts the PRE-#155 rule
+    // instead: it voids each original payment IN PLACE (shrinking a sale day the
+    // owner may already have reviewed) AND posts a full-amount `refund` for every
+    // row — a double reversal that also mis-types a deposit collection and a
+    // top-up as `refund` — while leaving the payment-credit wallet leg standing.
     final flagValue = await db.systemConfigDao.get(
       'feature.domain_rpcs_v2.cancel_order',
     );
@@ -1444,20 +1467,33 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       )..where((o) => o.id.equals(orderId) & whereBusiness(o))).write(ordComp);
 
       if (useDomainRpc) {
-        // v2 path: thin envelope. The server mints UUIDs for compensating
-        // stock_tx, refund payments, and wallet credits; _applyDomainResponse
-        // inserts those rows locally from the RPC response so local and
-        // cloud row ids stay in sync. While the queue is pending, local
-        // shows the order as cancelled but the stock / payment / wallet
+        // v2 path: thin envelope. The server mints UUIDs for the compensating
+        // stock_tx, payment and wallet rows plus the restored cost layer;
+        // _applyDomainResponse inserts those rows locally from the RPC response
+        // so local and cloud row ids stay in sync. While the queue is pending,
+        // local shows the order as cancelled but the stock / payment / wallet
         // ledgers haven't been adjusted yet — they land when the RPC
         // returns or, if offline, when sync drains the outbox.
+        //
+        // The R2 hold that used to sit here named only the wallet leg. The
+        // payment DOUBLE REVERSAL (void in place + full-amount `refund` for every
+        // row, deposits and top-ups mis-typed) was the larger half and went
+        // undocumented. Both — and the missing cost-layer restore — are fixed in
+        // migration 0169 (#201).
+        //
+        // ONE HOLD REMAINS BEYOND #121 AND 0169's DEPLOY: the CRATE leg. This
+        // early return skips `reverseIssuedByCustomer` below, and 0169's
+        // `pos_cancel_order` writes no crate rows either — so cancelling a
+        // crate-track sale on this path leaves the customer's DERIVED crate debt
+        // standing for crates they never kept (the phantom-debt cluster in PRD
+        // #156). ADR 0020 makes the Crate Pool seam the sole crate-table writer,
+        // so the server cannot mint those rows without its own crate arm. Do not
+        // enable this flag for a crate business until that lands.
         final payload = <String, dynamic>{
           'p_business_id': requireBusinessId(),
           'p_actor_id': staffId,
           'p_order_id': orderId,
           'p_cancellation_reason': reason,
-          // R2: until pos_cancel_order mints the wallet payment-leg reversal,
-          // don't enable feature.domain_rpcs_v2.cancel_order.
         };
         await db.syncDao.enqueue(
           'domain:pos_cancel_order',
