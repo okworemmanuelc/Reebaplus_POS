@@ -304,6 +304,47 @@ DateTime cashMovementDate(PaymentTransactionData p) => p.createdAt;
   return (totalKobo: totalKobo, count: count);
 }
 
+/// Value the product-delete WRITE-OFF loss (#170 #7c) from the write-time
+/// snapshot (#193) — the deferral #176 left open. Finalising a delete runs each
+/// store's remaining stock through `InventoryDao.adjustStock` with the machine
+/// reason `product_deleted` (`InventoryDao.writeOffAllStockForDelete`), which
+/// draws the FIFO queue down oldest-first and records the drawn cost on the
+/// `stock_adjustments` row (`value_kobo`).
+///
+/// The snapshot is the only basis that can value this loss at all: the product is
+/// soft-deleted the instant the write-off lands, so the recon engine's
+/// `productById` map — built from NON-deleted products (`isDeleted.not()`) — can
+/// never resolve a cost for it again. Valuing it at "current cost" therefore
+/// yields 0 forever, which is exactly how a real loss came to read ₦0 (#193).
+/// This is the same treatment Damages ([lossValueKobo]) and count shortages
+/// ([countShortageLossKobo]) already get, and ADR 0014's 2026-07-25 addendum
+/// prescribes it for every *loss* surface: a later cost edit cannot restate a
+/// past period's loss. Legacy quantity-only rows (pre-#170, no snapshot) fall
+/// back to current cost per [lossValueKobo], which still resolves whenever the
+/// product is somehow still live.
+///
+/// Only in-span, in-scope REMOVALS count, and the reason match is exact
+/// ([isProductDeleteReason]) so a free-text "deleted extra" removal stays in the
+/// stock card's residual.
+int productDeleteLossKobo(
+  Iterable<StockAdjustmentData> adjustments, {
+  required Map<String, ProductData> productById,
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var total = 0;
+  for (final a in adjustments) {
+    if (!isProductDeleteReason(a.reason) || a.quantityDiff >= 0) continue;
+    if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
+    total += lossValueKobo(
+      a.valueKobo,
+      -a.quantityDiff,
+      productById[a.productId]?.buyingPriceKobo,
+    );
+  }
+  return total;
+}
+
 // ── Buckets (list cards + drill-down breakdown) ──────────────────────────────
 
 class ReconBucket {
@@ -564,6 +605,8 @@ class ReconData {
     this.stockTransfersKobo = 0,
     this.stockCountAdjustmentsKobo = 0,
     this.stockDeletionsKobo = 0,
+    // #193 — the same write-off money as a positive P&L loss magnitude.
+    this.deletionCostKobo = 0,
     this.vatBasis = VatBasis.inclusive,
     // #147 — the van channel's rollup. Optional-defaulted like the #170/#176
     // additions above, so every existing construction site stays valid.
@@ -727,6 +770,28 @@ class ReconData {
   final int stockCountAdjustmentsKobo; // daily-count reconciliation adjustments
   final int stockDeletionsKobo; // product-delete write-offs (#170 #7c)
 
+  /// The product-delete write-off booked as a period LOSS (#193) — the cost of
+  /// stock still on the shelf when a product was deleted, valued at the FIFO
+  /// snapshot the write-off recorded ([productDeleteLossKobo]).
+  ///
+  /// A POSITIVE magnitude, exactly like [damageCostKobo] and [shortageCostKobo],
+  /// so [netProfitKobo] and [periodNetResultKobo] subtract it as one more loss
+  /// line in the same family. Deleting a product with stock on it destroys real
+  /// value the business paid for, so it counts against the period result rather
+  /// than being listed for information only.
+  ///
+  /// **Not the same figure as [stockDeletionsKobo]**, and deliberately so — the
+  /// pair mirrors [damageCostKobo] (P&L, write-time snapshot) vs
+  /// [stockDamagesKobo] (stock card, current cost). ADR 0014 pins the stock card
+  /// to current cost "on purpose" so its closing identity ties to the rewound
+  /// perpetual figure, while its 2026-07-25 addendum puts every *loss* surface on
+  /// the snapshot. One consequence is disclosed rather than hidden: because a
+  /// deleted product is filtered out of every current-cost lookup, the stock
+  /// card's own Product-deletions term still reads ₦0 (it is "uncosted" by that
+  /// card's rule) even though this figure — the one that reaches the P&L, the net
+  /// result and the frozen day close — carries the full value.
+  final int deletionCostKobo;
+
   /// The van channel's four report lines (#147). Purely additive — see
   /// [ReconVanRollup].
   final ReconVanRollup van;
@@ -762,13 +827,18 @@ class ReconData {
   /// story 27) and [forfeitIncomeKobo] (kept crate deposits, story 7) — before
   /// netting out expenses and losses. Quick-sale takings are excluded from COGS
   /// (none is recorded) and from gross margin, per the transparency footnote.
+  ///
+  /// [deletionCostKobo] joins Damages as a loss line (#193): stock written off
+  /// because its product was deleted is value the business paid for and no longer
+  /// has, so it belongs in the result and not merely in a stock-card note.
   int get netProfitKobo =>
       grossProfitKobo +
       uncostedTakingsKobo +
       forfeitIncomeKobo -
       expensesKobo -
       damageCostKobo -
-      crateDamageDepositKobo;
+      crateDamageDepositKobo -
+      deletionCostKobo;
 
   // ── Cash-flow summary getters (ADR 0014) ─────────────────────────────────
   /// **Cash from drivers** (#147, spec §8.2) — the period's cash-tender
@@ -869,6 +939,9 @@ class ReconData {
       expensesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
+      // #193 — deleted-product write-offs sit with Damages and Shortages as a
+      // realized loss, not as an unbooked stock-card footnote.
+      deletionCostKobo -
       shortageCostKobo;
   /// Point-in-time net worth, honest about crate liabilities (#163) and
   /// in-transit stock (#170 #7b). ASSETS: inventory at cost, stock dispatched
@@ -1179,6 +1252,18 @@ ReconData computeReconData(
       add(otherDelta, pid, delta);
     }
   }
+  // #193 — the delete write-off as a P&L LOSS, valued from each row's OWN
+  // write-time `value_kobo` snapshot. Deliberately NOT the basis of the stock
+  // card's `stockDeletionsKobo` term below: ADR 0014 fixes that card on current
+  // cost so its closing identity ties to the rewound perpetual figure, exactly as
+  // `stockDamagesKobo` (current cost) and `damageCostKobo` (snapshot) already
+  // split. See [productDeleteLossKobo].
+  final deletionCostKobo = productDeleteLossKobo(
+    adjustments,
+    productById: productById,
+    inSpan: inSpan,
+    inScope: inScope,
+  );
   var stockOpeningKobo = 0;
   var stockReceivedKobo = 0;
   var stockCogsKobo = 0;
@@ -1646,6 +1731,8 @@ ReconData computeReconData(
     stockTransfersKobo: stockTransfersKobo,
     stockCountAdjustmentsKobo: stockCountAdjustmentsKobo,
     stockDeletionsKobo: stockDeletionsKobo,
+    // #193 — the same write-off, as the positive P&L loss magnitude.
+    deletionCostKobo: deletionCostKobo,
     // #147 — the van channel's four additive lines.
     van: ReconVanRollup(
       salesKobo: vanSalesKobo,
