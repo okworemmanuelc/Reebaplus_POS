@@ -233,6 +233,65 @@ int countShortageLossKobo(
   return total;
 }
 
+// ── Expense date basis (#155 US 34 / #198) ───────────────────────────────────
+//
+// An expense row carries TWO dates and they answer different questions:
+//   • `expense_date` — the day the owner says the money was spent, chosen in
+//     the §20.2 date picker. This is the REPORTING basis.
+//   • `created_at`   — the moment the row was keyed into the app. This is the
+//     CUSTODY basis: when the money actually left the drawer.
+// Saturday's diesel keyed in on Tuesday is one spend with two honest dates, and
+// each figure names which one it uses ([expenseReportingDate] vs
+// [cashMovementDate]) so the two can never silently drift apart again.
+
+/// The date an expense is REPORTED on — the user-picked `expense_date`.
+///
+/// Every expense figure in the app now shares this basis: the Expenses screen
+/// and its monthly budget (`expenses_screen.dart`), the Home dashboard's Total
+/// Expenses (`home_screen.dart`) and — since #198 — the reconciliation P&L /
+/// Business Statement. Before #198 the P&L alone summed on `created_at`, so a
+/// backdated expense landed in a different period on every screen (#155 US 34;
+/// `MONEY_FLOW_AUDIT.md` § Expenses).
+///
+/// Never null: the column is NOT NULL with a `now()` default both in Drift and
+/// in the cloud (`0073_expenses_full.sql`), and legacy rows were backfilled
+/// from `created_at` on both sides (Drift v31 `columnTransformer`, then the 0073
+/// `UPDATE`). So there is no null case to fall back for — an un-picked date
+/// already reads as the record time.
+DateTime expenseReportingDate(ExpenseData e) => e.expenseDate;
+
+/// The date a cash tender is counted on in the cash-flow card — its own
+/// `created_at`, i.e. the moment the money moved through the drawer.
+///
+/// **The deliberate exception to [expenseReportingDate]** (#155 US 34 / #198).
+/// The cash card states cash MOVEMENT, so custody timing wins: cash left the
+/// drawer when it left the drawer, and backdating a receipt cannot un-empty a
+/// till that was already counted. That is why an expense entered today for last
+/// week shows in last week's P&L but in THIS period's "Expenses paid (cash)" —
+/// the two figures are answering different questions, and the reconciliation
+/// screen prints that in plain words under both cards.
+DateTime cashMovementDate(PaymentTransactionData p) => p.createdAt;
+
+/// Sum the period's expenses for the P&L / Business Statement: approved only
+/// (§20.4 — pending awaits the CEO and rejected is never spend), not
+/// soft-deleted, in store scope, and — the #198 fix — in span on the
+/// user-picked [expenseReportingDate] rather than the record time.
+({int totalKobo, int count}) approvedExpensesInPeriod(
+  Iterable<ExpenseData> expenses, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var totalKobo = 0;
+  var count = 0;
+  for (final e in expenses) {
+    if (e.isDeleted || e.status != 'approved') continue;
+    if (!inSpan(expenseReportingDate(e)) || !inScope(e.storeId)) continue;
+    totalKobo += e.amountKobo;
+    count++;
+  }
+  return (totalKobo: totalKobo, count: count);
+}
+
 // ── Buckets (list cards + drill-down breakdown) ──────────────────────────────
 
 class ReconBucket {
@@ -1132,14 +1191,32 @@ ReconData computeReconData(
   }
 
   // ── Expenses (approved, in span, in scope) ───────────────────────────────
-  var expensesKobo = 0;
-  var expensesCount = 0;
-  for (final e in expenses) {
-    if (e.expense.isDeleted || e.expense.status != 'approved') continue;
-    if (!inSpan(e.expense.createdAt) || !inScope(e.expense.storeId)) continue;
-    expensesKobo += e.expense.amountKobo;
-    expensesCount++;
-  }
+  // #198 (#155 US 34): in span on the user-picked `expense_date`
+  // ([expenseReportingDate]), NOT the record time it used to use — so
+  // Saturday's diesel keyed in on Tuesday is reported in Saturday's period here
+  // exactly as it already was on the Expenses screen, the budget and Home.
+  //
+  // The cash-flow card below deliberately does NOT follow this basis: it counts
+  // the drawer movement on its own record time ([cashMovementDate]), because
+  // custody timing is the question a cash figure answers. So these two expense
+  // figures can legitimately differ for the same money — the screen says so
+  // under both cards (`daily_reconciliation_detail_screen.dart`).
+  //
+  // One-off consequence of the switch: a day CLOSED before #198 froze its
+  // `expensesKobo` on the old record-time basis (`dailyClosingFiguresFrom`,
+  // first-writer-wins in `DailyClosingsDao`). Re-opening such a day can
+  // therefore show an as-reviewed-vs-current delta (#174) on Expenses / Net
+  // profit that is this basis correction, not money that moved. This fix does
+  // NOT back-patch frozen closes — a persisted close is the record of what was
+  // reviewed. Whether the delta view should label a basis change as such is the
+  // day-close / delta issues' call, not this one's.
+  final periodExpenses = approvedExpensesInPeriod(
+    expenses.map((e) => e.expense),
+    inSpan: inSpan,
+    inScope: inScope,
+  );
+  final expensesKobo = periodExpenses.totalKobo;
+  final expensesCount = periodExpenses.count;
 
   // ── Damages (reason names a loss; a removal) ─────────────────────────────
   // §17.2 crate-aware: a damage flagged +cratelost / +crateempty also forfeits
@@ -1301,6 +1378,15 @@ ReconData computeReconData(
   // banked as a sale. `method` casing drifts ('Cash'/'cash'), so match
   // case-insensitively. A cancelled deposit sale posts a negative `crate_deposit`
   // row, so the held line nets a same-period collect-then-cancel to zero.
+  //
+  // #198 — DELIBERATE EXCEPTION to the expense reporting basis. Every other
+  // expense figure in the app is on the user-picked `expense_date`
+  // ([expenseReportingDate]); "Expenses paid (cash)" here stays on the payment
+  // row's own record time ([cashMovementDate]) because this card states cash
+  // CUSTODY: cash left the drawer when it left the drawer, and backdating a
+  // receipt cannot un-empty a till that was already counted. Keep it that way —
+  // the divergence is disclosed to the CEO on the reconciliation screen, under
+  // both the Profit & Loss and the Cash flow cards.
   var cashSalesKobo = 0;
   var cashDebtsCollectedKobo = 0;
   var cashRefundsKobo = 0;
@@ -1309,7 +1395,7 @@ ReconData computeReconData(
   for (final p in payments) {
     if (p.voidedAt != null) continue;
     if (p.method.toLowerCase() != 'cash') continue;
-    if (!inSpan(p.createdAt)) continue;
+    if (!inSpan(cashMovementDate(p))) continue;
     if (p.type == 'sale') {
       cashSalesKobo += p.amountKobo;
     } else if (p.type == 'wallet_topup') {
