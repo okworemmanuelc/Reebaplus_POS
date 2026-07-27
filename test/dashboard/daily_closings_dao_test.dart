@@ -9,6 +9,9 @@
 //     snapshot is never overwritten, and no second push is enqueued.
 //   * The id is DETERMINISTIC from (business_id, business_date) so two devices
 //     converge on one row instead of racing two ids.
+//   * The row is BUSINESS-WIDE (#191): `store_scope_id` is always NULL, so the
+//     accident of which store the opener was locked to can never decide — under
+//     first-writer-wins, permanently — what that day's baseline means.
 //
 // Asserts the resulting rows + the enqueued payload at the public DAO surface —
 // never internal call order.
@@ -52,7 +55,6 @@ void main() {
     try {
       final id = await boot.db.dailyClosingsDao.snapshotIfAbsent(
         businessDate: '2026-07-20',
-        storeScopeId: null,
         figures: _figures(),
       );
 
@@ -64,6 +66,9 @@ void main() {
       expect(rows.single.totalSalesKobo, 500000);
       expect(rows.single.netProfitKobo, 120000);
       expect(rows.single.itemsSold, 42);
+      // #191 — business-wide by construction. The DAO has no store parameter to
+      // pass a lock through, and the column it does write is NULL.
+      expect(rows.single.storeScopeId, isNull);
 
       // Deterministic id from the natural key.
       expect(
@@ -82,6 +87,8 @@ void main() {
       expect(payload['business_id'], boot.businessId);
       expect(payload['business_date'], '2026-07-20');
       expect(payload['total_sales_kobo'], 500000);
+      expect(payload['store_scope_id'], isNull,
+          reason: 'a peer must restore the same business-wide row (#191)');
       expect(payload['reviewed_at'], isNotNull);
       expect(payload['created_at'], isNotNull);
     } finally {
@@ -95,7 +102,6 @@ void main() {
     try {
       final firstId = await boot.db.dailyClosingsDao.snapshotIfAbsent(
         businessDate: '2026-07-20',
-        storeScopeId: null,
         figures: _figures(totalSalesKobo: 500000, netProfitKobo: 120000),
       );
 
@@ -103,7 +109,6 @@ void main() {
       // and tries to snapshot again. The natural key already has a winner.
       final secondId = await boot.db.dailyClosingsDao.snapshotIfAbsent(
         businessDate: '2026-07-20',
-        storeScopeId: null,
         figures: _figures(totalSalesKobo: 999999, netProfitKobo: 888888),
       );
 
@@ -134,12 +139,10 @@ void main() {
     try {
       await boot.db.dailyClosingsDao.snapshotIfAbsent(
         businessDate: '2026-07-20',
-        storeScopeId: null,
         figures: _figures(),
       );
       await boot.db.dailyClosingsDao.snapshotIfAbsent(
         businessDate: '2026-07-21',
-        storeScopeId: null,
         figures: _figures(totalSalesKobo: 111111),
       );
 
@@ -167,7 +170,6 @@ void main() {
 
       await boot.db.dailyClosingsDao.snapshotIfAbsent(
         businessDate: '2026-07-20',
-        storeScopeId: null,
         figures: _figures(),
       );
 
