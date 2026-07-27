@@ -423,6 +423,20 @@ class _DailyReconciliationDetailScreenState
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
+        // #200 / US 20 — label the current-cost fallback. Newer damages are held
+        // at the cost they actually drew, so editing a buying price today cannot
+        // move them; older records kept only a quantity, so they DO move. Saying
+        // so is the difference between a frozen figure and one that looks frozen.
+        if (d.legacyValuedDamageRows > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            '${fmtNumber(d.legacyValuedDamageRows)} older damage record(s) are '
+            'valued at today\'s cost — they were saved before the cost of each '
+            'loss was recorded, so changing a buying price also changes this '
+            'figure.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
       ],
       badge: _deltaBadge(context, theme, delta),
     );
@@ -726,11 +740,33 @@ class _DailyReconciliationDetailScreenState
                       'and expiries — reported profit reconciles.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
-        ] else ...[
+        ],
+        // #200 — the card's valuation basis, stated on EVERY view rather than
+        // only when no count exists (the old `else` branch). The flow lines above
+        // price the units that MOVED at today's cost, which is what lets the
+        // column add up to Expected closing; the Profit & Loss card values the
+        // same losses at what they actually cost when they happened. One event,
+        // two figures, each labelled — see the report note on #186.
+        const SizedBox(height: 6),
+        Text(
+          d.hasStockCount
+              ? 'The lines above value the units that moved at today\'s cost, so '
+                    'the column adds up to Expected closing. What those losses '
+                    'actually cost you is on the Profit & Loss card.'
+              : 'The lines above value the units that moved at today\'s cost. No '
+                    'stock count in this period, so there is no variance to '
+                    'reconcile against.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+        // #200 / US 20 — the shortage/variance figure's own current-cost
+        // fallback, labelled where that figure is shown.
+        if (d.legacyValuedShortageRows > 0) ...[
           const SizedBox(height: 6),
           Text(
-            'Valued at current cost. No stock count in this period, so there is '
-            'no variance to reconcile against.',
+            '${fmtNumber(d.legacyValuedShortageRows)} older shortage record(s) '
+            'are valued at today\'s cost — they were saved before the cost of '
+            'each shortage was recorded, so changing a buying price also changes '
+            'the variance.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -1201,6 +1237,19 @@ class _DailyReconciliationDetailScreenState
         if (d.crateDamageDepositKobo > 0)
           ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
         ['Stock shortages (at cost)', money(d.shortageCostKobo)],
+        // #200 / US 20 — the export carries the same disclosure the screen shows:
+        // which of the two loss figures above lean on today's cost because the
+        // record predates loss-cost snapshotting. Omitted when nothing does.
+        if (d.legacyValuedDamageRows > 0)
+          [
+            'Damages — older records valued at today\'s cost',
+            '${d.legacyValuedDamageRows}',
+          ],
+        if (d.legacyValuedShortageRows > 0)
+          [
+            'Stock shortages — older records valued at today\'s cost',
+            '${d.legacyValuedShortageRows}',
+          ],
         ['Net result for period', money(d.periodNetResultKobo)],
         // Profit & Loss — mirrors _plCard.
         ['Revenue (costed, gross)', money(d.costedRevenueKobo)],
@@ -1244,10 +1293,18 @@ class _DailyReconciliationDetailScreenState
         ['Opening stock (at cost)', money(d.stockOpeningKobo)],
         ['Goods received (at cost)', money(d.stockReceivedKobo)],
         ['COGS (at current cost)', money(d.stockCogsKobo)],
-        ['Damages (stock, at cost)', money(d.stockDamagesKobo)],
+        // #200 — this block is the stock FLOW: every line prices the units that
+        // moved at TODAY's cost, which is what makes it add up to Expected
+        // closing. Spelled out here because the same export also carries the
+        // Profit & Loss "Damages (at cost)" row above, which is the write-time
+        // cost of the very same damages — one event, two labelled figures.
+        ['Damages (stock, units at today\'s cost)', money(d.stockDamagesKobo)],
         ['Expired (at cost)', money(d.stockExpiredKobo)],
         ['Store transfers (at cost)', money(d.stockTransfersKobo)],
-        ['Count corrections (at cost)', money(d.stockCountAdjustmentsKobo)],
+        [
+          'Count corrections (units at today\'s cost)',
+          money(d.stockCountAdjustmentsKobo),
+        ],
         ['Product deletions (at cost)', money(d.stockDeletionsKobo)],
         ['Other stock movements (at cost)', money(d.stockOtherMovementsKobo)],
         ['Expected closing (at cost)', money(d.stockExpectedClosingKobo)],
