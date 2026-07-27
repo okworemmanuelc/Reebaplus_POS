@@ -111,6 +111,23 @@ calendar day's reconciliation detail:
   captured scope. An unchanged reviewed day shows no badge — silent history
   mutation becomes visible history mutation. Purely observational: no money flow
   or existing figure changes.
+
+> **Superseded 2026-07-27 by #191 (ADR 0022) — the store-scope half of the two
+> clauses above no longer holds.** Capturing in the opener's active store scope,
+> and gating the badge on that scope still matching, meant whichever scope opened
+> a day first permanently decided what that day's baseline meant — and a
+> business-wide baseline could never be captured at all. It had already bitten
+> production: the one existing `daily_closings` row carries a non-null
+> `store_scope_id`, so that day was badge-blind at All Stores forever.
+>
+> A day close is now **one business-wide record**: figures are captured *and*
+> compared business-wide, ignoring the active lock and store confinement (vans
+> stay excluded), and the badge renders at every viewing scope. `store_scope_id`
+> is **legacy — always written NULL, never read**, which makes the fix
+> retroactive for the existing prod row with no data change and no schema change.
+> The frozen figure set, the deterministic id and first-writer-wins are all
+> unchanged. See ADR 0022 for the decision and the rejected per-scope
+> alternative.
 - **Residual (accepted).** An offline both-write race on the same day resolves
   last-write on the cloud upsert (the row is not a void-able ledger, so no
   immutability trigger — that would jam the outbox); each device still keeps the
