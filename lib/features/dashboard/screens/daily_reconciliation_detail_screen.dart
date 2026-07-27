@@ -328,6 +328,9 @@ class _DailyReconciliationDetailScreenState
     final netColor = net >= 0
         ? theme.extension<AppSemanticColors>()!.success
         : theme.colorScheme.error;
+    // #198 — only disclose the two expense date bases when there is expense
+    // money in the period on either basis; an expense-free day needs no note.
+    final hasExpenseFigures = d.expensesKobo != 0 || d.cashExpensesKobo != 0;
     return _card(
       context,
       theme,
@@ -423,6 +426,20 @@ class _DailyReconciliationDetailScreenState
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
+        // #198 (#155 US 34) — the two expense date bases, said out loud. Profit
+        // uses the date the owner picked; the cash card uses the day the drawer
+        // actually moved. Without this note a CEO reads two different expense
+        // figures on one screen and assumes one of them is broken.
+        if (hasExpenseFigures) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Expenses are counted on the date you picked when you recorded them, '
+            'so a bill entered late still lands in the period it was spent. Cash '
+            'flow counts that same money on the day it left the drawer, so the '
+            'two expense figures can differ.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
       ],
       badge: _deltaBadge(context, theme, delta),
     );
@@ -506,6 +523,9 @@ class _DailyReconciliationDetailScreenState
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
     final netColor = d.netCashMovementKobo >= 0 ? successColor : dangerColor;
+    // #198 — mirrors the Profit & Loss card: name the basis wherever an expense
+    // figure is shown, so the CEO can see why the two differ.
+    final hasExpenseFigures = d.expensesKobo != 0 || d.cashExpensesKobo != 0;
     return _card(
       context,
       theme,
@@ -555,6 +575,15 @@ class _DailyReconciliationDetailScreenState
           'held in the drawer, kept out of the net.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
+        if (hasExpenseFigures) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Expenses here are counted on the day the money left the drawer, not '
+            'the date picked on the expense — so this can differ from Expenses '
+            'in Profit & Loss. Both are right: this card follows the cash.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
       ],
       badge: _deltaBadge(context, theme, delta),
     );
