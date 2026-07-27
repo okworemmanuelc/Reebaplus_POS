@@ -132,9 +132,10 @@ void main() {
     addTearDown(container.dispose);
 
     // Pump inside runAsync so the real event loop drains: drift query streams
-    // emit, and initState's _loadSales (await .first + a customSelect) runs to
-    // completion. Under the fake clock that tester.pump() uses, those never
-    // settle, which also stalls db.close() at teardown.
+    // emit, and initState's _loadMetrics (await .first + four business-scoped
+    // DAO aggregates) runs to completion. Under the fake clock that
+    // tester.pump() uses, those never settle, which also stalls db.close() at
+    // teardown.
     await tester.runAsync(() async {
       await tester.pumpWidget(
         UncontrolledProviderScope(

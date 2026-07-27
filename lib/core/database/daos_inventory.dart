@@ -778,6 +778,27 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('stock_transactions', row);
   }
 
+  /// How many stock movements this staff member has performed in the bound
+  /// business — one of the Staff detail screen's activity figures (#205). Voided
+  /// rows still count: the figure is "how much did this person move stock",
+  /// which is what the screen has always shown.
+  ///
+  /// Business-scoped (architecture.md invariant #5): the screen's raw
+  /// `customSelect` carried no `business_id` predicate, so a device holding two
+  /// businesses' rows counted both.
+  Future<int> countPerformedByStaff(String userId) async {
+    final countCol = stockTransactions.id.count();
+    final row =
+        await (selectOnly(stockTransactions)
+              ..addColumns([countCol])
+              ..where(
+                whereBusiness(stockTransactions) &
+                    stockTransactions.performedBy.equals(userId),
+              ))
+            .getSingle();
+    return row.read(countCol) ?? 0;
+  }
+
   Stream<List<StockTransactionData>> watchLedger(String productId) {
     return (select(stockTransactions)
           ..where(
