@@ -20,11 +20,71 @@ reconciling a diverged `supabase_migrations` ledger (prod had applied
 Push-notifications (#138) parked: its migration renumbered `0153→0159` on
 `feat/push-notifications-fcm` (idempotent). GitHub #170/#174/#176 CLOSED; umbrella
 **#155 left open** for owner QA. Post-deploy verify green (all money columns +
-`daily_closings` RLS present; advisors 0 ERROR). **The app is now safe to release
-to devices.** Post-PRD follow-ups now ALSO merged + DEPLOYED (2026-07-25): #183
-RPC catalogue-price parity (cloud **0160** live) + #182 count-shortage write-time
-valuation (app-only) — both passed `/code-review`, PRs #185/#184 merged (main
-`fae9ab3`); follow-up **#186** filed (variance-card money-vs-units basis divergence).
+`daily_closings` RLS present; advisors 0 ERROR). The app is releasable to devices
+(the outbox will not jam on unknown columns) — **but see the close-out audit below
+for money defects that survived the deploy.** Post-PRD follow-ups now ALSO merged +
+DEPLOYED (2026-07-25): #183 RPC catalogue-price parity (cloud **0160** live) + #182
+count-shortage write-time valuation (app-only) — both passed `/code-review`, PRs
+#185/#184 merged (main `fae9ab3`); follow-up **#186** filed (variance-card
+money-vs-units basis divergence).
+
+### PRD #155 close-out audit (2026-07-25) — 20 follow-ups filed, #187–#206
+Seven parallel agents audited all 38 user stories against the shipped code; every
+headline finding was independently re-verified. `flutter analyze` clean, **745 tests
+pass**. Result: **23 stories done, 12 partial, 3 never implemented** — so "all 8
+slices closed and deployed" did **not** mean the PRD was delivered.
+
+Never implemented: **US 22** (approved stock increase records its cost — no column
+exists) → #197; **US 34** (one expense date basis — recon P&L still filters
+`expenses.createdAt`) → #198; **US 37** (warn on receiving with no buying price) →
+#199.
+
+Live money defects, ranked (all filed, none fixed yet):
+1. **#187 (P0)** — `pos_recost_product_store` (`0133:207-267`) replays FIFO from
+   `qty_original` against **sales only**, then overwrites `qty_remaining`. It fires on
+   every sale *and* cancel push, so it **resurrects every non-sale draw #170 added**:
+   damages/shortages counted as a loss *and* re-sold at real COGS, transfer sources
+   regaining phantom coverage, cancel restoring units twice. Defeats 7a+7b+7c. Blast
+   radius on prod data not yet quantified — **no repair pass without sign-off**.
+2. **#188** — offline double-Confirm still double-refunds a deposit. Only the status
+   re-read landed; the per-(order, manufacturer) settlement-row skip the PRD specified
+   did not, and legs use fresh `UuidV7` so the PK upsert cannot collapse them. The
+   existing "two devices" test runs sequentially on one converged DB and cannot fail.
+3. **#189** — three stock-increase paths (approval, Manager/CEO add, count surplus)
+   mint cost-0 batches that #41's backfill can never reach ⇒ 0 COGS forever.
+4. **#190** — deposit releases at Confirm/§18.3 are typed `refund`, so held money is
+   subtracted from period net result — contradicting `markCancelled`'s own documented
+   rule.
+5. **#191** — `daily_closings` freezes to the **first opener's store lock**; already
+   happened in prod, so that day's All-Stores view is permanently badge-blind. Needs a
+   product call on the natural key.
+6. **#192** — the changed-since-review delta covers only 4 of 16 frozen figures;
+   Managers can get the banner with zero badges; the snapshot can freeze a
+   crate-business net profit mid-load.
+7. Also: #193 product-delete write-off reads ₦0 in recon · #194 `CreditLedgerService`
+   never stamps `store_id` (US 36) · #195 Profit report isn't store-scoped, so the
+   single Total Sales definition fails under a store lock · #196 the `refunded`-status
+   residue leaves "Refunds Issued" permanently 0 · #200 report-truth residuals
+   (concession has no reader, reprints omit the discount line, legacy losses
+   unlabeled).
+
+Latent (flag-gated, **#201**): `pos_record_sale_v2` bundles one payment row with no
+`store_id`; `pos_cancel_order` still voids in place *and* double-reverses; the web
+`0141` adjustment RPC writes no cost. A flag flip silently reverts rules #155 fixed.
+
+Process debt filed: **#202** dead-code sweep never ran (all three promised removals
+linger) · **#206** golden fixtures have no cancel scenario and assert
+`catalogue_price_kobo` nowhere (so `BUILD_LOG` 2026-07-25's "pins the parity" claim
+was wrong — corrected) · **#203** the promised manufacturer deposit-**outflow** PRD ·
+**#204** cloud `checkout_order` deposit-0 parity gap · **#205** (unrelated, found in
+passing) `staff_detail_screen` raw `customSelect` on `orders` with no `business_id`.
+
+Docs corrected in this pass: ADR 0021 (two stale facts — it claimed schemaVersion 70
+and `0160_…daily_closings.sql`) and a new §4 recording the four settled product
+decisions that previously lived only in this tracker; ADR 0014's deferred day-close
+alternative now points at #174, plus a loss-valuation-basis addendum; `CONTEXT.md`
+gained the **Money & Payments** section it never had; this file gained the missing
+#172 section. **Umbrella #155 closed** with the audit summary.
 
 ### #182 — count-shortage loss valued at the #170 write-time snapshot (audit #30) — CODE-COMPLETE (2026-07-25)
 The last loss surface still recomputed at *current* cost. #170 gave damages a
@@ -314,6 +374,39 @@ migration** (the `transfer` method, the `crate_deposit`/`wallet_topup` types, an
   `extra_payments` multiset, and a `dart_arm_only` flag; 2 new dart-arm-only scenarios
   (overpayment; money-track deposit) skipped by the web RPC arm until it implements the
   split. `flutter analyze` clean; full suite green (see session log).
+
+### Money integrity #3 (#172) — Cancel writes a compensating cash-out row — DEPLOYED (2026-07-24)
+*Section added 2026-07-25 by the #155 close-out audit — this was the one slice of
+eight with no tracker entry of its own (it appeared only in the roll-up and as an
+aside inside #175's entry).*
+
+First correction slice to consume the #169 seam. `OrdersDao.markCancelled` selects
+the order's **live** payment rows and posts a compensating row per family via
+`postReversalPayment` (`at: now`), leaving the original rows untouched:
+- `sale` → a positive `refund` row for the amount actually paid, dated the **cancel**
+  day. Post-#175 the `sale` row is goods-only, so the old
+  `crateDepositPaidKobo` subtraction became a double-count and was retired; legacy
+  pre-#175 bundled rows refund their full amount, matching how they were counted.
+- `crate_deposit` → a **negative `crate_deposit`** row (in-family), so the held-deposit
+  line nets to zero. Deliberately *not* a `refund`: the collection was never in Cash
+  sales, so a refund row would break the symmetry and dock profit for money that was
+  never revenue.
+- `wallet_topup` → a negative `wallet_topup` row so "Debts collected" nets to zero.
+
+The seam copies each row's typed reference, store and tender, so a cash tender yields
+a cash reversal. The crate/wallet deposit-family legs were already done by #162; this
+slice added only the money leg. The dead `refunded` order status was retired in the
+reconciliation (refunds now derive from `type == 'refund'` rows).
+
+Tests: `test/orders/cancel_cashout_test.dart` — the sale day's cash figure is unchanged
+and the refund lands on the cancel day; goods refunded once with the deposit netting to
+zero.
+
+**Known residuals** (filed by the close-out audit, see below): only the *cash* figures
+are day-honest — the original day's Total Sales/COGS/items-sold still shrink, because
+revenue is status-derived, with #174's delta badge as the accepted mitigation. The
+`refunded` status residue survives on the Orders screen (#196), and the v2
+`pos_cancel_order` RPC still voids in place (#201).
 
 ### Money integrity #4 (#173) — expense reject/delete + wallet top-up void post reversal rows — CODE-COMPLETE (2026-07-24)
 Second correction slice on the #169 seam (parent PRD #155). CODE-ONLY — **no

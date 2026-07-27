@@ -116,10 +116,47 @@ calendar day's reconciliation detail:
   immutability trigger — that would jam the outbox); each device still keeps the
   first snapshot it knows locally. Observational-only, so acceptable.
 
-Drift `schemaVersion` → 70 (66–69 reserved for parallel money-integrity
-branches; renumbered contiguous at merge); cloud migration
-`0160_money_integrity_daily_closings.sql`. One `SyncedTable` registry entry
+Drift `schemaVersion` **v68** for `daily_closings` (66–69 were reserved for the
+parallel money-integrity branches and renumbered contiguous at merge; the app
+landed on **69** after #176's `order_items.catalogue_price_kobo`); cloud migration
+**`0157_money_integrity_daily_closings.sql`**. One `SyncedTable` registry entry
 (`tenantScoped`, append/first-write-only — no `scrubCreatedAt`, no `hardDelete`).
+
+> Corrected 2026-07-25 by the #155 close-out audit: this paragraph previously
+> read "`schemaVersion` → 70" and `0160_money_integrity_daily_closings.sql`.
+> Both were pre-merge reservations that the renumbering superseded — `0160` is
+> in fact #183's `0160_money_integrity_rpc_catalogue_price.sql`.
+
+## 4. Report-truth decisions settled during implementation
+
+PRD #155's decomposition listed four open product decisions gating the later
+slices. All four were settled and implemented; recorded here because the
+progress tracker is an implementation log, not a decision record.
+
+- **VAT basis: INCLUSIVE by default**, with an opt-in exclusive toggle, and
+  report-only. Nigerian shop prices are quoted VAT-inclusive, so an exclusive
+  computation overstates what the owner owes. `computeVatKobo` =
+  `base × rate / (10000 + rate)` (`lib/core/settings/vat_settings.dart:73-85`);
+  the setting has exactly one non-test consumer, which is what makes
+  "report-only" true rather than aspirational.
+- **Forfeited crate deposits ARE income** in the profit picture. A deposit we
+  legitimately kept because the crates never came back is earned money; leaving
+  it out made it invisible. Sourced from live `crate_deposit_forfeited` wallet
+  rows and folded into `netProfitKobo`, gated on `showCrates`.
+- **Loss valuation: snapshot-at-write, never today's rate.** A damage, expiry,
+  theft or shortage captures its value at the moment of loss
+  (`stock_adjustments.value_kobo`); a later cost-price edit must never restate a
+  past period's loss. This is the same immutability ADR 0005 demands for COGS,
+  extended from sales to losses. Legacy quantity-only rows keep a current-cost
+  fallback. Count **surplus** deliberately stays current-cost (a gain draws no
+  batch, so there is no snapshot to take).
+- **Confirm permission tier: Cashier and above.** Confirm is the till-side
+  ceremony a cashier performs, so gating it above Cashier would block normal
+  work; Stock keeper is explicitly excluded because the deposit-settlement
+  branch pays money out. The cash-refund branch additionally requires the
+  existing wallet-withdraw permission. Encoded in
+  `supabase/migrations/0154_money_integrity_confirm_gate.sql:117-145` and the
+  Gate Registry, both self-documenting.
 
 ## Consequences
 
