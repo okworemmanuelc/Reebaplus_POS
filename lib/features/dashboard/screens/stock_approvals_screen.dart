@@ -184,6 +184,14 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
     return formatCurrency(kobo / 100.0);
   }
 
+  /// What the whole delivery comes to — the figure the approver is actually
+  /// signing off. Null when no cost was stated (there is nothing to total).
+  String? get _totalCostLabel {
+    final kobo = widget.request.unitCostKobo;
+    if (kobo == null) return null;
+    return formatCurrency(kobo * widget.request.quantityDiff / 100.0);
+  }
+
   // Surface the common "not enough stock to remove" case in plain English.
   String _friendly(Object e) {
     final s = e.toString();
@@ -198,6 +206,7 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
     final r = widget.request;
     final isRemove = r.quantityDiff < 0;
     final qtyLabel = '${isRemove ? '−' : '+'}${r.quantityDiff.abs()}';
+    final totalCostLabel = _totalCostLabel;
 
     return Container(
       decoration: BoxDecoration(
@@ -270,12 +279,8 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
             // queue at approval time, not by the requester.
             if (!isRemove) ...[
               _detailRow(context, 'Cost per unit', _unitCostLabel),
-              if (r.unitCostKobo != null)
-                _detailRow(
-                  context,
-                  'Total cost',
-                  formatCurrency(r.unitCostKobo! * r.quantityDiff / 100.0),
-                ),
+              if (totalCostLabel != null)
+                _detailRow(context, 'Total cost', totalCostLabel),
             ],
             _detailRow(context, 'When', _fullStamp(r.createdAt)),
             SizedBox(height: context.spacingM),

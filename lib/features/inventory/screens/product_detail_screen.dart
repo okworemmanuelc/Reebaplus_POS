@@ -2143,6 +2143,24 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
     return kobo > 0 ? kobo : null;
   }
 
+  /// The product's recorded buying price, shown as the cost field's placeholder
+  /// so the number a blank field will use is visible before it is used.
+  String get _recordedCostHint =>
+      (widget.product.buyingPriceKobo / 100).toStringAsFixed(2);
+
+  /// Says out loud what leaving the cost blank will do — the recorded price
+  /// (#189), or nothing at all when the product has no price on file. Naming the
+  /// consequence is the difference between an optional field and a silent one.
+  String get _blankCostNote {
+    final recordedKobo = widget.product.buyingPriceKobo;
+    if (recordedKobo > 0) {
+      return 'Leave blank to use the recorded '
+          '${formatCurrency(recordedKobo / 100)}.';
+    }
+    return 'Leave blank if you don\'t know — these units will carry no cost '
+        'until a price is set.';
+  }
+
   Future<void> _doSave() async {
     final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 0;
     if (qty <= 0) {
@@ -2312,25 +2330,23 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
             // found more units has no invoice behind it, and then the recorded
             // price is used (#189).
             if (!_isRemove) ...[
-              const SizedBox(height: 14),
+              SizedBox(height: context.getRSize(14)),
               AppInput(
                 controller: _costCtrl,
                 labelText: 'Cost per unit (optional)',
-                hintText: (product.buyingPriceKobo / 100).toStringAsFixed(2),
+                hintText: _recordedCostHint,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
                 inputFormatters: [CurrencyInputFormatter()],
                 prefixText: '$activeCurrencySymbol ',
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: context.getRSize(6)),
               Text(
-                product.buyingPriceKobo > 0
-                    ? 'Leave blank to use the recorded '
-                          '${formatCurrency(product.buyingPriceKobo / 100)}.'
-                    : 'Leave blank if you don\'t know — these units will carry '
-                          'no cost until a price is set.',
-                style: TextStyle(fontSize: 11, color: _subtext),
+                _blankCostNote,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: _subtext),
               ),
             ],
             if (_isRemove) ...[
