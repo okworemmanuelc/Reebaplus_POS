@@ -53,7 +53,13 @@ void main() {
       final productId = UuidV7.generate();
       await db.into(db.products).insert(
             ProductsCompanion.insert(
-                id: Value(productId), businessId: businessId, name: 'Widget'),
+                id: Value(productId),
+                businessId: businessId,
+                name: 'Widget',
+                // #189: the cost basis an approved increase falls back to (the
+                // approval carries no price of its own). Absent → no cost on
+                // file, so the increase's batch is genuinely Uncosted.
+                buyingPriceKobo: Value(s.productBuyingPriceKobo ?? 0)),
           );
       await db.into(db.inventory).insert(
             InventoryCompanion.insert(
@@ -106,7 +112,8 @@ void main() {
           .getSingleOrNull();
 
       // #7a cost outcomes: the value snapshotted onto an applied decrease, and
-      // the cost of the batch an applied increase created (the newest batch).
+      // the cost of the batch an applied increase created (the newest batch) —
+      // the product's recorded cost, or 0 when it has none (#189).
       int? snapshotValueKobo;
       if (finalReq.status == 'approved' && s.quantityDiff < 0) {
         final adj = await (db.select(db.stockAdjustments)

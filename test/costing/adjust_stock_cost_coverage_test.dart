@@ -122,7 +122,40 @@ void main() {
     expect(perUnit[0], 15000);
   });
 
-  test('an increase WITHOUT a cost creates an Uncosted (0) batch', () async {
+  test('#189: an increase WITHOUT a cost is batched at the product\'s recorded '
+      'buying price, and a later sale draws it', () async {
+    final productId = await newProduct(buyingKobo: 15000);
+
+    await db.inventoryDao.adjustStock(
+      productId,
+      storeId,
+      10,
+      'Recount found more',
+      staffId,
+    );
+
+    // The scalar cache is the oldest COSTED batch (or the price the owner
+    // entered) — the best available basis, and the same rule F1's opening-batch
+    // migration used. Without it these units would sell at 0 COGS FOREVER: #41's
+    // backfill only fires on a 0 → positive cost edit, which a product that
+    // already has a price can never make again.
+    final batch = (await batchesFor(productId)).single;
+    expect(batch.qtyRemaining, 10);
+    expect(batch.costKobo, 15000);
+
+    final perUnit = await db.costBatchesDao.drawDownSale([
+      SaleCostLine(
+        index: 0,
+        productId: productId,
+        storeId: storeId,
+        quantity: 4,
+      ),
+    ]);
+    expect(perUnit[0], 15000);
+  });
+
+  test('#189: an increase WITHOUT a cost stays Uncosted (0) when the product '
+      'has no cost on file', () async {
     final productId = await newProduct();
 
     await db.inventoryDao.adjustStock(
@@ -133,9 +166,48 @@ void main() {
       staffId,
     );
 
+    // No cost is knowable, so the batch is genuinely Uncosted — the state #41's
+    // backfill exists to resolve.
     final batch = (await batchesFor(productId)).single;
     expect(batch.qtyRemaining, 10);
-    expect(batch.costKobo, 0); // uncosted — #41 backfill resolves later
+    expect(batch.costKobo, 0);
+  });
+
+  test('#189: an explicit inflow cost still WINS over the recorded buying '
+      'price', () async {
+    final productId = await newProduct(buyingKobo: 15000);
+
+    await db.inventoryDao.adjustStock(
+      productId,
+      storeId,
+      10,
+      'Add quantity',
+      staffId,
+      inflowUnitCostKobo: 22000,
+    );
+
+    final batch = (await batchesFor(productId)).single;
+    expect(batch.costKobo, 22000);
+  });
+
+  test('#189: an explicit inflow cost of 0 is a deliberate Uncosted batch, not '
+      'a missing one', () async {
+    final productId = await newProduct(buyingKobo: 15000);
+
+    // The fallback keys on the caller saying NOTHING (null). A caller that hands
+    // over 0 — Add Product with the buying price left blank — is stating there
+    // is no cost, and that must not be silently overridden.
+    await db.inventoryDao.adjustStock(
+      productId,
+      storeId,
+      10,
+      'Opening stock, price skipped',
+      staffId,
+      inflowUnitCostKobo: 0,
+    );
+
+    final batch = (await batchesFor(productId)).single;
+    expect(batch.costKobo, 0);
   });
 
   // ─── Decrease: snapshots the drawn value ───────────────────────────────────

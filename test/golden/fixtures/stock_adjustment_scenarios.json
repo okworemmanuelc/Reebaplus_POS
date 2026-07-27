@@ -1,5 +1,5 @@
 {
-  "_comment": "Stock-adjustment approval-gate golden fixtures (issue #50, extended #170). Run against the Dart DAO (requestStockAdjustment/approveRequest/rejectRequest) AND the SQL RPCs request_stock_adjustment/approve_stock_adjustment (0141). Rule: pending => no inventory change; approve => apply delta; reject => no change. status+inventory pinned on both arms. 'request' scenarios pin the stock-keeper->pending path on the Dart arm; the RPC arm skips them (its Tier-2 identity is the CEO, whom the server routes to immediate-apply). #170 #7a adds COST semantics on the Dart DAO: an approved increase creates a Cost Batch (Uncosted when unpriced), an approved decrease draws the FIFO queue down and snapshots the drawn value onto the adjustment (dart_snapshot_value_kobo / dart_new_batch_cost_kobo). Those scenarios are dart_arm_only — the web RPC cost pass is out of scope (flagged to the web repo), so the RPC arm skips them, same precedent as the #175 money-track scenarios. inflow_cost_kobo seeds a costed batch of start_qty before the op.",
+  "_comment": "Stock-adjustment approval-gate golden fixtures (issue #50, extended #170, #189). Run against the Dart DAO (requestStockAdjustment/approveRequest/rejectRequest) AND the SQL RPCs request_stock_adjustment/approve_stock_adjustment (0141). Rule: pending => no inventory change; approve => apply delta; reject => no change. status+inventory pinned on both arms. 'request' scenarios pin the stock-keeper->pending path on the Dart arm; the RPC arm skips them (its Tier-2 identity is the CEO, whom the server routes to immediate-apply). #170 #7a adds COST semantics on the Dart DAO: an approved increase creates a Cost Batch, an approved decrease draws the FIFO queue down and snapshots the drawn value onto the adjustment (dart_snapshot_value_kobo / dart_new_batch_cost_kobo). #189: the approval carries no cost of its own, so the increase's batch takes the product's RECORDED cost (product_buying_price_kobo, a Dart-arm-only seed) and is Uncosted (0) only when the product has no cost on file — batching at 0 with a price on file made those units sell at 0 COGS forever (#41's backfill fires only on a 0->positive cost edit). Those scenarios are dart_arm_only — the web RPC cost pass is out of scope (flagged to the web repo), so the RPC arm skips them, same precedent as the #175 money-track scenarios. inflow_cost_kobo seeds a costed batch of start_qty before the op.",
   "scenarios": [
     {
       "name": "stock keeper request creates a pending row, no inventory change",
@@ -34,7 +34,21 @@
       "expected": { "status": "rejected", "inventory_after": 20 }
     },
     {
-      "name": "#7a: approving an unpriced increase creates an Uncosted (0) batch",
+      "name": "#189: approving an increase batches it at the product's recorded cost",
+      "operation": "approve",
+      "start_qty": 0,
+      "quantity_diff": 10,
+      "reason": "recount found more",
+      "product_buying_price_kobo": 15000,
+      "dart_arm_only": true,
+      "expected": {
+        "status": "approved",
+        "inventory_after": 10,
+        "dart_new_batch_cost_kobo": 15000
+      }
+    },
+    {
+      "name": "#7a: approving an increase of a product with NO cost on file creates an Uncosted (0) batch",
       "operation": "approve",
       "start_qty": 0,
       "quantity_diff": 10,

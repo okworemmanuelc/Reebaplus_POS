@@ -16,9 +16,13 @@
 /// in the checkout suite). 'approve'/'reject' run on both.
 ///
 /// Money-integrity #7a (#170, PRD #155) gives the approval its COST semantics on
-/// the mobile DAO: an approved increase creates a Cost Batch (Uncosted when the
-/// approval carries no price), and an approved decrease draws the FIFO queue
-/// down and SNAPSHOTS the drawn value onto the adjustment. The web RPC
+/// the mobile DAO: an approved increase creates a Cost Batch, and an approved
+/// decrease draws the FIFO queue down and SNAPSHOTS the drawn value onto the
+/// adjustment. The approval carries no cost of its own, so #189 pins the
+/// increase's batch to the product's RECORDED cost, Uncosted (0) only when the
+/// product has no cost on file — batching at 0 with a price on file sold those
+/// units at 0 COGS forever (#41's backfill fires only on a 0 → positive cost
+/// edit, which such a product can never make again). The web RPC
 /// (approve_stock_adjustment, 0141) does not yet move cost — flagged to the web
 /// repo — so the cost scenarios are `dartArmOnly` (the RPC arm skips them, the
 /// same precedent as the #175 money-track scenarios). status + inventory stay
@@ -49,11 +53,19 @@ class StockAdjScenario {
   /// decrease has real cost to draw. Null → no batch seeded (an unpriced start).
   final int? inflowCostKobo;
 
+  /// #189 (dartArmOnly): seed the product's scalar `buying_price_kobo` at this
+  /// value — the cost basis an approved increase falls back to, since the
+  /// approval itself carries no cost. Null → no cost on file (a genuinely
+  /// Uncosted increase). The RPC arm never reads it: its cost pass is out of
+  /// scope, so every scenario using it is `dartArmOnly`.
+  final int? productBuyingPriceKobo;
+
   /// #7a (dartArmOnly): the value_kobo the approved DECREASE must snapshot.
   final int? expectedSnapshotValueKobo;
 
   /// #7a (dartArmOnly): the cost_kobo of the Cost Batch an approved INCREASE
-  /// must create (0 = Uncosted).
+  /// must create — the product's recorded cost (#189), or 0 = Uncosted when the
+  /// product has no cost on file.
   final int? expectedNewBatchCostKobo;
 
   /// Skips the RPC arm: the web cost pass is out of scope for #170 (flagged to
@@ -70,6 +82,7 @@ class StockAdjScenario {
     required this.expectedStatus,
     required this.expectedInventoryAfter,
     this.inflowCostKobo,
+    this.productBuyingPriceKobo,
     this.expectedSnapshotValueKobo,
     this.expectedNewBatchCostKobo,
     this.dartArmOnly = false,
@@ -86,6 +99,7 @@ class StockAdjScenario {
       expectedStatus: exp['status'] as String,
       expectedInventoryAfter: exp['inventory_after'] as int,
       inflowCostKobo: j['inflow_cost_kobo'] as int?,
+      productBuyingPriceKobo: j['product_buying_price_kobo'] as int?,
       expectedSnapshotValueKobo: exp['dart_snapshot_value_kobo'] as int?,
       expectedNewBatchCostKobo: exp['dart_new_batch_cost_kobo'] as int?,
       dartArmOnly: j['dart_arm_only'] as bool? ?? false,

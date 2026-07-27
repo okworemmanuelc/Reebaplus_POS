@@ -177,3 +177,20 @@ lines, which drew from no batch.
   uncosted; the **migration-era fallback** (pre-FIFO lines that drew from no
   batch) needs no special case — a no-batch product's uncosted lines are the
   same `buying_price_kobo == 0` set and back-fill identically.
+- **Omitted-cost inflows take the recorded scalar, not 0 (#189).** An inflow
+  whose caller hands over **no** cost — a stock-adjustment approval, a
+  Manager/CEO stock add, a stock-count surplus — is batched at the product's
+  scalar `buying_price_kobo` (`InventoryDao._recordedUnitCostKobo`), the same
+  basis the F1 opening-batch migration used above. Batching those at 0 sold the
+  units at **0 COGS forever**: F5's backfill fires only on a `0 → positive` cost
+  edit, which a product that already carries a price can never make again, and
+  `_recomputeScalarCost` deliberately ignores cost-0 batches, so nothing could
+  reach the layer. This is not the rejected *silent live fallback at report
+  time* — no past line is restated; a real, auditable cost is written onto the
+  batch at the moment the units enter, and it is what the queue then draws. An
+  **Uncosted** (0) batch survives exactly where no cost is knowable: the product
+  carries no price, or the caller states 0 (Add Product with the buying price
+  left blank) — the default keys on the caller saying *nothing*, never on a
+  stated 0. Capturing a real cost **on the adjustment request** is #197 (PRD
+  #155 US 22), which passes it as the explicit cost and falls back to this
+  default when the approver captured none.
