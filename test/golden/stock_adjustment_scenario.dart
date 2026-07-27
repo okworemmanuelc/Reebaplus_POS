@@ -18,15 +18,18 @@
 /// Money-integrity #7a (#170, PRD #155) gives the approval its COST semantics on
 /// the mobile DAO: an approved increase creates a Cost Batch, and an approved
 /// decrease draws the FIFO queue down and SNAPSHOTS the drawn value onto the
-/// adjustment. The approval carries no cost of its own, so #189 pins the
-/// increase's batch to the product's RECORDED cost, Uncosted (0) only when the
-/// product has no cost on file — batching at 0 with a price on file sold those
-/// units at 0 COGS forever (#41's backfill fires only on a 0 → positive cost
-/// edit, which such a product can never make again). The web RPC
-/// (approve_stock_adjustment, 0141) does not yet move cost — flagged to the web
-/// repo — so the cost scenarios are `dartArmOnly` (the RPC arm skips them, the
-/// same precedent as the #175 money-track scenarios). status + inventory stay
-/// pinned on BOTH arms.
+/// adjustment. What that batch costs runs down a three-step ladder:
+///   1. #197 (US 22) — the cost the REQUEST captured (`unit_cost_kobo`), stated
+///      by the person holding the invoice. It always wins.
+///   2. #189 — else the product's RECORDED scalar cost, the derived cache over
+///      the batch queue (ADR 0005).
+///   3. Uncosted (0) — only when neither is on file. Batching at 0 with a price
+///      on file sold those units at 0 COGS forever (#41's backfill fires only on
+///      a 0 → positive cost edit, which such a product can never make again).
+/// The web RPC (approve_stock_adjustment, 0141) does not yet move cost — flagged
+/// to the web repo — so the cost scenarios are `dartArmOnly` (the RPC arm skips
+/// them, the same precedent as the #175 money-track scenarios). status +
+/// inventory stay pinned on BOTH arms.
 library;
 
 import 'dart:convert';
@@ -54,18 +57,27 @@ class StockAdjScenario {
   final int? inflowCostKobo;
 
   /// #189 (dartArmOnly): seed the product's scalar `buying_price_kobo` at this
-  /// value — the cost basis an approved increase falls back to, since the
-  /// approval itself carries no cost. Null → no cost on file (a genuinely
-  /// Uncosted increase). The RPC arm never reads it: its cost pass is out of
-  /// scope, so every scenario using it is `dartArmOnly`.
+  /// value — the cost basis an approved increase falls back to when the request
+  /// captured none. Null → no cost on file (a genuinely Uncosted increase). The
+  /// RPC arm never reads it: its cost pass is out of scope, so every scenario
+  /// using it is `dartArmOnly`.
   final int? productBuyingPriceKobo;
+
+  /// #197 (dartArmOnly): the per-unit cost the REQUEST captures
+  /// (`stock_adjustment_requests.unit_cost_kobo`, US 22) — what the goods
+  /// actually cost, stated by the person holding the invoice. Null → the request
+  /// states nothing, and the approval falls back to
+  /// [productBuyingPriceKobo] (#189). A stated cost WINS over that fallback,
+  /// which is the whole point of the column. The RPC arm never sends it: the web
+  /// `request_stock_adjustment` (0141) has no cost parameter.
+  final int? requestUnitCostKobo;
 
   /// #7a (dartArmOnly): the value_kobo the approved DECREASE must snapshot.
   final int? expectedSnapshotValueKobo;
 
   /// #7a (dartArmOnly): the cost_kobo of the Cost Batch an approved INCREASE
-  /// must create — the product's recorded cost (#189), or 0 = Uncosted when the
-  /// product has no cost on file.
+  /// must create — the cost the request captured (#197), else the product's
+  /// recorded cost (#189), else 0 = Uncosted when neither is on file.
   final int? expectedNewBatchCostKobo;
 
   /// Skips the RPC arm: the web cost pass is out of scope for #170 (flagged to
@@ -83,6 +95,7 @@ class StockAdjScenario {
     required this.expectedInventoryAfter,
     this.inflowCostKobo,
     this.productBuyingPriceKobo,
+    this.requestUnitCostKobo,
     this.expectedSnapshotValueKobo,
     this.expectedNewBatchCostKobo,
     this.dartArmOnly = false,
@@ -100,6 +113,7 @@ class StockAdjScenario {
       expectedInventoryAfter: exp['inventory_after'] as int,
       inflowCostKobo: j['inflow_cost_kobo'] as int?,
       productBuyingPriceKobo: j['product_buying_price_kobo'] as int?,
+      requestUnitCostKobo: j['request_unit_cost_kobo'] as int?,
       expectedSnapshotValueKobo: exp['dart_snapshot_value_kobo'] as int?,
       expectedNewBatchCostKobo: exp['dart_new_batch_cost_kobo'] as int?,
       dartArmOnly: j['dart_arm_only'] as bool? ?? false,

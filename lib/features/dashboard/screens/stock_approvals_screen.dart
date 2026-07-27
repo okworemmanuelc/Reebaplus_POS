@@ -174,6 +174,16 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
     }
   }
 
+  /// The cost the request captured (#197). "Not stated" is not a formatting
+  /// nicety — it tells the approver the batch will be priced at the product's
+  /// recorded buying price instead (#189), which is the one case where the
+  /// figures they later read are an inference rather than an invoice.
+  String get _unitCostLabel {
+    final kobo = widget.request.unitCostKobo;
+    if (kobo == null) return 'Not stated — will use the recorded price';
+    return formatCurrency(kobo / 100.0);
+  }
+
   // Surface the common "not enough stock to remove" case in plain English.
   String _friendly(Object e) {
     final s = e.toString();
@@ -253,6 +263,20 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
             _detailRow(context, 'Requested by', widget.requesterName),
             _detailRow(context, 'Store', widget.storeName),
             _detailRow(context, 'Reason', r.reason),
+            // #197 (PRD #155 US 22): what the goods cost, so the approver sees
+            // the money they are letting in — and can reject a wrong price
+            // instead of discovering it as a wrong profit figure later. Shown on
+            // an INCREASE only: a removal is valued by drawing the store's FIFO
+            // queue at approval time, not by the requester.
+            if (!isRemove) ...[
+              _detailRow(context, 'Cost per unit', _unitCostLabel),
+              if (r.unitCostKobo != null)
+                _detailRow(
+                  context,
+                  'Total cost',
+                  formatCurrency(r.unitCostKobo! * r.quantityDiff / 100.0),
+                ),
+            ],
             _detailRow(context, 'When', _fullStamp(r.createdAt)),
             SizedBox(height: context.spacingM),
             if (_busy)

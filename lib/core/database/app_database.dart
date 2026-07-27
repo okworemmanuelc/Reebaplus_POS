@@ -1418,8 +1418,10 @@ class StockTransactions extends Table {
 // the atomic pos_inventory_delta_v2 envelope still applies the inventory +
 // ledger). `reason` is the note carried into the eventual adjustment; `summary`
 // is a denormalised human headline (like notifications.message) so the approval
-// card renders without cross-table joins. Direct Manager/CEO adjustments never
-// pass through here.
+// card renders without cross-table joins. `unit_cost_kobo` is what the goods
+// cost (#197, US 22) — the request is the only place that knows, so it is
+// captured here and threaded into the approval's inflow batch. Direct
+// Manager/CEO adjustments never pass through here.
 @DataClassName('StockAdjustmentRequestData')
 class StockAdjustmentRequests extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -1428,6 +1430,22 @@ class StockAdjustmentRequests extends Table {
   TextColumn get storeId => text().references(Stores, #id)();
   // Signed: positive = add, negative = remove.
   IntColumn get quantityDiff => integer()();
+
+  /// What the goods cost, **per unit, in kobo** — captured on the request
+  /// itself (#197, PRD #155 US 22) so the FIFO batch the approval mints carries
+  /// REAL cost instead of a guess.
+  ///
+  /// Nullable on purpose: a request legitimately may not know the cost (a
+  /// recount that simply found more units on the shelf has no invoice behind
+  /// it). NULL is handed to `InventoryDao.adjustStock` as an omitted
+  /// `inflowUnitCostKobo`, which falls back to the product's recorded scalar
+  /// price (#189) — so the fallback is what runs when nobody stated a cost, and
+  /// a stated cost always wins.
+  ///
+  /// Only meaningful on an INCREASE. A decrease values itself by drawing this
+  /// store's FIFO queue (#7a) and snapshotting what it drew, so the column is
+  /// left NULL there — the requester is not the authority on what a loss cost.
+  IntColumn get unitCostKobo => integer().nullable()();
   TextColumn get reason => text()();
   // Denormalised headline ("Akin added 5 bottle(s) of Star (Main Store)").
   TextColumn get summary => text()();
@@ -2517,7 +2535,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 74;
+  int get schemaVersion => 79;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5225,6 +5243,43 @@ class AppDatabase extends _$AppDatabase {
         );
         for (final stmt in _vanReturnIndexStatements) {
           await customStatement(stmt);
+        }
+      }
+
+      if (from < 79) {
+        // ── v79 — US 22: a stock request records what the goods cost (#197) ──
+        //
+        // `stock_adjustment_requests` gains ONE nullable column,
+        // `unit_cost_kobo`. That is the whole schema half of US 22: the stock
+        // keeper filing the request is the only person who knows what the goods
+        // cost, and until now there was nowhere to put it, so every approved
+        // increase minted a batch at whatever `adjustStock` could infer (0
+        // before #189, the product's recorded scalar price after it).
+        //
+        // Nullable + additive, and the table's only CHECK is on `status`, so
+        // this is a plain ADD COLUMN — no table rebuild (v73's shape). Every
+        // existing request stays NULL, which is exactly right: none of them
+        // captured a cost, so an approval of a legacy row keeps falling back to
+        // the recorded price (#189).
+        //
+        // Mirrors supabase/migrations/0171_stock_request_unit_cost.sql, where
+        // the column is `bigint` — a `_kobo` column declared `integer` caps at
+        // ₦21.4M and jams the outbox on push (22003), the wholesale fix in 0130.
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69/v70/v72/v73 so a DB stepped
+        // back to < 79 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        // It also covers the fresh-install-then-step-back case: `createTable`
+        // in the v34 block builds the table from the CURRENT Dart definition,
+        // so the column can already be there.
+        final hasRequestUnitCost = await customSelect(
+          "SELECT 1 FROM pragma_table_info('stock_adjustment_requests') "
+          "WHERE name = 'unit_cost_kobo'",
+        ).get();
+        if (hasRequestUnitCost.isEmpty) {
+          await m.addColumn(
+            stockAdjustmentRequests,
+            stockAdjustmentRequests.unitCostKobo,
+          );
         }
       }
     },
