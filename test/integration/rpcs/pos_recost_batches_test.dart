@@ -20,8 +20,18 @@ import '../../helpers/supabase_test_env.dart';
 ///     writes the authoritative COGS back onto order_items. A late
 ///     earlier-timestamped sale re-assigns already-corrected lines.
 ///
-/// Cleanup: orders / order_items / cost_batches are NOT append-only, so rows
-/// created per test are deleted by id in tearDown. fifo_assign writes nothing.
+/// It writes ONE thing: `order_items.buying_price_kobo`. It must NEVER write
+/// `cost_batches.qty_remaining` (#187, migration 0167). Its replay input is the
+/// SALE ledger only, so re-deriving remainders resurrected every non-sale draw
+/// #170 introduced — damages, shortages, count corrections, transfer dispatches,
+/// product-delete write-offs and a cancel's restore layer. `qty_remaining`
+/// belongs to the incremental drawers (the client's #170 draws, and 0139's
+/// `_checkout_draw_fifo` on the v2 path), which see every outflow class. The
+/// three "…leaves qty_remaining alone" tests below are that contract.
+///
+/// Cleanup: orders / order_items / cost_batches / stock_adjustments /
+/// stock_transfers are NOT append-only, so rows created per test are deleted by
+/// id in tearDown. fifo_assign writes nothing.
 
 final String? _skipReason = (() {
   try {
@@ -36,11 +46,16 @@ void main() {
   late TestClients clients;
   late String businessId;
   late String storeId;
+  // Transfer destination (#187 dispatch scenario) — a dispatch needs a
+  // to_location_id, and it must not be the store under test.
+  late String destStoreId;
 
   // Ids created per test, torn down (children before parents).
   final orderIds = <String>[];
   final orderItemIds = <String>[];
   final costBatchIds = <String>[];
+  final adjustmentIds = <String>[];
+  final transferIds = <String>[];
   final productIds = <String>[];
 
   setUpAll(() async {
@@ -54,12 +69,20 @@ void main() {
       'business_id': businessId,
       'name': 'Recost Store',
     });
+
+    destStoreId = UuidV7.generate();
+    await clients.adminClient.from('stores').insert({
+      'id': destStoreId,
+      'business_id': businessId,
+      'name': 'Recost Destination Store',
+    });
   });
 
   tearDown(() async {
     if (_skipReason != null) return;
     // Delete children before parents. order_items → orders → cost_batches →
-    // products. All mutable (non-append-only) so DELETE is permitted.
+    // stock_adjustments / stock_transfers → products. All mutable
+    // (non-append-only) so DELETE is permitted.
     for (final id in orderItemIds) {
       await clients.adminClient.from('order_items').delete().eq('id', id);
     }
@@ -69,18 +92,27 @@ void main() {
     for (final id in costBatchIds) {
       await clients.adminClient.from('cost_batches').delete().eq('id', id);
     }
+    for (final id in adjustmentIds) {
+      await clients.adminClient.from('stock_adjustments').delete().eq('id', id);
+    }
+    for (final id in transferIds) {
+      await clients.adminClient.from('stock_transfers').delete().eq('id', id);
+    }
     for (final id in productIds) {
       await clients.adminClient.from('products').delete().eq('id', id);
     }
     orderItemIds.clear();
     orderIds.clear();
     costBatchIds.clear();
+    adjustmentIds.clear();
+    transferIds.clear();
     productIds.clear();
   });
 
   tearDownAll(() async {
     if (_skipReason != null) return;
     await clients.adminClient.from('stores').delete().eq('id', storeId);
+    await clients.adminClient.from('stores').delete().eq('id', destStoreId);
     await clients.dispose();
   });
 
@@ -98,11 +130,16 @@ void main() {
     return id;
   }
 
+  /// A cost batch of [qty] units (`qty_original`). [qtyRemaining] defaults to
+  /// [qty] — an untouched layer; pass it to model a queue the CLIENT has already
+  /// drawn down (a sale plus, for the #187 scenarios, a non-sale outflow the
+  /// server's sale-only replay cannot see).
   Future<String> addBatch(
     String productId, {
     required int costKobo,
     required int qty,
     required DateTime receivedAt,
+    int? qtyRemaining,
   }) async {
     final id = UuidV7.generate();
     await clients.adminClient.from('cost_batches').insert({
@@ -110,13 +147,59 @@ void main() {
       'business_id': businessId,
       'product_id': productId,
       'store_id': storeId,
-      'qty_remaining': qty,
+      'qty_remaining': qtyRemaining ?? qty,
       'qty_original': qty,
       'cost_kobo': costKobo,
       'received_at': receivedAt.toUtc().toIso8601String(),
     });
     costBatchIds.add(id);
     return id;
+  }
+
+  /// A VALUED loss (#170 #7a): the damage / shortage / write-off row whose
+  /// `value_kobo` snapshot is the FIFO cost the client already drew out of the
+  /// queue. Its units are gone — the replay must never hand them to a sale.
+  Future<void> addValuedAdjustment(
+    String productId, {
+    required int quantityDiff,
+    required int unitCostKobo,
+    required String reason,
+  }) async {
+    final id = UuidV7.generate();
+    await clients.adminClient.from('stock_adjustments').insert({
+      'id': id,
+      'business_id': businessId,
+      'product_id': productId,
+      'store_id': storeId,
+      'quantity_diff': quantityDiff,
+      'reason': reason,
+      'performed_by': clients.env.userId,
+      'unit_cost_kobo': unitCostKobo,
+      'value_kobo': unitCostKobo * quantityDiff.abs(),
+    });
+    adjustmentIds.add(id);
+  }
+
+  /// A DISPATCHED transfer out of [storeId] (#170 #7b): the drawn cost rides the
+  /// transfer to the destination, so the source's units are spoken for.
+  Future<void> addDispatchedTransfer(
+    String productId, {
+    required int quantity,
+    required int costKobo,
+  }) async {
+    final id = UuidV7.generate();
+    await clients.adminClient.from('stock_transfers').insert({
+      'id': id,
+      'business_id': businessId,
+      'product_id': productId,
+      'from_location_id': storeId,
+      'to_location_id': destStoreId,
+      'quantity': quantity,
+      'status': 'in_transit',
+      'initiated_by': clients.env.userId,
+      'cost_kobo': costKobo,
+    });
+    transferIds.add(id);
   }
 
   /// Inserts an order + one order_item for [productId], stamped at [soldAt]
@@ -325,7 +408,10 @@ void main() {
       final res = await recost(product);
       expect(res['recosted_count'], 1);
       expect(await readBuyingPrice(sale), 54000);
-      expect(await readQtyRemaining(b1), 0, reason: 'cheap batch drawn dry');
+      // #187 / 0167: the replay derives the cheap batch dry, but it does NOT
+      // write that derivation back — the fixture's untouched 6 stands.
+      expect(await readQtyRemaining(b1), 6,
+          reason: 'the replay re-costs lines; it never writes qty_remaining');
     }, skip: _skipReason);
 
     test(
@@ -386,9 +472,109 @@ void main() {
           await addSale(product, qty: 3, soldAt: DateTime(2026, 3, 1));
 
       await recost(product);
-      expect(await readBuyingPrice(live), 50000);
-      expect(await readQtyRemaining(b1), 7,
-          reason: 'only the live sale of 3 drew down the batch');
+      expect(await readBuyingPrice(live), 50000,
+          reason: 'only the live sale of 3 is costed');
+      expect(await readQtyRemaining(b1), 10,
+          reason: 'the fixture layer is untouched — no qty_remaining write-back');
+    }, skip: _skipReason);
+  });
+
+  // ── #187: non-sale draws survive the replay ───────────────────────────────
+  //
+  // Each scenario hands the RPC a queue the CLIENT has already drawn below what
+  // the sale ledger alone explains, because a #170 outflow took the difference.
+  // The old write-back re-derived `qty_remaining` from sales only and handed
+  // those units straight back; the money consequence was a loss counted twice
+  // (once as the valued snapshot, again as COGS when the resurrected units
+  // sold), phantom cost coverage at a transfer source, and a doubled cancel
+  // restore. The contract is now: this RPC re-costs LINES and leaves the queue
+  // to the drawers.
+
+  group('pos_recost_product_store leaves non-sale draws alone (#187)', () {
+    test('damage-then-sale: the destroyed units are not resurrected', () async {
+      final product = await newProduct();
+      // 10 @ ₦500 received. The client damaged 3 (valued loss ₦1,500, #7a) and
+      // then sold 4 → 10 − 3 − 4 = 3 left. The sale ledger alone explains only
+      // the 4, so a sales-only replay derives 6.
+      final b1 = await addBatch(product,
+          costKobo: 50000,
+          qty: 10,
+          receivedAt: DateTime(2026, 1, 1),
+          qtyRemaining: 3);
+      await addValuedAdjustment(product,
+          quantityDiff: -3, unitCostKobo: 50000, reason: 'damage');
+      final sale = await addSale(product, qty: 4, soldAt: DateTime(2026, 2, 1));
+
+      await recost(product);
+
+      expect(await readBuyingPrice(sale), 50000,
+          reason: 'the line is still costed from the batch it drew');
+      expect(await readQtyRemaining(b1), 3,
+          reason: 'resurrecting the 3 damaged units would count the loss twice '
+              '— once as value_kobo, again as COGS when they sold');
+    }, skip: _skipReason);
+
+    test('transfer-dispatch-then-sale: the source keeps no phantom coverage',
+        () async {
+      final product = await newProduct();
+      // 10 @ ₦500 received. The client dispatched 6 to the destination store
+      // (₦3,000 rode the transfer, #7b) and then sold 3 → 1 left at the source.
+      // A sales-only replay derives 7 — the exact phantom coverage #170 removed.
+      final b1 = await addBatch(product,
+          costKobo: 50000,
+          qty: 10,
+          receivedAt: DateTime(2026, 1, 1),
+          qtyRemaining: 1);
+      await addDispatchedTransfer(product, quantity: 6, costKobo: 300000);
+      final sale = await addSale(product, qty: 3, soldAt: DateTime(2026, 2, 1));
+
+      await recost(product);
+
+      expect(await readBuyingPrice(sale), 50000);
+      expect(await readQtyRemaining(b1), 1,
+          reason: 'the dispatched units are the destination store\'s cost now');
+    }, skip: _skipReason);
+
+    test('cancel restore is not doubled (the issue\'s worked case)', () async {
+      final product = await newProduct();
+      // B1 10 @ ₦500, sell 4 → qty_remaining 6. The cancel appends restore layer
+      // B2(4) at the snapshotted cost and drops the order out of the sale
+      // ledger, so a sales-only replay derives B1 back to 10 while B2 survives:
+      // 14 units covered against 10 on hand.
+      final b1 = await addBatch(product,
+          costKobo: 50000,
+          qty: 10,
+          receivedAt: DateTime(2026, 1, 1),
+          qtyRemaining: 6);
+      final b2 = await addBatch(product,
+          costKobo: 50000, qty: 4, receivedAt: DateTime(2026, 2, 1));
+      await addSale(product,
+          qty: 4, soldAt: DateTime(2026, 1, 15), status: 'cancelled');
+
+      await recost(product);
+
+      expect(await readQtyRemaining(b1), 6);
+      expect(await readQtyRemaining(b2), 4);
+      expect(await readQtyRemaining(b1) + await readQtyRemaining(b2), 10,
+          reason: 'the queue covers exactly what is on hand, restored once');
+    }, skip: _skipReason);
+
+    test('idempotent across repeat calls: qty_remaining never drifts', () async {
+      final product = await newProduct();
+      final b1 = await addBatch(product,
+          costKobo: 50000,
+          qty: 10,
+          receivedAt: DateTime(2026, 1, 1),
+          qtyRemaining: 2);
+      await addValuedAdjustment(product,
+          quantityDiff: -5, unitCostKobo: 50000, reason: 'count_shortage');
+      await addSale(product, qty: 3, soldAt: DateTime(2026, 2, 1));
+
+      await recost(product);
+      expect(await readQtyRemaining(b1), 2);
+      await recost(product);
+      expect(await readQtyRemaining(b1), 2,
+          reason: 'every recost is a no-op on the queue, not a slow drift back');
     }, skip: _skipReason);
   });
 

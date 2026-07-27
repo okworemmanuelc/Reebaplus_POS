@@ -1381,10 +1381,14 @@ class SupabaseSyncService {
   /// Collect the (product, store) pairs from a batch of freshly-pushed
   /// `stock_transactions` upsert payloads whose `movement_type` is `return`
   /// (#170 #7c). A cancel writes compensating `return` rows and restores each
-  /// consumed cost layer LOCALLY; pushing those rows makes their (product,
+  /// consumed cost layer locally; pushing those rows makes their (product,
   /// store) pairs recost candidates too, so the cancel triggers the SAME
   /// server-authoritative `pos_recost_pairs` pass a sale push does — the
-  /// authoritative replay then supersedes the local batch-restore approximation.
+  /// cancelled order leaves the sale ledger, so every SURVIVING line of that
+  /// (product, store) needs its COGS re-derived. It does NOT re-derive the batch
+  /// remainders: since #187 / migration 0167 the replay no longer writes
+  /// `cost_batches.qty_remaining`, so the client's restore layer stands (it used
+  /// to be resurrected into a double restore).
   /// Non-`return` movements (sale/adjustment/transfer legs) are skipped here:
   /// sale pairs already come from `order_items`, and the rest never change COGS.
   @visibleForTesting
