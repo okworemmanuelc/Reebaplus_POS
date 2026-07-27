@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -58,44 +57,28 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         .first;
     final m = memberships.where((r) => r.id == widget.membershipId).firstOrNull;
     if (m == null) return;
-    
-    final salesResult = await db
-        .customSelect(
-          "SELECT COALESCE(SUM(net_amount_kobo), 0) AS total, COUNT(*) AS cnt "
-          "FROM orders WHERE staff_id = ?1 "
-          "AND status IN ('pending', 'completed')",
-          variables: [Variable<String>(m.userId)],
-        )
-        .getSingleOrNull();
 
-    final stockResult = await db
-        .customSelect(
-          "SELECT COUNT(*) AS cnt FROM stock_transactions WHERE performed_by = ?1",
-          variables: [Variable<String>(m.userId)],
-        )
-        .getSingleOrNull();
-
-    final quickSalesResult = await db
-        .customSelect(
-          "SELECT COUNT(*) AS cnt FROM quick_sale_requests WHERE requested_by = ?1",
-          variables: [Variable<String>(m.userId)],
-        )
-        .getSingleOrNull();
-
-    final expensesResult = await db
-        .customSelect(
-          "SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM expenses WHERE recorded_by = ?1 AND is_deleted = 0",
-          variables: [Variable<String>(m.userId)],
-        )
-        .getSingleOrNull();
+    // Every figure below is a tenant read, so each one goes through a
+    // business-scoped DAO method (#205). A screen may never raw-select a
+    // business-owned table (architecture.md invariant #5): these were four raw
+    // `customSelect`s keyed only on the member's user id, with no `business_id`
+    // predicate, so on a device holding two businesses' rows they reported both
+    // businesses' activity on one business's screen.
+    final sales = await db.ordersDao.getSalesTotalsForStaff(m.userId);
+    final stockCount = await db.stockLedgerDao.countPerformedByStaff(m.userId);
+    final quickSalesCount = await db.quickSaleRequestsDao
+        .countRequestedByStaff(m.userId);
+    final expensesTotalKobo = await db.expensesDao.getTotalRecordedByStaff(
+      m.userId,
+    );
 
     if (!mounted) return;
     setState(() {
-      _totalSalesKobo = salesResult?.read<int>('total') ?? 0;
-      _ordersCount = salesResult?.read<int>('cnt') ?? 0;
-      _stockTransactionsCount = stockResult?.read<int>('cnt') ?? 0;
-      _quickSalesCount = quickSalesResult?.read<int>('cnt') ?? 0;
-      _totalExpensesKobo = expensesResult?.read<int>('total') ?? 0;
+      _totalSalesKobo = sales.totalKobo;
+      _ordersCount = sales.orderCount;
+      _stockTransactionsCount = stockCount;
+      _quickSalesCount = quickSalesCount;
+      _totalExpensesKobo = expensesTotalKobo;
     });
   }
 

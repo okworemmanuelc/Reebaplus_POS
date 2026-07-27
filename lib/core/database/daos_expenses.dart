@@ -31,6 +31,28 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// What this staff member has recorded in expenses in the bound business —
+  /// one of the Staff detail screen's activity figures (#205). Soft-deleted rows
+  /// drop out; every status counts (approved, pending and rejected alike),
+  /// matching what the screen has always shown.
+  ///
+  /// Business-scoped (architecture.md invariant #5): the screen's raw
+  /// `customSelect` carried no `business_id` predicate, so a device holding two
+  /// businesses' rows summed both.
+  Future<int> getTotalRecordedByStaff(String userId) async {
+    final totalCol = expenses.amountKobo.sum();
+    final row =
+        await (selectOnly(expenses)
+              ..addColumns([totalCol])
+              ..where(
+                whereBusiness(expenses) &
+                    expenses.isDeleted.not() &
+                    expenses.recordedBy.equals(userId),
+              ))
+            .getSingle();
+    return row.read(totalCol) ?? 0;
+  }
+
   Stream<List<ExpenseCategoryData>> watchAllCategories() {
     return (select(expenseCategories)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())

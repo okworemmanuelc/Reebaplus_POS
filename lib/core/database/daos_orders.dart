@@ -109,6 +109,41 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// One staff member's recognized sales in the bound business — the two
+  /// figures the Staff detail screen shows for a member (#205). Both the sum
+  /// and the count are filtered to [orderRevenueStatuses], since revenue is
+  /// recognized at checkout and a reversed sale is not a sale
+  /// ([[project_revenue_recognized_at_checkout]]).
+  ///
+  /// Business-scoped like every tenant read (architecture.md invariant #5). The
+  /// screen used to run this as a raw `customSelect` keyed only on the user id,
+  /// with no `business_id` predicate — so on a device holding two businesses'
+  /// rows (offline-first shared till, a re-onboarded staff account) it summed
+  /// both businesses into one business's screen.
+  ///
+  /// The figure is the order header's `net_amount_kobo`: gross of discounts and
+  /// inclusive of crate deposits. Unchanged here on purpose — issue #195 (one
+  /// Total Sales definition) owns moving it to the item-line basis.
+  Future<({int totalKobo, int orderCount})> getSalesTotalsForStaff(
+    String staffId,
+  ) async {
+    final totalCol = orders.netAmountKobo.sum();
+    final countCol = orders.id.count();
+    final row =
+        await (selectOnly(orders)
+              ..addColumns([totalCol, countCol])
+              ..where(
+                whereBusiness(orders) &
+                    orders.staffId.equals(staffId) &
+                    orders.status.isIn(orderRevenueStatuses.toList()),
+              ))
+            .getSingle();
+    return (
+      totalKobo: row.read(totalCol) ?? 0,
+      orderCount: row.read(countCol) ?? 0,
+    );
+  }
+
   // ── N+1 fix: single joined query + fold ────────────────────────────────────
 
   Stream<List<OrderWithItems>> watchAllOrdersWithItems({String? storeId}) {
@@ -2199,6 +2234,27 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
     return (select(
       quickSaleRequests,
     )..where((t) => t.id.equals(id) & whereBusiness(t))).watchSingleOrNull();
+  }
+
+  /// How many Quick Sale approvals this staff member has requested in the bound
+  /// business — one of the Staff detail screen's activity figures (#205). Any
+  /// status counts (the figure is "how often did you ask", not "how often were
+  /// you approved"), matching what the screen has always shown.
+  ///
+  /// Business-scoped (architecture.md invariant #5): the screen's raw
+  /// `customSelect` carried no `business_id` predicate, so a device holding two
+  /// businesses' rows counted both.
+  Future<int> countRequestedByStaff(String userId) async {
+    final countCol = quickSaleRequests.id.count();
+    final row =
+        await (selectOnly(quickSaleRequests)
+              ..addColumns([countCol])
+              ..where(
+                whereBusiness(quickSaleRequests) &
+                    quickSaleRequests.requestedBy.equals(userId),
+              ))
+            .getSingle();
+    return row.read(countCol) ?? 0;
   }
 
   /// §12.3.1 — a cashier (role below Manager) submits a Quick Sale for approval.
