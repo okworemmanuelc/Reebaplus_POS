@@ -95,9 +95,20 @@ extension ReconGroupingX on ReconGrouping {
 /// instead as one aggregated "Van Sales" line (#147). Note this is about
 /// *revenue and per-store figures* only: van **stock** still counts towards
 /// All-Stores inventory value and business worth (§4.1), which is why
-/// `inventoryOnHandKobo` below is scoped by the locked store rather than by
-/// this predicate.
-bool Function(String?) reconStoreFilter(WidgetRef ref) {
+/// `inventoryOnHandKobo` below is scoped by the locked store — or unscoped on a
+/// [businessWide] compute — rather than by this predicate.
+///
+/// [businessWide] is the DAY-CLOSE basis (#191, ADR 0022): it ignores both the
+/// active lock and the viewer's confinement, so every store in the business
+/// counts. A persisted day close is ONE durable record of what the whole
+/// business's day looked like, and it is FIRST-WRITER-WINS — whoever opens the
+/// finished day first must therefore freeze the same figures, whatever store
+/// they happened to be locked to. Vans stay out even here: business-wide is not
+/// "vans too".
+bool Function(String?) reconStoreFilter(
+  WidgetRef ref, {
+  bool businessWide = false,
+}) {
   final selectableIds = ref
       .watch(selectableStoresProvider)
       .map((s) => s.id)
@@ -107,6 +118,7 @@ bool Function(String?) reconStoreFilter(WidgetRef ref) {
   final vans = ref.watch(vanStoresProvider);
   return (storeId) {
     if (vans.isVan(storeId)) return false;
+    if (businessWide) return true; // the whole business (incl. legacy null-store)
     if (active != null) return storeId == active;
     if (canAll) return true; // All-Stores aggregate (incl. legacy null-store)
     return storeId != null && selectableIds.contains(storeId);
@@ -291,6 +303,65 @@ Iterable<StockAdjustmentData> _lossRows(
 /// the figure carries its own write-time cost and the figure cannot be restated.
 int legacyValuedRowCount(Iterable<StockAdjustmentData> rows) =>
     rows.where((a) => a.valueKobo == null).length;
+
+// ── Expense date basis (#155 US 34 / #198) ───────────────────────────────────
+//
+// An expense row carries TWO dates and they answer different questions:
+//   • `expense_date` — the day the owner says the money was spent, chosen in
+//     the §20.2 date picker. This is the REPORTING basis.
+//   • `created_at`   — the moment the row was keyed into the app. This is the
+//     CUSTODY basis: when the money actually left the drawer.
+// Saturday's diesel keyed in on Tuesday is one spend with two honest dates, and
+// each figure names which one it uses ([expenseReportingDate] vs
+// [cashMovementDate]) so the two can never silently drift apart again.
+
+/// The date an expense is REPORTED on — the user-picked `expense_date`.
+///
+/// Every expense figure in the app now shares this basis: the Expenses screen
+/// and its monthly budget (`expenses_screen.dart`), the Home dashboard's Total
+/// Expenses (`home_screen.dart`) and — since #198 — the reconciliation P&L /
+/// Business Statement. Before #198 the P&L alone summed on `created_at`, so a
+/// backdated expense landed in a different period on every screen (#155 US 34;
+/// `MONEY_FLOW_AUDIT.md` § Expenses).
+///
+/// Never null: the column is NOT NULL with a `now()` default both in Drift and
+/// in the cloud (`0073_expenses_full.sql`), and legacy rows were backfilled
+/// from `created_at` on both sides (Drift v31 `columnTransformer`, then the 0073
+/// `UPDATE`). So there is no null case to fall back for — an un-picked date
+/// already reads as the record time.
+DateTime expenseReportingDate(ExpenseData e) => e.expenseDate;
+
+/// The date a cash tender is counted on in the cash-flow card — its own
+/// `created_at`, i.e. the moment the money moved through the drawer.
+///
+/// **The deliberate exception to [expenseReportingDate]** (#155 US 34 / #198).
+/// The cash card states cash MOVEMENT, so custody timing wins: cash left the
+/// drawer when it left the drawer, and backdating a receipt cannot un-empty a
+/// till that was already counted. That is why an expense entered today for last
+/// week shows in last week's P&L but in THIS period's "Expenses paid (cash)" —
+/// the two figures are answering different questions, and the reconciliation
+/// screen prints that in plain words under both cards.
+DateTime cashMovementDate(PaymentTransactionData p) => p.createdAt;
+
+/// Sum the period's expenses for the P&L / Business Statement: approved only
+/// (§20.4 — pending awaits the CEO and rejected is never spend), not
+/// soft-deleted, in store scope, and — the #198 fix — in span on the
+/// user-picked [expenseReportingDate] rather than the record time.
+({int totalKobo, int count}) approvedExpensesInPeriod(
+  Iterable<ExpenseData> expenses, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var totalKobo = 0;
+  var count = 0;
+  for (final e in expenses) {
+    if (e.isDeleted || e.status != 'approved') continue;
+    if (!inSpan(expenseReportingDate(e)) || !inScope(e.storeId)) continue;
+    totalKobo += e.amountKobo;
+    count++;
+  }
+  return (totalKobo: totalKobo, count: count);
+}
 
 // ── Buckets (list cards + drill-down breakdown) ──────────────────────────────
 
@@ -953,11 +1024,18 @@ class ReconData {
 /// Full reconciliation roll-up for `[start, endExclusive)` in the active store
 /// scope. `isCeo` only gates the supplier-ledger flows (the rest is computed
 /// either way; the screen decides which figures to show per the cost wall).
+///
+/// [businessWide] computes the whole business instead — the basis a persisted
+/// day close freezes and compares against (#191, ADR 0022). It ignores the
+/// active lock and the viewer's confinement (see [reconStoreFilter]) and reads
+/// the UNSCOPED stock totals, so the frozen record never depends on which store
+/// the first opener happened to be in. Every other caller wants the default.
 ReconData computeReconData(
   WidgetRef ref, {
   DateTime? start,
   DateTime? endExclusive,
   required bool isCeo,
+  bool businessWide = false,
 }) {
   final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
   final expenses = ref.watch(allExpensesProvider).valueOrNull ?? const [];
@@ -975,10 +1053,12 @@ ReconData computeReconData(
   // sum every store's stock (null = All Stores). The products list itself is
   // unaffected — only the stock totals are store-filtered — so `productById`
   // (used for damage/shortage/surplus cost lookups) stays complete.
-  final activeStoreId = ref.watch(lockedStoreProvider).value;
+  // A business-wide compute (#191) reads the unscoped totals, matching its
+  // store predicate below.
+  final storeScope =
+      businessWide ? null : ref.watch(lockedStoreProvider).value;
   final productsWS =
-      ref.watch(productsWithStockProvider(activeStoreId)).valueOrNull ??
-      const [];
+      ref.watch(productsWithStockProvider(storeScope)).valueOrNull ?? const [];
   final balances =
       ref.watch(creditBalancesKoboProvider).valueOrNull ?? const {};
   final manufacturers =
@@ -994,7 +1074,7 @@ ReconData computeReconData(
   final vat = ref.watch(vatConfigProvider).valueOrNull ?? VatConfig.off;
 
   final productById = {for (final p in productsWS) p.product.id: p.product};
-  final inScope = reconStoreFilter(ref);
+  final inScope = reconStoreFilter(ref, businessWide: businessWide);
   bool inSpan(DateTime t) =>
       (start == null || !t.isBefore(start)) &&
       (endExclusive == null || t.isBefore(endExclusive));
@@ -1235,14 +1315,32 @@ ReconData computeReconData(
   }
 
   // ── Expenses (approved, in span, in scope) ───────────────────────────────
-  var expensesKobo = 0;
-  var expensesCount = 0;
-  for (final e in expenses) {
-    if (e.expense.isDeleted || e.expense.status != 'approved') continue;
-    if (!inSpan(e.expense.createdAt) || !inScope(e.expense.storeId)) continue;
-    expensesKobo += e.expense.amountKobo;
-    expensesCount++;
-  }
+  // #198 (#155 US 34): in span on the user-picked `expense_date`
+  // ([expenseReportingDate]), NOT the record time it used to use — so
+  // Saturday's diesel keyed in on Tuesday is reported in Saturday's period here
+  // exactly as it already was on the Expenses screen, the budget and Home.
+  //
+  // The cash-flow card below deliberately does NOT follow this basis: it counts
+  // the drawer movement on its own record time ([cashMovementDate]), because
+  // custody timing is the question a cash figure answers. So these two expense
+  // figures can legitimately differ for the same money — the screen says so
+  // under both cards (`daily_reconciliation_detail_screen.dart`).
+  //
+  // One-off consequence of the switch: a day CLOSED before #198 froze its
+  // `expensesKobo` on the old record-time basis (`dailyClosingFiguresFrom`,
+  // first-writer-wins in `DailyClosingsDao`). Re-opening such a day can
+  // therefore show an as-reviewed-vs-current delta (#174) on Expenses / Net
+  // profit that is this basis correction, not money that moved. This fix does
+  // NOT back-patch frozen closes — a persisted close is the record of what was
+  // reviewed. Whether the delta view should label a basis change as such is the
+  // day-close / delta issues' call, not this one's.
+  final periodExpenses = approvedExpensesInPeriod(
+    expenses.map((e) => e.expense),
+    inSpan: inSpan,
+    inScope: inScope,
+  );
+  final expensesKobo = periodExpenses.totalKobo;
+  final expensesCount = periodExpenses.count;
 
   // ── Damages (reason names a loss; a removal) ─────────────────────────────
   // §17.2 crate-aware: a damage flagged +cratelost / +crateempty also forfeits
@@ -1413,6 +1511,15 @@ ReconData computeReconData(
   // banked as a sale. `method` casing drifts ('Cash'/'cash'), so match
   // case-insensitively. A cancelled deposit sale posts a negative `crate_deposit`
   // row, so the held line nets a same-period collect-then-cancel to zero.
+  //
+  // #198 — DELIBERATE EXCEPTION to the expense reporting basis. Every other
+  // expense figure in the app is on the user-picked `expense_date`
+  // ([expenseReportingDate]); "Expenses paid (cash)" here stays on the payment
+  // row's own record time ([cashMovementDate]) because this card states cash
+  // CUSTODY: cash left the drawer when it left the drawer, and backdating a
+  // receipt cannot un-empty a till that was already counted. Keep it that way —
+  // the divergence is disclosed to the CEO on the reconciliation screen, under
+  // both the Profit & Loss and the Cash flow cards.
   var cashSalesKobo = 0;
   var cashDebtsCollectedKobo = 0;
   var cashRefundsKobo = 0;
@@ -1421,7 +1528,7 @@ ReconData computeReconData(
   for (final p in payments) {
     if (p.voidedAt != null) continue;
     if (p.method.toLowerCase() != 'cash') continue;
-    if (!inSpan(p.createdAt)) continue;
+    if (!inSpan(cashMovementDate(p))) continue;
     if (p.type == 'sale') {
       cashSalesKobo += p.amountKobo;
     } else if (p.type == 'wallet_topup') {
@@ -1734,10 +1841,11 @@ class ReconFigureDelta {
 /// card's headline reviewed figure with its current value; the detail screen
 /// renders a delta badge on a card whose figure [ReconFigureDelta.changed].
 ///
-/// Built by [reconClosingComparison] only for a FINISHED Day bucket that has a
-/// snapshot AND whose captured store scope matches the current viewer's scope
-/// (figures computed in different scopes are not comparable — see
-/// `DailyClosings.storeScopeId`).
+/// Built by [reconClosingComparisonOrNull] for any FINISHED Day bucket that has a
+/// snapshot, at EVERY viewing scope. Both sides are BUSINESS-WIDE (#191, ADR
+/// 0022): the snapshot froze the whole business's day, so the live side is the
+/// `businessWide: true` compute — never the viewer's store-scoped figures, which
+/// would badge a scope difference as if history had moved.
 class ReconClosingComparison {
   const ReconClosingComparison({
     required this.reviewedAt,
@@ -1790,3 +1898,21 @@ ReconClosingComparison reconClosingComparison(
     current: live.stockExpectedClosingKobo,
   ),
 );
+
+/// The comparison a reconciliation view renders its reviewed banner + delta
+/// badges from — null when the day has no snapshot (it was never reviewed), so
+/// an unreviewed day renders exactly as it did before #174.
+///
+/// **Not gated on the snapshot's store scope (#191, ADR 0022).** A day close is
+/// business-wide and first-writer-wins, so [businessWideLive] must be the
+/// `businessWide: true` compute and the badges show at EVERY viewing scope. The
+/// legacy `store_scope_id` column — non-null on rows frozen before #191, which
+/// is why All Stores went permanently badge-blind for them — is deliberately
+/// never read: treating it as business-wide makes the fix retroactive, with no
+/// production data change.
+ReconClosingComparison? reconClosingComparisonOrNull(
+  DailyClosingData? snapshot,
+  ReconData businessWideLive,
+) => snapshot == null
+    ? null
+    : reconClosingComparison(snapshot, businessWideLive);

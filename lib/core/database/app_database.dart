@@ -621,9 +621,14 @@ class DailyClosings extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   // The calendar day being closed, YYYY-MM-DD (matches StockCounts.businessDate).
   TextColumn get businessDate => text()();
-  // The §12.1 active-store scope the figures were captured in (null = All
-  // Stores). Informational only: the natural key is (business, day), so the
-  // delta badges render only when the current viewer's scope matches this.
+  // LEGACY (#191, ADR 0022). The figures are always BUSINESS-WIDE now, so this
+  // is always written NULL and never read: the natural key is (business, day)
+  // with first-writer-wins, so a per-store capture let whichever scope opened
+  // the day first decide that day's baseline forever and left every other scope
+  // badge-blind. Rows written before #191 carry the opener's active store here;
+  // they are read as business-wide too (the column is ignored), which is what
+  // makes the fix retroactive with no data change. Kept — not dropped — so the
+  // cloud table (0157) needs no migration.
   TextColumn get storeScopeId => text().nullable().references(Stores, #id)();
   // ── Frozen figure set (period-scoped; see ReconData in recon_data.dart) ──
   IntColumn get totalSalesKobo => integer().withDefault(const Constant(0))();

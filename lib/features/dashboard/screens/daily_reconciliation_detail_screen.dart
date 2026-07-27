@@ -88,19 +88,25 @@ class _DailyReconciliationDetailScreenState
   /// gates on every source stream having loaded (see [_frozenFiguresReady]) so a
   /// zeroed mid-load snapshot can't freeze permanently. Deferred past the current
   /// build so it never mutates a provider mid-build.
-  void _maybeWriteSnapshot(ReconData d, {required bool dataReady}) {
+  ///
+  /// [businessWideFigures] — NOT the viewer's scoped figures (#191, ADR 0022).
+  /// The natural key is (business, day) with first-writer-wins, so freezing
+  /// whatever store the opener happened to be locked to let that accident decide
+  /// the day's baseline forever, and left every other scope with none.
+  void _maybeWriteSnapshot(
+    ReconData businessWideFigures, {
+    required bool dataReady,
+  }) {
     if (_snapshotAttempted || !_isFinishedDay || !dataReady) return;
     if (!Gates.dailyReconciliation.allows(ref)) return;
     _snapshotAttempted = true;
-    final storeScopeId = ref.read(lockedStoreProvider).value;
     final reviewedBy = ref.read(currentUserIdProvider);
     final db = ref.read(databaseProvider);
     Future.microtask(() async {
       try {
         await db.dailyClosingsDao.snapshotIfAbsent(
           businessDate: _businessDate,
-          storeScopeId: storeScopeId,
-          figures: dailyClosingFiguresFrom(d),
+          figures: dailyClosingFiguresFrom(businessWideFigures),
           reviewedBy: reviewedBy,
         );
       } on Exception catch (e) {
@@ -124,26 +130,47 @@ class _DailyReconciliationDetailScreenState
     final start = widget.start;
     final endExclusive = widget.endExclusive;
     final title = widget.title;
-    final activeStoreId = ref.watch(lockedStoreProvider).value;
     final d = computeReconData(
       ref,
       start: start,
       endExclusive: endExclusive,
       isCeo: isCeo,
     );
-    _maybeWriteSnapshot(d, dataReady: _frozenFiguresReady(activeStoreId));
 
-    // As-reviewed-vs-current delta (#174): only for a FINISHED Day that HAS a
-    // snapshot AND whose captured store scope matches the current viewer's scope
-    // (figures from different scopes are not comparable). Null everywhere else,
-    // so a week/month/year, an unreviewed day, or a mismatched scope renders
-    // exactly as before — no badges.
+    // The day close's basis (#191, ADR 0022): the BUSINESS-WIDE figures, so one
+    // durable record says what the whole business's day looked like whatever
+    // store the opener was locked to — and the same record is comparable from
+    // every scope. Deliberately computed ONLY for a FINISHED Day — a
+    // week/month/year bucket must not pay for a second full aggregate pass it
+    // has no snapshot for — so this and the snapshot read below register their
+    // watches conditionally; Riverpod re-resolves the dependency set on every
+    // build, so a bucket that becomes a finished day simply picks them up.
+    final dayCloseBasis = _isFinishedDay
+        ? computeReconData(
+            ref,
+            start: start,
+            endExclusive: endExclusive,
+            isCeo: isCeo,
+            businessWide: true,
+          )
+        : null;
+    if (dayCloseBasis != null) {
+      // null = All Stores: the frozen figures read the UNSCOPED stock totals, so
+      // that is the stream whose warmth the readiness gate must check.
+      _maybeWriteSnapshot(dayCloseBasis, dataReady: _frozenFiguresReady(null));
+    }
+
+    // As-reviewed-vs-current delta (#174): for a FINISHED Day that HAS a
+    // snapshot, at EVERY viewing scope (#191 — a snapshot is business-wide, so
+    // the badges are no longer gated on the scope that happened to capture it).
+    // Null for a week/month/year or an unreviewed day, which render exactly as
+    // before — no banner, no badges.
     final snapshot = _isFinishedDay
         ? ref.watch(dailyClosingForDayProvider(_businessDate)).valueOrNull
         : null;
-    final comparison = (snapshot != null && snapshot.storeScopeId == activeStoreId)
-        ? reconClosingComparison(snapshot, d)
-        : null;
+    final comparison = dayCloseBasis == null
+        ? null
+        : reconClosingComparisonOrNull(snapshot, dayCloseBasis);
     final reviewerName = comparison?.reviewedBy == null
         ? null
         : (ref.watch(usersByBusinessProvider).valueOrNull ??
@@ -328,6 +355,9 @@ class _DailyReconciliationDetailScreenState
     final netColor = net >= 0
         ? theme.extension<AppSemanticColors>()!.success
         : theme.colorScheme.error;
+    // #198 — only disclose the two expense date bases when there is expense
+    // money in the period on either basis; an expense-free day needs no note.
+    final hasExpenseFigures = d.expensesKobo != 0 || d.cashExpensesKobo != 0;
     return _card(
       context,
       theme,
@@ -437,6 +467,20 @@ class _DailyReconciliationDetailScreenState
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
+        // #198 (#155 US 34) — the two expense date bases, said out loud. Profit
+        // uses the date the owner picked; the cash card uses the day the drawer
+        // actually moved. Without this note a CEO reads two different expense
+        // figures on one screen and assumes one of them is broken.
+        if (hasExpenseFigures) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Expenses are counted on the date you picked when you recorded them, '
+            'so a bill entered late still lands in the period it was spent. Cash '
+            'flow counts that same money on the day it left the drawer, so the '
+            'two expense figures can differ.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
       ],
       badge: _deltaBadge(context, theme, delta),
     );
@@ -520,6 +564,9 @@ class _DailyReconciliationDetailScreenState
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
     final netColor = d.netCashMovementKobo >= 0 ? successColor : dangerColor;
+    // #198 — mirrors the Profit & Loss card: name the basis wherever an expense
+    // figure is shown, so the CEO can see why the two differ.
+    final hasExpenseFigures = d.expensesKobo != 0 || d.cashExpensesKobo != 0;
     return _card(
       context,
       theme,
@@ -569,6 +616,15 @@ class _DailyReconciliationDetailScreenState
           'held in the drawer, kept out of the net.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
+        if (hasExpenseFigures) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Expenses here are counted on the day the money left the drawer, not '
+            'the date picked on the expense — so this can differ from Expenses '
+            'in Profit & Loss. Both are right: this card follows the cash.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
       ],
       badge: _deltaBadge(context, theme, delta),
     );

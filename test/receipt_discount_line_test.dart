@@ -258,17 +258,14 @@ void main() {
         crateDeposit: t.depositKobo / 100.0,
         total: t.totalKobo / 100.0,
       );
-      for (final row in [
-        'Subtotal',
-        'Discount',
-        'Crate Deposit',
-      ]) {
-        // The padded two-column row is byte-identical on both copies.
-        final line = (String text) {
-          final i = text.indexOf(row);
-          return text.substring(i, text.indexOf('\n', i));
-        };
-        expect(line(reprint), line(original), reason: row);
+      // The padded two-column row is byte-identical on both copies.
+      String row(String text, String label) {
+        final i = text.indexOf(label);
+        return text.substring(i, text.indexOf('\n', i));
+      }
+
+      for (final label in ['Subtotal', 'Discount', 'Crate Deposit']) {
+        expect(row(reprint, label), row(original, label), reason: label);
       }
     });
 
