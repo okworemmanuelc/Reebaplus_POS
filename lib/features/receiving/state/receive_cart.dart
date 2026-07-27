@@ -47,6 +47,12 @@ class ReceiveCartLine {
       trackEmpties: trackEmpties ?? this.trackEmpties,
     );
   }
+
+  /// A line arriving with no recorded buying price is **Uncosted** (CONTEXT.md
+  /// §Inventory & Costing): it adds nothing to the supplier invoice and its
+  /// Cost Batch lands uncosted, so those units later sell at 0 COGS until a
+  /// cost is recorded. Accepted, never blocked — only disclosed (#199).
+  bool get isUncosted => buyingPriceKobo == 0;
 }
 
 class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
@@ -161,6 +167,15 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
   int get lineCount => state.length;
   int get totalUnits => state.fold(0, (sum, line) => sum + line.qty);
   int get invoiceTotalKobo => state.fold(0, (sum, line) => sum + (line.buyingPriceKobo * line.qty));
+
+  /// Lines that would arrive with no recorded buying price (#199 / PRD #155
+  /// US 37). Drives the checkout's Uncosted disclosure; it never blocks the
+  /// commit.
+  int get uncostedLineCount => state.where((line) => line.isUncosted).length;
+
+  /// Units carried by those lines — the quantity that would arrive at no cost.
+  int get uncostedUnits =>
+      state.fold(0, (sum, line) => sum + (line.isUncosted ? line.qty : 0));
 }
 
 final receiveCartProvider = NotifierProvider<ReceiveCartNotifier, List<ReceiveCartLine>>(() {
