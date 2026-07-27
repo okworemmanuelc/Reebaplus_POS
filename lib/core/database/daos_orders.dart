@@ -1446,13 +1446,22 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // Cost batches (#170 #7c): restore each sale line's consumed cost LAYER at
       // the per-unit COGS the sale snapshotted (`order_items.buying_price_kobo`),
       // so the FIFO queue and the shelf stay in step — the drawn units come back
-      // costed, not as phantom 0-cost stock. This is a LOCAL APPROXIMATION: the
-      // cancel push re-costs the same (product, store) pairs server-side (the
-      // `pos_recost_pairs` pass a sale push triggers, now also fired from the
-      // pushed `return` stock_transactions), and that authoritative replay
-      // supersedes this layer — keeping the client consistent with
-      // Batch-Boundary Reconciliation (ADR 0005) instead of fighting it. Quick-
-      // sale lines carry no product and are skipped (they were never batched).
+      // costed, not as phantom 0-cost stock.
+      //
+      // This layer is the QUEUE'S TRUTH, not a provisional guess (#187). It used
+      // to be documented as a local approximation the server's replay would
+      // supersede; that was false against the shipped SQL and double-restored
+      // the units. `pos_recost_product_store` rebuilt `qty_remaining` from the
+      // SALE ledger only, so on the next push it re-derived the drawn-from batch
+      // back to its full `qty_original` (the cancelled order having dropped out
+      // of that ledger) while this restore layer survived — 10 units on hand,
+      // 14 covered. Migration 0167 removed that write-back: the replay now only
+      // re-derives per-line COGS, and `qty_remaining` belongs to the incremental
+      // drawers that see every outflow class (this one included). The cancel push
+      // still triggers the recost — the surviving sale lines' COGS genuinely does
+      // need re-deriving once this order leaves the ledger (Batch-Boundary
+      // Reconciliation, ADR 0005). Quick-sale lines carry no product and are
+      // skipped (they were never batched).
       final cancelledLines =
           await (select(orderItems)..where(
                 (i) => i.orderId.equals(orderId) & whereBusiness(i),

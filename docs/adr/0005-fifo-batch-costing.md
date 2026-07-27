@@ -119,12 +119,22 @@ lines, which drew from no batch.
       orchestrator: loads the queue + the recognized-sale ledger
       (`orders.status IN ('pending','completed')`, ordered by `orders.created_at`),
       replays via `fifo_assign`, writes the authoritative per-line COGS back onto
-      `order_items.buying_price_kobo` and the derived `cost_batches.qty_remaining`.
-      Full replay from `qty_original` every call ⇒ idempotent; a late
-      earlier-timestamped sale re-orders the ledger ⇒ already-corrected lines are
-      re-assigned. Only changed rows bump `last_updated_at`, so `recosted_count`
-      counts genuinely re-costed sales and the correction flows down as an
-      ordinary LWW update.
+      `order_items.buying_price_kobo` — and **nothing else**. Full replay from
+      `qty_original` every call ⇒ idempotent; a late earlier-timestamped sale
+      re-orders the ledger ⇒ already-corrected lines are re-assigned. Only changed
+      rows bump `last_updated_at`, so `recosted_count` counts genuinely re-costed
+      sales and the correction flows down as an ordinary LWW update.
+      Van stores are fenced out entirely (#142, ADR 0019, migration 0164).
+      **It does NOT write `cost_batches.qty_remaining`** (#187, migration 0167).
+      It used to, and that was a P0 money defect: the replay input is the SALE
+      ledger only, so re-derived remainders resurrected every non-sale draw #170
+      added (damages, shortages, count corrections, transfer dispatches,
+      product-delete write-offs, and a cancel's restore layer) — a loss counted
+      twice, phantom cost coverage at a transfer source, a doubled cancel restore.
+      `qty_remaining` belongs to the INCREMENTAL drawers, which see every outflow
+      class: the client (`CostBatchesDao`) and `_checkout_draw_fifo` (0139) on the
+      v2 checkout path. The replay owns "which layer paid for this line"; it does
+      not own "what is left on the shelf".
     - `public.pos_recost_pairs(business, pairs)` — recosts the (product, store)
       pairs a sync touched and returns one rolled-up count for the client
       correction flow (#40) to audit with a single Activity Log row. It does not
