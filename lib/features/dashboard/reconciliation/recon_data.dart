@@ -95,9 +95,20 @@ extension ReconGroupingX on ReconGrouping {
 /// instead as one aggregated "Van Sales" line (#147). Note this is about
 /// *revenue and per-store figures* only: van **stock** still counts towards
 /// All-Stores inventory value and business worth (§4.1), which is why
-/// `inventoryOnHandKobo` below is scoped by the locked store rather than by
-/// this predicate.
-bool Function(String?) reconStoreFilter(WidgetRef ref) {
+/// `inventoryOnHandKobo` below is scoped by the locked store — or unscoped on a
+/// [businessWide] compute — rather than by this predicate.
+///
+/// [businessWide] is the DAY-CLOSE basis (#191, ADR 0022): it ignores both the
+/// active lock and the viewer's confinement, so every store in the business
+/// counts. A persisted day close is ONE durable record of what the whole
+/// business's day looked like, and it is FIRST-WRITER-WINS — whoever opens the
+/// finished day first must therefore freeze the same figures, whatever store
+/// they happened to be locked to. Vans stay out even here: business-wide is not
+/// "vans too".
+bool Function(String?) reconStoreFilter(
+  WidgetRef ref, {
+  bool businessWide = false,
+}) {
   final selectableIds = ref
       .watch(selectableStoresProvider)
       .map((s) => s.id)
@@ -107,6 +118,7 @@ bool Function(String?) reconStoreFilter(WidgetRef ref) {
   final vans = ref.watch(vanStoresProvider);
   return (storeId) {
     if (vans.isVan(storeId)) return false;
+    if (businessWide) return true; // the whole business (incl. legacy null-store)
     if (active != null) return storeId == active;
     if (canAll) return true; // All-Stores aggregate (incl. legacy null-store)
     return storeId != null && selectableIds.contains(storeId);
@@ -910,11 +922,18 @@ class ReconData {
 /// Full reconciliation roll-up for `[start, endExclusive)` in the active store
 /// scope. `isCeo` only gates the supplier-ledger flows (the rest is computed
 /// either way; the screen decides which figures to show per the cost wall).
+///
+/// [businessWide] computes the whole business instead — the basis a persisted
+/// day close freezes and compares against (#191, ADR 0022). It ignores the
+/// active lock and the viewer's confinement (see [reconStoreFilter]) and reads
+/// the UNSCOPED stock totals, so the frozen record never depends on which store
+/// the first opener happened to be in. Every other caller wants the default.
 ReconData computeReconData(
   WidgetRef ref, {
   DateTime? start,
   DateTime? endExclusive,
   required bool isCeo,
+  bool businessWide = false,
 }) {
   final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
   final expenses = ref.watch(allExpensesProvider).valueOrNull ?? const [];
@@ -932,10 +951,12 @@ ReconData computeReconData(
   // sum every store's stock (null = All Stores). The products list itself is
   // unaffected — only the stock totals are store-filtered — so `productById`
   // (used for damage/shortage/surplus cost lookups) stays complete.
-  final activeStoreId = ref.watch(lockedStoreProvider).value;
+  // A business-wide compute (#191) reads the unscoped totals, matching its
+  // store predicate below.
+  final storeScope =
+      businessWide ? null : ref.watch(lockedStoreProvider).value;
   final productsWS =
-      ref.watch(productsWithStockProvider(activeStoreId)).valueOrNull ??
-      const [];
+      ref.watch(productsWithStockProvider(storeScope)).valueOrNull ?? const [];
   final balances =
       ref.watch(creditBalancesKoboProvider).valueOrNull ?? const {};
   final manufacturers =
@@ -951,7 +972,7 @@ ReconData computeReconData(
   final vat = ref.watch(vatConfigProvider).valueOrNull ?? VatConfig.off;
 
   final productById = {for (final p in productsWS) p.product.id: p.product};
-  final inScope = reconStoreFilter(ref);
+  final inScope = reconStoreFilter(ref, businessWide: businessWide);
   bool inSpan(DateTime t) =>
       (start == null || !t.isBefore(start)) &&
       (endExclusive == null || t.isBefore(endExclusive));
@@ -1705,10 +1726,11 @@ class ReconFigureDelta {
 /// card's headline reviewed figure with its current value; the detail screen
 /// renders a delta badge on a card whose figure [ReconFigureDelta.changed].
 ///
-/// Built by [reconClosingComparison] only for a FINISHED Day bucket that has a
-/// snapshot AND whose captured store scope matches the current viewer's scope
-/// (figures computed in different scopes are not comparable — see
-/// `DailyClosings.storeScopeId`).
+/// Built by [reconClosingComparisonOrNull] for any FINISHED Day bucket that has a
+/// snapshot, at EVERY viewing scope. Both sides are BUSINESS-WIDE (#191, ADR
+/// 0022): the snapshot froze the whole business's day, so the live side is the
+/// `businessWide: true` compute — never the viewer's store-scoped figures, which
+/// would badge a scope difference as if history had moved.
 class ReconClosingComparison {
   const ReconClosingComparison({
     required this.reviewedAt,
@@ -1761,3 +1783,21 @@ ReconClosingComparison reconClosingComparison(
     current: live.stockExpectedClosingKobo,
   ),
 );
+
+/// The comparison a reconciliation view renders its reviewed banner + delta
+/// badges from — null when the day has no snapshot (it was never reviewed), so
+/// an unreviewed day renders exactly as it did before #174.
+///
+/// **Not gated on the snapshot's store scope (#191, ADR 0022).** A day close is
+/// business-wide and first-writer-wins, so [businessWideLive] must be the
+/// `businessWide: true` compute and the badges show at EVERY viewing scope. The
+/// legacy `store_scope_id` column — non-null on rows frozen before #191, which
+/// is why All Stores went permanently badge-blind for them — is deliberately
+/// never read: treating it as business-wide makes the fix retroactive, with no
+/// production data change.
+ReconClosingComparison? reconClosingComparisonOrNull(
+  DailyClosingData? snapshot,
+  ReconData businessWideLive,
+) => snapshot == null
+    ? null
+    : reconClosingComparison(snapshot, businessWideLive);
