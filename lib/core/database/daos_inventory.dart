@@ -217,9 +217,10 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   ///  • an **increase** creates a fresh FIFO cost batch through the same
   ///    [CostBatchesDao.recordInflowBatch] inflow Receive Stock uses —
   ///    [inflowUnitCostKobo] when the caller knows the cost (the existing-
-  ///    product Add path), an **Uncosted** (0) batch otherwise (an approved
-  ///    count/recount) — so its later sales draw real (or backfillable) COGS,
-  ///    never phantom 0.
+  ///    product Add path), else the product's recorded scalar cost (#189), and an
+  ///    **Uncosted** (0) batch only when no cost is knowable — so its later sales
+  ///    draw real (or backfillable) COGS, never phantom 0. See
+  ///    [_recordedUnitCostKobo] for why the omitted-cost default is not 0.
   ///  • a **decrease** draws the FIFO queue down oldest-first
   ///    ([CostBatchesDao.drawDownOutflow]) and SNAPSHOTS the drawn value onto
   ///    the `stock_adjustments` row (`unit_cost_kobo` / `value_kobo`), so a
@@ -422,8 +423,9 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
 
       // #7a inflow batch: a plain-adjustment increase creates a fresh FIFO layer
       // through the SAME inflow Receive Stock uses — a costed batch when the
-      // caller knows the price (the Add path), an Uncosted (0) batch otherwise —
-      // so its later sales draw real (or backfillable) COGS, never phantom 0.
+      // caller knows the price (the Add path), the product's recorded cost when
+      // it does not (#189), an Uncosted (0) batch only when no cost is knowable
+      // — so its later sales draw real (or backfillable) COGS, never phantom 0.
       // Transfer legs (isTransfer) move cost through the transfer DAO (#7b);
       // Receive Stock opts out (trackCost:false) and writes its own batch.
       if (trackCost && delta > 0 && !isTransfer) {
@@ -431,11 +433,40 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           productId: productId,
           storeId: storeId,
           quantity: delta,
-          costKobo: inflowUnitCostKobo ?? 0,
+          costKobo: inflowUnitCostKobo ?? await _recordedUnitCostKobo(productId),
           receivedAt: inflowReceivedAt,
         );
       }
     });
+  }
+
+  /// The cost basis for an increase whose caller hands over none (#189): the
+  /// product's scalar `buying_price_kobo`. 0 when the product carries no cost —
+  /// then, and only then, the batch is genuinely **Uncosted**.
+  ///
+  /// The scalar is not a guess. It is the derived display cache over the batch
+  /// queue (ADR 0005), re-pointed by `CostBatchesDao._recomputeScalarCost` at the
+  /// cost of the oldest remaining **costed** batch, or the price the owner
+  /// entered — the best available basis, and the same rule F1's opening-batch
+  /// migration used ("every existing product's current stock becomes one opening
+  /// batch at its existing scalar cost — zero-cost stock becomes an *uncosted*
+  /// batch"). Batching at 0 instead made these units sell at **0 COGS forever**:
+  /// #41's backfill only fires on a `0 → positive` cost edit, a transition a
+  /// product that already has a price can never make again, so nothing could ever
+  /// reach the batch.
+  ///
+  /// Keyed on the caller saying **nothing** (`inflowUnitCostKobo == null`), never
+  /// on a handed-over 0 — a caller that states "no cost" (Add Product with the
+  /// buying price left blank) still gets its deliberate Uncosted layer, and #197
+  /// composes cleanly: it passes the cost captured on the request and falls back
+  /// here when the approver captured none.
+  Future<int> _recordedUnitCostKobo(String productId) async {
+    final product =
+        await (select(products)
+              ..where((p) => p.id.equals(productId) & whereBusiness(p))
+              ..limit(1))
+            .getSingleOrNull();
+    return product?.buyingPriceKobo ?? 0;
   }
 
   /// The stable reason stamped on the write-off adjustments a product delete

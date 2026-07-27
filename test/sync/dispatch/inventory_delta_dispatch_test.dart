@@ -79,8 +79,9 @@ void main() {
       expect(await db.select(db.stockTransactions).get(), hasLength(1));
       final inv = await db.select(db.inventory).getSingle();
       expect(inv.quantity, 15);
-      // #170 #7a: the increase created an Uncosted (0) cost batch so its later
-      // sales draw backfillable COGS, never phantom 0.
+      // #170 #7a: the increase created a cost batch so its later sales draw real
+      // COGS, never phantom 0. Uncosted (0) here because this fixture's product
+      // carries no buying price — with one on file the batch takes it (#189).
       final batch = await db.select(db.costBatches).getSingle();
       expect(batch.qtyRemaining, 5);
       expect(batch.costKobo, 0);
