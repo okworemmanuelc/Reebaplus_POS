@@ -96,6 +96,83 @@ a separate concern.
 _Avoid_: treating a Cart as a draft/pending Order; folding cart logic into the
 Order Module.
 
+### Money & Payments
+
+Vocabulary established by PRD #155 (ADR 0021). The governing idea: `payment_transactions`
+behaves like the wallet and supplier ledgers — **append-only in practice, corrections
+are new rows**.
+
+**Payment row**:
+One row in `payment_transactions` recording money actually moving. Typed
+`sale` | `expense` | `refund` | `wallet_topup` | `crate_deposit` (+ legacy
+`purchase`, never written). Counted on its **own creation day**, which is what
+makes a reviewed day's cash figure stable.
+_Avoid_: editing a payment row; "voiding" one (the in-place void columns are
+legacy read-only).
+
+**Compensating row**:
+The correction mechanism — a new payment row that offsets an earlier one, dated
+the day the correction happens, rather than an edit to the original. Cancel posts
+a refund cash-out; expense reject/delete and top-up void post reversals. Written
+only through the reversal seam (`daos_payments.dart`), which copies the
+original's typed reference, store and tender so a cash tender yields a cash
+reversal.
+_Avoid_: reversal-in-place, void-and-rewrite, "adjusting" the original.
+
+**In-family reversal**:
+Releasing held money by posting a **negative row of the same type**, not a
+`refund` — so a crate deposit coming back nets the held-deposit line down instead
+of appearing as a sales refund (which would be subtracted from profit for money
+that was never revenue). `markCancelled` is the reference implementation.
+_Avoid_: typing any deposit or top-up release as `refund`.
+
+**Tender**:
+*How* the customer paid — the `method` on a payment row (`cash`, `transfer`, …),
+picked at checkout. Distinct from **payment type** (*what the money is for*).
+"Cash sales" means physical cash only, so the drawer can be counted against it.
+_Avoid_: conflating tender with payment type; assuming cash.
+
+**Crate deposit (money side)**:
+Refundable money held for a customer's crates. Its own payment type, deliberately
+outside "Cash sales" and headline "Total Sales", shown as its own held-money line
+and subtracted from Business worth as a liability. Forfeited deposits become
+income; see Crates for the physical side.
+_Avoid_: banking it as earnings; folding it into Total Sales.
+
+**Day close / as-reviewed**:
+The first time a permitted user opens a **finished** day's reconciliation, its
+figures freeze into a synced `daily_closings` row (one per business × day,
+first-writer-wins). The report thereafter shows *as reviewed* beside *current*
+with a per-card delta, so late syncs and backdated entries make history mutation
+**visible** rather than silent. Purely observational.
+_Avoid_: "closing the books" (nothing is locked); treating it as a cash-drawer
+close (Hard Rule #8 stands).
+
+**Total Sales (the one definition)**:
+Item-line gross minus discounts, deposit-exclusive — `computeTotalSalesKobo`.
+The Home dashboard, Daily Reconciliation and Profit report are all meant to read
+this one helper so a day has one answer.
+_Avoid_: `orders.totalAmountKobo` / `net_amount_kobo` for a "sales" figure (both
+are gross of discounts and deposit-inclusive).
+
+**Concession**:
+The gap between a product's catalogue (tier) price and what was actually charged,
+snapshotted per line as `order_items.catalogue_price_kobo` at checkout so
+under-the-counter discounting is derivable in margin review. NULL when the
+customer paid list price.
+_Avoid_: reconstructing it from the product's current price (products carry two
+tier prices; the tier deviated from is not recoverable later).
+
+**Valued loss**:
+A damage, expiry, theft or shortage that captured its cost **at the moment of
+loss** (`stock_adjustments.value_kobo`), so a later price edit cannot restate a
+past period. See Inventory & Costing for the batch mechanics.
+_Avoid_: valuing a past loss at today's cost.
+
+Retired vocabulary: the `refunded` **order status** — nothing writes it. Cancel is
+the single reversal state, and refund reporting derives from `refund` payment
+rows.
+
 ### Inventory & Costing
 
 **Add Product**:

@@ -56,6 +56,18 @@ Decisions locked:
   can diverge from the P&L COGS (per-line snapshotted FIFO cost) under a price
   change — accepted as the stated current-cost basis.
 
+  **Addendum 2026-07-25 (PRD #155, slices #170 + #182).** The *loss* surfaces no
+  longer share this card's current-cost basis. Damages (#170) and count
+  shortages (#182) are now valued from the write-time
+  `stock_adjustments.value_kobo` snapshot, so a later cost-price edit cannot
+  restate a past period's loss (ADR 0021 §4). **This card keeps current cost on
+  purpose** — its closing identity must tie to the rewound perpetual figure — so
+  the flow-equation Damages/Expired terms and the P&L Damages/Shortage lines can
+  legitimately differ after a price change. Count *surplus* remains current-cost
+  everywhere (a gain draws no batch). The residual "Other movements" is now
+  broken out by cause (transfers / count corrections / product deletions) per
+  #155 US 30.
+
 - **P&L books gross revenue and subtracts an explicit Discounts line.**
   `order_items.unitPriceKobo` is the **gross** list price; the order's real
   payable lives in `netAmountKobo`/`discountKobo` (`order_commands.dart`). The
@@ -88,6 +100,11 @@ Decisions locked:
   most faithful to "running net position," but adds a synced snapshot table +
   backfill; the flow-reconciliation flag delivers the recording-error signal now
   without new persistence. Revisit if snapshot-grade history is wanted.
+  **→ No longer deferred: landed 2026-07-25 via PRD #155 slice #174** as the
+  synced `daily_closings` table (one first-writer-wins row per business × day,
+  frozen on the first review of a finished day) plus a per-card
+  "changed since review" delta. See ADR 0021 §2. Purely observational — no money
+  flow changed.
 - **Book revenue net of discount with no discount line** — rejected: correct
   bottom line but hides how much was discounted; the ask names discounts as an
   explicit subtraction.
