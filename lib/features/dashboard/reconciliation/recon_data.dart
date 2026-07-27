@@ -243,9 +243,37 @@ Iterable<StockAdjustmentData> countShortageRows(
   Iterable<StockAdjustmentData> adjustments, {
   required bool Function(DateTime) inSpan,
   required bool Function(String?) inScope,
+}) => _lossRows(
+  adjustments,
+  isLoss: isCountReconciliationReason,
+  inSpan: inSpan,
+  inScope: inScope,
+);
+
+/// The damage/loss rows inside [inSpan] + [inScope] — the [countShortageRows]
+/// twin for the Damages figure, so its money and its footnote also describe one
+/// row set. Disjoint from [countShortageRows] by reason, so a loss is never
+/// counted as both.
+Iterable<StockAdjustmentData> damageLossRows(
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) => _lossRows(
+  adjustments,
+  isLoss: isDamageReason,
+  inSpan: inSpan,
+  inScope: inScope,
+);
+
+/// A loss is a DECREASE whose reason [isLoss] classifies, inside span + scope.
+Iterable<StockAdjustmentData> _lossRows(
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(String) isLoss,
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
 }) => adjustments.where(
   (a) =>
-      isCountReconciliationReason(a.reason) &&
+      isLoss(a.reason) &&
       a.quantityDiff < 0 &&
       inSpan(a.createdAt) &&
       inScope(a.storeId),
@@ -1220,16 +1248,16 @@ ReconData computeReconData(
   var damageCostKobo = 0;
   var damageRetailKobo = 0;
   var crateDamageDepositKobo = 0;
-  var legacyValuedDamageRows = 0;
-  for (final a in adjustments) {
-    if (!isDamageReason(a.reason) || a.quantityDiff >= 0) continue;
-    if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
+  final damageRows =
+      damageLossRows(adjustments, inSpan: inSpan, inScope: inScope).toList();
+  // #200 / US 20 — how many of those rows take the current-cost fallback, so the
+  // report can LABEL them instead of the fallback living only in dartdoc. Read
+  // off the SAME row list the money below sums, so the two cannot drift.
+  final legacyValuedDamageRows = legacyValuedRowCount(damageRows);
+  for (final a in damageRows) {
     final units = -a.quantityDiff;
     final p = productById[a.productId];
     damageUnits += units;
-    // #200 / US 20 — count the rows taking the current-cost fallback so the
-    // report can LABEL them, instead of the fallback living only in dartdoc.
-    if (a.valueKobo == null) legacyValuedDamageRows++;
     // #170 #7a: value the loss at the FIFO cost SNAPSHOTTED when the damage was
     // recorded (`value_kobo`), so a later cost-price edit can't rewrite a past
     // loss. Legacy quantity-only rows (no snapshot, written before #170) keep
