@@ -30,6 +30,7 @@ import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.d
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/crate_money_arrangement_section.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
 import 'package:reebaplus_pos/core/constants/category_filter.dart';
@@ -2080,6 +2081,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   ),
                 ),
               ],
+
+              // #211 — the brand's Crate Money Arrangement (ADR 0023 rule 3).
+              // Self-gating (crate business + Gates.crateMoneyArrangement) and
+              // self-saving: it confirms and writes on its own rather than
+              // riding the Save button below, because a money policy must not be
+              // half-chosen and abandoned. Renders nothing for a non-crate
+              // business or a role without money permission.
+              CrateMoneyArrangementSection(
+                manufacturer: mfr,
+                surfaceColor: _surface,
+                textColor: _text,
+                subtextColor: _subtext,
+              ),
 
               const SizedBox(height: 32),
               AppButton(

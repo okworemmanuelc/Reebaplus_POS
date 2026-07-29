@@ -187,11 +187,14 @@ void main() {
     // empties pool is derived from the append-only `crate_ledger`, so the
     // absolute scalar never crosses the wire. This whitelist is every
     // manufacturers column EXCEPT `empty_crate_stock`.
+    // #211: `crate_money_arrangement` IS pushed — an owner-chosen money policy
+    // has to reach every other device, exactly like `deposit_amount_kobo`.
     'manufacturers': {
       'id',
       'business_id',
       'name',
       'deposit_amount_kobo',
+      'crate_money_arrangement',
       'is_deleted',
       'created_at',
       'last_updated_at',

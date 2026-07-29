@@ -2915,4 +2915,131 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v77 → v78 (a brand says whether its crate money moves, '
+      '#211)', () {
+    /// Reverts the v78 delta: drop the one added column. `manufacturers` has no
+    /// CHECK mentioning it (the value set is enforced on the cloud only) and
+    /// nothing references it, so a raw DROP COLUMN is enough — no rebuild.
+    Future<void> dropCrateMoneyArrangement(AppDatabase db) async {
+      await db.customStatement(
+        'ALTER TABLE manufacturers DROP COLUMN crate_money_arrangement',
+      );
+    }
+
+    /// A business + two manufacturers carrying real deposit rates — the shape
+    /// every live crate tenant already has on disk before this upgrade.
+    Future<Map<String, String>> seedTenant(AppDatabase db) async {
+      final biz = UuidV7.generate();
+      final star = UuidV7.generate();
+      final gulder = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name, type) VALUES (?, 'Biz', 'Bar')",
+        [biz],
+      );
+      await db.customStatement(
+        'INSERT INTO manufacturers (id, business_id, name, empty_crate_stock, '
+        "deposit_amount_kobo) VALUES (?, ?, 'Star Lager', 42, 350000)",
+        [star, biz],
+      );
+      await db.customStatement(
+        'INSERT INTO manufacturers (id, business_id, name, empty_crate_stock, '
+        "deposit_amount_kobo) VALUES (?, ?, 'Gulder', 7, 300000)",
+        [gulder, biz],
+      );
+      return {'biz': biz, 'star': star, 'gulder': gulder};
+    }
+
+    test('THE RELEASE GATE — every manufacturer that existed before the upgrade '
+        'survives it and reads `none`, with nothing else touched', () async {
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+
+      await dropCrateMoneyArrangement(db1);
+      expect(
+        (await columnsOf(db1, 'manufacturers')).contains(
+          'crate_money_arrangement',
+        ),
+        isFalse,
+        reason: 'teeth: the pre-v78 shape must genuinely lack the column',
+      );
+
+      await db1.customStatement('PRAGMA user_version = 77');
+      await db1.close();
+
+      // Re-open → onUpgrade(77 → 78) adds the column.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(
+        (await columnsOf(db2, 'manufacturers')).contains(
+          'crate_money_arrangement',
+        ),
+        isTrue,
+      );
+
+      // The whole of PRD #203 rests on this: every brand that already existed
+      // reads 'none' — swap only, no money ever changes hands — so no later
+      // slice can move a live tenant's figures until an owner opts a brand in.
+      final rows = await db2
+          .customSelect(
+            'SELECT id, name, empty_crate_stock, deposit_amount_kobo, '
+            'crate_money_arrangement FROM manufacturers ORDER BY name',
+          )
+          .get();
+      expect(rows, hasLength(2), reason: 'no row was lost in the upgrade');
+      expect(
+        rows.map((r) => r.read<String>('crate_money_arrangement')),
+        everyElement('none'),
+      );
+
+      // …and NOTHING else about those rows moved. A broken migration (a table
+      // rebuild that quoted the new name into a string literal, a backfill that
+      // "helpfully" inferred an arrangement from the rate) would show up here.
+      expect(rows.map((r) => r.read<String>('id')), [
+        ids['gulder']!,
+        ids['star']!,
+      ]);
+      expect(rows.map((r) => r.read<String>('name')), [
+        'Gulder',
+        'Star Lager',
+      ]);
+      expect(rows.map((r) => r.read<int>('empty_crate_stock')), [7, 42]);
+      expect(rows.map((r) => r.read<int>('deposit_amount_kobo')), [
+        300000,
+        350000,
+      ]);
+    });
+
+    test('a brand opted in before a step-back keeps its arrangement — the '
+        'upgrade never resets an owner\'s choice', () async {
+      // Do NOT drop the column — just step user_version back, so the v78 block
+      // runs against a schema that already has it (also the shape a fresh
+      // install lands in: createTable builds from the CURRENT Dart definition).
+      // The guard must skip the addColumn, and an already-chosen arrangement
+      // must not be flattened back to 'none'.
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      await db1.customStatement(
+        "UPDATE manufacturers SET crate_money_arrangement = 'per_delivery' "
+        'WHERE id = ?',
+        [ids['star']!],
+      );
+      await db1.customStatement('PRAGMA user_version = 77');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final rows = await db2
+          .customSelect(
+            'SELECT id, crate_money_arrangement FROM manufacturers',
+          )
+          .get();
+      final byId = {
+        for (final r in rows)
+          r.read<String>('id'): r.read<String>('crate_money_arrangement'),
+      };
+      expect(byId[ids['star']!], 'per_delivery');
+      expect(byId[ids['gulder']!], 'none');
+    });
+  });
 }

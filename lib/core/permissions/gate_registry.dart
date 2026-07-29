@@ -586,6 +586,31 @@ abstract final class Gates {
     rule: Gate.tierAtLeast(GateTier.manager),
   );
 
+  // ── Crate money cluster (#211, PRD #203 / ADR 0023) ───────────────────────
+
+  /// Set a brand's **Crate Money Arrangement** — whether crate money moves for
+  /// that manufacturer at all, and when (ADR 0023 rule 3). Compounded at the
+  /// call site with the crate-business check (`businessTracksCrates`), which is
+  /// a business-type rule rather than a permission, exactly as
+  /// [crateDepositsReport] does.
+  ///
+  /// `settings.manage` — CEO-only by default (migration 0043) — deliberately
+  /// the same key as [manageSettings] but a distinct action with its own name
+  /// and denial text, the [recordCrateReturn] pattern. This is a standing money
+  /// *policy*, not a transaction: flipping it decides whether every future
+  /// delivery of that brand moves cash. ADR 0023 rule 6 keeps cash movement
+  /// away from the roles that receive stock, so the person who types the crate
+  /// count must not be the person who chooses the arrangement. Reusing the
+  /// owner-policy key rather than minting a new one keeps this slice clear of
+  /// the permission-key deploy ordering (a new key must reach the cloud
+  /// catalogue before any grant syncs, or `role_permissions` FK-rejects and
+  /// jams the outbox).
+  static const NamedGate crateMoneyArrangement = NamedGate(
+    name: 'crateMoneyArrangement',
+    action: 'Set Crate Money Arrangement',
+    rule: Gate.key('settings.manage'),
+  );
+
   // ── Van Sales cluster (#140, PRD #139 / ADR 0019) ─────────────────────────
 
   /// Set up and run the van side of the business (`van.manage`, CEO + Manager
@@ -665,6 +690,7 @@ abstract final class Gates {
     viewApprovals,
     dailyReconciliation,
     crateDepositsReport,
+    crateMoneyArrangement,
     vanManage,
     vanSell,
   ];
