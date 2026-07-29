@@ -32,6 +32,17 @@ shared Golden-Scenario fixtures (ADR 0009). Two never were.
     **negative `crate_deposit`**, `wallet_topup` → a **negative `wallet_topup`**.
     Mutation-verified — rewriting the deposit leg as the pre-#155 positive
     `refund` turns it red.
+  - **One half of the rule is not in the fixture, because a fixture cannot
+    express it.** "The reversal lands on the CANCEL day" only means anything
+    because the ORIGINAL keeps its own `created_at`, and a golden run happens in
+    a single instant, so the two dates cannot be compared to each other. Each
+    runner instead snapshots every original payment row's full state (type,
+    method, amount, `created_at`, `voided_at`) BEFORE the cancel and reports any
+    that changed or vanished as `CancelOutcome.mutatedOriginals`, which
+    `expectGoldenCancel` requires to be **empty** — mutation-verified with a
+    `created_at` rewrite, which the row multiset cannot see. The day-boundary
+    case itself stays pinned, with a backdated sale, in
+    `test/orders/cancel_cashout_test.dart`.
   - Also asserted per scenario: every wallet leg on the order after the cancel
     (originals + the appended opposites — goods debit → `refund` credit, payment
     credit → `void` debit, held `crate_deposit` credit → the deposit-family
@@ -68,10 +79,14 @@ shared Golden-Scenario fixtures (ADR 0009). Two never were.
   every existing scenario now asserts NULL as well rather than ignoring it.
   - The rule itself is shared as **`catalogueSnapshotKobo`** next to
     `clampDiscountKobo` — the Dart twin of `OrderCommands._buildOrderItems` and
-    of SQL `_catalogue_price_snapshot` (0160). The RPC arm forwards
-    `catalogue_price_kobo` **only on a concession line**, so a full-price
-    scenario's payload is byte-identical to what it has always sent, and reads
-    the column back for the comparison.
+    of SQL `_catalogue_price_snapshot` (0160) — as is `GoldenScenario
+    .chargedKobo`, so both arms compute the charged price from one definition.
+    The RPC arm forwards `catalogue_price_kobo` on **every** line, exactly as
+    the mobile cart carries a `catalogPriceKobo` on every item, and reads the
+    column back. That is what puts `_catalogue_price_snapshot` under test in
+    both directions — sending the key only on the concession line would leave
+    the full-price lines NULL for the trivial reason that nothing was sent,
+    pinning half the rule.
   - **This scenario is NOT `dart_arm_only`** — 0160 is deployed, so the RPC arm
     should satisfy it. But the Tier-2 arm **was not run this session** (it needs a
     live DB + a fresh `TEST_USER_REFRESH_TOKEN`), so the parity is pinned in the

@@ -182,7 +182,7 @@ void main() {
         // price; a line may be charged less (a custom-price concession). The
         // line records the catalogue price only when the two differ — the same
         // rule OrderCommands._buildOrderItems applies on the real checkout.
-        final charged = line.chargedUnitPriceKobo ?? p.unitPriceKobo;
+        final charged = scenario.chargedKobo(line);
         final total = charged * line.quantity;
         gross += total;
         items.add(OrderItemsCompanion.insert(
@@ -193,8 +193,8 @@ void main() {
           quantity: line.quantity,
           unitPriceKobo: charged,
           totalKobo: total,
-          cataloguePriceKobo:
-              Value(catalogueSnapshotKobo(p.unitPriceKobo, charged)),
+          cataloguePriceKobo: Value(catalogueSnapshotKobo(
+              catalogueKobo: p.unitPriceKobo, chargedKobo: charged)),
         ));
       }
       // The role discount cap (§12.6/§13.2): clamp the requested discount to the
@@ -304,32 +304,67 @@ void main() {
               type: p.type, method: p.method, amountKobo: p.amountKobo),
       ];
 
-      // Wallet legs THIS sale posted (order_id == this order — excludes the
-      // seeded opening balance) + the customer's derived spendable balance.
+      // ── Readers shared by both steps ───────────────────────────────────────
+      // The checkout and the cancel (#206) read the same three projections, so
+      // each is defined once here and called twice rather than re-typed.
+
+      // Every wallet leg on THIS order (excludes the seeded opening balance,
+      // which carries no order_id) + the customer's derived spendable balance.
+      // Both are null/empty for a walk-in.
       const crateDepositRefs = {
         'crate_deposit',
         'crate_deposit_refunded',
         'crate_deposit_forfeited',
       };
-      final walletLegs = <ActualWalletLeg>[];
-      int? customerBalanceAfter;
-      if (customerId != null) {
+      Future<(List<ActualWalletLeg>, int?)> readWalletState() async {
+        if (customerId == null) return (<ActualWalletLeg>[], null);
         final legRows = await (db.select(db.walletTransactions)
               ..where((w) => w.orderId.equals(orderId)))
             .get();
-        for (final l in legRows) {
-          walletLegs.add(ActualWalletLeg(
-            referenceType: l.referenceType,
-            signedAmountKobo: l.signedAmountKobo,
-          ));
-        }
         final allLegs = await (db.select(db.walletTransactions)
               ..where((w) => w.customerId.equals(customerId!)))
             .get();
-        customerBalanceAfter = allLegs
-            .where((l) => !crateDepositRefs.contains(l.referenceType))
-            .fold<int>(0, (s, l) => s + l.signedAmountKobo);
+        return (
+          [
+            for (final l in legRows)
+              ActualWalletLeg(
+                referenceType: l.referenceType,
+                signedAmountKobo: l.signedAmountKobo,
+              ),
+          ],
+          allLegs
+              .where((l) => !crateDepositRefs.contains(l.referenceType))
+              .fold<int>(0, (s, l) => s + l.signedAmountKobo),
+        );
       }
+
+      /// productKey → on-hand in this store.
+      Future<Map<String, int>> readInventory() async {
+        final out = <String, int>{};
+        for (final entry in productIdByKey.entries) {
+          final invRow = await (db.select(db.inventory)
+                ..where((i) =>
+                    i.productId.equals(entry.value) & i.storeId.equals(storeId)))
+              .getSingleOrNull();
+          if (invRow != null) out[entry.key] = invRow.quantity;
+        }
+        return out;
+      }
+
+      /// key "productKey|receivedAt" → the SEEDED batch's qty_remaining. Batches
+      /// the run appended (a cancel's restore) are deliberately not in here.
+      Future<Map<String, int>> readSeededBatchRemaining() async {
+        final out = <String, int>{};
+        for (final (id, productKey, receivedAt) in seededBatches) {
+          final row = await (db.select(db.costBatches)
+                ..where((b) => b.id.equals(id)))
+              .getSingle();
+          out['$productKey|$receivedAt'] = row.qtyRemaining;
+        }
+        return out;
+      }
+
+      final (walletLegs, customerBalanceAfter) = await readWalletState();
 
       // Crate rows THIS sale posted (Slice 4, #45), keyed by manufacturer:
       // order_crate_lines, the 'issued' crate_ledger movements, and
@@ -369,22 +404,11 @@ void main() {
         }
       }
 
-      final batchRemaining = <String, int>{};
-      for (final (id, productKey, receivedAt) in seededBatches) {
-        final row = await (db.select(db.costBatches)
-              ..where((b) => b.id.equals(id)))
-            .getSingle();
-        batchRemaining['$productKey|$receivedAt'] = row.qtyRemaining;
-      }
+      final batchRemaining = await readSeededBatchRemaining();
+      final inventoryAfter = await readInventory();
 
-      final inventoryAfter = <String, int>{};
       final scalarCost = <String, int>{};
       for (final entry in productIdByKey.entries) {
-        final invRow = await (db.select(db.inventory)
-              ..where((i) =>
-                  i.productId.equals(entry.value) & i.storeId.equals(storeId)))
-            .getSingleOrNull();
-        if (invRow != null) inventoryAfter[entry.key] = invRow.quantity;
         final prodRow = await (db.select(db.products)
               ..where((p) => p.id.equals(entry.value)))
             .getSingle();
@@ -436,6 +460,21 @@ void main() {
       // sale whose own rows are pinned.
       if (scenario.cancel == null) return;
       final cancel = scenario.cancel!;
+
+      Future<List<PaymentTransactionData>> orderPayments() =>
+          (db.select(db.paymentTransactions)
+                ..where((p) => p.orderId.equals(orderId)))
+              .get();
+      // The FULL state of a payment row, so "the cancel mutated nothing" covers
+      // its created_at — the field that keeps the sale on the sale day (#172).
+      String stateOf(PaymentTransactionData p) =>
+          '${p.type}|${p.method}|${p.amountKobo}'
+          '|at=${p.createdAt.toIso8601String()}|voided=${p.voidedAt != null}';
+
+      final beforeCancel = {
+        for (final p in await orderPayments()) p.id: stateOf(p),
+      };
+
       await db.ordersDao.markCancelled(orderId, cancel.reason, staffId);
 
       final cancelledOrder =
@@ -444,59 +483,32 @@ void main() {
 
       // EVERY payment row on the order — the originals must still be here,
       // unvoided and unedited, alongside the appended compensating rows.
-      final paymentRowsAfter = await (db.select(db.paymentTransactions)
-            ..where((p) => p.orderId.equals(orderId)))
-          .get();
+      final paymentRowsAfter = await orderPayments();
       final paymentsAfter = [
         for (final p in paymentRowsAfter)
-          ActualCancelPayment(
+          ActualTypedPayment(
             type: p.type,
             method: p.method,
             amountKobo: p.amountKobo,
-            voided: p.voidedAt != null,
+            isVoided: p.voidedAt != null,
           ),
+      ];
+      final survivingIds = {for (final p in paymentRowsAfter) p.id};
+      final mutatedOriginals = <String>[
+        for (final p in paymentRowsAfter)
+          if (beforeCancel.containsKey(p.id) && beforeCancel[p.id] != stateOf(p))
+            '${p.id}: ${beforeCancel[p.id]} → ${stateOf(p)}',
+        for (final entry in beforeCancel.entries)
+          if (!survivingIds.contains(entry.key))
+            '${entry.key}: DELETED (was ${entry.value})',
       ];
 
       // EVERY wallet leg on the order — sale legs plus their appended reversals.
-      final walletLegsAfter = <ActualWalletLeg>[];
-      int? balanceAfterCancel;
-      if (customerId != null) {
-        final legRows = await (db.select(db.walletTransactions)
-              ..where((w) => w.orderId.equals(orderId)))
-            .get();
-        for (final l in legRows) {
-          walletLegsAfter.add(ActualWalletLeg(
-            referenceType: l.referenceType,
-            signedAmountKobo: l.signedAmountKobo,
-          ));
-        }
-        final allLegs = await (db.select(db.walletTransactions)
-              ..where((w) => w.customerId.equals(customerId!)))
-            .get();
-        balanceAfterCancel = allLegs
-            .where((l) => !crateDepositRefs.contains(l.referenceType))
-            .fold<int>(0, (s, l) => s + l.signedAmountKobo);
-      }
-
-      final inventoryAfterCancel = <String, int>{};
-      for (final entry in productIdByKey.entries) {
-        final invRow = await (db.select(db.inventory)
-              ..where((i) =>
-                  i.productId.equals(entry.value) & i.storeId.equals(storeId)))
-            .getSingleOrNull();
-        if (invRow != null) inventoryAfterCancel[entry.key] = invRow.quantity;
-      }
+      final (walletLegsAfter, balanceAfterCancel) = await readWalletState();
 
       // The SEEDED batches keep their post-sale remainders (the restore appends
       // a layer, it never tops the drawn one back up — #187); every OTHER batch
       // is a layer the cancel restored.
-      final batchRemainingAfter = <String, int>{};
-      for (final (id, productKey, receivedAt) in seededBatches) {
-        final row = await (db.select(db.costBatches)
-              ..where((b) => b.id.equals(id)))
-            .getSingle();
-        batchRemainingAfter['$productKey|$receivedAt'] = row.qtyRemaining;
-      }
       final seededBatchIds = {for (final (id, _, _) in seededBatches) id};
       final allBatches = await db.select(db.costBatches).get();
       final restoredLayers = [
@@ -515,10 +527,11 @@ void main() {
           orderStatus: cancelledOrder.status,
           cancelledAtNull: cancelledOrder.cancelledAt == null,
           payments: paymentsAfter,
+          mutatedOriginals: mutatedOriginals,
           walletLegs: walletLegsAfter,
           customerBalanceAfter: balanceAfterCancel,
-          inventoryAfter: inventoryAfterCancel,
-          batchRemaining: batchRemainingAfter,
+          inventoryAfter: await readInventory(),
+          batchRemaining: await readSeededBatchRemaining(),
           restoredCostLayers: restoredLayers,
         ),
       );

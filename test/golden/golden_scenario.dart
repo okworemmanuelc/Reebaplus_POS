@@ -169,19 +169,25 @@ class ExpectedPayment {
         amountKobo = j['amount_kobo'] as int;
 }
 
-/// #175: a NON-`sale` money row the checkout is expected to post — a
-/// `crate_deposit` (the refundable held deposit) or a `wallet_topup` (an
-/// overpayment's excess). Compared as a multiset by [signature].
+/// One expected `payment_transactions` row, in fixture terms. Two uses:
+///   * #175 — the NON-`sale` money rows a checkout posts (a `crate_deposit`
+///     held, or a `wallet_topup` for an overpayment's excess);
+///   * #206 — EVERY row on the order after a cancel, originals included, where
+///     [amountKobo] is SIGNED (an in-family reversal is negative) and
+///     [isVoided] must be false on all of them.
+/// Compared as a multiset by [signature].
 class ExpectedTypedPayment {
   final String type;
   final String method;
   final int amountKobo;
+  final bool isVoided;
   ExpectedTypedPayment(Map<String, dynamic> j)
       : type = j['type'] as String,
         method = j['method'] as String,
-        amountKobo = j['amount_kobo'] as int;
+        amountKobo = j['amount_kobo'] as int,
+        isVoided = j['voided'] as bool? ?? false;
 
-  String get signature => '$type|$method|$amountKobo';
+  String get signature => '$type|$method|$amountKobo|voided=$isVoided';
 }
 
 /// One wallet ledger leg the checkout is expected to post (Slice 3). Compared as
@@ -213,33 +219,6 @@ class ExpectedCrateLine {
   String get signature => '$cratesTaken|$depositRateKobo|$depositPaidKobo';
 }
 
-/// #206 — one `payment_transactions` row on the order AFTER the cancel, in
-/// fixture terms. The MULTISET of these is the whole #172/#190/#201 contract in
-/// one assertion: the originals must still be there, unvoided and at their
-/// original amount (never voided in place — the sale day cannot shrink behind
-/// the owner), and exactly one compensating row must have been APPENDED per
-/// reversible original. A missing row, an extra row, a mutated original, or a
-/// reversal of the wrong type/sign all fail it.
-class ExpectedCancelPayment {
-  final String type;
-  final String method;
-
-  /// SIGNED: a `sale` reverses as a POSITIVE `refund`, while `crate_deposit` and
-  /// `wallet_topup` reverse as a NEGATIVE row of their OWN type so their card
-  /// line nets to zero (#190/#201 — in-family, never a `refund`).
-  final int amountKobo;
-
-  /// Must be false on every row: the append-only discipline never voids.
-  final bool voided;
-  ExpectedCancelPayment(Map<String, dynamic> j)
-      : type = j['type'] as String,
-        method = j['method'] as String,
-        amountKobo = j['amount_kobo'] as int,
-        voided = j['voided'] as bool? ?? false;
-
-  String get signature => '$type|$method|$amountKobo|voided=$voided';
-}
-
 /// #206 — a FIFO layer the cancel APPENDED (#170 #7c): the returned units come
 /// back costed at the per-unit COGS the sale snapshotted, never as phantom
 /// 0-cost stock. Matched as a multiset against every cost batch that was not
@@ -264,7 +243,14 @@ class FxCancel {
   final String reason;
   final String expectedStatus;
   final bool expectedCancelledAtNull;
-  final List<ExpectedCancelPayment> payments;
+
+  /// EVERY payment row expected on the order after the cancel, originals
+  /// included. The MULTISET of these is the whole #172/#190/#201 contract in one
+  /// assertion: the originals must still be there, unvoided and at their
+  /// original amount, and exactly one compensating row must have been APPENDED
+  /// per reversible original. A missing row, an extra row, a mutated original,
+  /// or a reversal of the wrong type/sign all fail it.
+  final List<ExpectedTypedPayment> payments;
   final List<ExpectedWalletLeg> walletLegs;
   final int? customerBalanceAfterKobo;
 
@@ -308,7 +294,7 @@ class FxCancel {
       expectedStatus: order['status'] as String,
       expectedCancelledAtNull: order['cancelled_at_null'] as bool,
       payments: ((exp['payments'] as List?) ?? const [])
-          .map((p) => ExpectedCancelPayment(p as Map<String, dynamic>))
+          .map((p) => ExpectedTypedPayment(p as Map<String, dynamic>))
           .toList(),
       walletLegs: ((exp['wallet_legs'] as List?) ?? const [])
           .map((l) => ExpectedWalletLeg(l as Map<String, dynamic>))
@@ -441,6 +427,13 @@ class GoldenScenario {
   });
 
   FxProduct product(String key) => products.firstWhere((p) => p.key == key);
+
+  /// The price a checkout line is actually CHARGED at: its own custom price when
+  /// the cashier overrode the tier list price, else the product's catalogue
+  /// price. Shared so both arms compute the line total — and the concession —
+  /// from one definition (ADR 0009).
+  int chargedKobo(FxCheckoutLine line) =>
+      line.chargedUnitPriceKobo ?? product(line.productKey).unitPriceKobo;
 
   factory GoldenScenario._fromJson(Map<String, dynamic> j) {
     final rejectedWith =
@@ -635,15 +628,21 @@ class ActualPayment {
   ActualPayment({required this.method, required this.amountKobo});
 }
 
-/// One posted NON-`sale` money row (#175), in fixture terms. Compared by
+/// One posted `payment_transactions` row, in fixture terms — the #175 split rows
+/// a checkout writes, or (#206) every row on a cancelled order. Compared by
 /// [signature].
 class ActualTypedPayment {
   final String type;
   final String method;
   final int amountKobo;
-  ActualTypedPayment(
-      {required this.type, required this.method, required this.amountKobo});
-  String get signature => '$type|$method|$amountKobo';
+  final bool isVoided;
+  ActualTypedPayment({
+    required this.type,
+    required this.method,
+    required this.amountKobo,
+    this.isVoided = false,
+  });
+  String get signature => '$type|$method|$amountKobo|voided=$isVoided';
 }
 
 /// One posted wallet leg, in fixture terms. Compared by [signature].
@@ -668,22 +667,6 @@ class ActualCrateLine {
   String get signature => '$cratesTaken|$depositRateKobo|$depositPaidKobo';
 }
 
-/// One `payment_transactions` row surviving on a cancelled order, in fixture
-/// terms (#206). Compared by [signature].
-class ActualCancelPayment {
-  final String type;
-  final String method;
-  final int amountKobo;
-  final bool voided;
-  ActualCancelPayment({
-    required this.type,
-    required this.method,
-    required this.amountKobo,
-    required this.voided,
-  });
-  String get signature => '$type|$method|$amountKobo|voided=$voided';
-}
-
 /// One cost batch the cancel APPENDED, in fixture terms (#206). Compared by
 /// [signature].
 class ActualRestoredLayer {
@@ -705,7 +688,18 @@ class CancelOutcome {
 
   /// EVERY payment row on the order after the cancel — originals included, so
   /// the multiset proves the originals survived untouched.
-  final List<ActualCancelPayment> payments;
+  final List<ActualTypedPayment> payments;
+
+  /// One human-readable entry per ORIGINAL payment row the cancel changed or
+  /// deleted, comparing each row's full state (type, method, amount,
+  /// `created_at`, `voided_at`) across the cancel. It must come back EMPTY.
+  ///
+  /// This is the half of #172 the fixture cannot express: "the reversal lands on
+  /// the CANCEL day" is only meaningful because the original keeps ITS OWN
+  /// `created_at`, and a golden run happens in a single instant, so the dates
+  /// cannot be compared to each other — only to themselves before and after.
+  /// Each runner computes this against its own storage.
+  final List<String> mutatedOriginals;
 
   /// EVERY wallet leg on the order after the cancel — originals included.
   final List<ActualWalletLeg> walletLegs;
@@ -723,6 +717,7 @@ class CancelOutcome {
     required this.orderStatus,
     required this.cancelledAtNull,
     required this.payments,
+    required this.mutatedOriginals,
     required this.walletLegs,
     required this.customerBalanceAfter,
     required this.inventoryAfter,
@@ -809,7 +804,10 @@ int clampDiscountKobo(int requestedKobo, int? maxPct, int grossKobo) {
 /// no phantom concession. Shared so both golden arms apply it identically — the
 /// Dart twin of `OrderCommands._buildOrderItems` and of the SQL
 /// `public._catalogue_price_snapshot` (migration 0160).
-int? catalogueSnapshotKobo(int? catalogueKobo, int chargedKobo) =>
+int? catalogueSnapshotKobo({
+  required int? catalogueKobo,
+  required int chargedKobo,
+}) =>
     (catalogueKobo != null && catalogueKobo != chargedKobo)
         ? catalogueKobo
         : null;
@@ -938,6 +936,11 @@ void expectGoldenCancel(GoldenScenario s, CancelOutcome actual) {
           '(type|method|signed amount|voided) — originals must survive '
           'untouched and one compensating row must be appended per reversible '
           'original');
+  expect(actual.mutatedOriginals, isEmpty,
+      reason: '${s.name}: the cancel must mutate NO original payment row — not '
+          'its amount, not its type, not its created_at (the sale stays on the '
+          'sale day, so a reviewed and banked day never shrinks behind the '
+          'owner), and never an in-place void');
 
   final expectedLegSigs = c.walletLegs.map((l) => l.signature).toList()..sort();
   final actualLegSigs = actual.walletLegs.map((l) => l.signature).toList()

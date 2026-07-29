@@ -284,10 +284,8 @@ void main() {
       // catalogue (tier list) price — a custom-price concession. Gross is
       // computed from the charged price; the catalogue price rides along on the
       // item so the server can snapshot the deviation.
-      int chargedOf(FxCheckoutLine l) =>
-          l.chargedUnitPriceKobo ?? scenario.product(l.productKey).unitPriceKobo;
       final gross = scenario.checkout.items
-          .fold<int>(0, (s, l) => s + chargedOf(l) * l.quantity);
+          .fold<int>(0, (s, l) => s + scenario.chargedKobo(l) * l.quantity);
       final net = gross - scenario.checkout.discountKobo;
       // Walk-in cash/transfer pays the net; a credit/wallet sale passes exactly
       // what the fixture tendered (the RPC clamps + routes it).
@@ -303,15 +301,17 @@ void main() {
             {
               'product_id': productIdByKey[l.productKey],
               'quantity': l.quantity,
-              'unit_price_kobo': chargedOf(l),
-              // Sent only on a concession line, so a full-price scenario's
-              // payload is byte-identical to what it has always sent. The
-              // server's `_catalogue_price_snapshot` (0160) applies the same
-              // "only a REAL concession" rule the Dart arm applies locally, so
-              // the recorded column must match on both arms.
-              if (l.chargedUnitPriceKobo != null)
-                'catalogue_price_kobo':
-                    scenario.product(l.productKey).unitPriceKobo,
+              'unit_price_kobo': scenario.chargedKobo(l),
+              // Sent on EVERY line, exactly as the mobile cart carries a
+              // `catalogPriceKobo` on every item. That is what puts the
+              // server's `_catalogue_price_snapshot` (0160) under test in both
+              // directions: it must RECORD the catalogue price on the
+              // concession line and return NULL on the full-price ones, where
+              // catalogue == charged. Omitting the key on full-price lines
+              // would leave them NULL for the trivial reason that nothing was
+              // sent, pinning only half the rule.
+              'catalogue_price_kobo':
+                  scenario.product(l.productKey).unitPriceKobo,
             }
         ],
         'p_payment_method': scenario.checkout.paymentMethod,
@@ -509,25 +509,30 @@ void main() {
 
       expectGolden(scenario, outcome, orderNumberScheme: webOrderNumberScheme);
     },
-        // The clamp keys off the CALLER's role cap, and 0135 short-circuits the
-        // CEO slug to 100 — so it can't bite for this Tier-2 identity (the
-        // business CEO). The clamp rule is pinned on the Dart arm; skip it here
-        // rather than assert an un-clampable caller. #175's tender/deposit/
-        // overpayment row split (dart_arm_only) is likewise pinned on the Dart
-        // arm until the web `checkout_order` RPC implements the matching split.
-        // #206's cancel fixtures are dart_arm_only for a DIFFERENT reason: the
-        // SQL twin exists (migration 0170) but is NOT DEPLOYED, so this arm
-        // still meets the pre-#155 `pos_cancel_order` that voids originals in
-        // place and would fail every one of them.
-        skip: _skipReason ??
-            (scenario.maxDiscountPercent != null
-                ? 'discount clamp needs a non-CEO caller; pinned on the Dart arm'
-                : scenario.dartArmOnly
-                    ? scenario.cancel != null
-                        ? 'cancel parity ships in migration 0170 (#201) — '
-                            'un-flag once it is DEPLOYED and this arm has a '
-                            'pos_cancel_order step (#206)'
-                        : '#175 money-row split pinned on the Dart arm; web RPC TODO'
-                    : null));
+        skip: _skipReason ?? _armSkipReason(scenario));
   }
+}
+
+/// Why this arm skips a scenario, or null when it must run.
+///
+/// * The discount clamp keys off the CALLER's role cap, and 0135 short-circuits
+///   the CEO slug to 100 — so it cannot bite for this Tier-2 identity (the
+///   business CEO). That rule is pinned on the Dart arm rather than asserted
+///   here against an un-clampable caller.
+/// * #175's tender/deposit/overpayment row split is `dart_arm_only` until the
+///   web `checkout_order` RPC implements the matching split.
+/// * #206's cancel fixtures are `dart_arm_only` for a DIFFERENT reason: the SQL
+///   twin EXISTS (migration 0170, #201) but is NOT DEPLOYED, so this arm still
+///   meets the pre-#155 `pos_cancel_order` that voids originals in place and
+///   would fail every one of them.
+String? _armSkipReason(GoldenScenario scenario) {
+  if (scenario.maxDiscountPercent != null) {
+    return 'discount clamp needs a non-CEO caller; pinned on the Dart arm';
+  }
+  if (!scenario.dartArmOnly) return null;
+  if (scenario.cancel != null) {
+    return 'cancel parity ships in migration 0170 (#201) — un-flag once it is '
+        'DEPLOYED and this arm has a pos_cancel_order step (#206)';
+  }
+  return '#175 money-row split pinned on the Dart arm; web RPC TODO';
 }
