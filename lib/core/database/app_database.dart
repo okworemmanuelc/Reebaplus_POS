@@ -5531,9 +5531,9 @@ class AppDatabase extends _$AppDatabase {
         // leaks into an OLDER step's SELECT list as a bare identifier that
         // SQLite silently degrades to a string literal. NO existing rebuild
         // step touches `manufacturers` — the alterTable steps in this file
-        // cover customers, crate_size_groups, activity_logs, notifications,
-        // crate_ledger, expenses, products, order_items, wallet_transactions,
-        // user_businesses and payment_transactions, and nothing else. If a
+        // cover customers, expenses, notifications, crate_ledger, products,
+        // order_items, wallet_transactions, user_businesses, users and
+        // payment_transactions, and nothing else. If a
         // future step ever rebuilds `manufacturers`, this column must be pinned
         // there.
         //
