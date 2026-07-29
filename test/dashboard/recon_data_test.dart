@@ -43,6 +43,13 @@ DailyClosingData snapshotOf(
 /// Builds a [ReconData] with everything zeroed except the P&L inputs a test
 /// cares about — the getters under test only touch revenue / discounts / COGS /
 /// expenses / damages, so the rest can be neutral.
+///
+/// `totalSalesKobo` is REQUIRED on the real type (#195: the headline comes from
+/// `computeTotalSalesKobo`, never from a second derivation), so this fabricator
+/// fills it with the identity the production compute also satisfies — gross
+/// item-line revenue minus the period's discounts. A test that cares about the
+/// headline itself belongs in `report_revenue_test.dart`, which runs the real
+/// `reconDataFrom`.
 ReconData recon({
   int costedRevenueKobo = 0,
   int totalRevenueKobo = -1, // -1 ⇒ mirror costedRevenueKobo (back-compat)
@@ -90,8 +97,12 @@ ReconData recon({
   // #193 — deleted-product write-off booked as a loss.
   int deletionCostKobo = 0,
 }) {
+  final grossRevenueKobo = totalRevenueKobo < 0
+      ? costedRevenueKobo
+      : totalRevenueKobo;
   return ReconData(
-    totalRevenueKobo: totalRevenueKobo < 0 ? costedRevenueKobo : totalRevenueKobo,
+    totalRevenueKobo: grossRevenueKobo,
+    totalSalesKobo: grossRevenueKobo - discountsKobo,
     costedRevenueKobo: costedRevenueKobo,
     cogsKobo: cogsKobo,
     discountsKobo: discountsKobo,

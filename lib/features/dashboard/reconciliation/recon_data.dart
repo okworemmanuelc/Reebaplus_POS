@@ -674,11 +674,13 @@ class ReconData {
     // #147 — the van channel's rollup. Optional-defaulted like the #170/#176
     // additions above, so every existing construction site stays valid.
     this.van = const ReconVanRollup(),
-    // #195 — the headline Total Sales, resolved through `computeTotalSalesKobo`
-    // by [reconDataFrom]. Optional so a fabricated ReconData (getter-only test
-    // harness) still reads the documented identity; see [totalSalesKobo].
-    int? totalSalesKobo,
-  }) : _totalSalesKobo = totalSalesKobo;
+    // #195 — the headline Total Sales, resolved through `computeTotalSalesKobo`.
+    // REQUIRED, unlike the additive fields above: the whole point of the issue
+    // is that there is no second way to arrive at this figure, and an
+    // optional-defaulted one would let a construction site quietly fall back to
+    // the derivation the issue removed. See [totalSalesKobo].
+    required this.totalSalesKobo,
+  });
 
   final int totalRevenueKobo;
   final int costedRevenueKobo;
@@ -918,17 +920,13 @@ class ReconData {
   /// dashboard, the Daily Reconciliation and the Profit report report the SAME
   /// number for a day because all three resolve it through the ONE helper
   /// [computeTotalSalesKobo] — [reconDataFrom] calls it and hands the result in
-  /// here (#195). It used to be derived from this file's own sales loop as
-  /// `totalRevenueKobo − discountsKobo`, which was equal only "by construction"
-  /// with nothing enforcing it. `totalRevenueKobo` stays the gross intermediate
-  /// the P&L card keeps beside its discount line.
-  ///
-  /// A ReconData fabricated WITHOUT the field (the getter-only test harnesses)
-  /// falls back to that documented identity, so those harnesses keep working —
+  /// here (#195). It used to be a getter deriving the figure from this file's
+  /// own sales loop as `totalRevenueKobo − discountsKobo`, which was equal only
+  /// "by construction" with nothing enforcing it. `totalRevenueKobo` stays the
+  /// gross intermediate the P&L card keeps beside its discount line, and
   /// `test/dashboard/report_revenue_test.dart` pins the two against each other
-  /// on the real compute path, which is where drift would actually happen.
-  int get totalSalesKobo => _totalSalesKobo ?? (totalRevenueKobo - discountsKobo);
-  final int? _totalSalesKobo;
+  /// on the real compute path.
+  final int totalSalesKobo;
 
   /// Costed revenue net of discounts given — the real money earned on costed
   /// lines. `costedRevenueKobo` is gross (Σ qty × gross unitPrice), so we
@@ -1334,10 +1332,12 @@ ReconData reconDataFrom(ReconInputs input) {
     if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
       continue;
     }
-    // Order-level discount (contra-revenue). Scoped by the order's store to
-    // match the sales lines; lines carry the same storeId in practice.
+    // Order-level discount (contra-revenue). Scoped by the ORDER's store — the
+    // one rule that decides it lives in [orderDiscountKobo] (#195), so the P&L
+    // card's discount line and the Total Sales headline cannot disagree about
+    // which store wears a discount.
     final orderInScope = inScope(o.order.storeId);
-    if (orderInScope) discountsKobo += o.order.discountKobo;
+    discountsKobo += orderDiscountKobo(o, inScope: inScope);
     var orderRevenue = 0;
     for (final i in o.items) {
       if (!inScope(i.item.storeId)) continue;
@@ -1372,12 +1372,12 @@ ReconData reconDataFrom(ReconInputs input) {
       );
     }
     // #176 — paid-now vs on-credit split of this order's contribution to Total
-    // Sales. `goodsNet` is exactly the order's Total-Sales share (scoped lines −
-    // scoped discount), so `paidNow + onCredit == totalSalesKobo` by
-    // construction. `goodsPaid` = what was tendered toward the GOODS
-    // (amountPaid − deposit held, capped at the goods net); the rest is debt.
-    final goodsNet =
-        orderRevenue - (orderInScope ? o.order.discountKobo : 0);
+    // Sales. `goodsNet` is exactly the order's Total-Sales share, taken from
+    // the SAME helper the headline sums (#195) rather than re-derived here, so
+    // `paidNow + onCredit == totalSalesKobo` holds by construction and not by
+    // coincidence. `goodsPaid` = what was tendered toward the GOODS (amountPaid
+    // − deposit held, capped at the goods net); the rest is debt.
+    final goodsNet = orderGoodsNetKobo(o, inScope: inScope);
     final split = splitPaidNowOnCredit(
       goodsNet: goodsNet,
       amountPaid: o.order.amountPaidKobo,

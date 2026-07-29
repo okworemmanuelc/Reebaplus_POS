@@ -317,6 +317,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // reconciliation's `netProfitKobo` (which also nets damages, shortages,
     // write-offs and forfeit income). The Profit & Loss card is the full P&L;
     // this tile is the at-a-glance version, and its subtitle says so.
+    //
+    // Forfeit income (kept crate deposits) stays OUT for a specific reason, not
+    // by omission: wallet rows carry no store, so that figure is business-wide.
+    // Adding a business-wide term to a store-scoped tile would re-open exactly
+    // the cross-scope contradiction #195 exists to close — under a store lock it
+    // would credit one store with the whole business's forfeits. It belongs
+    // here only alongside a store-attributed forfeit source.
     final hasBuyingPrices = filteredOrdersWithItems.any(
       (o) => o.items.any(
         (i) => inScope(i.item.storeId) && i.item.buyingPriceKobo > 0,
@@ -335,9 +342,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             cogs += i.item.quantity * i.item.buyingPriceKobo / 100.0;
           }
         }
-        if (inScope(o.order.storeId)) {
-          discounts += o.order.discountKobo / 100.0;
-        }
+        discounts += orderDiscountKobo(o, inScope: inScope) / 100.0;
       }
       netProfit = pricedRevenue - discounts - cogs - totalExpenses;
     }

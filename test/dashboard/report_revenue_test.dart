@@ -227,10 +227,22 @@ void main() {
 
       final locked = surfacesFor(orders, inScope: (s) => s == 's1');
       expect({locked.home, locked.profit, locked.recon}, {170000});
+      // The load-bearing one: the reconciliation's OWN gross/discount loop —
+      // which scopes lines and the discount independently of the helper — must
+      // land on the same store-scoped figure. Scoping is precisely what this
+      // issue is named for, so the scoped case is pinned, not just All Stores.
+      expect(
+        locked.reconData.totalRevenueKobo - locked.reconData.discountsKobo,
+        170000,
+      );
 
       // All Stores is the business-wide figure — the same three surfaces again.
       final all = surfacesFor(orders);
       expect({all.home, all.profit, all.recon}, {170000 + 400000});
+      expect(
+        all.reconData.totalRevenueKobo - all.reconData.discountsKobo,
+        170000 + 400000,
+      );
     });
 
     test('the reconciliation headline IS the shared helper, not its own loop',

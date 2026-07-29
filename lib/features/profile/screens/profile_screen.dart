@@ -62,14 +62,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       // business-owned table keyed only on the staff id would report both
       // (architecture.md invariant #5). The joined read also carries the item
       // lines "Sales Volume" is summed from (#195).
-      _ordersSub = db.ordersDao.watchAllOrdersWithItems().listen((data) {
-        if (!mounted) return;
-        setState(() {
-          _staffOrders = data
-              .where((o) => o.order.staffId == user.id)
-              .toList();
-        });
-      });
+      _ordersSub = db.ordersDao
+          .watchAllOrdersWithItems(staffId: user.id)
+          .listen((data) {
+            if (mounted) setState(() => _staffOrders = data);
+          });
 
       setState(() => _contentReady = true);
     });

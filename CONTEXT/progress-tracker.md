@@ -124,6 +124,14 @@ Profit tile (nets discounts, scopes per line), `OrdersDao.getSalesTotalsForStaff
 stat (which also stopped raw-selecting `orders` with no `business_id`,
 architecture invariant #5).
 
+**One rule, one place.** `orderGoodsNetKobo` (per-order Total Sales share) and
+`orderDiscountKobo` ("which store wears an order's discount") are the only two
+definitions; the recon P&L's discount line, its paid-now/on-credit split, Home's
+Net Profit loop and the drill-down's header all resolve through them instead of
+re-deciding the rule. `ReconData.totalSalesKobo` is a **required** field — not
+optional-defaulted like the other additive fields — so no construction site can
+silently fall back to `totalRevenueKobo − discountsKobo`.
+
 **Structural: `computeReconData` is now gather + pure compute.** New
 `ReconInputs` (every row set, the settings, the span and `inScope`, all
 optional-defaulted) and `ReconData reconDataFrom(ReconInputs)`;
@@ -142,10 +150,24 @@ in recon's loop, and making the helper deposit-inclusive, each turn it red.
 `flutter analyze` clean; full suite **1494 pass / 119 skipped**, sole failure the
 pre-existing `test/auth/who_is_working_screen_test.dart` (fails on `main` too).
 
-**Left open (out of scope, worth filing if it matters):** Home's Net Profit tile
-is goods margin less expenses — it still does not include forfeit income, nor
-recon's damages / shortages / write-offs, so it is deliberately NOT equal to
-`ReconData.netProfitKobo`. Only the Total Sales definition is unified.
+**Left open (deliberate, worth filing if it matters):** Home's Net Profit tile is
+goods margin less expenses — it does not include forfeit income, nor recon's
+damages / shortages / write-offs, so it is NOT equal to
+`ReconData.netProfitKobo`. Forfeit income specifically stays out for a reason
+rather than by omission: wallet rows carry no store, so that figure is
+business-wide, and adding it to a store-scoped tile would re-open the very
+cross-scope contradiction this issue closes (under a store lock it would credit
+one store with the whole business's forfeits). It belongs there only alongside a
+store-attributed forfeit source. Only the Total Sales definition is unified here.
+
+**Reviewed** (`/review` since `main`, both axes). Acted on: the nullable
+`totalSalesKobo` fallback became a required field; the paid-now/on-credit split
+and the two discount call sites now go through the helpers instead of re-deriving
+them; the locked-store test gained the load-bearing
+`totalRevenue − discounts == totalSales` assertion (verified: mutating recon's
+per-line scoping turns it red); `watchAllOrdersWithItems` gained a SQL-level
+`staffId` filter so the Profile screen stops streaming the whole business's
+orders to read one person's.
 
 ### #182 — count-shortage loss valued at the #170 write-time snapshot (audit #30) — CODE-COMPLETE (2026-07-25)
 The last loss surface still recomputed at *current* cost. #170 gave damages a

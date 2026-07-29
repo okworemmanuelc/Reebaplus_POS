@@ -133,7 +133,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   Future<({int totalKobo, int orderCount})> getSalesTotalsForStaff(
     String staffId,
   ) async {
-    Expression<bool> countsAsThisStaffsSale() =>
+    Expression<bool> whereThisStaffsRecognizedSale() =>
         whereBusiness(orders) &
         orders.staffId.equals(staffId) &
         orders.status.isIn(orderRevenueStatuses.toList());
@@ -144,7 +144,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
               innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
             ])
               ..addColumns([grossCol])
-              ..where(countsAsThisStaffsSale()))
+              ..where(whereThisStaffsRecognizedSale()))
             .getSingle();
 
     final discountCol = orders.discountKobo.sum();
@@ -152,7 +152,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final headerRow =
         await (selectOnly(orders)
               ..addColumns([discountCol, countCol])
-              ..where(countsAsThisStaffsSale()))
+              ..where(whereThisStaffsRecognizedSale()))
             .getSingle();
 
     // Drift types an aggregate over an arithmetic expression as `num`; both
@@ -167,7 +167,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   // ── N+1 fix: single joined query + fold ────────────────────────────────────
 
-  Stream<List<OrderWithItems>> watchAllOrdersWithItems({String? storeId}) {
+  /// [staffId] narrows to one member's own orders in SQL — the Profile screen
+  /// shows only the signed-in user's activity, and filtering the whole
+  /// business's join in Dart would stream every order to read one person's.
+  Stream<List<OrderWithItems>> watchAllOrdersWithItems({
+    String? storeId,
+    String? staffId,
+  }) {
     final query = select(orders).join([
       leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
       leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
@@ -176,6 +182,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     query.where(whereBusiness(orders));
     if (storeId != null) {
       query.where(orders.storeId.equals(storeId));
+    }
+    if (staffId != null) {
+      query.where(orders.staffId.equals(staffId));
     }
     query.orderBy([OrderingTerm.desc(orders.createdAt)]);
 

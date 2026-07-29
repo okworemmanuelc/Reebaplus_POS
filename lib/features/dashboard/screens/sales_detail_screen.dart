@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 
 /// Shows when the user taps "Total Sales" or "Net Profit" on the dashboard.
 /// [mode] = 'sales' → revenue-focused columns.
@@ -57,7 +58,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
   double _discountTotal() {
     var kobo = 0;
     for (final o in widget.orders) {
-      if (widget.inScope(o.order.storeId)) kobo += o.order.discountKobo;
+      kobo += orderDiscountKobo(o, inScope: widget.inScope);
     }
     return kobo / 100.0;
   }

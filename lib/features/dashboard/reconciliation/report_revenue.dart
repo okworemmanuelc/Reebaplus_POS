@@ -58,11 +58,21 @@ int orderGoodsNetKobo(
     if (!inScope(line.item.storeId)) continue;
     net += line.item.quantity * line.item.unitPriceKobo;
   }
-  // Order-level discount is contra-revenue; scoped by the order's store to
-  // match the reconciliation (lines carry the same store in practice).
-  if (inScope(order.order.storeId)) net -= order.order.discountKobo;
-  return net;
+  return net - orderDiscountKobo(order, inScope: inScope);
 }
+
+/// ONE order's discount as it counts toward a scoped figure: `discountKobo`
+/// when the ORDER's own store is in scope, else 0.
+///
+/// The discount is order-level, so unlike the item lines it cannot be scoped
+/// per line — the order's store is what decides whether it belongs to this
+/// view. Every surface that nets a discount out of a money figure resolves it
+/// here (#195), so "which store wears the discount" is answered in one place
+/// instead of being re-decided per screen.
+int orderDiscountKobo(
+  OrderWithItems order, {
+  bool Function(String? storeId) inScope = _anyStore,
+}) => inScope(order.order.storeId) ? order.order.discountKobo : 0;
 
 bool _always(DateTime _) => true;
 bool _anyStore(String? _) => true;
