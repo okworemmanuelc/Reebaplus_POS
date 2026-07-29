@@ -2199,6 +2199,16 @@ final dailyClosingForDayProvider =
   whenAbsent: null,
 );
 
+/// Every persisted day-close snapshot in the business, newest day first (#192).
+/// One small row per REVIEWED day — days nobody opened have none — so the
+/// reconciliation LIST can mark which days were reviewed and which of those have
+/// moved since, instead of that being knowable only from inside the day itself.
+final allDailyClosingsProvider =
+    businessScopedStream<List<DailyClosingData>>(
+  (ref, db, businessId) => db.dailyClosingsDao.watchAllForBusiness(),
+  whenAbsent: const [],
+);
+
 /// Every applied stock adjustment for the business (newest first). Used by the
 /// §25.10 Business Statement / Store Reconciliation to value damages
 /// (`reason` `damage:<key>`, §17.2): at cost for the CEO P&L, at selling price

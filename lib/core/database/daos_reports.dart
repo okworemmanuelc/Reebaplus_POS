@@ -146,6 +146,19 @@ class DailyClosingsDao extends DatabaseAccessor<AppDatabase>
         .watchSingleOrNull();
   }
 
+  /// Every persisted day-close snapshot in the business, newest day first.
+  ///
+  /// One small row per REVIEWED day, so this is a bounded read — a day that was
+  /// never opened has no row. It drives the reconciliation list's
+  /// changed-since-review marker (#192), which needs to know which days have a
+  /// baseline at all before it can ask whether any of them moved.
+  Stream<List<DailyClosingData>> watchAllForBusiness() {
+    return (select(dailyClosings)
+          ..where(whereBusiness)
+          ..orderBy([(t) => OrderingTerm.desc(t.businessDate)]))
+        .watch();
+  }
+
   /// One-shot read of [businessDate]'s snapshot (null when unreviewed).
   Future<DailyClosingData?> getForDay(String businessDate) {
     return (select(dailyClosings)

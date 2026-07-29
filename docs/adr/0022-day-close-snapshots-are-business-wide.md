@@ -70,11 +70,18 @@ day looked like" is the property #174 was for.
   stores they cannot see, and their banner reflects business-wide movement. That
   is the price of a single comparable baseline; no per-store figure is exposed on
   screen.
-- **Known cousin, not fixed here (#192's neighbourhood):** the capture still
+- ~~**Known cousin, not fixed here (#192's neighbourhood):** the capture still
   passes the viewer's `isCeo`, which gates the supplier-ledger flows, so a
   Manager-captured snapshot freezes a different `netCashMovement` /
-  `stockExpectedClosing` basis than a CEO-captured one. The frozen record should
-  be opener-independent in role terms too.
+  `stockExpectedClosing` basis than a CEO-captured one.~~ **Closed by #192
+  (2026-07-29)**, and the feared divergence was never real: the only `isCeo`-gated
+  terms are `goodsReceivedKobo` / `supplierPaidKobo` / `supplierPayableKobo`, none
+  of which is frozen, and `cashSupplierPaidKobo` — the one that DOES reach
+  `netCashMovement` — has always been summed outside the gate. So a
+  Manager-captured and a CEO-captured snapshot already agreed. The capture now
+  passes `isCeo: true` regardless of the viewer anyway, so the frozen record is
+  opener-independent in role terms **by construction** rather than by that
+  coincidence holding.
 
 ## Invariants that still bind
 

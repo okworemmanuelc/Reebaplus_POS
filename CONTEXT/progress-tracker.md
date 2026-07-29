@@ -186,7 +186,8 @@ Live money defects, ranked (all filed, none fixed yet):
    product call on the natural key.
 6. **#192** — the changed-since-review delta covers only 4 of 16 frozen figures;
    Managers can get the banner with zero badges; the snapshot can freeze a
-   crate-business net profit mid-load.
+   crate-business net profit mid-load. **FIXED 2026-07-29** — see the #192 section
+   below.
 7. Also: #193 product-delete write-off reads ₦0 in recon · #194 `CreditLedgerService`
    never stamps `store_id` (US 36) · #195 Profit report isn't store-scoped, so the
    single Total Sales definition fails under a store lock · #196 the `refunded`-status
@@ -211,6 +212,92 @@ decisions that previously lived only in this tracker; ADR 0014's deferred day-cl
 alternative now points at #174, plus a loss-valuation-basis addendum; `CONTEXT.md`
 gained the **Money & Payments** section it never had; this file gained the missing
 #172 section. **Umbrella #155 closed** with the audit summary.
+
+### #192 — changed-since-review covers all 16 frozen figures, and says so honestly — CODE-COMPLETE (2026-07-29)
+Follow-up from the #155 close-out audit, built on #195's `ReconInputs` /
+`reconDataFrom` seam. Branch `fix/192-day-close-delta-coverage` off `main`
+(3ee5f98). Five gaps, in the issue's own priority order.
+
+**1. The snapshot could freeze mid-load on a crate business (the data-corrupting
+one).** `_frozenFiguresReady` named eight streams, but the frozen `netProfitKobo`
+also nets out three crate terms — `allManufacturersProvider` (deposit rates),
+`allCrateDamagesProvider` (damaged stored empties) and `crateForfeitRowsProvider`
+(kept deposits, ADDED to profit). On a Bar a cold open could win the
+first-writer-wins race with a net profit missing them, permanently. The gate now
+**mirrors the gather's watch set**: manufacturers + crate damages unconditionally
+(the gather watches them either way, so this opens nothing new), and the forfeit
+feed **only behind `showCrates`**, so a pharmacy is neither made to open nor to
+wait on a crate stream. The capture also now passes `isCeo: true` rather than the
+viewer's role — closing the "known cousin" ADR 0022 explicitly left to #192. It
+changes no figure today (the flag gates only supplier-ledger flows, none of which
+are frozen); it removes the way one could start to.
+
+**2. The comparison covers the whole frozen set.** `ReconClosingComparison` went
+from 4 deltas to **16**, one per `DailyClosingFigures` column, in the same order —
+read it side by side with `dailyClosingFiguresFrom`. New `all` / `anyChanged` and
+`dayLocal` / `anyDayLocalChanged`; the latter drops `stockExpectedClosing`, the
+one frozen figure rewound from TODAY's on-hand and therefore not derivable from a
+single day's rows.
+
+**3. Badges follow the cost wall, per card, per role.** A card now takes a LIST of
+labelled badges (rendered in a `Wrap` under the title) instead of one unlabelled
+one, because expenses and damages move independently of net profit. A Manager gets
+money deltas only where the same money is already on their card — Total sales /
+Refunds / Items sold on Sales, **Expenses on Debts & expenses** (the card that
+rendered the frozen `expensesKobo` with no delta at all) — and the cost-basis stock
+figures as an amount-free "Stock value changed" marker, which also closes a
+pre-existing leak (the Manager's stock card used to show a raw cost-basis money
+delta).
+
+**4. The banner can no longer promise cards that are not there.** The per-card
+badge lists are built in `build`, BEFORE the cards, and the banner is worded from
+whether any of them is non-empty. Three states now: unchanged · changed with a
+flagged card · changed with none you can see ("…but not on any card you can see
+here — ask the owner to open this day"). That last one is what a Manager gets for
+US 35's backdated supplier payment, which is CEO-card-only by the cost wall.
+
+**5. A changed reviewed day announces itself from the LIST.** New
+`changedReviewedDaysProvider` sweeps every reviewed day and returns the ones whose
+day-local figures moved; `daily_reconciliation_list_screen` shows a warning-toned
+"Changed since review" chip on those Day buckets. It is **one pass over the data,
+not one per day**: rows are filed under the reviewed days they could report on
+(`_byCandidateDay`, deliberately over-inclusive — `reconDataFrom` applies the real
+date basis itself), then each day runs through the REAL `reconDataFrom` over its
+own slice. Cost is `O(rows) + O(days × products)`. Backing reads:
+`DailyClosingsDao.watchAllForBusiness` + `allDailyClosingsProvider`.
+`businessWideStoreFilter(VanStores)` was factored out of `reconStoreFilter` so the
+sweep shares the ONE definition of business-wide instead of re-deriving it.
+
+**Deliberately NOT wired to the Home Reports attention dot.** `reports_attention.dart`
+re-derives on the Home hot path (every sale); this sweep re-runs whenever any report
+row set changes. That is the right price on a report screen you are already reading
+and the wrong one on Home. The issue's fix bullet says "list and/or attention
+reason" — the list is the surface chosen.
+
+**Two-axis review applied.** Standards: the list marker's hand-rolled pill was
+replaced by a shared `ChangedSinceReviewBadge` (`lib/features/dashboard/widgets/`)
+— one widget for both surfaces, and it retires a raw `BorderRadius.circular(20)`;
+`_CardFigure` moved to named parameters; `dayLocal` is listed out rather than
+identity-filtered from `all` (const canonicalisation could have excluded the wrong
+figure); the list screen watches the sweep only while Day buckets are on screen.
+Spec: `discounts` / `cogs` / `cashIn` were compared but badged nowhere — now
+badged on the cards that already render those lines, so all 16 are both compared
+AND reachable; the "not on any card" banner is role-aware (a CEO is pointed at the
+CSV export, not told to ask the owner); and the Sales card keeps its Refunds line
+whenever its own badge is on it, so a refund VOIDED after review cannot badge a
+line the card stopped rendering. ADR 0022's "known cousin" bullet struck through
+and corrected.
+
+**Tests.** `test/dashboard/recon_day_close_delta_coverage_test.dart` (pure, no
+widget): a no-hole test that perturbs each of the 16 frozen columns and demands
+**exactly one** delta fires; the US 35 backdated-supplier-payment case (which had
+no test at all); late expense / refund / damage; and the sweep flagging the right
+day and only it. `test/dashboard/daily_reconciliation_detail_screen_test.dart` is
+the **first widget test this screen has ever had** — the four trigger conditions
+(finished day / permission / data ready / one shot), the crate-vs-non-crate
+readiness gate, and the badge + banner wording per role. Verified by mutation:
+reverting the three readiness lines reds the three crate tests, and reverting the
+banner gate reds the Manager test.
 
 ### #190 — deposit releases are an in-family reversal, not a refund — CODE-COMPLETE (2026-07-29)
 Fourth of the close-out audit's live money defects. `markCancelled` has stated the

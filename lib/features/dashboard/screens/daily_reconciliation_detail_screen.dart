@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/changed_since_review_badge.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -69,7 +70,25 @@ class _DailyReconciliationDetailScreenState
   /// is deferred — a genuinely empty day still has real (loaded, all-zero)
   /// streams, so it snapshots correctly. Called during build so the watches
   /// register and the write retries the instant the last stream warms.
-  bool _frozenFiguresReady(String? activeStoreId) {
+  ///
+  /// **The gate must mirror the gather's watch set exactly (#192).** It used to
+  /// list eight streams while the frozen `netProfitKobo` also nets out three crate
+  /// terms — the per-manufacturer deposit rates, the damaged-empties ledger and
+  /// the kept-deposit forfeit rows. On a Bar / Beer Distributor a cold open could
+  /// therefore win the first-writer race with a net profit missing those terms and
+  /// freeze it permanently. A missing figure is worse than a late snapshot: the
+  /// write can always retry, but first-writer-wins never lets it be corrected.
+  ///
+  /// [showCrates] keeps the gate honest in the other direction. `crate_deposit`
+  /// forfeit rows are read ONLY behind the opt-in (`computeReconData`'s
+  /// conditional watch), so a business that tracks no crates must not be made to
+  /// open — or wait on — that stream. The manufacturer and crate-damage streams
+  /// are watched unconditionally by the gather, so naming them here opens nothing
+  /// new for anyone.
+  bool _frozenFiguresReady(
+    String? activeStoreId, {
+    required bool showCrates,
+  }) {
     bool ready<T>(ProviderListenable<AsyncValue<T>> p) => ref.watch(p).hasValue;
     return ready(allOrdersProvider) &&
         ready(allPaymentTransactionsProvider) &&
@@ -78,7 +97,14 @@ class _DailyReconciliationDetailScreenState
         ready(allStockTransactionsProvider) &&
         ready(allStockCountsProvider) &&
         ready(allSupplierLedgerEntriesProvider) &&
-        ready(productsWithStockProvider(activeStoreId));
+        ready(productsWithStockProvider(activeStoreId)) &&
+        // Crate-deposit forfeiture on a damaged bottle / stored empty — both
+        // subtracted from the frozen net profit.
+        ready(allManufacturersProvider) &&
+        ready(allCrateDamagesProvider) &&
+        // Kept deposits, ADDED to the frozen net profit. Short-circuits for a
+        // non-crate business so no crate stream is opened at all.
+        (!showCrates || ready(crateForfeitRowsProvider));
   }
 
   /// Freezes the day's computed figures as a `daily_closings` snapshot the FIRST
@@ -145,19 +171,31 @@ class _DailyReconciliationDetailScreenState
     // has no snapshot for — so this and the snapshot read below register their
     // watches conditionally; Riverpod re-resolves the dependency set on every
     // build, so a bucket that becomes a finished day simply picks them up.
+    //
+    // `isCeo: true` is deliberate and is NOT the viewer's role (#192, closing
+    // ADR 0022's flagged cousin). The frozen record must be opener-independent
+    // in role terms exactly as it is in scope terms — a Manager and a CEO opening
+    // the same finished day must freeze the same numbers, because
+    // first-writer-wins means whoever gets there first decides the baseline
+    // forever. The flag gates only the supplier-ledger flows, none of which reach
+    // the frozen figure set, so this changes no number today; it removes the way
+    // one could start to.
     final dayCloseBasis = _isFinishedDay
         ? computeReconData(
             ref,
             start: start,
             endExclusive: endExclusive,
-            isCeo: isCeo,
+            isCeo: true,
             businessWide: true,
           )
         : null;
     if (dayCloseBasis != null) {
       // null = All Stores: the frozen figures read the UNSCOPED stock totals, so
       // that is the stream whose warmth the readiness gate must check.
-      _maybeWriteSnapshot(dayCloseBasis, dataReady: _frozenFiguresReady(null));
+      _maybeWriteSnapshot(
+        dayCloseBasis,
+        dataReady: _frozenFiguresReady(null, showCrates: d.showCrates),
+      );
     }
 
     // As-reviewed-vs-current delta (#174): for a FINISHED Day that HAS a
@@ -185,6 +223,94 @@ class _DailyReconciliationDetailScreenState
             endExclusive: endExclusive,
             grouping: grouping.finer!,
           );
+
+    // ── Which frozen figures each card actually FLAGS (#192) ────────────────
+    // Built before the cards, not inside them, for one reason: the banner's
+    // wording promises "the flagged cards show what moved", and the only way that
+    // promise cannot lie is for the banner to be told what was actually flagged.
+    // Before #192 `anyChanged` covered figures that live on CEO-only cards, so a
+    // Manager could read that sentence with no flagged card anywhere on screen.
+    //
+    // Role visibility follows the §25.3 cost wall, per card: a Manager is shown
+    // money deltas only where the same money is already on their card (sales,
+    // refunds, expenses) and unit deltas anywhere; the cost-basis stock figures
+    // are flagged for them WITHOUT a naira amount rather than not at all.
+    final salesBadges = _deltaChips([
+      _CardFigure(label: 'Total sales', delta: comparison?.totalSales),
+      _CardFigure(label: 'Refunds', delta: comparison?.refunds),
+      _CardFigure(
+        label: 'Items sold',
+        delta: comparison?.itemsSold,
+        isUnits: true,
+      ),
+    ]);
+    final plBadges = !isCeo
+        ? const <Widget>[]
+        : _deltaChips([
+            _CardFigure(label: 'Net profit', delta: comparison?.netProfit),
+            _CardFigure(label: 'Gross profit', delta: comparison?.grossProfit),
+            _CardFigure(label: 'Discounts', delta: comparison?.discounts),
+            _CardFigure(label: 'Cost of goods sold', delta: comparison?.cogs),
+            _CardFigure(label: 'Expenses', delta: comparison?.expenses),
+            _CardFigure(label: 'Damages', delta: comparison?.damagesCost),
+          ]);
+    final cashBadges = !isCeo
+        ? const <Widget>[]
+        : _deltaChips([
+            _CardFigure(
+              label: 'Net cash movement',
+              delta: comparison?.netCashMovement,
+            ),
+            _CardFigure(label: 'Cash sales', delta: comparison?.cashSales),
+            _CardFigure(label: 'Cash in', delta: comparison?.cashIn),
+            _CardFigure(label: 'Cash out', delta: comparison?.cashOut),
+          ]);
+    final stockBadges = isCeo
+        ? _deltaChips([
+            _CardFigure(
+              label: 'Expected closing',
+              delta: comparison?.stockExpectedClosing,
+            ),
+            _CardFigure(
+              label: 'Cost of goods sold',
+              delta: comparison?.stockCogs,
+            ),
+            _CardFigure(
+              label: 'Short',
+              delta: comparison?.shortageUnits,
+              isUnits: true,
+            ),
+          ])
+        : [
+            ..._deltaChips([
+              _CardFigure(
+                label: 'Short',
+                delta: comparison?.shortageUnits,
+                isUnits: true,
+              ),
+            ]),
+            // Cost wall: the amounts belong to the CEO's card, so a Manager gets
+            // the fact that stock value moved without the figure itself.
+            if (comparison != null &&
+                (comparison.stockExpectedClosing.changed ||
+                    comparison.stockCogs.changed ||
+                    comparison.damagesCost.changed))
+              _changedChip('Stock value'),
+          ];
+    // The Manager's own money card — the one that rendered the frozen
+    // `expensesKobo` with no delta at all before #192.
+    final debtsBadges = isCeo
+        ? const <Widget>[]
+        : _deltaChips([
+            _CardFigure(label: 'Expenses', delta: comparison?.expenses),
+          ]);
+    final hasFlaggedCard = [
+      salesBadges,
+      plBadges,
+      cashBadges,
+      stockBadges,
+      debtsBadges,
+    ].any((b) => b.isNotEmpty);
 
     return SharedScaffold(
       activeRoute: 'dashboard',
@@ -224,10 +350,27 @@ class _DailyReconciliationDetailScreenState
         ).copyWith(bottom: context.spacingM + context.deviceBottomPadding),
         children: [
           if (comparison != null) ...[
-            _reviewedBanner(context, theme, comparison, reviewerName),
+            _reviewedBanner(
+              context,
+              theme,
+              comparison,
+              reviewerName,
+              hasFlaggedCard: hasFlaggedCard,
+              isCeo: isCeo,
+            ),
             SizedBox(height: context.spacingM),
           ],
-          _salesCard(context, theme, d, delta: comparison?.totalSales),
+          _salesCard(
+            context,
+            theme,
+            d,
+            badges: salesBadges,
+            // Keep the line whose badge is on this card (#192): a refund VOIDED
+            // after the review takes `refundsKobo` to 0, which would otherwise
+            // badge a line the card no longer renders.
+            showRefunds:
+                d.refundsKobo > 0 || (comparison?.refunds.changed ?? false),
+          ),
           // #147 — the van channel, as one aggregated block. Rendered only when
           // the period actually saw van activity, so a business with no vans
           // reads exactly as it did before.
@@ -237,9 +380,9 @@ class _DailyReconciliationDetailScreenState
           ],
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
-            _plCard(context, theme, d, delta: comparison?.netProfit),
+            _plCard(context, theme, d, badges: plBadges),
             SizedBox(height: context.spacingM),
-            _cashFlowCard(context, theme, d, delta: comparison?.netCashMovement),
+            _cashFlowCard(context, theme, d, badges: cashBadges),
           ],
           SizedBox(height: context.spacingM),
           _stockReconciliationCard(
@@ -247,7 +390,7 @@ class _DailyReconciliationDetailScreenState
             theme,
             d,
             isCeo: isCeo,
-            delta: comparison?.stockExpectedClosing,
+            badges: stockBadges,
           ),
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
@@ -255,7 +398,7 @@ class _DailyReconciliationDetailScreenState
           ],
           if (!isCeo) ...[
             SizedBox(height: context.spacingM),
-            _debtsExpensesCard(context, theme, d),
+            _debtsExpensesCard(context, theme, d, badges: debtsBadges),
           ],
           if (d.showCrates) ...[
             SizedBox(height: context.spacingM),
@@ -276,7 +419,8 @@ class _DailyReconciliationDetailScreenState
     BuildContext context,
     ThemeData theme,
     ReconData d, {
-    ReconFigureDelta? delta,
+    List<Widget> badges = const [],
+    bool showRefunds = false,
   }) {
     return _card(
       context,
@@ -310,7 +454,7 @@ class _DailyReconciliationDetailScreenState
             formatCurrency(d.salesOnCreditKobo / 100.0),
           ),
         ],
-        if (d.refundsKobo > 0)
+        if (showRefunds)
           _line(
             context,
             theme,
@@ -341,7 +485,7 @@ class _DailyReconciliationDetailScreenState
               : d.topItems.map((e) => '${e.name} (×${e.qty})').join('\n'),
         ),
       ],
-      badge: _deltaBadge(context, theme, delta),
+      badges: badges,
     );
   }
 
@@ -349,7 +493,7 @@ class _DailyReconciliationDetailScreenState
     BuildContext context,
     ThemeData theme,
     ReconData d, {
-    ReconFigureDelta? delta,
+    List<Widget> badges = const [],
   }) {
     final net = d.netProfitKobo;
     final netColor = net >= 0
@@ -492,7 +636,7 @@ class _DailyReconciliationDetailScreenState
           ),
         ],
       ],
-      badge: _deltaBadge(context, theme, delta),
+      badges: badges,
     );
   }
 
@@ -569,7 +713,7 @@ class _DailyReconciliationDetailScreenState
     BuildContext context,
     ThemeData theme,
     ReconData d, {
-    ReconFigureDelta? delta,
+    List<Widget> badges = const [],
   }) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
@@ -636,7 +780,7 @@ class _DailyReconciliationDetailScreenState
           ),
         ],
       ],
-      badge: _deltaBadge(context, theme, delta),
+      badges: badges,
     );
   }
 
@@ -652,7 +796,7 @@ class _DailyReconciliationDetailScreenState
     ThemeData theme,
     ReconData d, {
     required bool isCeo,
-    ReconFigureDelta? delta,
+    List<Widget> badges = const [],
   }) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
@@ -731,7 +875,7 @@ class _DailyReconciliationDetailScreenState
           if (d.hasStockCount) ...[_divider(theme), ...countSection()],
         ],
         danger: hasShortage,
-        badge: _deltaBadge(context, theme, delta),
+        badges: badges,
       );
     }
 
@@ -838,7 +982,7 @@ class _DailyReconciliationDetailScreenState
         ],
       ],
       danger: hasVariance,
-      badge: _deltaBadge(context, theme, delta),
+      badges: badges,
     );
   }
 
@@ -899,8 +1043,9 @@ class _DailyReconciliationDetailScreenState
   Widget _debtsExpensesCard(
     BuildContext context,
     ThemeData theme,
-    ReconData d,
-  ) {
+    ReconData d, {
+    List<Widget> badges = const [],
+  }) {
     return _card(
       context,
       theme,
@@ -922,6 +1067,7 @@ class _DailyReconciliationDetailScreenState
           formatCurrency(d.expensesKobo / 100.0),
         ),
       ],
+      badges: badges,
     );
   }
 
@@ -1067,7 +1213,7 @@ class _DailyReconciliationDetailScreenState
     Color color,
     List<Widget> children, {
     bool danger = false,
-    Widget? badge,
+    List<Widget> badges = const [],
   }) {
     return Container(
       padding: EdgeInsets.all(context.spacingM),
@@ -1094,9 +1240,20 @@ class _DailyReconciliationDetailScreenState
                       context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
-              if (badge != null) ...[const SizedBox(width: 8), badge],
             ],
           ),
+          // #192 — a card can now flag SEVERAL frozen figures (expenses and
+          // damages move independently of net profit), so the badges wrap onto
+          // their own line under the title instead of competing with it for the
+          // header row's width.
+          if (badges.isNotEmpty) ...[
+            SizedBox(height: context.spacingS),
+            Wrap(
+              spacing: context.getRSize(6),
+              runSpacing: context.getRSize(6),
+              children: badges,
+            ),
+          ],
           SizedBox(height: context.spacingS),
           ...children,
         ],
@@ -1106,56 +1263,48 @@ class _DailyReconciliationDetailScreenState
 
   // ── Persisted day close (#174) — delta badge + reviewed banner ─────────────
 
-  /// The per-card "changed since review" badge, or null when the day was not
-  /// reviewed or this card's figure has not moved (an unchanged card shows no
-  /// badge). Neutral WARNING treatment: it flags that history mutated after the
-  /// review, not that the change is good or bad.
-  Widget? _deltaBadge(
-    BuildContext context,
-    ThemeData theme,
-    ReconFigureDelta? delta,
-  ) {
-    if (delta == null || !delta.changed) return null;
-    final warn = theme.extension<AppSemanticColors>()!.warning;
-    final up = delta.delta > 0;
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(3),
-      ),
-      decoration: BoxDecoration(
-        color: warn.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: warn.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(FontAwesomeIcons.arrowsRotate.data, size: 10, color: warn),
-          const SizedBox(width: 5),
-          Text(
-            '${up ? '+' : '−'} ${formatCurrency(delta.delta.abs() / 100.0)} '
-            'since review',
-            style: context.bodySmall.copyWith(
-              color: warn,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  /// The card's "changed since review" badges — one per figure in [figures] that
+  /// actually moved, and none at all for an unreviewed or unchanged day.
+  ///
+  /// Callers pass only what THIS card renders for THIS role, so the list doubles
+  /// as the answer to "did anything visible get flagged?" that the reviewed
+  /// banner is worded from.
+  List<Widget> _deltaChips(List<_CardFigure> figures) => [
+    for (final f in figures)
+      if (f.delta != null && f.delta!.changed)
+        ChangedSinceReviewBadge(
+          label:
+              '${f.label} ${f.delta!.delta > 0 ? '+' : '−'} '
+              '${f.isUnits ? fmtNumber(f.delta!.delta.abs()) : formatCurrency(f.delta!.delta.abs() / 100.0)}',
+        ),
+  ];
+
+  /// A "changed since review" badge with NO figure on it — the form used where
+  /// the money behind the change is on the far side of the §25.3 cost wall
+  /// (#192). A Manager is told their stock value moved after the review without
+  /// being shown the cost it moved by.
+  Widget _changedChip(String label) =>
+      ChangedSinceReviewBadge(label: '$label changed');
 
   /// The screen-level banner shown once, above the cards, when the finished day
   /// has a persisted review snapshot (#174). States when (and by whom) the day
   /// was reviewed, and whether any figure has changed since — turning silent
   /// history mutation into a visible statement.
+  ///
+  /// [hasFlaggedCard] is what the changed wording is allowed to promise (#192).
+  /// The banner used to say "the flagged cards show what moved" off `anyChanged`
+  /// alone, which includes figures that live on CEO-only cards — so a Manager
+  /// could be told to look at flagged cards when the screen had none. It is now
+  /// told what was actually flagged, and when the answer is "nothing you can
+  /// see", it says that instead of pointing at cards that do not exist.
   Widget _reviewedBanner(
     BuildContext context,
     ThemeData theme,
     ReconClosingComparison c,
-    String? reviewerName,
-  ) {
+    String? reviewerName, {
+    required bool hasFlaggedCard,
+    required bool isCeo,
+  }) {
     final changed = c.anyChanged;
     final accent = changed
         ? theme.extension<AppSemanticColors>()!.warning
@@ -1190,10 +1339,18 @@ class _DailyReconciliationDetailScreenState
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  changed
+                  !changed
+                      ? 'The figures still match what was reviewed.'
+                      : hasFlaggedCard
                       ? 'Some figures changed after this day was reviewed — the '
-                          'flagged cards show what moved since.'
-                      : 'The figures still match what was reviewed.',
+                            'flagged cards show what moved since.'
+                      : isCeo
+                      ? 'Some figures changed after this day was reviewed, but '
+                            'not on any card shown here — the CSV export lists '
+                            'every figure.'
+                      : 'Some figures changed after this day was reviewed, but '
+                            'not on any card you can see here — ask the owner to '
+                            'open this day.',
                   style: context.bodySmall.copyWith(color: theme.hintColor),
                 ),
               ],
@@ -1415,4 +1572,24 @@ class _DailyReconciliationDetailScreenState
       }
     }
   }
+}
+
+/// One frozen figure a card can flag (#192): the label the badge names it by,
+/// the figure's as-reviewed-vs-current delta (null when the day was never
+/// reviewed), and whether that delta reads as a unit COUNT rather than money.
+///
+/// Naming the figure is what makes several badges on one card readable, and what
+/// lets a Manager tell an "Expenses" badge from a "Total sales" one without
+/// inferring it from position. The unit flag is not cosmetic: `itemsSold` and
+/// `shortageUnits` are frozen as counts, and formatting a count as naira would
+/// state a number that never existed.
+class _CardFigure {
+  const _CardFigure({
+    required this.label,
+    required this.delta,
+    this.isUnits = false,
+  });
+  final String label;
+  final ReconFigureDelta? delta;
+  final bool isUnits;
 }
