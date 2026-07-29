@@ -1570,6 +1570,18 @@ class $ManufacturersTable extends Manufacturers
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _crateMoneyArrangementMeta =
+      const VerificationMeta('crateMoneyArrangement');
+  @override
+  late final GeneratedColumn<String> crateMoneyArrangement =
+      GeneratedColumn<String>(
+        'crate_money_arrangement',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(kCrateMoneyArrangementNone),
+      );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -1617,6 +1629,7 @@ class $ManufacturersTable extends Manufacturers
     name,
     emptyCrateStock,
     depositAmountKobo,
+    crateMoneyArrangement,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -1670,6 +1683,15 @@ class $ManufacturersTable extends Manufacturers
         ),
       );
     }
+    if (data.containsKey('crate_money_arrangement')) {
+      context.handle(
+        _crateMoneyArrangementMeta,
+        crateMoneyArrangement.isAcceptableOrUnknown(
+          data['crate_money_arrangement']!,
+          _crateMoneyArrangementMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_deleted')) {
       context.handle(
         _isDeletedMeta,
@@ -1720,6 +1742,10 @@ class $ManufacturersTable extends Manufacturers
         DriftSqlType.int,
         data['${effectivePrefix}deposit_amount_kobo'],
       )!,
+      crateMoneyArrangement: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crate_money_arrangement'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -1747,7 +1773,31 @@ class ManufacturerData extends DataClass
   final String businessId;
   final String name;
   final int emptyCrateStock;
+
+  /// The single canonical per-crate deposit rate (ADR 0023 rule 2). Both ends
+  /// of a crate deposit — what a customer leaves with us and what we leave with
+  /// a supplier — are valued from THIS column.
+  /// `crate_size_groups.deposit_amount_kobo` is a dead column with zero readers
+  /// and must never be revived as a second, per-size rate.
   final int depositAmountKobo;
+
+  /// Whether crate money moves for this brand at all, and when (#211, ADR 0023
+  /// rule 3). One of [kCrateMoneyArrangements]; see
+  /// `lib/core/crates/crate_money_arrangement.dart` for the owner-facing
+  /// meaning of each value and the ONLY place the strings are interpreted.
+  ///
+  /// NOT NULL with a `'none'` default, which is the release gate for PRD #203:
+  /// every existing manufacturer on every live tenant lands on `none` at
+  /// upgrade, so no figure anywhere in the app moves until an owner
+  /// deliberately switches a brand on. Nothing is ever backfilled.
+  ///
+  /// The value set is enforced by a cloud CHECK (0171) rather than a Drift
+  /// table-level CHECK, exactly as `stores.kind` is: SQLite cannot add a table
+  /// constraint without rebuilding the table, and rebuilding `manufacturers`
+  /// would rebuild an FK parent of most of the crate schema for no gain. The
+  /// client only ever writes the [kCrateMoneyArrangements] constants
+  /// (`CatalogDao.updateManufacturerCrateMoneyArrangement`).
+  final String crateMoneyArrangement;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -1757,6 +1807,7 @@ class ManufacturerData extends DataClass
     required this.name,
     required this.emptyCrateStock,
     required this.depositAmountKobo,
+    required this.crateMoneyArrangement,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -1769,6 +1820,7 @@ class ManufacturerData extends DataClass
     map['name'] = Variable<String>(name);
     map['empty_crate_stock'] = Variable<int>(emptyCrateStock);
     map['deposit_amount_kobo'] = Variable<int>(depositAmountKobo);
+    map['crate_money_arrangement'] = Variable<String>(crateMoneyArrangement);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -1782,6 +1834,7 @@ class ManufacturerData extends DataClass
       name: Value(name),
       emptyCrateStock: Value(emptyCrateStock),
       depositAmountKobo: Value(depositAmountKobo),
+      crateMoneyArrangement: Value(crateMoneyArrangement),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -1799,6 +1852,9 @@ class ManufacturerData extends DataClass
       name: serializer.fromJson<String>(json['name']),
       emptyCrateStock: serializer.fromJson<int>(json['emptyCrateStock']),
       depositAmountKobo: serializer.fromJson<int>(json['depositAmountKobo']),
+      crateMoneyArrangement: serializer.fromJson<String>(
+        json['crateMoneyArrangement'],
+      ),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -1813,6 +1869,7 @@ class ManufacturerData extends DataClass
       'name': serializer.toJson<String>(name),
       'emptyCrateStock': serializer.toJson<int>(emptyCrateStock),
       'depositAmountKobo': serializer.toJson<int>(depositAmountKobo),
+      'crateMoneyArrangement': serializer.toJson<String>(crateMoneyArrangement),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -1825,6 +1882,7 @@ class ManufacturerData extends DataClass
     String? name,
     int? emptyCrateStock,
     int? depositAmountKobo,
+    String? crateMoneyArrangement,
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -1834,6 +1892,7 @@ class ManufacturerData extends DataClass
     name: name ?? this.name,
     emptyCrateStock: emptyCrateStock ?? this.emptyCrateStock,
     depositAmountKobo: depositAmountKobo ?? this.depositAmountKobo,
+    crateMoneyArrangement: crateMoneyArrangement ?? this.crateMoneyArrangement,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -1851,6 +1910,9 @@ class ManufacturerData extends DataClass
       depositAmountKobo: data.depositAmountKobo.present
           ? data.depositAmountKobo.value
           : this.depositAmountKobo,
+      crateMoneyArrangement: data.crateMoneyArrangement.present
+          ? data.crateMoneyArrangement.value
+          : this.crateMoneyArrangement,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -1867,6 +1929,7 @@ class ManufacturerData extends DataClass
           ..write('name: $name, ')
           ..write('emptyCrateStock: $emptyCrateStock, ')
           ..write('depositAmountKobo: $depositAmountKobo, ')
+          ..write('crateMoneyArrangement: $crateMoneyArrangement, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -1881,6 +1944,7 @@ class ManufacturerData extends DataClass
     name,
     emptyCrateStock,
     depositAmountKobo,
+    crateMoneyArrangement,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -1894,6 +1958,7 @@ class ManufacturerData extends DataClass
           other.name == this.name &&
           other.emptyCrateStock == this.emptyCrateStock &&
           other.depositAmountKobo == this.depositAmountKobo &&
+          other.crateMoneyArrangement == this.crateMoneyArrangement &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -1905,6 +1970,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
   final Value<String> name;
   final Value<int> emptyCrateStock;
   final Value<int> depositAmountKobo;
+  final Value<String> crateMoneyArrangement;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -1915,6 +1981,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     this.name = const Value.absent(),
     this.emptyCrateStock = const Value.absent(),
     this.depositAmountKobo = const Value.absent(),
+    this.crateMoneyArrangement = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -1926,6 +1993,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     required String name,
     this.emptyCrateStock = const Value.absent(),
     this.depositAmountKobo = const Value.absent(),
+    this.crateMoneyArrangement = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -1938,6 +2006,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     Expression<String>? name,
     Expression<int>? emptyCrateStock,
     Expression<int>? depositAmountKobo,
+    Expression<String>? crateMoneyArrangement,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -1949,6 +2018,8 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
       if (name != null) 'name': name,
       if (emptyCrateStock != null) 'empty_crate_stock': emptyCrateStock,
       if (depositAmountKobo != null) 'deposit_amount_kobo': depositAmountKobo,
+      if (crateMoneyArrangement != null)
+        'crate_money_arrangement': crateMoneyArrangement,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -1962,6 +2033,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     Value<String>? name,
     Value<int>? emptyCrateStock,
     Value<int>? depositAmountKobo,
+    Value<String>? crateMoneyArrangement,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -1973,6 +2045,8 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
       name: name ?? this.name,
       emptyCrateStock: emptyCrateStock ?? this.emptyCrateStock,
       depositAmountKobo: depositAmountKobo ?? this.depositAmountKobo,
+      crateMoneyArrangement:
+          crateMoneyArrangement ?? this.crateMoneyArrangement,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -1998,6 +2072,11 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     if (depositAmountKobo.present) {
       map['deposit_amount_kobo'] = Variable<int>(depositAmountKobo.value);
     }
+    if (crateMoneyArrangement.present) {
+      map['crate_money_arrangement'] = Variable<String>(
+        crateMoneyArrangement.value,
+      );
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -2021,6 +2100,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
           ..write('name: $name, ')
           ..write('emptyCrateStock: $emptyCrateStock, ')
           ..write('depositAmountKobo: $depositAmountKobo, ')
+          ..write('crateMoneyArrangement: $crateMoneyArrangement, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -52288,6 +52368,7 @@ typedef $$ManufacturersTableCreateCompanionBuilder =
       required String name,
       Value<int> emptyCrateStock,
       Value<int> depositAmountKobo,
+      Value<String> crateMoneyArrangement,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -52300,6 +52381,7 @@ typedef $$ManufacturersTableUpdateCompanionBuilder =
       Value<String> name,
       Value<int> emptyCrateStock,
       Value<int> depositAmountKobo,
+      Value<String> crateMoneyArrangement,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -52591,6 +52673,11 @@ class $$ManufacturersTableFilterComposer
 
   ColumnFilters<int> get depositAmountKobo => $composableBuilder(
     column: $table.depositAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crateMoneyArrangement => $composableBuilder(
+    column: $table.crateMoneyArrangement,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -52891,6 +52978,11 @@ class $$ManufacturersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get crateMoneyArrangement => $composableBuilder(
+    column: $table.crateMoneyArrangement,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -52952,6 +53044,11 @@ class $$ManufacturersTableAnnotationComposer
 
   GeneratedColumn<int> get depositAmountKobo => $composableBuilder(
     column: $table.depositAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get crateMoneyArrangement => $composableBuilder(
+    column: $table.crateMoneyArrangement,
     builder: (column) => column,
   );
 
@@ -53266,6 +53363,7 @@ class $$ManufacturersTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<int> emptyCrateStock = const Value.absent(),
                 Value<int> depositAmountKobo = const Value.absent(),
+                Value<String> crateMoneyArrangement = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -53276,6 +53374,7 @@ class $$ManufacturersTableTableManager
                 name: name,
                 emptyCrateStock: emptyCrateStock,
                 depositAmountKobo: depositAmountKobo,
+                crateMoneyArrangement: crateMoneyArrangement,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -53288,6 +53387,7 @@ class $$ManufacturersTableTableManager
                 required String name,
                 Value<int> emptyCrateStock = const Value.absent(),
                 Value<int> depositAmountKobo = const Value.absent(),
+                Value<String> crateMoneyArrangement = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -53298,6 +53398,7 @@ class $$ManufacturersTableTableManager
                 name: name,
                 emptyCrateStock: emptyCrateStock,
                 depositAmountKobo: depositAmountKobo,
+                crateMoneyArrangement: crateMoneyArrangement,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,

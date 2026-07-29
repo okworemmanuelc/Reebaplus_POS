@@ -11,6 +11,7 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
+import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
@@ -110,7 +111,32 @@ class Manufacturers extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
   IntColumn get emptyCrateStock => integer().withDefault(const Constant(0))();
+
+  /// The single canonical per-crate deposit rate (ADR 0023 rule 2). Both ends
+  /// of a crate deposit — what a customer leaves with us and what we leave with
+  /// a supplier — are valued from THIS column.
+  /// `crate_size_groups.deposit_amount_kobo` is a dead column with zero readers
+  /// and must never be revived as a second, per-size rate.
   IntColumn get depositAmountKobo => integer().withDefault(const Constant(0))();
+
+  /// Whether crate money moves for this brand at all, and when (#211, ADR 0023
+  /// rule 3). One of [kCrateMoneyArrangements]; see
+  /// `lib/core/crates/crate_money_arrangement.dart` for the owner-facing
+  /// meaning of each value and the ONLY place the strings are interpreted.
+  ///
+  /// NOT NULL with a `'none'` default, which is the release gate for PRD #203:
+  /// every existing manufacturer on every live tenant lands on `none` at
+  /// upgrade, so no figure anywhere in the app moves until an owner
+  /// deliberately switches a brand on. Nothing is ever backfilled.
+  ///
+  /// The value set is enforced by a cloud CHECK (0171) rather than a Drift
+  /// table-level CHECK, exactly as `stores.kind` is: SQLite cannot add a table
+  /// constraint without rebuilding the table, and rebuilding `manufacturers`
+  /// would rebuild an FK parent of most of the crate schema for no gain. The
+  /// client only ever writes the [kCrateMoneyArrangements] constants
+  /// (`CatalogDao.updateManufacturerCrateMoneyArrangement`).
+  TextColumn get crateMoneyArrangement =>
+      text().withDefault(const Constant(kCrateMoneyArrangementNone))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -2570,7 +2596,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 77;
+  int get schemaVersion => 78;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5474,6 +5500,65 @@ class AppDatabase extends _$AppDatabase {
             'retired `purchase` type — leaving the type CHECK wide rather than '
             'destroying a money row. See #202 / 0169.',
           );
+        }
+      }
+
+      if (from < 78) {
+        // ── v78 — #211: a brand says whether its crate money moves ──────────
+        //
+        // `manufacturers` gains ONE column, `crate_money_arrangement` TEXT NOT
+        // NULL DEFAULT 'none' (PRD #203, ADR 0023 rule 3). Every existing row
+        // on every live tenant therefore reads `none` — "swap only, no money
+        // ever changes hands" — the moment this step runs, and NOTHING is
+        // backfilled. That default is the release gate for the whole PRD: with
+        // every brand on `none`, the later slices have nothing to act on, so
+        // the eight of them can ship to production without moving a single
+        // tenant's figures. Do not "helpfully" infer an arrangement here from
+        // deposit_amount_kobo or from historic supplier_crate_ledger rows —
+        // inferring one would silently opt a live tenant in.
+        //
+        // Simple ADD COLUMN with a non-null default, the v70 `stores.kind`
+        // shape. The `crate_money_arrangement IN (...)` CHECK lives on the
+        // CLOUD only (0171): SQLite cannot add a table constraint without
+        // rebuilding the table, and `manufacturers` is the FK parent of most of
+        // the crate schema (crate_ledger, the four *_crate_balances caches,
+        // order_crate_deposits, pending_crate_returns, products). The client
+        // only ever writes the `kCrateMoneyArrangements` constants.
+        //
+        // `columnTransformer` — NOT needed, and here is the check that says so
+        // (the trap the v64/v72/v77 rebuild steps carry). A `TableMigration`
+        // rebuild copies from the CURRENT Drift schema, so a column added later
+        // leaks into an OLDER step's SELECT list as a bare identifier that
+        // SQLite silently degrades to a string literal. NO existing rebuild
+        // step touches `manufacturers` — the alterTable steps in this file
+        // cover customers, crate_size_groups, activity_logs, notifications,
+        // crate_ledger, expenses, products, order_items, wallet_transactions,
+        // user_businesses and payment_transactions, and nothing else. If a
+        // future step ever rebuilds `manufacturers`, this column must be pinned
+        // there.
+        //
+        // No sync_registry table change — `manufacturers` is already a
+        // registered synced table. It DOES carry an explicit push whitelist
+        // (#159 demoted `empty_crate_stock`), so the new column is added to
+        // that whitelist, plus a pull-side `defaults` entry so a cloud row
+        // written before 0171 lands (this column is NOT NULL locally, and
+        // Restore.plain runs fromJson BEFORE the FK-resilient wrapper, so a
+        // missing key would abort the whole pull page — the same fuse
+        // `stores.kind` needed).
+        //
+        // Mirrors supabase/migrations/0171_crate_money_arrangement.sql.
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69/v70/v72/v73/v76 so a DB
+        // stepped back to < 78 by the revert-then-re-upgrade tests re-upgrades
+        // cleanly, and so a fresh install (whose createTable already builds the
+        // column from the current Dart definition) that is stepped back does
+        // not fail on a duplicate column.
+        final hasCrateMoneyArrangement = await customSelect(
+          "SELECT 1 FROM pragma_table_info('manufacturers') "
+          "WHERE name = 'crate_money_arrangement'",
+        ).get();
+        if (hasCrateMoneyArrangement.isEmpty) {
+          await m.addColumn(manufacturers, manufacturers.crateMoneyArrangement);
         }
       }
     },

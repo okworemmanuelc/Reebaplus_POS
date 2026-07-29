@@ -5,6 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:reebaplus_pos/core/costing/fifo_drawdown.dart';
+// #211: the typed form of `manufacturers.crate_money_arrangement`. The write
+// boundary takes the enum, not a string, so no caller can persist a value the
+// cloud CHECK would reject.
+import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';

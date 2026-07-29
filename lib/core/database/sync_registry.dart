@@ -519,6 +519,10 @@ final List<SyncedTable> kSyncRegistry = [
       'business_id',
       'name',
       'deposit_amount_kobo',
+      // #211 — the brand's Crate Money Arrangement (ADR 0023 rule 3). An
+      // owner-chosen money policy, so it must reach every other device; it is
+      // pushed like `deposit_amount_kobo` and for the same reason.
+      'crate_money_arrangement',
       'is_deleted',
       'created_at',
       'last_updated_at',
@@ -527,6 +531,14 @@ final List<SyncedTable> kSyncRegistry = [
       (db) => db.manufacturers,
       ManufacturerData.fromJson,
       resilient: true,
+      // #211 — `crate_money_arrangement` is NOT NULL locally, and
+      // [Restore.plain] runs `fromJson` BEFORE the FK-resilient wrapper, so a
+      // cloud row missing the column would throw and abort the whole pull page
+      // rather than skip one row. That is exactly what a device on Drift v78
+      // sees if it pulls before supabase/migrations/0171 is applied. Defaulting
+      // to `none` is both the right value (nobody has opted in) and the
+      // deploy-order fuse.
+      defaults: {'crate_money_arrangement': kCrateMoneyArrangementNone},
     ),
   ),
   SyncedTable(

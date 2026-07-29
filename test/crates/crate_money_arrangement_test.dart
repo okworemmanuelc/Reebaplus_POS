@@ -1,0 +1,442 @@
+// crate_money_arrangement_test.dart
+//
+// #211 / PRD #203, ADR 0023 rule 3 — the Crate Money Arrangement, and above all
+// its DEFAULT.
+//
+// The setting itself is small: three values on a manufacturer saying whether
+// crate money moves for that brand and when. What matters is that every
+// manufacturer that already exists reads `none`, because that default is the
+// release gate for all eight slices of PRD #203 — it is what lets the money
+// slices behind it ship to live production without moving a single tenant's
+// figures.
+//
+// So this suite pins four things:
+//   1. `none` is what you get: on insert, on a NULL/garbage cloud value, and
+//      after the 77→78 upgrade (that last one lives in
+//      test/database/migration_upgrade_test.dart, which owns the on-disk
+//      upgrade path).
+//   2. THE RELEASE GATE — a business whose every manufacturer is `none`
+//      produces the same reconciliation figures it produced before this slice
+//      existed, to the kobo.
+//   3. The setting has no readers outside its own module, the schema, the sync
+//      registry, the one write method and the picker — so there is no path by
+//      which it could move a figure yet.
+//   4. The write boundary round-trips and enqueues.
+
+import 'dart:io';
+
+import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
+
+void main() {
+  const businessId = 'biz-1';
+  const star = 'mfr-star';
+  const gulder = 'mfr-gulder';
+
+  ManufacturerData mfr(
+    String id,
+    String name,
+    int depositKobo, {
+    String arrangement = kCrateMoneyArrangementNone,
+  }) => ManufacturerData(
+    id: id,
+    businessId: businessId,
+    name: name,
+    emptyCrateStock: 0,
+    depositAmountKobo: depositKobo,
+    crateMoneyArrangement: arrangement,
+    isDeleted: false,
+    createdAt: DateTime.utc(2026, 1, 1),
+    lastUpdatedAt: DateTime.utc(2026, 1, 1),
+  );
+
+  group('`none` is what you get', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      db.businessIdResolver = () => businessId;
+      await db
+          .into(db.businesses)
+          .insert(
+            BusinessesCompanion.insert(
+              id: const Value(businessId),
+              name: 'Biz',
+              type: const Value('Bar'),
+            ),
+          );
+    });
+
+    tearDown(() => db.close());
+
+    test('a manufacturer created without naming an arrangement is `none`',
+        () async {
+      await db
+          .into(db.manufacturers)
+          .insert(
+            ManufacturersCompanion.insert(
+              id: const Value(star),
+              businessId: businessId,
+              name: 'Star Lager',
+              depositAmountKobo: const Value(350000),
+            ),
+          );
+
+      final row = await (db.select(
+        db.manufacturers,
+      )..where((t) => t.id.equals(star))).getSingle();
+      expect(row.crateMoneyArrangement, kCrateMoneyArrangementNone);
+      expect(
+        crateMoneyArrangementOf(row.crateMoneyArrangement),
+        CrateMoneyArrangement.none,
+      );
+      expect(CrateMoneyArrangement.none.movesMoney, isFalse);
+    });
+
+    test('an unreadable value fails CLOSED to `none`, never to a money mode',
+        () {
+      // A null from a cloud row written before 0171, a blank, a value some
+      // future client invented. A wrong money movement costs far more than a
+      // missed one, so anything we cannot read means "no money moves".
+      for (final bad in <String?>[null, '', 'None', 'per delivery', 'float']) {
+        expect(
+          crateMoneyArrangementOf(bad),
+          CrateMoneyArrangement.none,
+          reason: '$bad must not be read as a money-moving arrangement',
+        );
+      }
+    });
+
+    test('the three values are the three the cloud CHECK allows', () async {
+      expect(kCrateMoneyArrangements, [
+        'none',
+        'per_delivery',
+        'standing_float',
+      ]);
+      expect(
+        CrateMoneyArrangement.values.map((a) => a.wire),
+        kCrateMoneyArrangements,
+      );
+      expect(
+        CrateMoneyArrangement.values.where((a) => a.movesMoney).map((a) => a.wire),
+        ['per_delivery', 'standing_float'],
+      );
+
+      // The client's set and the cloud's CHECK must not drift — a value the
+      // client can write but the CHECK rejects jams the outbox (23514).
+      final sql = await File(
+        'supabase/migrations/0171_crate_money_arrangement.sql',
+      ).readAsString();
+      expect(
+        sql,
+        contains(
+          "CHECK (crate_money_arrangement IN "
+          "('none','per_delivery','standing_float'))",
+        ),
+      );
+      expect(
+        sql,
+        contains("crate_money_arrangement text NOT NULL DEFAULT 'none'"),
+        reason: 'the cloud default is the other half of the release gate',
+      );
+    });
+  });
+
+  group('THE RELEASE GATE — every manufacturer at `none` moves no figure', () {
+    // A real crate business's day: two brands, empties on hand, deposits held
+    // for customers, and crate debt owed to a supplier. Every figure below is
+    // hand-computed from the domain rules, NOT snapshotted from a run — so if
+    // this slice had perturbed anything (a migration that disturbed the rate, a
+    // figure path that started consulting the new column) the arithmetic here
+    // would disagree with the code.
+    const starDeposit = 350000; // ₦3,500 a crate
+    const gulderDeposit = 300000; // ₦3,000 a crate
+    const starEmpties = 42;
+    const gulderEmpties = 7;
+    const heldForCustomers = 1400000; // ₦14,000 of customer deposits held
+    const owedToSuppliers = 900000; // ₦9,000 of crate debt owed out
+
+    ReconInputs inputsWith(String arrangement) => ReconInputs(
+      manufacturers: [
+        mfr(star, 'Star Lager', starDeposit, arrangement: arrangement),
+        mfr(gulder, 'Gulder', gulderDeposit, arrangement: arrangement),
+      ],
+      emptyCrateCounts: const {star: starEmpties, gulder: gulderEmpties},
+      showCrates: true,
+      heldCrateDepositsKobo: heldForCustomers,
+      supplierCrateDebtKobo: owedToSuppliers,
+      isCeo: true,
+    );
+
+    /// Every figure a crate-money change could conceivably disturb.
+    Map<String, int> figures(ReconData d) => {
+      'crateUnits': d.crateUnits,
+      'crateDepositKobo': d.crateDepositKobo,
+      'heldCrateDepositsKobo': d.heldCrateDepositsKobo,
+      'supplierCrateDebtKobo': d.supplierCrateDebtKobo,
+      'businessNetPositionKobo': d.businessNetPositionKobo,
+      'periodNetResultKobo': d.periodNetResultKobo,
+      'totalSalesKobo': d.totalSalesKobo,
+      'netProfitKobo': d.netProfitKobo,
+      'refundsKobo': d.refundsKobo,
+      'expensesKobo': d.expensesKobo,
+      'cashInKobo': d.cashInKobo,
+      'cashOutKobo': d.cashOutKobo,
+      'netCashMovementKobo': d.netCashMovementKobo,
+      'inventoryOnHandKobo': d.inventoryOnHandKobo,
+      'goodsReceivedKobo': d.goodsReceivedKobo,
+      'supplierPaidKobo': d.supplierPaidKobo,
+      'crateDamageDepositKobo': d.crateDamageDepositKobo,
+    };
+
+    test('the figures a crate business reads are exactly what they were before '
+        'this slice', () {
+      final d = reconDataFrom(inputsWith(kCrateMoneyArrangementNone));
+
+      // Empties held, valued at the ONE canonical rate —
+      // `manufacturers.deposit_amount_kobo`. Nothing here reads
+      // `crate_size_groups.deposit_amount_kobo`, which is dead.
+      expect(d.crateUnits, starEmpties + gulderEmpties); // 49
+      expect(
+        d.crateDepositKobo,
+        starEmpties * starDeposit + gulderEmpties * gulderDeposit,
+      ); // 42×350000 + 7×300000 = 16,800,000
+      expect(d.crateDepositKobo, 16800000);
+
+      // Both crate liabilities still net out of worth (#163) untouched.
+      expect(d.heldCrateDepositsKobo, heldForCustomers);
+      expect(d.supplierCrateDebtKobo, owedToSuppliers);
+
+      // Net worth = empties asset − deposits held for customers − crate debt
+      // owed to suppliers. No inventory, no in-transit, no customer debt, no
+      // supplier payable in this fixture.
+      expect(
+        d.businessNetPositionKobo,
+        16800000 - heldForCustomers - owedToSuppliers,
+      );
+      expect(d.businessNetPositionKobo, 14500000);
+
+      // And nothing became income, an expense or a cash movement. A Placed
+      // Deposit is an ASSET, never an expense (ADR 0023 rule 1) — and at `none`
+      // there is no placed deposit at all.
+      expect(d.periodNetResultKobo, 0);
+      expect(d.netProfitKobo, 0);
+      expect(d.totalSalesKobo, 0);
+      expect(d.expensesKobo, 0);
+      expect(d.netCashMovementKobo, 0);
+      expect(d.crateDamageDepositKobo, 0);
+    });
+
+    test('the setting is inert: the same business reads the same figures '
+        'whatever the arrangement says — TODAY', () {
+      // This slice ships the SETTING only; no money behaviour hangs off it yet.
+      // Proving inertness here is what makes "a business at `none` is identical
+      // to before this slice" airtight: before the column existed there was one
+      // possible state, and every state produces that same state's figures.
+      //
+      // TO THE NEXT SLICE (#212+): when you make an arrangement actually move
+      // money, this test is SUPPOSED to fail for the money-moving values. That
+      // failure is your prompt to narrow it to `none` rather than delete it —
+      // the `none` row must keep matching the pre-slice figures forever, which
+      // is the promise the whole PRD ships on.
+      final atNone = figures(reconDataFrom(inputsWith(
+        kCrateMoneyArrangementNone,
+      )));
+      for (final other in [
+        kCrateMoneyArrangementPerDelivery,
+        kCrateMoneyArrangementStandingFloat,
+      ]) {
+        expect(
+          figures(reconDataFrom(inputsWith(other))),
+          equals(atNone),
+          reason:
+              'no figure may depend on the arrangement while it is a setting '
+              'and nothing more ($other)',
+        );
+      }
+    });
+
+    test('a non-crate business carries no crate figures at all, arrangement or '
+        'not', () {
+      // The setting is hidden for a non-crate business; the figures were
+      // already zero there and must stay zero.
+      final d = reconDataFrom(
+        ReconInputs(
+          manufacturers: [
+            mfr(star, 'Star Lager', starDeposit,
+                arrangement: kCrateMoneyArrangementPerDelivery),
+          ],
+          emptyCrateCounts: const {star: starEmpties},
+          showCrates: false,
+          heldCrateDepositsKobo: heldForCustomers,
+          supplierCrateDebtKobo: owedToSuppliers,
+        ),
+      );
+      expect(d.crateUnits, 0);
+      expect(d.crateDepositKobo, 0);
+      expect(d.heldCrateDepositsKobo, 0);
+      expect(d.supplierCrateDebtKobo, 0);
+      expect(d.businessNetPositionKobo, 0);
+    });
+  });
+
+  group('the setting has nowhere to leak from', () {
+    test('nothing in lib/ reads the arrangement except its own module, the '
+        'schema, the sync registry, the write method and the picker', () {
+      // The structural half of the release gate. A figure can only move if
+      // something READS the column; today nothing that computes a figure does.
+      // If a later slice adds a reader it lands here first, which is the
+      // moment to re-check the `none` path above.
+      const allowed = {
+        // The domain module — the ONLY interpretation of the strings.
+        'lib/core/crates/crate_money_arrangement.dart',
+        // The column itself + its upgrade step.
+        'lib/core/database/app_database.dart',
+        'lib/core/database/app_database.g.dart',
+        // Push whitelist + pull default.
+        'lib/core/database/sync_registry.dart',
+        // The typed import for the write boundary, and the write boundary.
+        'lib/core/database/daos.dart',
+        'lib/core/database/daos_catalog.dart',
+        // The named gate that guards editing it.
+        'lib/core/permissions/gate_registry.dart',
+        // The one surface that shows and sets it.
+        'lib/features/inventory/widgets/crate_money_arrangement_section.dart',
+        'lib/features/inventory/screens/inventory_screen.dart',
+      };
+
+      final found = <String>{};
+      for (final entity in Directory('lib').listSync(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.dart')) continue;
+        final text = entity.readAsStringSync();
+        if (text.contains('crateMoneyArrangement') ||
+            text.contains('crate_money_arrangement') ||
+            text.contains('CrateMoneyArrangement')) {
+          found.add(entity.path.replaceAll(r'\', '/'));
+        }
+      }
+
+      expect(
+        found.difference(allowed),
+        isEmpty,
+        reason:
+            'a new file mentions the Crate Money Arrangement. If it READS the '
+            'value to compute a figure, PRD #203\'s release gate needs '
+            're-checking: a business with every brand at `none` must still '
+            'produce the figures it produced before slice #211.',
+      );
+    });
+  });
+
+  group('the write boundary', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      db.businessIdResolver = () => businessId;
+      await db
+          .into(db.businesses)
+          .insert(
+            BusinessesCompanion.insert(
+              id: const Value(businessId),
+              name: 'Biz',
+              type: const Value('Bar'),
+            ),
+          );
+      await db
+          .into(db.manufacturers)
+          .insert(
+            ManufacturersCompanion.insert(
+              id: const Value(star),
+              businessId: businessId,
+              name: 'Star Lager',
+              depositAmountKobo: const Value(350000),
+            ),
+          );
+    });
+
+    tearDown(() => db.close());
+
+    Future<ManufacturerData> reread() => (db.select(
+      db.manufacturers,
+    )..where((t) => t.id.equals(star))).getSingle();
+
+    test('setting an arrangement persists it, bumps last_updated_at, and '
+        'changes nothing else about the brand', () async {
+      final before = await reread();
+
+      await db.catalogDao.updateManufacturerCrateMoneyArrangement(
+        star,
+        CrateMoneyArrangement.perDelivery,
+      );
+
+      final after = await reread();
+      expect(after.crateMoneyArrangement, kCrateMoneyArrangementPerDelivery);
+      // The rate is untouched — the arrangement says WHETHER money moves, the
+      // rate says how much (ADR 0023 rule 2). One never rewrites the other.
+      expect(after.depositAmountKobo, before.depositAmountKobo);
+      expect(after.name, before.name);
+      expect(after.emptyCrateStock, before.emptyCrateStock);
+      expect(
+        after.lastUpdatedAt.isAfter(before.lastUpdatedAt) ||
+            after.lastUpdatedAt.isAtSameMomentAs(before.lastUpdatedAt),
+        isTrue,
+      );
+    });
+
+    test('switching back to `none` is a normal edit, not a special case',
+        () async {
+      await db.catalogDao.updateManufacturerCrateMoneyArrangement(
+        star,
+        CrateMoneyArrangement.standingFloat,
+      );
+      expect(
+        (await reread()).crateMoneyArrangement,
+        kCrateMoneyArrangementStandingFloat,
+      );
+
+      await db.catalogDao.updateManufacturerCrateMoneyArrangement(
+        star,
+        CrateMoneyArrangement.none,
+      );
+      expect(
+        (await reread()).crateMoneyArrangement,
+        kCrateMoneyArrangementNone,
+      );
+    });
+
+    test('the edit enqueues the FULL row for sync, carrying the arrangement',
+        () async {
+      await db.catalogDao.updateManufacturerCrateMoneyArrangement(
+        star,
+        CrateMoneyArrangement.perDelivery,
+      );
+
+      final queued = await db
+          .customSelect(
+            "SELECT action_type, payload FROM sync_queue "
+            "WHERE action_type LIKE 'manufacturers:%'",
+          )
+          .get();
+      expect(queued, isNotEmpty);
+      final payload = queued.last.read<String>('payload');
+      expect(payload, contains('crate_money_arrangement'));
+      expect(payload, contains('per_delivery'));
+      // A partial upsert would omit the NOT NULL name and the cloud would
+      // reject it (23502) — the full-row enqueue is what prevents that.
+      expect(payload, contains('Star Lager'));
+    });
+
+    test('the arrangement is on the manufacturers push whitelist', () {
+      expect(
+        kSyncPushColumns['manufacturers'],
+        contains('crate_money_arrangement'),
+      );
+    });
+  });
+}
