@@ -40,10 +40,17 @@
 -- on existing data. It cannot in practice (no writer has ever produced such a
 -- row), but a money row must never be destroyed to make a constraint fit, so
 -- the DO block below SKIPS the narrowing outright if any `purchase` row exists
--- and RAISES A WARNING naming the count. Re-running the migration after those
--- rows are reclassified by hand completes the job. Drift's v77 step makes the
--- same call for the same reason (a failed rebuild would brick the client on
--- open).
+-- and RAISES A WARNING naming the count. Drift's v77 step makes the same call
+-- for the same reason (a failed rebuild would brick the client on open).
+--
+-- The skip is ONE-SHOT on both sides, so recovery is deliberate, not automatic:
+-- this file is recorded in `supabase_migrations.schema_migrations` whether or
+-- not it narrowed anything, and the client's `user_version` lands on 77 either
+-- way. If the warning ever fires, reclassify the offending rows and then EITHER
+-- `supabase migration repair --status reverted 0169` + `db push` to replay this
+-- file, OR — better, because it also re-narrows the affected clients — ship the
+-- fix as a NEW numbered migration plus its own Drift step. Do not hand-edit
+-- this file after it has been applied.
 --
 -- DEPLOY ORDER: this narrowing is safe to push AHEAD of the v77 client — a v76
 -- client still only ever pushes the six live types, so nothing it can produce
@@ -97,7 +104,9 @@ BEGIN
   IF v_rows > 0 THEN
     RAISE WARNING
       '0169: % payment_transactions row(s) have type = ''purchase''; leaving '
-      'the CHECK wide. Reclassify those rows, then re-run this migration.',
+      'the CHECK wide rather than destroying a money row. Reclassify them, '
+      'then ship the narrowing as a NEW migration (this one is already '
+      'recorded and will not replay on its own).',
       v_rows;
     RETURN;
   END IF;

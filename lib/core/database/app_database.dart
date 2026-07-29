@@ -5382,19 +5382,31 @@ class AppDatabase extends _$AppDatabase {
         // NO column changes — this is a CHECK edit only, and SQLite cannot ALTER
         // a CHECK in place, so it is the v64/v72 table-rebuild recipe once more:
         //   1. alterTable(TableMigration(...)) rebuilds from the CURRENT Drift
-        //      schema and copies every row 1:1. No `columnTransformer` is needed
-        //      (unlike v64): a DB arriving here has already passed through v64
-        //      and v72, so every column in the current schema exists on the
-        //      table being copied.
+        //      schema and copies every row 1:1.
         //   2. drift re-applies the table's EXISTING indexes but NOT its
         //      triggers, so DROP-then-CREATE each index (idempotent, same fix as
         //      the v29/v61/v64/v72 rebuilds) and re-emit the two append-only
         //      ledger triggers from the single `_ledgerTables` source, plus the
         //      last_updated_at bump trigger.
         //
-        // Rebuilding an APPEND-ONLY table is only safe because the triggers are
-        // dropped first: `payment_transactions_no_delete` would otherwise abort
-        // drift's copy-and-swap.
+        // `columnTransformer` — READ THIS BEFORE ADDING A COLUMN TO
+        // payment_transactions (the same warning v64 carries; it applies to
+        // EVERY rebuild step, and this is now the third). `TableMigration`
+        // rebuilds from the CURRENT Drift schema, not from the schema as of
+        // v77, so a column the table grows LATER also appears in this copy's
+        // SELECT list. A column that does not exist on the v76-shaped table is
+        // emitted as a bare `"name"` identifier, which SQLite (by its legacy
+        // double-quote fallback) silently degrades to the STRING 'name' — a
+        // non-null value in a column that should be NULL, which is what aborted
+        // the v72 upgrade for `van_trip_id`. NO transformer is needed TODAY
+        // (a DB reaching here has already passed v64 and v72, so every column
+        // in the current schema exists on the table being copied) — but a v78
+        // that adds a column MUST map it to NULL here as well as in v64.
+        //
+        // Rebuilding an APPEND-ONLY table is safe because drift's copy-and-swap
+        // drops the source table rather than deleting rows, and SQLite fires no
+        // row triggers on DROP TABLE; the triggers are then re-created below,
+        // without which the ledger silently stops being append-only.
         //
         // **This is the first NARROWING**, so unlike every rebuild before it the
         // copy CAN fail on existing data — a single legacy `purchase` row would
@@ -5404,6 +5416,12 @@ class AppDatabase extends _$AppDatabase {
         // wider CHECK locally, which is harmless (`SchemaAudit` only checks for
         // missing tables/columns), and the row stays visible and pushable. The
         // cloud twin, 0169_drop_purchase_payment_type.sql, makes the same call.
+        //
+        // The skip is ONE-SHOT: `user_version` still lands on 77, so the step
+        // never runs again on that device. It is logged (not silent) so a field
+        // report can explain a device whose CHECK is still wide; re-narrowing it
+        // would need its own later step, which is the right place for that
+        // decision anyway — by then the stray rows will have been classified.
         final hasPurchasePayments = await customSelect(
           "SELECT 1 FROM payment_transactions WHERE type = 'purchase' LIMIT 1",
         ).get();
@@ -5450,6 +5468,12 @@ class AppDatabase extends _$AppDatabase {
           )) {
             await customStatement(stmt);
           }
+        } else {
+          debugPrint(
+            '[AppDatabase] v77: payment_transactions still holds row(s) of the '
+            'retired `purchase` type — leaving the type CHECK wide rather than '
+            'destroying a money row. See #202 / 0169.',
+          );
         }
       }
     },

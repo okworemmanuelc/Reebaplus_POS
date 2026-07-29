@@ -61,7 +61,25 @@ and a DB reaching v77 has already passed v64/v72, so every current column exists
 on the table being copied. Deploy order is free either way — a v76 client can only
 produce the six live types. Three new cases in
 `test/database/migration_upgrade_test.dart` pin the narrowing, the row-survival,
-the skip-on-legacy-row path, and idempotency. `flutter analyze` clean.
+the skip-on-legacy-row path, and idempotency. `flutter analyze` clean; full suite
+1506 pass / 121 skipped / 0 fail.
+
+The skip is **one-shot on both sides** — `user_version` reaches 77 and 0169 is
+recorded in `schema_migrations` whether or not either narrowed anything — so
+recovery from a stray row is deliberate: reclassify the rows, then ship a NEW
+numbered migration plus its own Drift step (which also re-narrows the affected
+clients), rather than replaying 0169. The client logs the skip so a field report
+can explain a device left on the wide CHECK. `CONTEXT.md`'s **Payment row** entry
+was corrected in the same pass: it listed `purchase` as "legacy, never written"
+and had never listed `van_remittance` at all; it now names the six live types and
+says why `purchase` is not coming back.
+
+**Deliberately NOT done (and why):** the v77 rebuild is a near-verbatim copy of
+v72's index/trigger re-emission, which reads as Duplicated Code. It is left
+inline because `ai-workflow-rules.md` §Protected Files forbids rewriting a
+shipped migration, and extracting a helper that only the newest step uses would
+make the three steps *less* alike, not more. Each `onUpgrade` block is frozen
+history by design.
 
 ### #197 — US 22: a stock request records what the goods cost — CODE-COMPLETE (2026-07-29)
 One of the three PRD #155 stories the close-out audit found **never

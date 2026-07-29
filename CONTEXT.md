@@ -104,9 +104,13 @@ are new rows**.
 
 **Payment row**:
 One row in `payment_transactions` recording money actually moving. Typed
-`sale` | `expense` | `refund` | `wallet_topup` | `crate_deposit` (+ legacy
-`purchase`, never written). Counted on its **own creation day**, which is what
-makes a reviewed day's cash figure stable.
+`sale` | `expense` | `refund` | `wallet_topup` | `crate_deposit` |
+`van_remittance` — those six and no others. (A seventh, `purchase`, was carried
+in the CHECK from the 0001 schema and never written by anything; #202 dropped it
+from both the Drift and cloud constraints. A goods purchase is a **supplier
+invoice** plus an `expense` / supplier-ledger payment — do not resurrect the
+value for it.) Counted on its **own creation day**, which is what makes a
+reviewed day's cash figure stable.
 _Avoid_: editing a payment row; "voiding" one (the in-place void columns are
 legacy read-only).
 
