@@ -1032,7 +1032,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // from `totalAmountKobo` but the envelope forwards only the per-line
       // discount sum, so the server's goods cap is higher by the credit. That is
       // an older v2-envelope gap — it already moves the order header's own
-      // `net_amount_kobo` — and 0170's header records it as a follow-up.)
+      // `net_amount_kobo` — filed as #209. It cannot fire today either: #202
+      // deleted the cart block that computed the credit, whose source field was
+      // hardcoded empty everywhere.)
       //
       // #142 (van-sales spec §5.3, ADR 0019 decision 2) — "cash follows
       // custody". A ROAD sale writes NONE of the three rows. The driver has the

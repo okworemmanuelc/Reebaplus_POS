@@ -80,10 +80,16 @@
 -- `net_amount_kobo` higher than the v1 mirror on such a sale (and the response
 -- overwrites the local mirror with it), which is a v1/v2 envelope gap that
 -- predates #175. The split follows the header it is paired with, which is the
--- only self-consistent choice available without a signature change. FILED AS A
--- FOLLOW-UP: forward the crate credit on the v2 envelope — that fixes the header
+-- only self-consistent choice available without a signature change. FILED AS
+-- **#209**: forward the crate credit on the v2 envelope — that fixes the header
 -- and this split together, in one place. Until then, treat a crate-credit sale as
 -- a known v1/v2 difference on the flag-flip checklist.
+--
+-- DOUBLY LATENT, worth knowing before anyone panics: #202 deleted the cart block
+-- that computed the credit at all, because the field it read
+-- (`Customer.emptyCratesBalance`) was hardcoded empty at every construction
+-- site — so the figure is ₦0 today and neither symptom can fire. #209 is about
+-- the envelope CONTRACT, which is wrong again the moment a real credit is wired.
 --
 -- The van suppression (#142/ADR 0019 decision 2, "cash follows custody") is
 -- preserved and now covers all three legs: a ROAD sale writes NO payment row of
@@ -488,9 +494,14 @@ BEGIN
         AND pt.business_id = p_business_id
         AND pt.voided_at IS NULL;
 
+    -- #201 delta — `business_id` added for the same reason as the two reads
+    -- above: DEFINER means the predicate is the only tenant boundary, and this
+    -- read was already here filtering on `order_id` alone.
     SELECT to_jsonb(wt.*) INTO v_wallet_txn_row
       FROM public.wallet_transactions wt
-      WHERE wt.order_id = p_order_id AND wt.voided_at IS NULL
+      WHERE wt.order_id    = p_order_id
+        AND wt.business_id = p_business_id
+        AND wt.voided_at IS NULL
       ORDER BY wt.created_at LIMIT 1;
 
     RETURN jsonb_build_object(
@@ -768,7 +779,7 @@ DECLARE
   v_refund_payments jsonb := '[]'::jsonb;
   v_wallet_compens  jsonb := '[]'::jsonb;
   v_to_credit       bool;                        -- #201 delta
-  v_void_note       text;                        -- #201 delta
+  v_correction_note text;                        -- #201 delta
   v_batch_id        uuid;                        -- #201 delta
   v_cost_batches    jsonb := '[]'::jsonb;        -- #201 delta
 BEGIN
@@ -802,11 +813,14 @@ BEGIN
     RAISE EXCEPTION 'cannot_cancel_status_%', v_existing.status USING ERRCODE = 'P0001';
   END IF;
 
-  -- #201 delta — the audit note stamped on every compensating row, mirroring the
-  -- client's `reason: 'order_cancelled: $reason'`. A NULL reason propagates
-  -- through the concat and falls back to the bare marker.
-  v_void_note := COALESCE('order_cancelled: ' || p_cancellation_reason,
-                          'order_cancelled');
+  -- #201 delta — the CORRECTION note stamped on every compensating row,
+  -- mirroring the client's `reason: 'order_cancelled: $reason'`. Named for what
+  -- it is, not for the column it lands in: the destination is `void_reason`, but
+  -- nothing here is voided any more — that column is the table's only free-text
+  -- audit field and the seam reuses it (`postReversalPayment`'s `reason`). A NULL
+  -- reason propagates through the concat and falls back to the bare marker.
+  v_correction_note := COALESCE('order_cancelled: ' || p_cancellation_reason,
+                                'order_cancelled');
 
   -- Update order header.
   UPDATE public.orders
@@ -821,7 +835,9 @@ BEGIN
   FOR v_oi IN
     SELECT id, product_id, store_id, quantity,
            buying_price_kobo                                       -- #201 delta
-      FROM public.order_items WHERE order_id = p_order_id
+      FROM public.order_items
+     WHERE order_id    = p_order_id
+       AND business_id = p_business_id                             -- #201 delta
   LOOP
     -- #201 delta — a Quick Sale line (§26.4, nullable product_id since 0091)
     -- bypassed inventory, the stock ledger and the cost queue on the way OUT, so
@@ -918,7 +934,7 @@ BEGIN
            ELSE -v_pt.amount_kobo END,
       v_pt.method,
       CASE WHEN v_pt.type = 'sale' THEN 'refund' ELSE v_pt.type END,
-      p_order_id, p_actor_id, v_void_note, v_now, v_now
+      p_order_id, p_actor_id, v_correction_note, v_now, v_now
     );
     v_refund_payments := v_refund_payments || to_jsonb(
       (SELECT pt FROM public.payment_transactions pt WHERE pt.id = v_refund_id));
@@ -1113,7 +1129,13 @@ BEGIN
     v_rem := v_assigned->'batches_remaining';
 
     -- Write back the derived remainders (only where changed; the 0132 bump
-    -- trigger stamps last_updated_at so peers pull the decrement).
+    -- trigger stamps last_updated_at so peers pull the decrement). Byte-for-byte
+    -- the loop 0133's own orchestrator runs, and it relies on the same
+    -- invariant: `v_batches` and `v_batch_ids` are built by ONE aggregate over
+    -- ONE row set in ONE order, and `fifo_assign` emits exactly one
+    -- `batches_remaining` entry per input batch — so the 0-based jsonb index is
+    -- always in range and the `::int` can never be NULL against the column's
+    -- NOT NULL. A defensive COALESCE here would only hide a broken `fifo_assign`.
     FOR v_i IN 1 .. COALESCE(array_length(v_batch_ids, 1), 0) LOOP
       UPDATE public.cost_batches
          SET qty_remaining = (v_rem->>(v_i - 1))::int

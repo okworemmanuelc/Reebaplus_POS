@@ -87,12 +87,15 @@ change, no RLS change, no data rewrite.
   leaves the v2 flags un-flippable, which is the status quo. Branch
   `fix/201-flag-gated-rpc-155-parity` (merged with main at `7edb3a0`; the
   migration was renumbered 0169 → 0170 because #202 took 0169).
-- **Open follow-up recorded, not fixed.** The v2 envelope forwards only the
-  per-line discount, never the customer's crate CREDIT, so on a credit sale the
-  server's goods cap exceeds the client's payable and the split books more as
+- **Open follow-up FILED as #209, not fixed here.** The v2 envelope forwards only
+  the per-line discount, never the customer's crate CREDIT, so on a credit sale
+  the server's goods cap exceeds the client's payable and the split books more as
   `sale` and less as `wallet_topup`. That gap predates #175 (it already moves the
   order header's own `net_amount_kobo`) and closing it needs the envelope to
-  forward the credit — one place that fixes header and split together.
+  forward the credit — one place that fixes header and split together. **Doubly
+  latent:** #202 deleted the cart block that computed the credit (its source
+  field was hardcoded empty), so the figure is ₦0 today; #209 is about the
+  envelope contract, which is wrong again the moment a real credit is wired up.
 
 ### #202 — the PRD #155 dead-code sweep (3 promised removals) — CODE-COMPLETE (2026-07-29)
 Process debt from the #155 close-out audit: the PRD's "Further Notes" promised a
