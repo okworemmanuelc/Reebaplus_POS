@@ -1739,7 +1739,7 @@ class SupabaseSyncService {
         );
       }
       // pos_cancel_order (v2): the cancel also restores each sale line's consumed
-      // cost LAYER as a fresh cost_batches row (#201, migration 0169) — the
+      // cost LAYER as a fresh cost_batches row (#201, migration 0170) — the
       // server is the sole author on this path (the client's own #170 #7c restore
       // is v1-only), and since #187 / 0167 the recost replay no longer rebuilds
       // `qty_remaining`, so nothing else would bring those units' cost back.
@@ -1796,7 +1796,7 @@ class SupabaseSyncService {
           Map<String, dynamic>.from(paymentTxn),
         ]);
       }
-      // pos_record_sale_v2 (#201, migration 0169): the tender is SPLIT by money
+      // pos_record_sale_v2 (#201, migration 0170): the tender is SPLIT by money
       // type, so one sale can mint up to three payment rows (goods `sale`,
       // `crate_deposit`, `wallet_topup`). The singular key above carries only the
       // goods row — kept for envelope compatibility — so restore the whole array

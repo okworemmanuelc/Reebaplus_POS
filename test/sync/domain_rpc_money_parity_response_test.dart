@@ -7,16 +7,16 @@ import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import '../helpers/dispatch_test_utils.dart';
 import '../helpers/in_memory_cloud_transport.dart';
 
-/// #201 — the CLIENT half of the flag-gated money-parity fix (migration 0169).
+/// #201 — the CLIENT half of the flag-gated money-parity fix (migration 0170).
 ///
 /// The two v2 envelopes are the only writers of their money rows on the flagged
 /// path: `OrdersDao.createOrder` writes NO local payment row when
 /// `feature.domain_rpcs_v2.record_sale` is on, and `markCancelled` returns right
 /// after enqueueing when `…cancel_order` is on. So whatever the RPC response
-/// carries is what the device shows until the next pull, and every row 0169
+/// carries is what the device shows until the next pull, and every row 0170
 /// writes must have a handler in `_applyDomainResponse`.
 ///
-/// 0169 added two arrays to those envelopes, and these tests pin them:
+/// 0170 added two arrays to those envelopes, and these tests pin them:
 ///   • `payment_transactions` — the #175 three-way tender split (goods `sale` /
 ///     `crate_deposit` / `wallet_topup`). The pre-#201 singular
 ///     `payment_transaction` key carried ONE bundled row, so without the array
@@ -131,13 +131,13 @@ void main() {
     'last_updated_at': createdAt ?? ts,
   };
 
-  group('pos_record_sale_v2 response (#201 / 0169)', () {
+  group('pos_record_sale_v2 response (#201 / 0170)', () {
     test(
       'the three-way tender split lands locally — goods sale, held deposit and '
       'overpayment, all store-stamped',
       () async {
         // A sale of 200000 goods + 30000 deposit, tendered 250000: the split is
-        // sale 200000 / crate_deposit 30000 / wallet_topup 20000 (0169).
+        // sale 200000 / crate_deposit 30000 / wallet_topup 20000 (0170).
         final goods = payRow(type: 'sale', amountKobo: 200000);
         final deposit = payRow(type: 'crate_deposit', amountKobo: 30000);
         final topup = payRow(type: 'wallet_topup', amountKobo: 20000);
@@ -197,7 +197,7 @@ void main() {
     });
   });
 
-  group('pos_cancel_order response (#201 / 0169)', () {
+  group('pos_cancel_order response (#201 / 0170)', () {
     test(
       'compensating rows land in their own money families and no original is '
       'voided',
@@ -210,7 +210,7 @@ void main() {
           'replayed': false,
         });
 
-        // What 0169's cancel returns: the originals untouched, one dated
+        // What 0170's cancel returns: the originals untouched, one dated
         // compensating row per reversible original, `voided_payments` empty.
         await sync.applyServerResponse('pos_cancel_order', {
           'voided_payments': const <Map<String, dynamic>>[],
@@ -274,7 +274,7 @@ void main() {
     );
 
     test('the cancelled sale\'s cost layer is restored from the response', () async {
-      // 0169 appends one fresh FIFO layer per sale line at the per-unit COGS the
+      // 0170 appends one fresh FIFO layer per sale line at the per-unit COGS the
       // sale snapshotted. Nothing else restores it on this path since 0167.
       await sync.applyServerResponse('pos_cancel_order', {
         'refund_payments': const <Map<String, dynamic>>[],

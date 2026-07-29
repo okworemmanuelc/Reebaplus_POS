@@ -59,7 +59,7 @@ void main() {
       await del('stock_transactions', 'product_id', id);
       await del('stock_adjustments', 'product_id', id);
       await del('inventory', 'product_id', id);
-      // #201 / migration 0169: an approved INCREASE now creates a Cost Batch on
+      // #201 / migration 0170: an approved INCREASE now creates a Cost Batch on
       // the RPC arm too (it used to move no cost at all). The batch FKs the
       // product, and `del` swallows 23503 — so without this the product delete
       // would silently fail and leak a row every run.
@@ -143,7 +143,8 @@ void main() {
     },
         skip: _skipReason ??
             (s.dartArmOnly
-                ? '#7a cost pass out of scope for the web RPC (#170, flagged to the web repo)'
+                ? '#7a cost pass lands on the web RPC in migration 0170 (#201); '
+                      'un-flag once it is deployed and this arm seeds the costs'
                 : s.operation == 'request'
                     ? 'stock-keeper → pending pinned on the Dart arm (Tier-2 identity is CEO)'
                     : null));

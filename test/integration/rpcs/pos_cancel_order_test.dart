@@ -11,19 +11,19 @@ import '../../helpers/test_business_fixture.dart';
 /// Tier-2 integration tests for the v2 pos_cancel_order RPC. Hits real
 /// dev Supabase. Auto-skipped when env vars are absent.
 ///
-/// Since #201 / migration 0169 the cancel implements the #155 rule: it APPENDS
+/// Since #201 / migration 0170 the cancel implements the #155 rule: it APPENDS
 /// one dated compensating row per reversible original and mutates nothing — no
 /// in-place void, deposits and top-ups reversed in their own money families
 /// (never as `refund`), every wallet leg reversed, and the drawn cost layer
 /// restored. These tests pin that rule; they will FAIL against a cloud that
-/// predates 0169 (which voided the originals and posted a full-amount `refund`
+/// predates 0170 (which voided the originals and posted a full-amount `refund`
 /// for every row).
 ///
 /// Note on cleanup:
 ///   * `stock_transactions`, `payment_transactions`, `wallet_transactions`,
 ///     `crate_ledger`, and `activity_logs` are append-only — the cancel
 ///     RPC inserts compensating rows. None of those rows can be deleted via
-///     REST. They leak per test. Since 0169 a cancel also inserts one
+///     REST. They leak per test. Since 0170 a cancel also inserts one
 ///     `cost_batches` row per line; those leak too, which is harmless here —
 ///     the store and product are created once in `setUpAll` and are themselves
 ///     left behind, so nothing FK-blocks on them.

@@ -120,7 +120,9 @@ the day the correction happens, rather than an edit to the original. Cancel post
 a refund cash-out; expense reject/delete and top-up void post reversals. Written
 only through the reversal seam (`daos_payments.dart`), which copies the
 original's typed reference, store and tender so a cash tender yields a cash
-reversal.
+reversal. The cloud has ONE twin of that seam, `pos_cancel_order` (rewritten to
+this rule by #201 / `0170`); it is reached only when the v2 cancel flag is on,
+and it appends exactly as the client does.
 _Avoid_: reversal-in-place, void-and-rewrite, "adjusting" the original.
 
 **In-family reversal**:
@@ -129,7 +131,8 @@ Releasing held money by posting a **negative row of the same type**, not a
 of appearing as a sales refund (which would be subtracted from profit for money
 that was never revenue). `markCancelled` is the reference implementation; since
 #190 all three release paths follow it — Cancel, Confirm
-(`settleCrateDepositReturn`) and §18.3 Refund Cash (`CreditLedgerService`). A
+(`settleCrateDepositReturn`) and §18.3 Refund Cash (`CreditLedgerService`) — and
+since #201 so does the cloud cancel (`pos_cancel_order`, `0170`). A
 refund of spendable CREDIT is not in this category: that money was the
 customer's to spend, so it is a genuine `refund`.
 _Avoid_: typing any deposit or top-up release as `refund`.

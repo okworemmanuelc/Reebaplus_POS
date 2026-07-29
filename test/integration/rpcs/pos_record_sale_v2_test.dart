@@ -164,7 +164,7 @@ void main() {
       expect((stxList.first as Map)['quantity_delta'], -2);
       expect((stxList.first as Map)['movement_type'], 'sale');
 
-      // #201 / migration 0169 — the tender is SPLIT by money type and stamped
+      // #201 / migration 0170 — the tender is SPLIT by money type and stamped
       // with the sale's store. This sale has no deposit and no overpayment, so
       // the split degenerates to exactly one goods `sale` row, and the singular
       // key still carries it (envelope compatibility).
@@ -201,7 +201,7 @@ void main() {
       final orderNumber = 'ORD-SPL-${orderId.substring(orderId.length - 12)}';
 
       // Goods 200000 + deposit 30000 = 230000 payable, tendered 250000.
-      // 0169's rule: sale 200000 / crate_deposit 30000 / wallet_topup 20000.
+      // 0170's rule: sale 200000 / crate_deposit 30000 / wallet_topup 20000.
       final response = await clients.userClient.rpc(
         'pos_record_sale_v2',
         params: {

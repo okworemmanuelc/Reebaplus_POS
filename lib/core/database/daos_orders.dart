@@ -658,11 +658,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       final orderId = order.id.present ? order.id.value : UuidV7.generate();
 
       // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate). The money
-      // rules themselves are now at parity: migration 0169 (#201) gave
+      // rules themselves are now at parity: migration 0170 (#201) gave
       // `pos_record_sale_v2` the #175 three-way tender split and the #169
       // `store_id` stamp, so flipping this flag no longer silently re-bundles
       // crate deposits and overpayments into "Cash sales". That parity holds only
-      // while 0169 is DEPLOYED — flipping the flag against a cloud that predates
+      // while 0170 is DEPLOYED — flipping the flag against a cloud that predates
       // it reintroduces the single bundled, store-less `sale` row.
       final flagValue = await db.systemConfigDao.get(
         'feature.domain_rpcs_v2.record_sale',
@@ -1024,7 +1024,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // cash, so no row is written (and `depositHeld ≤ paid` ⇒ all three are 0
       // anyway) — matching the pre-#175 single-row behaviour and never touching
       // `items.first` on an item-less ledger-only order.
-      // (This same split now exists on the v2 path: migration 0169 (#201) gave
+      // (This same split now exists on the v2 path: migration 0170 (#201) gave
       // `pos_record_sale_v2` the same three-way rule and `store_id` stamp — ADR
       // 0009, two implementations, one contract. It used to mint ONE bundled,
       // store-less `sale` row. The one figure the two paths can still disagree
@@ -1032,7 +1032,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // from `totalAmountKobo` but the envelope forwards only the per-line
       // discount sum, so the server's goods cap is higher by the credit. That is
       // an older v2-envelope gap — it already moves the order header's own
-      // `net_amount_kobo` — and 0169's header records it as a follow-up.)
+      // `net_amount_kobo` — and 0170's header records it as a follow-up.)
       //
       // #142 (van-sales spec §5.3, ADR 0019 decision 2) — "cash follows
       // custody". A ROAD sale writes NONE of the three rows. The driver has the
@@ -1475,22 +1475,23 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           // and cash when no collection row is found — see the residual below.
           //
           // RESIDUAL, deliberately accepted and NOT fixed here (#190 scope).
-          // Four cases reach this branch with no `crate_deposit` collection row,
-          // and only the first two collected the deposit into the cash books at
-          // all: a LEGACY pre-#175 order (deposit bundled into its `sale` row,
-          // so it landed in Cash sales); the v2 `pos_record_sale_v2` path (the
-          // #175 split sits after that path's early return, so the server's one
-          // bundled `sale` row is all there is — flag held off in Phase 1); a
-          // ROAD sale (#142 writes NO payment row — the driver holds the cash);
-          // and a pure-credit sale (`amountPaidKobo == 0`). For the first two,
-          // `markCancelled`'s legacy carve-out would reverse in the `sale` row's
-          // family instead (a positive `refund`, matching how it was counted);
-          // for the last two neither family is right, because the money never
-          // moved through the drawer. Posting the negative unconditionally is
-          // strictly better than the pre-#190 behaviour in ALL four (the drawer
-          // total still ties and no phantom refund or loss is created) — it only
-          // leaves the held line reading negative for the bundled cases. Picking
-          // per-case behaviour needs a product decision this issue did not make.
+          // #190 recorded FOUR cases that reach this branch with no
+          // `crate_deposit` collection row. #201 (migration 0170) closed one of
+          // them: `pos_record_sale_v2` now writes the #175 three-way split, so a
+          // v2 sale leaves behind the very row this lookup wants. THREE remain,
+          // and only the first collected the deposit into the cash books at all:
+          // a LEGACY pre-#175 order (deposit bundled into its `sale` row, so it
+          // landed in Cash sales); a ROAD sale (#142 writes NO payment row — the
+          // driver holds the cash); and a pure-credit sale
+          // (`amountPaidKobo == 0`). For the first, `markCancelled`'s legacy
+          // carve-out would reverse in the `sale` row's family instead (a
+          // positive `refund`, matching how it was counted); for the other two
+          // neither family is right, because the money never moved through the
+          // drawer. Posting the negative unconditionally is strictly better than
+          // the pre-#190 behaviour in ALL of them (the drawer total still ties
+          // and no phantom refund or loss is created) — it only leaves the held
+          // line reading negative for the legacy bundled case. Picking per-case
+          // behaviour needs a product decision #190 did not make.
           final depositCollection =
               await (select(paymentTransactions)
                     ..where(
@@ -1594,10 +1595,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String staffId,
   ) async {
     // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate), and not
-    // before migration 0169 is DEPLOYED. #201 rewrote `pos_cancel_order` to the
+    // before migration 0170 is DEPLOYED. #201 rewrote `pos_cancel_order` to the
     // rules below — compensating rows only, deposits and top-ups reversed in
     // their own families, every wallet leg reversed, the cost layer restored.
-    // Against a cloud that predates 0169 this flag posts the PRE-#155 rule
+    // Against a cloud that predates 0170 this flag posts the PRE-#155 rule
     // instead: it voids each original payment IN PLACE (shrinking a sale day the
     // owner may already have reviewed) AND posts a full-amount `refund` for every
     // row — a double reversal that also mis-types a deposit collection and a
@@ -1636,10 +1637,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // payment DOUBLE REVERSAL (void in place + full-amount `refund` for every
         // row, deposits and top-ups mis-typed) was the larger half and went
         // undocumented. Both — and the missing cost-layer restore — are fixed in
-        // migration 0169 (#201).
+        // migration 0170 (#201).
         //
-        // ONE HOLD REMAINS BEYOND #121 AND 0169's DEPLOY: the CRATE leg. This
-        // early return skips `reverseIssuedByCustomer` below, and 0169's
+        // ONE HOLD REMAINS BEYOND #121 AND 0170's DEPLOY: the CRATE leg. This
+        // early return skips `reverseIssuedByCustomer` below, and 0170's
         // `pos_cancel_order` writes no crate rows either — so cancelling a
         // crate-track sale on this path leaves the customer's DERIVED crate debt
         // standing for crates they never kept (the phantom-debt cluster in PRD

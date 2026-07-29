@@ -10,6 +10,90 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #201 — the flag-gated RPCs reach #155 parity — CODE-COMPLETE (2026-07-29)
+Three server-side money writers still implemented the **pre-#155** rules. All
+three were unreachable — two behind `feature.domain_rpcs_v2.*` flags held off by
+#121, one on the web arm — which is precisely what made them dangerous: flipping
+a flag reverts rules #155 had just fixed, with **no code change to review**. The
+issue allowed either parity or "do not enable until X" notes; this takes parity
+**and** the notes, following `0160`/`0164`'s precedent of patching the RPC ahead
+of its flag ("a latent landmine otherwise"). One migration,
+**`0170_flag_gated_rpc_money_parity.sql`** — five function bodies, no schema
+change, no RLS change, no data rewrite.
+
+- **`pos_record_sale_v2` — the #175 three-way split + the #169/#194 store
+  stamp.** It inserted ONE `sale` row for the whole `p_amount_paid_kobo` with no
+  `store_id`, and on the v2 path the client writes no local payment row at all,
+  so that was the only row. Now up to THREE store-stamped rows — `sale` (goods
+  paid), `crate_deposit` (the deposit HELD), `wallet_topup` (the overpayment) —
+  always summing to what was tendered, a zero leg writing nothing (a goods-only
+  sale is byte-identical to before), a ROAD sale still writing none (#142). The
+  response keeps the singular `payment_transaction` key (now the GOODS row, so
+  the shipped handler and the Tier-2 contract are unchanged) and adds a plural
+  `payment_transactions` array the client restores.
+- **`pos_cancel_order` — compensating rows, nothing mutated.** `0045` voided each
+  original **in place** *and* posted a full-amount `refund` for every one — a
+  double reversal that shrank an already-reviewed sale day and mis-typed a
+  deposit collection and a top-up as `refund`. Now the SQL twin of
+  `markCancelled`: originals untouched, one dated compensating row per reversible
+  original, each reversing **in its own money family** (#190's rule: `sale` → a
+  positive `refund`; `crate_deposit` → a negative `crate_deposit`;
+  `wallet_topup` → a negative `wallet_topup`), copying the original's method and
+  store. Same treatment on the WALLET arm, which closes the "R2" hold recorded at
+  the client's flag check. It also restores each line's **cost layer** — load-
+  bearing since **0167 (#187)** removed the recost's `qty_remaining` write-back,
+  so on this path nothing else would bring those units' cost back.
+- **The web adjustment arm stops losing cost, using #197's column.**
+  `_apply_stock_adjustment` (0141) wrote no `value_kobo`/`unit_cost_kobo` and
+  touched no `cost_batches`. Now a DECREASE draws the queue oldest-first through
+  **`public.fifo_assign` (0133)** — the same pure function the recost replays
+  through — and snapshots what it drew; an INCREASE mints one fresh layer down
+  the same three-step ladder the mobile approval walks: the cost the REQUEST
+  stated (**#197's `stock_adjustment_requests.unit_cost_kobo`, cloud 0168**),
+  else the product's recorded scalar (#189), else Uncosted 0. #197 explicitly
+  left the web arm here, so this reads **that** column rather than inventing one:
+  `approve_stock_adjustment` passes `v_req.unit_cost_kobo` straight through, and
+  `request_stock_adjustment` gains `p_unit_cost_kobo` so a web requester can
+  state a cost at all (persisted on an increase only, mirroring the client).
+- **The overload trap, hit twice.** `_apply_stock_adjustment` and
+  `request_stock_adjustment` each take a new trailing `p_unit_cost_kobo bigint
+  DEFAULT NULL`, so each is preceded by an explicit `DROP FUNCTION` of its old
+  signature. `CREATE OR REPLACE` + a new parameter **overloads**, and PostgREST
+  answers PGRST203; for the REVOKEd internal helper it would have been worse than
+  an error — silent, with 6-arg calls binding to the stale cost-less definition.
+  Dropping a function two PL/pgSQL callers reference is safe (their bodies are
+  opaque strings resolved at run time, so no dependency is recorded).
+- **Client half.** `_applyDomainResponse` gains handlers for the two new response
+  arrays (`payment_transactions`, `cost_batches`) — the v2 path pre-inserts
+  neither, so without them the rows would exist only in the cloud until the next
+  pull. Both flag checks now carry a "DO NOT ENABLE UNTIL …" note naming #121
+  **and** 0170's deploy.
+- **Tests.** New `test/sync/domain_rpc_money_parity_response_test.dart` drives
+  the real `applyServerResponse` and pins both arrays (split lands, legs sum to
+  the tender, no original voided, cost layer restored). Tier-2
+  `pos_record_sale_v2_test.dart` / `pos_cancel_order_test.dart` are rewritten to
+  the new rule — **they need a live DB and were NOT run here.**
+- **Still held after this.** The flags stay OFF: #121 (oversell-orphan go-live)
+  plus one crate hold — neither this cancel nor the client's early return
+  reverses the customer's issued crates, and ADR 0020 makes the Crate Pool seam
+  the sole crate-table writer, so the server cannot mint them without its own
+  crate arm. Do not enable `cancel_order` for a crate business until that lands.
+- **DEPLOY ORDER.** `0170` requires **0168** (the column part 3 reads — without
+  it the new bodies do not compile), plus 0167, 0164, 0163, 0155, 0141 and 0133.
+  0169 (#202) is independent but must not be undone; none of the four payment
+  types written here is `purchase`. Relative to the APP, 0170 may be pushed in
+  **either order with any client build** — no column, no new request shape, only
+  two additive response keys an older client ignores; an un-deployed 0170 simply
+  leaves the v2 flags un-flippable, which is the status quo. Branch
+  `fix/201-flag-gated-rpc-155-parity` (merged with main at `7edb3a0`; the
+  migration was renumbered 0169 → 0170 because #202 took 0169).
+- **Open follow-up recorded, not fixed.** The v2 envelope forwards only the
+  per-line discount, never the customer's crate CREDIT, so on a credit sale the
+  server's goods cap exceeds the client's payable and the split books more as
+  `sale` and less as `wallet_topup`. That gap predates #175 (it already moves the
+  order header's own `net_amount_kobo`) and closing it needs the envelope to
+  forward the credit — one place that fixes header and split together.
+
 ### #202 — the PRD #155 dead-code sweep (3 promised removals) — CODE-COMPLETE (2026-07-29)
 Process debt from the #155 close-out audit: the PRD's "Further Notes" promised a
 dead-code sweep that never ran. All three items were still present, and all three
@@ -126,15 +210,22 @@ is where the cost is now captured.
   scenario model gains `request_unit_cost_kobo`;
   `test/database/migration_upgrade_test.dart` gains the v75 → v76 group
   (legacy rows stay NULL; a > ₦21.4M cost round-trips; the step is idempotent).
-- **Out of scope.** The web RPCs (`request_stock_adjustment` /
-  `approve_stock_adjustment`, 0141) have no cost parameter and are flagged to the
-  reebaplus-web repo, same precedent as the #175 money-track scenarios.
+- **Out of scope HERE, picked up by #201.** The web RPCs
+  (`request_stock_adjustment` / `approve_stock_adjustment`, 0141) had no cost
+  parameter when this shipped. **#201 / cloud `0170` closed that**:
+  `approve_stock_adjustment` now reads this very column back off the request row
+  and `request_stock_adjustment` gained a `p_unit_cost_kobo` parameter, so both
+  arms walk the same three-step ladder. The golden cost scenarios stay
+  `dart_arm_only` until 0170 is deployed (the RPC arm runs against live
+  Supabase).
 - **DEPLOY ORDER:** push cloud `0168` BEFORE a v76 app reaches a device, or the
   `stock_adjustment_requests` upserts carrying `unit_cost_kobo` are rejected
-  cloud-side (PGRST204). Branch
+  cloud-side (PGRST204). `0168` must also precede **`0170`** (#201), whose new
+  function bodies read this column. Branch
   `feat/197-capture-inflow-cost-on-stock-request` (rebased onto main at
-  `4c79d20`; Drift renumbered 79 → 76 and cloud 0171 → 0168, since 0169 is
-  reserved for #201 and 0170 for #202).
+  `4c79d20`; Drift renumbered 79 → 76 and cloud 0171 → 0168). The migration
+  lanes settled as **0169 = #202** and **0170 = #201**, the reverse of what was
+  reserved when this was written.
 
 ### Money integrity PRD #155 — DEPLOYED to production (2026-07-25)
 All 8 slices (#169/#171/#172/#173/#175 payment-chain + #170 cost-batch + #174
@@ -194,9 +285,11 @@ Live money defects, ranked (all filed, none fixed yet):
    (concession has no reader, reprints omit the discount line, legacy losses
    unlabeled).
 
-Latent (flag-gated, **#201**): `pos_record_sale_v2` bundles one payment row with no
-`store_id`; `pos_cancel_order` still voids in place *and* double-reverses; the web
-`0141` adjustment RPC writes no cost. A flag flip silently reverts rules #155 fixed.
+Latent (flag-gated, **#201**) — **FIXED, see the #201 section above**:
+`pos_record_sale_v2` bundled one payment row with no `store_id`;
+`pos_cancel_order` voided in place *and* double-reversed; the web `0141`
+adjustment RPC wrote no cost. A flag flip would have silently reverted rules #155
+fixed. Cloud `0170` brings all three to parity (not yet deployed).
 
 Process debt filed: **#202** dead-code sweep never ran (all three promised removals
 linger) · **#206** golden fixtures have no cancel scenario and assert
@@ -258,6 +351,14 @@ four (the drawer total still ties, no phantom refund or loss) but leaves the
 held-deposit line reading negative for (1) and (2). Deciding per case is beyond
 what #190 specified — worth its own issue before the v2 record-sale flag is
 flipped.
+
+**UPDATE (#201, cloud `0170`): case (2) is closed.** `pos_record_sale_v2` now
+writes the #175 three-way split, so a v2 sale leaves behind the very
+`crate_deposit` collection row this branch looks for and its release copies the
+real tender. THREE cases remain — (1) legacy bundled, (3) road, (4) pure credit
+— and only (1) still leaves the held line negative. The call-site comment in
+`daos_orders.dart` is updated to match.
+
 ### #195 — Profit report store-scoped; the single Total Sales definition actually shared — CODE-COMPLETE (2026-07-29)
 Follow-up from the #155 close-out audit. #176 created `computeTotalSalesKobo`
 (`lib/features/dashboard/reconciliation/report_revenue.dart`) but only Home and

@@ -1,4 +1,4 @@
--- 0169_flag_gated_rpc_money_parity.sql
+-- 0170_flag_gated_rpc_money_parity.sql
 --
 -- #201 / PRD #155 close-out — BRING THE FLAG-GATED SERVER WRITE PATHS TO #155
 -- PARITY. Three server-side money writers still implemented the PRE-#155 rules.
@@ -46,6 +46,16 @@
 -- The three always sum to `p_amount_paid_kobo` (no cash created or destroyed),
 -- and a zero leg writes no row — so a plain goods-only sale still produces
 -- exactly ONE `sale` row, byte-identical to the pre-#201 behaviour.
+--
+-- A SIDE EFFECT WORTH NAMING (#190): #190's review recorded four cases where
+-- Confirm's cash branch finds NO `crate_deposit` collection row to copy its
+-- tender and store from, and "the v2 record-sale path" was one of them —
+-- precisely because this RPC bundled the deposit into the `sale` row. Writing
+-- the deposit as its own row closes that case: a v2 sale now leaves behind the
+-- collection row `settleCrateDepositReturn` looks for, so its release copies the
+-- real tender instead of falling back. The remaining three (legacy pre-#175
+-- bundled, a road sale, a pure-credit sale) are untouched here and are still the
+-- open question recorded in the tracker.
 --
 -- Mapping the client's arithmetic onto the RPC's server-computed figures: the
 -- client's `totalAmountKobo` is the payable INCLUDING the deposit
@@ -103,12 +113,23 @@
 --   • `sale`          → a POSITIVE `refund` cash-out for the same amount;
 --   • `crate_deposit` → a NEGATIVE `crate_deposit` row, so the held-deposit line
 --     nets to zero. NOT a `refund`: that would land in Cash refunds while the
---     collection was never in Cash sales, breaking the symmetry;
+--     collection was never in Cash sales, breaking the symmetry. #190 later
+--     promoted this from "markCancelled's rule" to THE rule for every release of
+--     held deposit money (Confirm's cash branch and §18.3 Refund Cash were
+--     converted to it), so this arm is now the third implementation of one
+--     documented rule rather than a local choice;
 --   • `wallet_topup`  → a NEGATIVE `wallet_topup` row, so "Debts collected" nets
 --     to zero (mirrors the top-up VOID pattern in `CreditLedgerService`).
 --   • a row already of another type (a prior cancel's `refund`, a
 --     `van_remittance`) is never re-reversed, and each reversal copies the
 --     original's method + store so a cash tender yields a cash reversal.
+-- ON `store_id` (#169 US 36 / #194): the reversal copies the ORIGINAL's store —
+-- exactly `PaymentTransactionsDao.postReversalPayment`'s `storeId ?? original
+-- .storeId`. It deliberately does NOT fall back to the order's store when the
+-- original is store-less: a legacy store-less collection must yield a store-less
+-- reversal, or the two rows land on different store filters and neither line
+-- nets to zero. #194's "stamp the store" duty falls on the WRITER of the
+-- original, which for this path is part 1 above.
 -- THE RULE, stated for the golden fixtures (#206): a cancel APPENDS one
 -- compensating row per reversible original, dated on the cancel day, and mutates
 -- nothing. Row count after a cancel = originals + one per reversible original.
@@ -158,20 +179,50 @@
 -- for plain `adjustment` movements (which is all this helper ever performs):
 --   • an INCREASE creates one fresh FIFO layer — the same rule 0140 uses
 --     ({qty_remaining = qty_original = delta, cost_kobo, received_at}, never
---     merged). This helper is handed NO cost, and #189 settled what an
---     omitted-cost inflow is worth: the product's recorded scalar
---     `buying_price_kobo` (`InventoryDao._recordedUnitCostKobo`, ADR 0005), and
---     an UNCOSTED (0) layer only when the product carries no cost at all.
+--     merged) — priced off the SAME three-step ladder the mobile approval walks:
+--       1. the cost the REQUEST captured (#197 / US 22,
+--          `stock_adjustment_requests.unit_cost_kobo`, added by 0168) — stated by
+--          the person holding the invoice, and it always wins;
+--       2. else the product's recorded scalar `buying_price_kobo`
+--          (`InventoryDao._recordedUnitCostKobo`, #189 / ADR 0005);
+--       3. else an UNCOSTED (0) layer — only when neither is on file.
 --     Batching an increase at 0 while a price is on file sold those units at
 --     0 COGS FOREVER — #41's backfill fires only on a `0 → positive` cost edit, a
 --     transition a product that already has a price can never make again.
+--     The ladder is keyed on the caller saying NOTHING (NULL), never on a
+--     handed-over 0: a requester who deliberately states "no cost" still gets
+--     their Uncosted layer, exactly as `adjustStock` keys it on
+--     `inflowUnitCostKobo == null`.
 --   • a DECREASE draws the queue down oldest-first and SNAPSHOTS what it drew
 --     onto the adjustment row (`value_kobo` total, `unit_cost_kobo` =
 --     round(value / |delta|)), so a later cost edit cannot restate a past loss.
---     Uncovered / uncosted units contribute 0 — "uncosted", not "free".
+--     Uncovered / uncosted units contribute 0 — "uncosted", not "free". No
+--     stated cost is ever consulted on this arm: the requester is not the
+--     authority on what a loss cost, which is why 0168 has the client write NULL
+--     there and why this helper ignores the parameter when `p_delta < 0`.
 -- The draw-down reuses `public.fifo_assign` (0133), the SAME pure function the
 -- authoritative recost replays through and the twin of the client's
 -- `fifoDrawDown` — so there is one FIFO algorithm on the server, not two.
+--
+-- ── WHERE THE STATED COST ENTERS THE WEB ARM (#197 / 0168) ──────────────────
+-- 0168 added `stock_adjustment_requests.unit_cost_kobo` (bigint, nullable) and
+-- said outright that teaching the WEB RPCs to capture and apply it was out of
+-- its scope, left to this issue. So this migration does not invent a new column
+-- — it reads THAT one, on both call sites:
+--   • `approve_stock_adjustment` passes `v_req.unit_cost_kobo` straight through
+--     (the row is already SELECTed FOR UPDATE; no extra read). The twin of
+--     `StockAdjustmentRequestsDao.approveRequest`'s
+--     `inflowUnitCostKobo: req.unitCostKobo`.
+--   • `request_stock_adjustment` gains `p_unit_cost_kobo`, so the web requester
+--     can state the cost at all. On the stock-keeper branch it is PERSISTED to
+--     the pending row (and the later approval reads it back); on the
+--     manager-applies-immediately branch it is both persisted and passed to the
+--     helper in the same call. Persisted only on an INCREASE
+--     (`quantity_diff > 0`), mirroring the client's
+--     `Value(quantityDiff > 0 ? unitCostKobo : null)` — a decrease's cost is
+--     drawn, not stated.
+-- Legacy rows (every request written before 0168) carry NULL and therefore land
+-- on step 2 of the ladder, which is exactly what they did on the mobile arm.
 --
 -- THIS ARM IS AN INCREMENTAL DRAWER, which is what makes it legal under #187 /
 -- 0167: it reads `qty_remaining` (never `qty_original`), decrements exactly what
@@ -184,8 +235,9 @@
 -- holds unchanged even though its count of them is now out of date.
 --
 -- Both call sites (`request_stock_adjustment` :206 manager-applies-immediately,
--- `approve_stock_adjustment` :309 approve) inherit the fix by calling this
--- helper; neither needed a change, so neither is re-declared here.
+-- `approve_stock_adjustment` :309 approve) inherit the movement fix by calling
+-- this helper, and both ARE re-declared below — not for the movement, but to
+-- thread the stated cost described in the next block.
 --
 -- NOT mirrored: `CostBatchesDao._recomputeScalarCost` (re-pointing
 -- `products.buying_price_kobo` at the oldest remaining COSTED batch after a
@@ -195,28 +247,67 @@
 -- with a no-clobber rule; the mobile client re-points it on its next draw-down.
 --
 -- ── SIGNATURES / THE OVERLOAD TRAP ─────────────────────────────────────────
--- All three functions keep their EXACT current signatures, so each is a plain
--- CREATE OR REPLACE with no DROP and no possibility of an overload
--- (`CREATE OR REPLACE` + a new parameter would leave two candidates and
--- PostgREST answers PGRST203 — see 0164's header). Concretely:
---   • pos_record_sale_v2(uuid, uuid, uuid, text, uuid, text, jsonb, text, uuid,
---       int, int, int, text, text, text, int, bool, uuid)   — 18 args, from 0164
---   • pos_cancel_order(uuid, uuid, uuid, text)              — 4 args, from 0045
---   • _apply_stock_adjustment(uuid, uuid, uuid, int, text, uuid) — from 0141
--- The `int` money PARAMETERS on pos_record_sale_v2 are inherited from 0011 and
--- left alone here (widening them is a signature change). Every money COLUMN
--- written below is bigint, per 0130; the new locals are bigint too.
+-- `CREATE OR REPLACE` with a NEW parameter does NOT replace a function — it
+-- creates an OVERLOAD, leaving two candidates that PostgREST answers with
+-- PGRST203 (see 0164's header). Two of the five functions here take a new
+-- parameter, so each is preceded by an explicit `DROP FUNCTION` of its OLD
+-- signature, in this same transaction:
 --
--- No RLS is touched. No schema change, no data rewrite — three function bodies.
+--   UNCHANGED signature ⇒ plain CREATE OR REPLACE, no DROP:
+--     • pos_record_sale_v2(uuid, uuid, uuid, text, uuid, text, jsonb, text, uuid,
+--         int, int, int, text, text, text, int, bool, uuid) — 18 args, from 0164
+--     • pos_cancel_order(uuid, uuid, uuid, text)            — 4 args, from 0045
+--     • approve_stock_adjustment(uuid, uuid, boolean, text) — 4 args, from 0141
+--
+--   CHANGED signature ⇒ DROP the old one FIRST:
+--     • _apply_stock_adjustment(uuid, uuid, uuid, int, text, uuid)      [0141]
+--         → (uuid, uuid, uuid, int, text, uuid, bigint)   + p_unit_cost_kobo
+--     • request_stock_adjustment(uuid, uuid, uuid, uuid, int, text, text) [0141]
+--         → (uuid, uuid, uuid, uuid, int, text, text, bigint) + p_unit_cost_kobo
+--
+-- Dropping `_apply_stock_adjustment` mid-transaction is safe even though the two
+-- RPCs call it: PL/pgSQL bodies are opaque strings resolved at RUN time, so
+-- Postgres records no dependency and the new definition is in place long before
+-- any call. Both new parameters are `DEFAULT NULL` and TRAILING, so a web caller
+-- that never learned about them keeps working unchanged — and because the old
+-- signature is gone, there is exactly one candidate for PostgREST to resolve.
+-- `_apply_stock_adjustment` is REVOKEd from `public` (internal helper, never
+-- PostgREST-exposed), so its overload would not have raised PGRST203 — it would
+-- have silently split into two functions with a 6-arg call binding to the STALE
+-- one. That is worse than an error, which is why it is dropped too.
+--
+-- The `int` money PARAMETERS on pos_record_sale_v2 are inherited from 0011 and
+-- left alone here (widening them is a signature change nothing in this issue
+-- needs). Every money COLUMN written below is bigint, per 0130; both new
+-- parameters and every new local are bigint too.
+--
+-- No RLS is touched. No schema change, no data rewrite — five function bodies.
 --
 -- DEPLOY ORDER: after 0164 (the current pos_record_sale_v2), 0163 (the widened
 -- payment type CHECK that admits `crate_deposit`), 0155 (the stock_adjustments
--- cost columns), 0141 (the helper being replaced), 0133 (fifo_assign) and — for
--- the cost-queue reasoning above to hold — 0167 (#187, the recost write-back
--- removal). Nothing here depends on 0167 mechanically; the ORDER matters only
--- because deploying this cancel restore while the old replay still resurrected
--- remainders would double-restore, which is the very defect 0167 removed.
--- MIGRATION-NUMBER LANE: 0169 is #201's; 0166/0167/0168/0170 belong to siblings.
+-- cost columns), 0141 (the three functions being replaced), 0133 (fifo_assign),
+-- 0168 (#197 — `stock_adjustment_requests.unit_cost_kobo`, the column part 3
+-- reads; without it the new bodies do not compile) and — for the cost-queue
+-- reasoning above to hold — 0167 (#187, the recost write-back removal). Nothing
+-- here depends on 0167 mechanically; the ORDER matters only because deploying
+-- this cancel restore while the old replay still resurrected remainders would
+-- double-restore, which is the very defect 0167 removed.
+--
+-- RELATIVE TO THE APP: this migration may be pushed AHEAD of any client build.
+-- It adds no column and changes no wire shape a v77 client sends; it only adds
+-- RESPONSE keys (`payment_transactions`, `cost_batches`), which the companion
+-- client change reads and an older client ignores. The reverse order is also
+-- safe — an un-deployed 0170 simply leaves the v2 flags un-flippable, which is
+-- the status quo (#121 holds them off regardless). There is no outbox-jam window
+-- in either direction.
+--
+-- 0169 (#202) narrowed `payment_transactions.type` by dropping the never-written
+-- `purchase`. Every type written below — `sale`, `crate_deposit`,
+-- `wallet_topup`, `refund` — survives that narrowing; nothing here resurrects
+-- `purchase`, and a goods purchase must never be booked as one (it is a supplier
+-- invoice plus an `expense` / supplier payment).
+--
+-- MIGRATION-NUMBER LANE: 0170 is #201's; 0166/0167/0168/0169 belong to siblings.
 
 BEGIN;
 
@@ -906,22 +997,37 @@ GRANT EXECUTE ON FUNCTION public.pos_cancel_order(uuid, uuid, uuid, text)
 --
 -- Body copied VERBATIM from 0141; every change is marked `-- #201 delta`. The
 -- inventory increment / guarded decrement, the insufficient_stock raise, the
--- stock_adjustments + stock_transactions pair and the return value are unchanged,
--- so `request_stock_adjustment` / `approve_stock_adjustment` need no edit and are
--- not re-declared.
+-- stock_adjustments + stock_transactions pair and the return value are unchanged.
 --
 -- An adjustment is a CORRECTION, not a supplier inflow — it books no invoice and
 -- no payable. But it does move goods, and #170 #7a settled that quantity must
 -- never move without its value: otherwise a Remove writes an unvalued loss (and
 -- the remaining COGS drifts to zero-cost) and an Add creates phantom cost-free
 -- stock that later sells at 0 COGS.
+--
+-- SIGNATURE CHANGE — `p_unit_cost_kobo` is new, so the OLD six-argument function
+-- must be DROPPED, not replaced: `CREATE OR REPLACE` with an added parameter
+-- overloads instead of replacing, and a six-argument call would then bind to the
+-- STALE definition silently (this helper is REVOKEd from `public`, so PostgREST
+-- never sees it and would not even raise PGRST203). The two callers below are
+-- PL/pgSQL and resolve the name at run time, so dropping it here breaks nothing.
+DROP FUNCTION IF EXISTS public._apply_stock_adjustment(
+  uuid, uuid, uuid, int, text, uuid);
+
 CREATE OR REPLACE FUNCTION public._apply_stock_adjustment(
-  p_business_id uuid,
-  p_product_id  uuid,
-  p_store_id    uuid,
-  p_delta       int,
-  p_reason      text,
-  p_actor_id    uuid
+  p_business_id     uuid,
+  p_product_id      uuid,
+  p_store_id        uuid,
+  p_delta           int,
+  p_reason          text,
+  p_actor_id        uuid,
+  -- #201 delta — what the goods cost per unit, as STATED on the request (#197 /
+  -- US 22, `stock_adjustment_requests.unit_cost_kobo`, added by 0168). NULL is
+  -- "not stated" and is the ONLY thing that triggers the #189 recorded-price
+  -- fallback — a stated 0 stays a deliberate Uncosted layer, exactly as
+  -- `adjustStock` keys it on `inflowUnitCostKobo == null`. Ignored on a
+  -- DECREASE: a loss is valued by drawing this store's queue, not by assertion.
+  p_unit_cost_kobo  bigint DEFAULT NULL
 )
 RETURNS int
 LANGUAGE plpgsql
@@ -1044,23 +1150,32 @@ BEGIN
   -- add-product / receive-stock: one inflow ⇒ one fresh batch, NEVER merged
   -- ({qty_remaining = qty_original = delta, received_at}).
   --
-  -- THE COST OF AN OMITTED-COST INFLOW (#189, ADR 0005): this helper is handed no
-  -- cost — the adjustment carries a quantity and a reason, nothing more — so the
-  -- layer takes the product's recorded scalar `buying_price_kobo`, exactly what
-  -- `InventoryDao._recordedUnitCostKobo` supplies on the mobile approval path.
-  -- It is UNCOSTED (0) only when the product carries no cost at all. Batching at
-  -- 0 with a price on file would sell those units at 0 COGS forever: #41's
-  -- backfill fires only on a `0 → positive` cost edit, which a product that
-  -- already has a price can never make again, and `_recomputeScalarCost` ignores
-  -- cost-0 batches, so nothing could ever reach the layer. The scalar is not a
-  -- guess — it is the derived display cache over this very queue.
-  -- (#197 will capture a real cost ON the request; when it lands, pass it here
-  -- and fall back to this scalar, exactly as the client composes it.)
+  -- WHAT THE LAYER COSTS — the same three-step ladder the mobile approval walks
+  -- (`StockAdjustmentRequestsDao.approveRequest` → `InventoryDao.adjustStock`):
+  --   1. `p_unit_cost_kobo` — the cost the REQUEST captured (#197 / US 22, the
+  --      0168 column). The person filing the request holds the invoice, so a
+  --      stated cost always wins.
+  --   2. the product's recorded scalar `buying_price_kobo` — what
+  --      `InventoryDao._recordedUnitCostKobo` supplies when the caller states
+  --      nothing (#189). Not a guess: it is the derived display cache over this
+  --      very queue (ADR 0005).
+  --   3. UNCOSTED (0) — only when neither is on file.
+  -- The step-2 fallback is keyed on NULL, never on a handed-over 0, so a
+  -- requester who deliberately states "no cost" keeps their Uncosted layer.
+  -- Batching at 0 with a price on file would instead sell those units at 0 COGS
+  -- forever: #41's backfill fires only on a `0 → positive` cost edit, which a
+  -- product that already has a price can never make again, and
+  -- `_recomputeScalarCost` ignores cost-0 batches, so nothing could ever reach
+  -- the layer. A negative stated cost is clamped to 0 rather than trusted.
   IF p_delta > 0 THEN
-    SELECT GREATEST(COALESCE(p.buying_price_kobo, 0), 0)
-      INTO v_inflow_cost_kobo
-      FROM public.products p
-     WHERE p.id = p_product_id AND p.business_id = p_business_id;
+    IF p_unit_cost_kobo IS NOT NULL THEN
+      v_inflow_cost_kobo := GREATEST(p_unit_cost_kobo, 0);
+    ELSE
+      SELECT GREATEST(COALESCE(p.buying_price_kobo, 0), 0)
+        INTO v_inflow_cost_kobo
+        FROM public.products p
+       WHERE p.id = p_product_id AND p.business_id = p_business_id;
+    END IF;
 
     INSERT INTO public.cost_batches (
       id, business_id, product_id, store_id,
@@ -1076,23 +1191,297 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public._apply_stock_adjustment(uuid, uuid, uuid, int, text, uuid) FROM public;
--- Internal helper: only the SECURITY DEFINER RPCs in 0141 call it; not granted to clients.
+REVOKE ALL ON FUNCTION public._apply_stock_adjustment(
+  uuid, uuid, uuid, int, text, uuid, bigint) FROM public;
+-- Internal helper: only the two SECURITY DEFINER RPCs below call it; never
+-- granted to clients, so it is not a PostgREST surface at all. Re-stated here
+-- because the DROP above took the old signature's grants with it.
+
+
+-- ═══ 4. request_stock_adjustment — capture the stated cost ══════════════════
+--
+-- Body copied VERBATIM from 0141; every change is marked `-- #201 delta`. The
+-- caller-owns-business assert, the `stock.adjust` permission gate, the parameter
+-- validation, the idempotent replay, the server-decides-the-path role branch,
+-- the summary derivation, the activity logs and the response shapes are all
+-- unchanged. The ONLY deltas are the new parameter and the two places the cost
+-- it carries is written.
+--
+-- WHY THIS FUNCTION AT ALL (it moves no cost itself): without a parameter here
+-- there is no way for a web requester to state what the goods cost, so the web
+-- arm could only ever reach step 2 of the ladder — the recorded-price inference
+-- #197 exists to stop relying on. 0168 added the column and said outright that
+-- teaching these RPCs to capture it was left to #201. The twin of
+-- `StockAdjustmentRequestsDao.requestStockAdjustment(unitCostKobo:)`.
+--
+-- SIGNATURE CHANGE — `p_unit_cost_kobo` is new, so the old SEVEN-argument
+-- function is DROPPED first. This one IS granted to `authenticated`, so an
+-- overload would leave PostgREST with two candidates and answer PGRST203 on
+-- EVERY call, including the ones that omit the new argument.
+DROP FUNCTION IF EXISTS public.request_stock_adjustment(
+  uuid, uuid, uuid, uuid, int, text, text);
+
+CREATE OR REPLACE FUNCTION public.request_stock_adjustment(
+  p_business_id    uuid,
+  p_request_id     uuid,        -- idempotency key (client UUID)
+  p_store_id       uuid,
+  p_product_id     uuid,
+  p_quantity_diff  int,
+  p_reason         text,
+  p_summary        text DEFAULT NULL,
+  -- #201 delta — what the goods cost per unit (#197 / US 22). Trailing and
+  -- DEFAULT NULL, so a web caller that predates this keeps working and simply
+  -- states nothing, which is the honest legacy answer.
+  p_unit_cost_kobo bigint DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_now       timestamptz := now();
+  v_actor_id  uuid;
+  v_slug      text;
+  v_existing  text;
+  v_summary   text;
+  v_new_qty   int;
+  v_is_approver boolean;
+  v_unit_cost_kobo bigint;                       -- #201 delta
+BEGIN
+  PERFORM public._assert_caller_owns_business(p_business_id);
+
+  IF NOT public.caller_has_permission(p_business_id, 'stock.adjust') THEN
+    RAISE EXCEPTION 'permission_denied: stock.adjust'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+
+  IF p_request_id IS NULL THEN
+    RAISE EXCEPTION 'request_id_required' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  IF p_store_id IS NULL OR p_product_id IS NULL THEN
+    RAISE EXCEPTION 'store_and_product_required' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  IF COALESCE(p_quantity_diff, 0) = 0 THEN
+    RAISE EXCEPTION 'quantity_diff_must_be_nonzero' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  -- Idempotent replay.
+  SELECT status INTO v_existing FROM public.stock_adjustment_requests WHERE id = p_request_id;
+  IF v_existing IS NOT NULL THEN
+    RETURN jsonb_build_object('request_id', p_request_id, 'status', v_existing,
+                              'applied', v_existing = 'approved', 'replayed', true);
+  END IF;
+
+  SELECT id INTO v_actor_id FROM public.users WHERE auth_user_id = auth.uid() LIMIT 1;
+  v_slug := public.caller_role_slug(p_business_id);
+  v_is_approver := v_slug IN ('ceo', 'manager');
+  v_summary := COALESCE(NULLIF(btrim(p_summary), ''),
+                        CASE WHEN p_quantity_diff > 0 THEN 'Add ' ELSE 'Remove ' END
+                          || abs(p_quantity_diff)::text || ' unit(s)');
+
+  -- #201 delta — a stated cost is kept only on an INCREASE, mirroring the
+  -- client's `Value(quantityDiff > 0 ? unitCostKobo : null)`. A decrease is
+  -- valued by drawing this store's FIFO queue at apply time (#7a); the requester
+  -- is not the authority on what a loss cost, so a cost sent with a Remove is
+  -- dropped here rather than stored where a later reader would trust it.
+  v_unit_cost_kobo := CASE WHEN p_quantity_diff > 0 THEN p_unit_cost_kobo END;
+
+  IF v_is_approver THEN
+    -- Manager/CEO: apply immediately + record an approved request for the audit.
+    -- #201 delta — the stated cost is passed straight to the movement; there is
+    -- no pending row to read it back from on this branch.
+    v_new_qty := public._apply_stock_adjustment(
+      p_business_id, p_product_id, p_store_id, p_quantity_diff, p_reason,
+      v_actor_id, v_unit_cost_kobo);
+
+    INSERT INTO public.stock_adjustment_requests (
+      id, business_id, product_id, store_id, quantity_diff, reason, summary,
+      unit_cost_kobo,                                              -- #201 delta
+      requested_by, status, approved_by, approved_at, created_at, last_updated_at
+    )
+    VALUES (
+      p_request_id, p_business_id, p_product_id, p_store_id, p_quantity_diff,
+      COALESCE(p_reason, 'Adjustment'), v_summary,
+      v_unit_cost_kobo,                                            -- #201 delta
+      v_actor_id, 'approved', v_actor_id, v_now, v_now, v_now
+    );
+
+    INSERT INTO public.activity_logs (
+      id, business_id, user_id, action, description, product_id, store_id,
+      entity_type, entity_id, created_at, last_updated_at
+    )
+    VALUES (
+      gen_random_uuid(), p_business_id, v_actor_id, 'stock_adjustment_approved',
+      'Applied stock change: ' || v_summary, p_product_id, p_store_id,
+      'stock_adjustment_request', p_request_id, v_now, v_now
+    );
+
+    RETURN jsonb_build_object('request_id', p_request_id, 'status', 'approved',
+                              'applied', true, 'inventory_after', v_new_qty,
+                              'replayed', false);
+  END IF;
+
+  -- Stock keeper: a pending request; NO inventory change. #201 delta — the cost
+  -- rides on the row and is read back by `approve_stock_adjustment`, which is
+  -- what makes it reach the FIFO layer the approval mints.
+  INSERT INTO public.stock_adjustment_requests (
+    id, business_id, product_id, store_id, quantity_diff, reason, summary,
+    unit_cost_kobo,                                                -- #201 delta
+    requested_by, status, created_at, last_updated_at
+  )
+  VALUES (
+    p_request_id, p_business_id, p_product_id, p_store_id, p_quantity_diff,
+    COALESCE(p_reason, 'Adjustment'), v_summary,
+    v_unit_cost_kobo,                                              -- #201 delta
+    v_actor_id, 'pending', v_now, v_now
+  );
+
+  INSERT INTO public.activity_logs (
+    id, business_id, user_id, action, description, product_id, store_id,
+    entity_type, entity_id, created_at, last_updated_at
+  )
+  VALUES (
+    gen_random_uuid(), p_business_id, v_actor_id, 'stock_adjustment_requested',
+    'Requested approval: ' || v_summary, p_product_id, p_store_id,
+    'stock_adjustment_request', p_request_id, v_now, v_now
+  );
+
+  RETURN jsonb_build_object('request_id', p_request_id, 'status', 'pending',
+                            'applied', false, 'replayed', false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.request_stock_adjustment(
+  uuid, uuid, uuid, uuid, int, text, text, bigint) FROM public;
+GRANT EXECUTE ON FUNCTION public.request_stock_adjustment(
+  uuid, uuid, uuid, uuid, int, text, text, bigint)
+  TO authenticated, service_role;
+
+
+-- ═══ 5. approve_stock_adjustment — apply the cost the request stated ════════
+--
+-- Body copied VERBATIM from 0141; the ONLY change is the extra argument on the
+-- `_apply_stock_adjustment` call. Signature UNCHANGED (4 args), so this is a
+-- plain CREATE OR REPLACE with no DROP — the row already carries the cost, so
+-- there is nothing for the approver to pass in.
+CREATE OR REPLACE FUNCTION public.approve_stock_adjustment(
+  p_business_id uuid,
+  p_request_id  uuid,
+  p_approve     boolean,
+  p_reason      text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_now      timestamptz := now();
+  v_actor_id uuid;
+  v_slug     text;
+  v_req      public.stock_adjustment_requests%ROWTYPE;
+  v_new_qty  int;
+BEGIN
+  PERFORM public._assert_caller_owns_business(p_business_id);
+
+  v_slug := public.caller_role_slug(p_business_id);
+  IF v_slug NOT IN ('ceo', 'manager') THEN
+    RAISE EXCEPTION 'permission_denied: approve_stock_adjustment'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+
+  SELECT * INTO v_req FROM public.stock_adjustment_requests
+   WHERE id = p_request_id AND business_id = p_business_id
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'request_not_found' USING ERRCODE = 'no_data_found';
+  END IF;
+  IF v_req.status <> 'pending' THEN
+    RETURN jsonb_build_object('request_id', p_request_id, 'status', v_req.status,
+                              'replayed', true);
+  END IF;
+
+  SELECT id INTO v_actor_id FROM public.users WHERE auth_user_id = auth.uid() LIMIT 1;
+
+  IF p_approve THEN
+    -- #201 delta — the increase is batched at the cost the REQUEST captured
+    -- (#197 / US 22), the twin of `approveRequest`'s
+    -- `inflowUnitCostKobo: req.unitCostKobo`. NULL — a request that stated no
+    -- cost, and every row written before 0168 — falls the helper back to the
+    -- product's recorded price (#189). The row is already locked FOR UPDATE
+    -- above, so this costs no extra read and cannot race an edit.
+    v_new_qty := public._apply_stock_adjustment(
+      p_business_id, v_req.product_id, v_req.store_id, v_req.quantity_diff,
+      v_req.reason, v_req.requested_by, v_req.unit_cost_kobo);
+
+    UPDATE public.stock_adjustment_requests
+       SET status = 'approved', approved_by = v_actor_id, approved_at = v_now,
+           last_updated_at = v_now
+     WHERE id = p_request_id AND business_id = p_business_id;
+
+    INSERT INTO public.activity_logs (
+      id, business_id, user_id, action, description, product_id, store_id,
+      entity_type, entity_id, created_at, last_updated_at
+    )
+    VALUES (
+      gen_random_uuid(), p_business_id, v_actor_id, 'stock_adjustment_approved',
+      'Approved stock change: ' || v_req.summary, v_req.product_id, v_req.store_id,
+      'stock_adjustment_request', p_request_id, v_now, v_now
+    );
+
+    RETURN jsonb_build_object('request_id', p_request_id, 'status', 'approved',
+                              'inventory_after', v_new_qty, 'replayed', false);
+  END IF;
+
+  -- Reject: no inventory change.
+  UPDATE public.stock_adjustment_requests
+     SET status = 'rejected', approved_by = v_actor_id, approved_at = v_now,
+         last_updated_at = v_now
+   WHERE id = p_request_id AND business_id = p_business_id;
+
+  INSERT INTO public.activity_logs (
+    id, business_id, user_id, action, description, product_id, store_id,
+    entity_type, entity_id, created_at, last_updated_at
+  )
+  VALUES (
+    gen_random_uuid(), p_business_id, v_actor_id, 'stock_adjustment_rejected',
+    'Rejected stock change: ' || v_req.summary
+      || COALESCE(' — ' || NULLIF(btrim(p_reason), ''), ''),
+    v_req.product_id, v_req.store_id, 'stock_adjustment_request', p_request_id,
+    v_now, v_now
+  );
+
+  RETURN jsonb_build_object('request_id', p_request_id, 'status', 'rejected',
+                            'replayed', false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.approve_stock_adjustment(uuid, uuid, boolean, text) FROM public;
+GRANT EXECUTE ON FUNCTION public.approve_stock_adjustment(uuid, uuid, boolean, text)
+  TO authenticated, service_role;
 
 COMMIT;
 
 -- =============================================================================
 -- Verification (paste into the SQL editor while authenticated as a business user):
 --
---   0. NO OVERLOADS — the check that matters most. Each name must resolve to
---      exactly ONE function, with the argument count this migration declared:
+--   0. NO OVERLOADS — the check that matters most, because two of these took a
+--      NEW parameter. Each name must resolve to exactly ONE function, with the
+--      argument count this migration declared:
 --        SELECT proname, pronargs FROM pg_proc
 --         WHERE pronamespace = 'public'::regnamespace
 --           AND proname IN ('pos_record_sale_v2','pos_cancel_order',
---                           '_apply_stock_adjustment')
+--                           '_apply_stock_adjustment','request_stock_adjustment',
+--                           'approve_stock_adjustment')
 --         ORDER BY proname;
---        -- expect 3 rows: _apply_stock_adjustment 6, pos_cancel_order 4,
---        --                pos_record_sale_v2 18.  Two rows for one name ⇒ PGRST203.
+--        -- expect 5 rows: _apply_stock_adjustment 7, approve_stock_adjustment 4,
+--        --                pos_cancel_order 4, pos_record_sale_v2 18,
+--        --                request_stock_adjustment 8.
+--        -- TWO rows for one name ⇒ the DROP did not match the deployed
+--        -- signature. For request_stock_adjustment that is PGRST203 on every
+--        -- web call; for _apply_stock_adjustment it is worse — silent, with the
+--        -- 6-arg calls binding to the stale cost-less definition.
 --
 --   1. THE TENDER SPLIT. A sale paying 250000 on goods of 200000 with a 30000
 --      deposit must write THREE store-stamped rows summing to what was paid:
@@ -1149,28 +1538,52 @@ COMMIT;
 --        -- expect -8, 15000, 120000  (the golden fixture's figures)
 --        SELECT qty_remaining FROM public.cost_batches WHERE id = '<that batch>';
 --        -- expect 12
---      Increase, product WITH a recorded cost (#189) — approve an Add of 10 on a
---      product whose buying_price_kobo is 15000:
+--      Increase, request STATED a cost (#197 / 0168, step 1 of the ladder) —
+--      seed a pending request with unit_cost_kobo = 22000 on a product whose
+--      buying_price_kobo is 15000, then approve it:
 --        SELECT qty_remaining, qty_original, cost_kobo FROM public.cost_batches
 --         WHERE product_id = '<product>' AND store_id = '<store>'
 --         ORDER BY received_at DESC LIMIT 1;
+--        -- expect 10, 10, 22000  (the STATED cost wins over the recorded one)
+--      Increase, request stated NOTHING, product WITH a recorded cost (#189,
+--      step 2) — same seed with unit_cost_kobo NULL:
 --        -- expect 10, 10, 15000  (the product's recorded cost, NOT 0)
 --        SELECT unit_cost_kobo, value_kobo FROM public.stock_adjustments
 --         WHERE id = '<the new adjustment>';        -- expect NULL, NULL
---      Increase, product with NO cost on file — same query on a product whose
---      buying_price_kobo is 0:
+--      Increase, nothing on file anywhere (step 3) — same query on a product
+--      whose buying_price_kobo is 0 and a request that stated nothing:
 --        -- expect 10, 10, 0  (a genuinely UNCOSTED layer)
+--      A stated 0 is NOT the same as stating nothing: seed unit_cost_kobo = 0 on
+--      the 15000 product and expect cost_kobo 0, not 15000 — a deliberate
+--      Uncosted layer, matching `adjustStock`'s null-keyed fallback.
+--      The web REQUEST captures it end-to-end (both branches):
+--        SELECT rpc request_stock_adjustment(..., p_unit_cost_kobo => 22000);
+--        SELECT quantity_diff, unit_cost_kobo FROM public.stock_adjustment_requests
+--         WHERE id = '<the request>';
+--        -- as a CEO/manager (immediate apply): expect the row stored approved
+--        --   with unit_cost_kobo 22000, and the batch above at 22000
+--        -- as a stock keeper: expect status pending with unit_cost_kobo 22000
+--        --   and NO inventory change, then approve and see the 22000 batch
+--        -- the same call with a NEGATIVE p_quantity_diff must store
+--        --   unit_cost_kobo NULL (a loss is drawn, never stated)
+--      Omitting p_unit_cost_kobo entirely (the pre-0170 web call shape) must
+--      still succeed — the parameter is trailing and DEFAULT NULL.
 --      A Remove that would take stock negative still raises insufficient_stock
 --      and leaves both the queue and the adjustment row untouched.
 --
 --   4. AFTER THIS DEPLOYS, the three cost scenarios in
---      test/golden/fixtures/stock_adjustment_scenarios.json (the #189 recorded-cost
---      increase, the Uncosted increase, and the #7a snapshotted decrease) can drop
---      their `dart_arm_only` flag: the web RPC arm now implements the same rule, so
---      the two arms can be pinned together. They are left flagged in this PR
---      because the RPC arm runs against live Supabase and would fail until this
---      migration is applied — and the RPC arm's tearDown needs a
---      `del('cost_batches', 'product_id', …)` before it deletes the product, since
---      the RPC now creates batch rows (the FK would otherwise silently block the
+--      test/golden/fixtures/stock_adjustment_scenarios.json (the #197 stated-cost
+--      increase, the #189 recorded-cost increase, the Uncosted increase, and the
+--      #7a snapshotted decrease) can drop their `dart_arm_only` flag: the web RPC
+--      arm now implements the same three-step ladder, so the two arms can be
+--      pinned together. They are left flagged in this PR because the RPC arm runs
+--      against live Supabase and would fail until this migration is applied.
+--      Un-flagging is not free — `web_stock_adjustment_golden_test.dart` seeds its
+--      pending request through the admin client and asserts only status +
+--      inventory, so it would also need to seed `unit_cost_kobo` and the
+--      product's `buying_price_kobo`, seed the starting batch, and read back the
+--      snapshot / batch cost. Its tearDown already gained the
+--      `del('cost_batches', 'product_id', …)` this migration made necessary (the
+--      RPC now creates batch rows, and the FK would otherwise silently block the
 --      product delete: its 23503 is swallowed).
 -- =============================================================================
