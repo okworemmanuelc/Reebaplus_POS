@@ -47,6 +47,30 @@ int computeTotalSalesKobo(
 bool _always(DateTime _) => true;
 bool _anyStore(String? _) => true;
 
+/// The **catalogue-price concession** on ONE sold line (#200 / PRD #155 US 32):
+/// how much less than the product's list price the line was actually charged.
+///
+/// `order_items.catalogue_price_kobo` (#176, migration 0158; cloud parity #183,
+/// migration 0160) is written ONLY when the cashier overrode the tier list price
+/// — it is NULL when the line went out at list, and NULL for product-less quick
+/// sales, so a NULL means "no concession to report", never "unknown". A charge
+/// ABOVE list yields a negative figure and is kept signed rather than clamped:
+/// an over-charge is as much a margin-review fact as a give-away, and clamping
+/// would let one line's markup hide behind another's discount.
+///
+/// This is DISTINCT from `orders.discount_kobo` (§13.3), which is an explicit,
+/// order-level discount already netted out of Total Sales. A concession is the
+/// under-the-counter version — the price itself was quietly changed — which is
+/// exactly why it needs its own reader.
+int lineConcessionKobo({
+  required int? cataloguePriceKobo,
+  required int unitPriceKobo,
+  required int quantity,
+}) {
+  if (cataloguePriceKobo == null) return 0;
+  return (cataloguePriceKobo - unitPriceKobo) * quantity;
+}
+
 /// The goods-paid-now vs on-credit split of ONE order's contribution to Total
 /// Sales (#176 / PRD #155 story 29). [goodsNet] is the order's Total-Sales share
 /// (scoped item lines − scoped discount); [amountPaid] is what was tendered;

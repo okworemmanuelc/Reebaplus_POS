@@ -484,41 +484,56 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// write-off is visible. Idempotent for a re-tapped delete: a store already at
   /// 0 on-hand is skipped, and the value is read back from the row this call
   /// wrote.
+  /// **All-or-nothing across stores (#193).** The whole multi-store sweep runs in
+  /// ONE transaction, so a failure part-way cannot leave some stores written off
+  /// and others not. That mattered less when the write-off was only an
+  /// informational stock-card line; now that the reconciliation books it as a
+  /// realized LOSS against net profit (#193), a partial sweep would post a
+  /// phantom loss for a product the caller then leaves alive — real money against
+  /// stock that is still on the shelf.
   Future<int> writeOffAllStockForDelete(
     String productId,
     String? staffId,
   ) async {
-    var totalValueKobo = 0;
-    final stores = await db.storesDao.getActiveStores();
-    for (final store in stores) {
-      final invRow =
-          await (select(inventory)..where(
-                (t) =>
-                    t.productId.equals(productId) &
-                    t.storeId.equals(store.id) &
-                    whereBusiness(t),
-              ))
-              .getSingleOrNull();
-      final qty = invRow?.quantity ?? 0;
-      if (qty <= 0) continue;
+    return transaction(() async {
+      var totalValueKobo = 0;
+      final stores = await db.storesDao.getActiveStores();
+      for (final store in stores) {
+        final invRow =
+            await (select(inventory)..where(
+                  (t) =>
+                      t.productId.equals(productId) &
+                      t.storeId.equals(store.id) &
+                      whereBusiness(t),
+                ))
+                .getSingleOrNull();
+        final qty = invRow?.quantity ?? 0;
+        if (qty <= 0) continue;
 
-      await adjustStock(productId, store.id, -qty, productDeletedReason, staffId);
+        await adjustStock(
+          productId,
+          store.id,
+          -qty,
+          productDeletedReason,
+          staffId,
+        );
 
-      final adj =
-          await (select(stockAdjustments)
-                ..where(
-                  (a) =>
-                      a.productId.equals(productId) &
-                      a.storeId.equals(store.id) &
-                      a.reason.equals(productDeletedReason) &
-                      whereBusiness(a),
-                )
-                ..orderBy([(a) => OrderingTerm.desc(a.createdAt)])
-                ..limit(1))
-              .getSingleOrNull();
-      totalValueKobo += adj?.valueKobo ?? 0;
-    }
-    return totalValueKobo;
+        final adj =
+            await (select(stockAdjustments)
+                  ..where(
+                    (a) =>
+                        a.productId.equals(productId) &
+                        a.storeId.equals(store.id) &
+                        a.reason.equals(productDeletedReason) &
+                        whereBusiness(a),
+                  )
+                  ..orderBy([(a) => OrderingTerm.desc(a.createdAt)])
+                  ..limit(1))
+                .getSingleOrNull();
+        totalValueKobo += adj?.valueKobo ?? 0;
+      }
+      return totalValueKobo;
+    });
   }
 
   Stream<List<CategoryData>> watchAllCategories() {
@@ -578,15 +593,22 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// receive-delivery and crate-return flows to credit the physical pool of
   /// returnable crates held against a manufacturer. Delegates to the Crate Pool
   /// seam (#157).
+  ///
+  /// [orderId] identifies the ORDER the crates came back against, when there is
+  /// one (Confirm's crate returns). It makes the credit idempotent across
+  /// offline devices — see [CratePoolDao.addEmptiesToPool] (#188). An order-less
+  /// credit (manual return, delivery) omits it.
   Future<void> addEmptyCrates(
     String manufacturerId,
     int quantity, {
     String? storeId,
+    String? orderId,
   }) async {
     await db.cratePoolDao.addEmptiesToPool(
       manufacturerId,
       quantity,
       storeId: storeId,
+      orderId: orderId,
     );
   }
 

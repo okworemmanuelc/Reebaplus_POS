@@ -309,6 +309,20 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   int get _goodsTotalKobo => (widget.total * 100).round();
 
+  /// Per-line discounts (§13.3) summed across the cart — already netted out of
+  /// [widget.total], while [widget.subtotal] is still the pre-discount gross.
+  /// #200 / US 33: the receipt prints this on its own line so the printed
+  /// Subtotal → Discount → Total reads as an addition, and so a later reprint
+  /// (which rebuilds the same three figures from the recorded order via
+  /// `receiptTotalsFromOrder`) prints the identical block.
+  ///
+  /// The printed total stays [_totalKobo] — the payable actually charged — rather
+  /// than `ReceiptTotals.totalKobo`, so the receipt can never disagree with the
+  /// till. The two are equal because the only other term in the cart's goods
+  /// total, `customerCrateCredit`, is dead code (see `ReceiptTotals.totalKobo`).
+  int get _discountTotalKobo =>
+      widget.cart.fold<int>(0, (s, i) => s + ((i['discountKobo'] as int?) ?? 0));
+
   /// True when the crate deposit is captured for this sale: a registered
   /// customer (walk-ins have no wallet to hold it, rule #14) paying Cash /
   /// Transfer (deposit is cash received now — a Wallet / Credit Sale hands over
@@ -407,6 +421,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 ...widget.cart.map(_orderItemTile),
                 Divider(height: 1, color: _border),
                 _summaryRow('Subtotal', widget.subtotal),
+                // #200 / US 33 — the discount is already out of Total but was
+                // not on this card, so the summary showed a Total below its own
+                // Subtotal with nothing explaining it. Same line the receipt
+                // this screen is about to print now shows.
+                if (_discountTotalKobo > 0)
+                  _summaryRow('Discount', -_discountTotalKobo / 100.0),
                 if (_depositTotalKobo > 0)
                   _summaryRow('Crate Deposit', _depositTotalKobo / 100.0),
                 Divider(height: 1, color: _border),
@@ -1200,10 +1220,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             crateDepositPaidByManufacturer: _depositApplies
                 ? Map<String, int>.from(_depositByMfr)
                 : const {},
-            discountKobo: widget.cart.fold<int>(
-              0,
-              (s, i) => s + ((i['discountKobo'] as int?) ?? 0),
-            ),
+            discountKobo: _discountTotalKobo,
             // 'wallet' debits the whole total from the wallet (no cash lands);
             // 'cash' covers Cash / Transfer and Credit Sale — the entered amount
             // (0 for a credit sale) credits the wallet, netting against the total.
@@ -1278,6 +1295,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 orderId: _currentOrderId,
                 cart: widget.cart,
                 subtotal: widget.subtotal,
+                discount: _discountTotalKobo / 100.0,
                 crateDeposit: _depositTotalKobo / 100.0,
                 total: _totalKobo / 100.0,
                 paymentMethod: _receiptPaymentLabel,
@@ -1479,6 +1497,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         orderId: _currentOrderId,
         cart: widget.cart,
         subtotal: widget.subtotal,
+        discount: _discountTotalKobo / 100.0,
         crateDeposit: _depositTotalKobo / 100.0,
         total: _totalKobo / 100.0,
         paymentMethod: _receiptPaymentLabel,

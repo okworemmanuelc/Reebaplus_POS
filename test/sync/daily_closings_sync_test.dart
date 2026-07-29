@@ -66,7 +66,6 @@ void main() {
       () async {
     final id = await db.dailyClosingsDao.snapshotIfAbsent(
       businessDate: '2026-07-20',
-      storeScopeId: null,
       figures: _figures(),
     );
 

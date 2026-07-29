@@ -1,0 +1,199 @@
+-- 0166_crate_settlement_claim.sql
+--
+-- Reebaplus — the crate-settlement CLAIM (issue #188; PRD #155 User Story 14,
+-- slice #171). The cloud half of Drift schema v75.
+--
+-- ── The bug this closes ─────────────────────────────────────────────────────
+--
+-- US 14 specified TWO guards on Confirm. Only the first shipped:
+--
+--   1. Confirm re-reads the order status inside its transaction and aborts
+--      unless `pending`.                                          ← shipped
+--   2. Deposit settlement SKIPS any (order, manufacturer) that already has a
+--      settlement row — idempotent across devices.            ← never shipped
+--
+-- Guard 1 alone only closes the CONVERGED double-Confirm: device B has already
+-- pulled `completed`, so it skips. It cannot close the case the story actually
+-- names — TWO DEVICES BOTH OFFLINE. Both read `pending` locally, both settle,
+-- both push; every settlement leg was minted with a fresh UUID and the push
+-- upserts on the PRIMARY KEY, so nothing collapsed the duplicate. Result: the
+-- held deposit was refunded TWICE and the empties pool credited TWICE
+-- (`CRATE_TRACKING_AUDIT.md` A3).
+--
+-- ── What ships, and why the schema half is only two columns ─────────────────
+--
+-- The client fix is three parts; only one of them needs cloud schema:
+--
+--   a. DETERMINISTIC leg ids — every wallet leg (`crate_deposit_forfeited`,
+--      `crate_deposit_refunded`, `crate_refund`, `adjustment`), the cash refund
+--      `payment_transactions` row, the physical `crate_ledger` pool credit, and
+--      the crate-track customer-return row are now derived from
+--      `(order, manufacturer, leg)` via a v5 UUID (`UuidV7.deterministic`, the
+--      same trick as the FIFO opening cost-batch and `daily_closings`). Two
+--      offline devices mint the SAME id, so the existing PK upsert collapses the
+--      duplicate with NO schema change and no new conflict target.
+--   b. THE CLAIM — `order_crate_lines.settled_at` / `settled_by`, below. This is
+--      the schema half.
+--   c. ONE TRANSACTION — settlement and the status flip now commit together.
+--      Client-only.
+--
+-- ── Why the claim lives on order_crate_lines ────────────────────────────────
+--
+-- `order_crate_lines` already carries UNIQUE (business_id, order_id,
+-- manufacturer_id) (0093) and the client already heals a divergent id against
+-- that natural key on restore. So it is the ONE row per (order, manufacturer)
+-- that BOTH devices already share — stamping the claim on it means the claim
+-- converges through the machinery that is already there, rather than needing a
+-- new table, a new conflict target, or a new pull entry.
+--
+-- Both columns are NULLABLE and additive. Every existing row stays NULL, which
+-- is exactly right: "no claim recorded" covers both a still-unsettled line and a
+-- line settled before this column existed — and for the latter the pre-existing
+-- `orders.status` re-read still guards it, because such an order is `completed`.
+--
+-- NOT a money column: no `_kobo` column is added or altered here, so the 0130
+-- bigint rule has nothing to bite on. `settled_at` is timestamptz like every
+-- other client-written timestamp; `settled_by` is a plain nullable FK to
+-- `public.users`, the same shape as `orders.confirmed_by` (0153).
+--
+-- RLS: untouched. `order_crate_lines_tenant_rw` (0093) is already
+-- `current_user_business_ids()`-based and is FOR ALL, so the new columns are
+-- covered with no policy edit. Adding a column never widens a policy.
+--
+-- The `bump_order_crate_lines_last_updated_at` trigger (0093) already keeps the
+-- sync heartbeat moving when a claim is stamped, so the client's stamped row
+-- pulls to peers as an ordinary upsert.
+--
+-- pos_pull_snapshot is deliberately NOT re-declared: `order_crate_lines` is
+-- already in its tenant-table array and the RPC ships whole rows, so a new
+-- COLUMN rides along. Only a new TABLE needs the array edit.
+--
+-- No function signature changes anywhere, so there is no overload to drop
+-- (contrast 0164) — nothing here can raise PGRST203.
+--
+-- DEPLOY ORDER: push this BEFORE the v75 app reaches a device. A v75 client
+-- pushes `order_crate_lines` rows carrying `settled_at` / `settled_by`; against
+-- the old cloud table that upsert references an unknown column and jams the
+-- outbox (the land-the-migration-first rule).
+--
+-- MIGRATION-NUMBER LANE: 0166 is #188's. Local max before this file is 0165
+-- (#143); 0159 is held by the unmerged push branch.
+
+BEGIN;
+
+-- ═══ 1. order_crate_lines — the settlement claim ════════════════════════════
+--
+-- `settled_at` is the claim. Confirm stamps it inside the ONE transaction that
+-- also flips the order, and SKIPS a stamped (order, manufacturer) pair
+-- entirely — physical empties, crate-track netting, AND the money-track
+-- deposit. `settled_by` records who won the claim (the confirmer, which may
+-- differ from `orders.staff_id`, the seller) purely for audit; nothing gates on
+-- it.
+--
+-- Deliberately NOT a CHECK or a NOT NULL: an unsettled line and a legacy line
+-- settled before this column existed are both legitimately NULL, and a CHECK
+-- tying `settled_by` to `settled_at` would reject the (real) case of a
+-- settlement whose confirmer is unknown.
+ALTER TABLE public.order_crate_lines
+  ADD COLUMN IF NOT EXISTS settled_at timestamptz;
+
+ALTER TABLE public.order_crate_lines
+  ADD COLUMN IF NOT EXISTS settled_by uuid REFERENCES public.users(id);
+
+COMMIT;
+
+-- =============================================================================
+-- Verification (paste into the SQL editor while authenticated as a business
+-- user):
+--
+--   1. Both columns exist, nullable, with no default:
+--        SELECT column_name, data_type, is_nullable, column_default
+--          FROM information_schema.columns
+--         WHERE table_schema = 'public' AND table_name = 'order_crate_lines'
+--           AND column_name IN ('settled_at','settled_by');
+--        -- expect 2 rows, is_nullable = YES, column_default NULL
+--
+--   2. Nothing was back-filled (the claim starts empty everywhere):
+--        SELECT count(*) FROM public.order_crate_lines
+--         WHERE settled_at IS NOT NULL;                            -- expect 0
+--
+--   3. The natural key the claim rides on is still unique:
+--        SELECT conname FROM pg_constraint
+--         WHERE conrelid = 'public.order_crate_lines'::regclass
+--           AND contype  = 'u';       -- expect the (business, order, mfr) UNIQUE
+-- =============================================================================
+
+-- =============================================================================
+-- READ-ONLY QUANTIFICATION — how much money did the old bug already move?
+--
+-- This migration deliberately performs NO data repair. A double refund is two
+-- real, delivered, append-only ledger rows; deleting or editing one would
+-- violate the append-only contract (invariant #3), and the correct remedy is a
+-- compensating row authored by a human who has looked at the case. So: measure
+-- first, decide second. Run these AS-IS (they only SELECT) and attach the output
+-- to #188 before anyone considers a repair pass.
+--
+-- Q1 — Deposit-settlement legs that were posted MORE THAN ONCE for the same
+--      (order, manufacturer-equivalent, leg). Pre-#188 rows carry random ids, so
+--      duplicates are found by their natural key instead: same order, same
+--      reference_type, same amount, distinct ids. A count > 1 is a double
+--      settlement; `naira_overpaid` is what the second (and later) legs moved.
+--
+--        SELECT wt.business_id,
+--               wt.order_id,
+--               wt.reference_type,
+--               wt.amount_kobo,
+--               count(*)                                    AS legs,
+--               (count(*) - 1) * wt.amount_kobo / 100.0      AS naira_overpaid
+--          FROM public.wallet_transactions wt
+--         WHERE wt.order_id IS NOT NULL
+--           AND wt.voided_at IS NULL
+--           AND wt.reference_type IN ('crate_deposit_refunded',
+--                                     'crate_deposit_forfeited',
+--                                     'crate_refund')
+--         GROUP BY wt.business_id, wt.order_id, wt.reference_type, wt.amount_kobo
+--        HAVING count(*) > 1
+--         ORDER BY naira_overpaid DESC;
+--
+-- Q2 — Cash paid out of the till twice for the same crate refund. Same shape,
+--      on the payment leg. (`type` is 'refund' today; issue #190 re-types these
+--      rows to a negative `crate_deposit`, so widen the IN list if #190 has
+--      landed by the time you run this.)
+--
+--        SELECT pt.business_id,
+--               wt.order_id,
+--               pt.amount_kobo,
+--               count(*)                                    AS rows_posted,
+--               (count(*) - 1) * pt.amount_kobo / 100.0      AS naira_overpaid
+--          FROM public.payment_transactions pt
+--          JOIN public.wallet_transactions  wt ON wt.id = pt.wallet_txn_id
+--         WHERE pt.voided_at IS NULL
+--           AND pt.type = 'refund'
+--           AND wt.reference_type = 'crate_deposit_refunded'
+--         GROUP BY pt.business_id, wt.order_id, pt.amount_kobo
+--        HAVING count(*) > 1
+--         ORDER BY naira_overpaid DESC;
+--
+-- Q3 — Empties credited to the physical pool twice for the same order. The pool
+--      is DERIVED from these rows (ADR 0020), so a duplicate here IS a phantom
+--      crate. Pre-#188 pool rows carry no `reference_order_id` at all (the verb
+--      took no order id), so this can only catch duplicates that a v75+ client
+--      wrote; the historical ones are visible only as an unexplained pool
+--      surplus, which is precisely why the fix is forward-looking.
+--
+--        SELECT cl.business_id,
+--               cl.reference_order_id,
+--               cl.manufacturer_id,
+--               cl.store_id,
+--               sum(cl.quantity_delta)  AS crates_credited,
+--               count(*)                AS rows_posted
+--          FROM public.crate_ledger cl
+--         WHERE cl.reference_order_id IS NOT NULL
+--           AND cl.customer_id IS NULL
+--           AND cl.voided_at IS NULL
+--           AND cl.quantity_delta > 0
+--         GROUP BY cl.business_id, cl.reference_order_id, cl.manufacturer_id,
+--                  cl.store_id
+--        HAVING count(*) > 1
+--         ORDER BY crates_credited DESC;
+-- =============================================================================

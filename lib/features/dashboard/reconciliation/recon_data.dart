@@ -95,9 +95,20 @@ extension ReconGroupingX on ReconGrouping {
 /// instead as one aggregated "Van Sales" line (#147). Note this is about
 /// *revenue and per-store figures* only: van **stock** still counts towards
 /// All-Stores inventory value and business worth (§4.1), which is why
-/// `inventoryOnHandKobo` below is scoped by the locked store rather than by
-/// this predicate.
-bool Function(String?) reconStoreFilter(WidgetRef ref) {
+/// `inventoryOnHandKobo` below is scoped by the locked store — or unscoped on a
+/// [businessWide] compute — rather than by this predicate.
+///
+/// [businessWide] is the DAY-CLOSE basis (#191, ADR 0022): it ignores both the
+/// active lock and the viewer's confinement, so every store in the business
+/// counts. A persisted day close is ONE durable record of what the whole
+/// business's day looked like, and it is FIRST-WRITER-WINS — whoever opens the
+/// finished day first must therefore freeze the same figures, whatever store
+/// they happened to be locked to. Vans stay out even here: business-wide is not
+/// "vans too".
+bool Function(String?) reconStoreFilter(
+  WidgetRef ref, {
+  bool businessWide = false,
+}) {
   final selectableIds = ref
       .watch(selectableStoresProvider)
       .map((s) => s.id)
@@ -107,6 +118,7 @@ bool Function(String?) reconStoreFilter(WidgetRef ref) {
   final vans = ref.watch(vanStoresProvider);
   return (storeId) {
     if (vans.isVan(storeId)) return false;
+    if (businessWide) return true; // the whole business (incl. legacy null-store)
     if (active != null) return storeId == active;
     if (canAll) return true; // All-Stores aggregate (incl. legacy null-store)
     return storeId != null && selectableIds.contains(storeId);
@@ -220,13 +232,172 @@ int countShortageLossKobo(
   required bool Function(String?) inScope,
 }) {
   var total = 0;
-  for (final a in adjustments) {
-    if (!isCountReconciliationReason(a.reason) || a.quantityDiff >= 0) continue;
-    if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
+  for (final a in countShortageRows(
+    adjustments,
+    inSpan: inSpan,
+    inScope: inScope,
+  )) {
     final units = -a.quantityDiff;
     total += lossValueKobo(
       a.valueKobo,
       units,
+      productById[a.productId]?.buyingPriceKobo,
+    );
+  }
+  return total;
+}
+
+/// The count-reconciliation SHORTAGE rows inside [inSpan] + [inScope] — the one
+/// definition of "which rows are a count shortage", so the money
+/// ([countShortageLossKobo]) and the footnote that discloses how it was valued
+/// ([legacyValuedRowCount]) can never disagree about the row set they describe.
+Iterable<StockAdjustmentData> countShortageRows(
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) => _lossRows(
+  adjustments,
+  isLoss: isCountReconciliationReason,
+  inSpan: inSpan,
+  inScope: inScope,
+);
+
+/// The damage/loss rows inside [inSpan] + [inScope] — the [countShortageRows]
+/// twin for the Damages figure, so its money and its footnote also describe one
+/// row set. Disjoint from [countShortageRows] by reason, so a loss is never
+/// counted as both.
+Iterable<StockAdjustmentData> damageLossRows(
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) => _lossRows(
+  adjustments,
+  isLoss: isDamageReason,
+  inSpan: inSpan,
+  inScope: inScope,
+);
+
+/// A loss is a DECREASE whose reason [isLoss] classifies, inside span + scope.
+Iterable<StockAdjustmentData> _lossRows(
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(String) isLoss,
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) => adjustments.where(
+  (a) =>
+      isLoss(a.reason) &&
+      a.quantityDiff < 0 &&
+      inSpan(a.createdAt) &&
+      inScope(a.storeId),
+);
+
+/// How many of [rows] were valued at TODAY's cost rather than at the cost drawn
+/// when they were written — i.e. how many carry no `value_kobo` snapshot and so
+/// took [lossValueKobo]'s legacy fallback (#200 / PRD #155 US 20).
+///
+/// #170 made every new loss snapshot its own cost, but rows written before it
+/// only ever recorded a quantity. Their money therefore moves whenever someone
+/// edits the product's buying price — the one case where a past loss figure is
+/// NOT frozen. The story asked for that fallback to be *labelled*, not just
+/// documented, so this count drives the report footnote. Zero means every row in
+/// the figure carries its own write-time cost and the figure cannot be restated.
+int legacyValuedRowCount(Iterable<StockAdjustmentData> rows) =>
+    rows.where((a) => a.valueKobo == null).length;
+
+// ── Expense date basis (#155 US 34 / #198) ───────────────────────────────────
+//
+// An expense row carries TWO dates and they answer different questions:
+//   • `expense_date` — the day the owner says the money was spent, chosen in
+//     the §20.2 date picker. This is the REPORTING basis.
+//   • `created_at`   — the moment the row was keyed into the app. This is the
+//     CUSTODY basis: when the money actually left the drawer.
+// Saturday's diesel keyed in on Tuesday is one spend with two honest dates, and
+// each figure names which one it uses ([expenseReportingDate] vs
+// [cashMovementDate]) so the two can never silently drift apart again.
+
+/// The date an expense is REPORTED on — the user-picked `expense_date`.
+///
+/// Every expense figure in the app now shares this basis: the Expenses screen
+/// and its monthly budget (`expenses_screen.dart`), the Home dashboard's Total
+/// Expenses (`home_screen.dart`) and — since #198 — the reconciliation P&L /
+/// Business Statement. Before #198 the P&L alone summed on `created_at`, so a
+/// backdated expense landed in a different period on every screen (#155 US 34;
+/// `MONEY_FLOW_AUDIT.md` § Expenses).
+///
+/// Never null: the column is NOT NULL with a `now()` default both in Drift and
+/// in the cloud (`0073_expenses_full.sql`), and legacy rows were backfilled
+/// from `created_at` on both sides (Drift v31 `columnTransformer`, then the 0073
+/// `UPDATE`). So there is no null case to fall back for — an un-picked date
+/// already reads as the record time.
+DateTime expenseReportingDate(ExpenseData e) => e.expenseDate;
+
+/// The date a cash tender is counted on in the cash-flow card — its own
+/// `created_at`, i.e. the moment the money moved through the drawer.
+///
+/// **The deliberate exception to [expenseReportingDate]** (#155 US 34 / #198).
+/// The cash card states cash MOVEMENT, so custody timing wins: cash left the
+/// drawer when it left the drawer, and backdating a receipt cannot un-empty a
+/// till that was already counted. That is why an expense entered today for last
+/// week shows in last week's P&L but in THIS period's "Expenses paid (cash)" —
+/// the two figures are answering different questions, and the reconciliation
+/// screen prints that in plain words under both cards.
+DateTime cashMovementDate(PaymentTransactionData p) => p.createdAt;
+
+/// Sum the period's expenses for the P&L / Business Statement: approved only
+/// (§20.4 — pending awaits the CEO and rejected is never spend), not
+/// soft-deleted, in store scope, and — the #198 fix — in span on the
+/// user-picked [expenseReportingDate] rather than the record time.
+({int totalKobo, int count}) approvedExpensesInPeriod(
+  Iterable<ExpenseData> expenses, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var totalKobo = 0;
+  var count = 0;
+  for (final e in expenses) {
+    if (e.isDeleted || e.status != 'approved') continue;
+    if (!inSpan(expenseReportingDate(e)) || !inScope(e.storeId)) continue;
+    totalKobo += e.amountKobo;
+    count++;
+  }
+  return (totalKobo: totalKobo, count: count);
+}
+
+/// Value the product-delete WRITE-OFF loss (#170 #7c) from the write-time
+/// snapshot (#193) — the deferral #176 left open. Finalising a delete runs each
+/// store's remaining stock through `InventoryDao.adjustStock` with the machine
+/// reason `product_deleted` (`InventoryDao.writeOffAllStockForDelete`), which
+/// draws the FIFO queue down oldest-first and records the drawn cost on the
+/// `stock_adjustments` row (`value_kobo`).
+///
+/// The snapshot is the only basis that can value this loss at all: the product is
+/// soft-deleted the instant the write-off lands, so the recon engine's
+/// `productById` map — built from NON-deleted products (`isDeleted.not()`) — can
+/// never resolve a cost for it again. Valuing it at "current cost" therefore
+/// yields 0 forever, which is exactly how a real loss came to read ₦0 (#193).
+/// This is the same treatment Damages ([lossValueKobo]) and count shortages
+/// ([countShortageLossKobo]) already get, and ADR 0014's 2026-07-25 addendum
+/// prescribes it for every *loss* surface: a later cost edit cannot restate a
+/// past period's loss. Legacy quantity-only rows (pre-#170, no snapshot) fall
+/// back to current cost per [lossValueKobo], which still resolves whenever the
+/// product is somehow still live.
+///
+/// Only in-span, in-scope REMOVALS count, and the reason match is exact
+/// ([isProductDeleteReason]) so a free-text "deleted extra" removal stays in the
+/// stock card's residual.
+int productDeleteLossKobo(
+  Iterable<StockAdjustmentData> adjustments, {
+  required Map<String, ProductData> productById,
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var total = 0;
+  for (final a in adjustments) {
+    if (!isProductDeleteReason(a.reason) || a.quantityDiff >= 0) continue;
+    if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
+    total += lossValueKobo(
+      a.valueKobo,
+      -a.quantityDiff,
       productById[a.productId]?.buyingPriceKobo,
     );
   }
@@ -493,6 +664,12 @@ class ReconData {
     this.stockTransfersKobo = 0,
     this.stockCountAdjustmentsKobo = 0,
     this.stockDeletionsKobo = 0,
+    // #200 / US 20 — the two legacy-valuation row counts that drive the
+    // "valued at today's cost" footnotes. Optional-defaulted like the above.
+    this.legacyValuedDamageRows = 0,
+    this.legacyValuedShortageRows = 0,
+    // #193 — the same write-off money as a positive P&L loss magnitude.
+    this.deletionCostKobo = 0,
     this.vatBasis = VatBasis.inclusive,
     // #147 — the van channel's rollup. Optional-defaulted like the #170/#176
     // additions above, so every existing construction site stays valid.
@@ -653,8 +830,69 @@ class ReconData {
   // true residual [stockOtherMovementsKobo] they partition what used to be one
   // "Other movements" line, and still fold into [stockDerivedClosingKobo].
   final int stockTransfersKobo; // transfer_in / transfer_out legs
-  final int stockCountAdjustmentsKobo; // daily-count reconciliation adjustments
+
+  /// Daily-count reconciliation adjustments, at CURRENT cost — deliberately a
+  /// different basis from the P&L's [shortageCostKobo], which #182 moved onto the
+  /// #170 write-time snapshot. #200 asked whether this line should follow it. It
+  /// must not, on its own, for three reasons in ascending weight:
+  ///
+  ///  1. This term is built from **void-filtered** `stock_transactions`, while
+  ///     the snapshot lives on `stock_adjustments`, which has **no void column**.
+  ///     Reaching across would need the void filter carried over by hand (the
+  ///     adjustment id is already joined for the reason, so it is *possible*) —
+  ///     get it wrong and a VOIDED count correction contributes money with no
+  ///     matching units. That money-vs-units divergence is #186's subject.
+  ///  2. [stockDamagesKobo] has the identical property, so converting only this
+  ///     line would put two bases inside ONE card.
+  ///  3. Decisive: the flow equation ties to the perpetual system figure **by
+  ///     construction** only while every term shares one basis (opening is the
+  ///     rewind of the period's deltas — see [stockDerivedClosingKobo]). Swap one
+  ///     term and the rendered column stops adding up to Expected closing, which
+  ///     is a worse report failure than the one being fixed.
+  ///
+  /// So the card keeps one basis and now SAYS so, on screen and in the export:
+  /// one event reports two labelled figures instead of two silent ones. A real
+  /// basis change has to convert the whole card at once — #186.
+  final int stockCountAdjustmentsKobo;
+
   final int stockDeletionsKobo; // product-delete write-offs (#170 #7c)
+
+  // ── #200 / PRD #155 US 20: label the current-cost fallback ────────────────
+  // #170 froze every new loss at the cost it actually drew, so a later
+  // buying-price edit can't restate it. Rows written BEFORE #170 recorded only a
+  // quantity, so they still fall back to today's cost ([lossValueKobo]) — the
+  // one case where a past loss figure is NOT frozen. That was documented in
+  // dartdoc only; these counts put it on the report, where the person reading
+  // the money can see it.
+  /// Rows inside [damageCostKobo] valued at today's cost (no write-time
+  /// snapshot). 0 = the whole Damages figure is frozen.
+  final int legacyValuedDamageRows;
+
+  /// Rows inside [shortageCostKobo] valued at today's cost (no write-time
+  /// snapshot). 0 = the whole shortage/variance figure is frozen.
+  final int legacyValuedShortageRows;
+
+  /// The product-delete write-off booked as a period LOSS (#193) — the cost of
+  /// stock still on the shelf when a product was deleted, valued at the FIFO
+  /// snapshot the write-off recorded ([productDeleteLossKobo]).
+  ///
+  /// A POSITIVE magnitude, exactly like [damageCostKobo] and [shortageCostKobo],
+  /// so [netProfitKobo] and [periodNetResultKobo] subtract it as one more loss
+  /// line in the same family. Deleting a product with stock on it destroys real
+  /// value the business paid for, so it counts against the period result rather
+  /// than being listed for information only.
+  ///
+  /// **Not the same figure as [stockDeletionsKobo]**, and deliberately so — the
+  /// pair mirrors [damageCostKobo] (P&L, write-time snapshot) vs
+  /// [stockDamagesKobo] (stock card, current cost). ADR 0014 pins the stock card
+  /// to current cost "on purpose" so its closing identity ties to the rewound
+  /// perpetual figure, while its 2026-07-25 addendum puts every *loss* surface on
+  /// the snapshot. One consequence is disclosed rather than hidden: because a
+  /// deleted product is filtered out of every current-cost lookup, the stock
+  /// card's own Product-deletions term still reads ₦0 (it is "uncosted" by that
+  /// card's rule) even though this figure — the one that reaches the P&L, the net
+  /// result and the frozen day close — carries the full value.
+  final int deletionCostKobo;
 
   /// The van channel's four report lines (#147). Purely additive — see
   /// [ReconVanRollup].
@@ -691,13 +929,18 @@ class ReconData {
   /// story 27) and [forfeitIncomeKobo] (kept crate deposits, story 7) — before
   /// netting out expenses and losses. Quick-sale takings are excluded from COGS
   /// (none is recorded) and from gross margin, per the transparency footnote.
+  ///
+  /// [deletionCostKobo] joins Damages as a loss line (#193): stock written off
+  /// because its product was deleted is value the business paid for and no longer
+  /// has, so it belongs in the result and not merely in a stock-card note.
   int get netProfitKobo =>
       grossProfitKobo +
       uncostedTakingsKobo +
       forfeitIncomeKobo -
       expensesKobo -
       damageCostKobo -
-      crateDamageDepositKobo;
+      crateDamageDepositKobo -
+      deletionCostKobo;
 
   // ── Cash-flow summary getters (ADR 0014) ─────────────────────────────────
   /// **Cash from drivers** (#147, spec §8.2) — the period's cash-tender
@@ -798,6 +1041,9 @@ class ReconData {
       expensesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
+      // #193 — deleted-product write-offs sit with Damages and Shortages as a
+      // realized loss, not as an unbooked stock-card footnote.
+      deletionCostKobo -
       shortageCostKobo;
   /// Point-in-time net worth, honest about crate liabilities (#163) and
   /// in-transit stock (#170 #7b). ASSETS: inventory at cost, stock dispatched
@@ -851,11 +1097,18 @@ class ReconData {
 /// Full reconciliation roll-up for `[start, endExclusive)` in the active store
 /// scope. `isCeo` only gates the supplier-ledger flows (the rest is computed
 /// either way; the screen decides which figures to show per the cost wall).
+///
+/// [businessWide] computes the whole business instead — the basis a persisted
+/// day close freezes and compares against (#191, ADR 0022). It ignores the
+/// active lock and the viewer's confinement (see [reconStoreFilter]) and reads
+/// the UNSCOPED stock totals, so the frozen record never depends on which store
+/// the first opener happened to be in. Every other caller wants the default.
 ReconData computeReconData(
   WidgetRef ref, {
   DateTime? start,
   DateTime? endExclusive,
   required bool isCeo,
+  bool businessWide = false,
 }) {
   final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
   final expenses = ref.watch(allExpensesProvider).valueOrNull ?? const [];
@@ -873,10 +1126,12 @@ ReconData computeReconData(
   // sum every store's stock (null = All Stores). The products list itself is
   // unaffected — only the stock totals are store-filtered — so `productById`
   // (used for damage/shortage/surplus cost lookups) stays complete.
-  final activeStoreId = ref.watch(lockedStoreProvider).value;
+  // A business-wide compute (#191) reads the unscoped totals, matching its
+  // store predicate below.
+  final storeScope =
+      businessWide ? null : ref.watch(lockedStoreProvider).value;
   final productsWS =
-      ref.watch(productsWithStockProvider(activeStoreId)).valueOrNull ??
-      const [];
+      ref.watch(productsWithStockProvider(storeScope)).valueOrNull ?? const [];
   final balances =
       ref.watch(creditBalancesKoboProvider).valueOrNull ?? const {};
   final manufacturers =
@@ -892,7 +1147,7 @@ ReconData computeReconData(
   final vat = ref.watch(vatConfigProvider).valueOrNull ?? VatConfig.off;
 
   final productById = {for (final p in productsWS) p.product.id: p.product};
-  final inScope = reconStoreFilter(ref);
+  final inScope = reconStoreFilter(ref, businessWide: businessWide);
   bool inSpan(DateTime t) =>
       (start == null || !t.isBefore(start)) &&
       (endExclusive == null || t.isBefore(endExclusive));
@@ -1099,6 +1354,18 @@ ReconData computeReconData(
       add(otherDelta, pid, delta);
     }
   }
+  // #193 — the delete write-off as a P&L LOSS, valued from each row's OWN
+  // write-time `value_kobo` snapshot. Deliberately NOT the basis of the stock
+  // card's `stockDeletionsKobo` term below: ADR 0014 fixes that card on current
+  // cost so its closing identity ties to the rewound perpetual figure, exactly as
+  // `stockDamagesKobo` (current cost) and `damageCostKobo` (snapshot) already
+  // split. See [productDeleteLossKobo].
+  final deletionCostKobo = productDeleteLossKobo(
+    adjustments,
+    productById: productById,
+    inSpan: inSpan,
+    inScope: inScope,
+  );
   var stockOpeningKobo = 0;
   var stockReceivedKobo = 0;
   var stockCogsKobo = 0;
@@ -1126,20 +1393,39 @@ ReconData computeReconData(
     stockDamagesKobo += (damagedUnits[pid] ?? 0) * cost;
     stockExpiredKobo += (expiredUnits[pid] ?? 0) * cost;
     stockTransfersKobo += (transfersDelta[pid] ?? 0) * cost;
+    // #200 — stays at CURRENT cost on purpose; see [stockCountAdjustmentsKobo].
     stockCountAdjustmentsKobo += (countAdjDelta[pid] ?? 0) * cost;
     stockDeletionsKobo += (deletionsDelta[pid] ?? 0) * cost;
     stockOtherMovementsKobo += (otherDelta[pid] ?? 0) * cost;
   }
 
   // ── Expenses (approved, in span, in scope) ───────────────────────────────
-  var expensesKobo = 0;
-  var expensesCount = 0;
-  for (final e in expenses) {
-    if (e.expense.isDeleted || e.expense.status != 'approved') continue;
-    if (!inSpan(e.expense.createdAt) || !inScope(e.expense.storeId)) continue;
-    expensesKobo += e.expense.amountKobo;
-    expensesCount++;
-  }
+  // #198 (#155 US 34): in span on the user-picked `expense_date`
+  // ([expenseReportingDate]), NOT the record time it used to use — so
+  // Saturday's diesel keyed in on Tuesday is reported in Saturday's period here
+  // exactly as it already was on the Expenses screen, the budget and Home.
+  //
+  // The cash-flow card below deliberately does NOT follow this basis: it counts
+  // the drawer movement on its own record time ([cashMovementDate]), because
+  // custody timing is the question a cash figure answers. So these two expense
+  // figures can legitimately differ for the same money — the screen says so
+  // under both cards (`daily_reconciliation_detail_screen.dart`).
+  //
+  // One-off consequence of the switch: a day CLOSED before #198 froze its
+  // `expensesKobo` on the old record-time basis (`dailyClosingFiguresFrom`,
+  // first-writer-wins in `DailyClosingsDao`). Re-opening such a day can
+  // therefore show an as-reviewed-vs-current delta (#174) on Expenses / Net
+  // profit that is this basis correction, not money that moved. This fix does
+  // NOT back-patch frozen closes — a persisted close is the record of what was
+  // reviewed. Whether the delta view should label a basis change as such is the
+  // day-close / delta issues' call, not this one's.
+  final periodExpenses = approvedExpensesInPeriod(
+    expenses.map((e) => e.expense),
+    inSpan: inSpan,
+    inScope: inScope,
+  );
+  final expensesKobo = periodExpenses.totalKobo;
+  final expensesCount = periodExpenses.count;
 
   // ── Damages (reason names a loss; a removal) ─────────────────────────────
   // §17.2 crate-aware: a damage flagged +cratelost / +crateempty also forfeits
@@ -1150,9 +1436,13 @@ ReconData computeReconData(
   var damageCostKobo = 0;
   var damageRetailKobo = 0;
   var crateDamageDepositKobo = 0;
-  for (final a in adjustments) {
-    if (!isDamageReason(a.reason) || a.quantityDiff >= 0) continue;
-    if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
+  final damageRows =
+      damageLossRows(adjustments, inSpan: inSpan, inScope: inScope).toList();
+  // #200 / US 20 — how many of those rows take the current-cost fallback, so the
+  // report can LABEL them instead of the fallback living only in dartdoc. Read
+  // off the SAME row list the money below sums, so the two cannot drift.
+  final legacyValuedDamageRows = legacyValuedRowCount(damageRows);
+  for (final a in damageRows) {
     final units = -a.quantityDiff;
     final p = productById[a.productId];
     damageUnits += units;
@@ -1241,6 +1531,11 @@ ReconData computeReconData(
     inSpan: inSpan,
     inScope: inScope,
   );
+  // #200 / US 20 — how many of those rows had NO snapshot and so were valued at
+  // today's cost. Drives the report footnote that labels the fallback.
+  final legacyValuedShortageRows = legacyValuedRowCount(
+    countShortageRows(adjustments, inSpan: inSpan, inScope: inScope),
+  );
 
   // ── Supplier ledger flows (CEO only) ─────────────────────────────────────
   var goodsReceivedKobo = 0;
@@ -1301,6 +1596,15 @@ ReconData computeReconData(
   // banked as a sale. `method` casing drifts ('Cash'/'cash'), so match
   // case-insensitively. A cancelled deposit sale posts a negative `crate_deposit`
   // row, so the held line nets a same-period collect-then-cancel to zero.
+  //
+  // #198 — DELIBERATE EXCEPTION to the expense reporting basis. Every other
+  // expense figure in the app is on the user-picked `expense_date`
+  // ([expenseReportingDate]); "Expenses paid (cash)" here stays on the payment
+  // row's own record time ([cashMovementDate]) because this card states cash
+  // CUSTODY: cash left the drawer when it left the drawer, and backdating a
+  // receipt cannot un-empty a till that was already counted. Keep it that way —
+  // the divergence is disclosed to the CEO on the reconciliation screen, under
+  // both the Profit & Loss and the Cash flow cards.
   var cashSalesKobo = 0;
   var cashDebtsCollectedKobo = 0;
   var cashRefundsKobo = 0;
@@ -1309,7 +1613,7 @@ ReconData computeReconData(
   for (final p in payments) {
     if (p.voidedAt != null) continue;
     if (p.method.toLowerCase() != 'cash') continue;
-    if (!inSpan(p.createdAt)) continue;
+    if (!inSpan(cashMovementDate(p))) continue;
     if (p.type == 'sale') {
       cashSalesKobo += p.amountKobo;
     } else if (p.type == 'wallet_topup') {
@@ -1539,6 +1843,11 @@ ReconData computeReconData(
     stockTransfersKobo: stockTransfersKobo,
     stockCountAdjustmentsKobo: stockCountAdjustmentsKobo,
     stockDeletionsKobo: stockDeletionsKobo,
+    // #200 / US 20 — the legacy-valuation disclosure counts.
+    legacyValuedDamageRows: legacyValuedDamageRows,
+    legacyValuedShortageRows: legacyValuedShortageRows,
+    // #193 — the same write-off, as the positive P&L loss magnitude.
+    deletionCostKobo: deletionCostKobo,
     // #147 — the van channel's four additive lines.
     van: ReconVanRollup(
       salesKobo: vanSalesKobo,
@@ -1619,10 +1928,11 @@ class ReconFigureDelta {
 /// card's headline reviewed figure with its current value; the detail screen
 /// renders a delta badge on a card whose figure [ReconFigureDelta.changed].
 ///
-/// Built by [reconClosingComparison] only for a FINISHED Day bucket that has a
-/// snapshot AND whose captured store scope matches the current viewer's scope
-/// (figures computed in different scopes are not comparable — see
-/// `DailyClosings.storeScopeId`).
+/// Built by [reconClosingComparisonOrNull] for any FINISHED Day bucket that has a
+/// snapshot, at EVERY viewing scope. Both sides are BUSINESS-WIDE (#191, ADR
+/// 0022): the snapshot froze the whole business's day, so the live side is the
+/// `businessWide: true` compute — never the viewer's store-scoped figures, which
+/// would badge a scope difference as if history had moved.
 class ReconClosingComparison {
   const ReconClosingComparison({
     required this.reviewedAt,
@@ -1675,3 +1985,21 @@ ReconClosingComparison reconClosingComparison(
     current: live.stockExpectedClosingKobo,
   ),
 );
+
+/// The comparison a reconciliation view renders its reviewed banner + delta
+/// badges from — null when the day has no snapshot (it was never reviewed), so
+/// an unreviewed day renders exactly as it did before #174.
+///
+/// **Not gated on the snapshot's store scope (#191, ADR 0022).** A day close is
+/// business-wide and first-writer-wins, so [businessWideLive] must be the
+/// `businessWide: true` compute and the badges show at EVERY viewing scope. The
+/// legacy `store_scope_id` column — non-null on rows frozen before #191, which
+/// is why All Stores went permanently badge-blind for them — is deliberately
+/// never read: treating it as business-wide makes the fix retroactive, with no
+/// production data change.
+ReconClosingComparison? reconClosingComparisonOrNull(
+  DailyClosingData? snapshot,
+  ReconData businessWideLive,
+) => snapshot == null
+    ? null
+    : reconClosingComparison(snapshot, businessWideLive);

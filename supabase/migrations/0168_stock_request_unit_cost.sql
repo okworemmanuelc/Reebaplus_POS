@@ -1,4 +1,4 @@
--- 0171_stock_request_unit_cost.sql
+-- 0168_stock_request_unit_cost.sql
 --
 -- #197 (PRD #155 US 22, slice #170) — a stock-adjustment request records WHAT
 -- THE GOODS COST, so the increase it authorises stops selling at a guessed COGS.
@@ -48,8 +48,8 @@
 --    scope here for the same reason the rest of the #170 cost pass is (flagged
 --    to the reebaplus-web repo); its golden scenarios stay `dart_arm_only`.
 --
--- Mirrors the local Drift `StockAdjustmentRequests.unitCostKobo` (schema v79).
--- DEPLOY ORDER: push this BEFORE the v79 app reaches a device, or the
+-- Mirrors the local Drift `StockAdjustmentRequests.unitCostKobo` (schema v76).
+-- DEPLOY ORDER: push this BEFORE the v76 app reaches a device, or the
 -- stock_adjustment_requests upserts carrying `unit_cost_kobo` would be rejected
 -- cloud-side (PGRST204 — column not found in the schema cache).
 --

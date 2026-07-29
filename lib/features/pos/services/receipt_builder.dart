@@ -15,6 +15,12 @@ class ThermalReceiptService {
     required String orderId,
     required List<Map<String, dynamic>> cart,
     required double subtotal,
+    /// Discount given on this sale (#200 / US 33). [subtotal] is always the goods
+    /// at their FULL price, so the discount prints on its own line between the
+    /// subtotal and the total — keeping the paper copy and the on-screen
+    /// [ReceiptWidget] identical, on the original print and on every reprint.
+    /// 0 (the default) prints no line.
+    double discount = 0,
     required double crateDeposit,
     required double total,
     required String paymentMethod,
@@ -228,6 +234,18 @@ class ThermalReceiptService {
       formatCurrency(subtotal).replaceAll('₦', 'N'),
       charsPerLine,
     );
+
+    // #200 / US 33 — the discount that explains Total < Subtotal. Printed
+    // negative (formatCurrency renders the minus sign) so the totals block
+    // reads as an addition down to TOTAL, exactly as the on-screen receipt does.
+    if (discount > 0) {
+      bytes += _buildTwoColumnRow(
+        generator,
+        'Discount',
+        formatCurrency(-discount).replaceAll('₦', 'N'),
+        charsPerLine,
+      );
+    }
 
     if (crateDeposit > 0) {
       bytes += _buildTwoColumnRow(

@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
@@ -1016,6 +1017,15 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       backgroundColor: Colors.transparent,
       builder: (modalCtx) {
         final currentOrder = richOrder.order;
+        // #200 / US 33 — rebuild the ORIGINAL receipt's money block from the
+        // recorded order, so a reprint prints the same Subtotal / Discount /
+        // Total the customer first got. `totalKobo` returns
+        // `currentOrder.totalAmountKobo` by construction.
+        final totals = receiptTotalsFromOrder(
+          totalAmountKobo: currentOrder.totalAmountKobo,
+          crateDepositPaidKobo: currentOrder.crateDepositPaidKobo,
+          discountKobo: currentOrder.discountKobo,
+        );
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
@@ -1070,13 +1080,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                           // owed (goods net + deposit). The old form
                           // (subtotal: totalAmount, crateDeposit: 0) inflated the
                           // printed Subtotal by the deposit and hid it entirely.
-                          subtotal:
-                              (currentOrder.totalAmountKobo -
-                                  currentOrder.crateDepositPaidKobo) /
-                              100.0,
-                          crateDeposit:
-                              currentOrder.crateDepositPaidKobo / 100.0,
-                          total: currentOrder.totalAmountKobo / 100.0,
+                          // #200 — and the discount goes back INTO Subtotal with
+                          // its own line under it, so a discounted order's
+                          // reprint no longer reads a lower Subtotal than the
+                          // original (see [receiptTotalsFromOrder]).
+                          subtotal: totals.subtotalKobo / 100.0,
+                          discount: totals.discountKobo / 100.0,
+                          crateDeposit: totals.depositKobo / 100.0,
+                          total: totals.totalKobo / 100.0,
                           manufacturerNames: manufacturerNames,
                           paymentMethod: currentOrder.paymentType,
                           customerName:
@@ -1219,18 +1230,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       final manufacturerNames = {for (final m in mfrList) m.id: m.name};
 
       final paperSize = await printer.getPaperSize();
+      // #176 — real goods/deposit split on the thermal reprint (see the
+      // on-screen reprint above): goods = grand total − deposit, deposit on its
+      // own line, grand total = goods net + deposit. The old
+      // (subtotal: totalAmount, crateDeposit: 0) inflated the printed Subtotal
+      // by the deposit and hid it. #200 — plus the discount line, from the same
+      // shared derivation the on-screen copy uses.
+      final totals = receiptTotalsFromOrder(
+        totalAmountKobo: order.totalAmountKobo,
+        crateDepositPaidKobo: order.crateDepositPaidKobo,
+        discountKobo: order.discountKobo,
+      );
       final bytes = await ThermalReceiptService.buildReceipt(
         orderId: order.orderNumber,
         cart: receiptMapping,
-        // #176 — real goods/deposit split on the thermal reprint (see the
-        // on-screen reprint above): goods = grand total − deposit, deposit on its
-        // own line, grand total = goods net + deposit. The old
-        // (subtotal: totalAmount, crateDeposit: 0) inflated the printed Subtotal
-        // by the deposit and hid it.
-        subtotal:
-            (order.totalAmountKobo - order.crateDepositPaidKobo) / 100.0,
-        crateDeposit: order.crateDepositPaidKobo / 100.0,
-        total: order.totalAmountKobo / 100.0,
+        subtotal: totals.subtotalKobo / 100.0,
+        discount: totals.discountKobo / 100.0,
+        crateDeposit: totals.depositKobo / 100.0,
+        total: totals.totalKobo / 100.0,
         paymentMethod: order.paymentType,
         customerName: richOrder.customer?.name ?? 'Walk-in Customer',
         customerAddress: richOrder.customer?.addressText ?? 'N/A',
