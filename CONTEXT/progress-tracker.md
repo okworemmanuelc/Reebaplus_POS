@@ -18,7 +18,7 @@ the run: **1550 passed / 126 skipped / 0 failed**.
 | Slice | Status | Main |
 |---|---|---|
 | #210 receipt leg (no money) | **MERGED** | `a7a28e0` — 1561 pass / 126 skip / 0 fail |
-| #211 arrangement setting (Drift v78, cloud 0171) | in progress | — |
+| #211 arrangement setting (Drift v78, cloud 0171) | **MERGED** | `7185235` — 1585 pass / 126 skip / 0 fail |
 | #212 Placed Deposit + approval + position seam | pending | — |
 | #213 settle on return | pending | — |
 | #214 standing float | pending | — |
@@ -37,8 +37,27 @@ relabelled "N drinks on this delivery". Historically-negative balances on live
 tenants are **not** retroactively repaired; the drift stays visible in the
 counts, per ADR 0023's consequences.
 
+**#211 notes.** One column, `manufacturers.crate_money_arrangement`, TEXT NOT
+NULL DEFAULT `'none'`, nothing backfilled — the v70 `stores.kind` shape. The
+`IN (...)` CHECK lives on the **cloud only**: SQLite cannot add a table
+constraint without rebuilding, and `manufacturers` is the FK parent of most of
+the crate schema. No `columnTransformer` pin needed — verified that no
+`TableMigration` rebuild step touches `manufacturers`. No new RLS: it is an
+existing tenant table with policies from `0002_rls.sql`, and RLS is row-level,
+so a new column inherits them. Reads **fail closed** to `none`.
+
+Two calls worth revisiting if you disagree:
+- Editing is gated on **`settings.manage`** (CEO-only) rather than a new
+  `crate.money.manage` key, to avoid the permission-key cloud-FK deploy
+  ordering trap. Changing it later is a one-line rule + a catalogue row, but
+  it gets harder once #212–#217 build on the gate.
+- `test/crates/crate_money_arrangement_test.dart` carries a test **designed to
+  fail at #212** ("the setting is inert… — TODAY"). The correct response is to
+  **narrow it to `none`, never delete it** — the `none` row must keep matching
+  pre-slice figures forever. That is the release gate in test form.
+
 **Cloud migrations are NOT deployed yet** — branches commit them, deployment is
-sequenced separately after the app code lands.
+sequenced separately after the app code lands. Pending: **0171**.
 
 ### #203 — crate-deposit OUTFLOW settlement: PRD WRITTEN + published (2026-07-29)
 Grilling session on the #155 carve-out. **No code written.** Output is
