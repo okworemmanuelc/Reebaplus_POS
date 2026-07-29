@@ -15,8 +15,16 @@ import 'golden_scenario.dart';
 /// CI build. Its Tier-2 twin (test/integration/rpcs/checkout_order_golden_test)
 /// runs the SAME fixtures against the SQL `checkout_order` RPC; any drift between
 /// the two fails the build.
+///
+/// #206: a fixture carrying a `cancel` block runs a SECOND step here — the order
+/// is cancelled through `OrdersDao.markCancelled` and the compensated rows are
+/// asserted by [expectGoldenCancel].
 void main() {
-  final scenarios = [...loadCashSaleScenarios(), ...loadCrateSaleScenarios()];
+  final scenarios = [
+    ...loadCashSaleScenarios(),
+    ...loadCrateSaleScenarios(),
+    ...loadCancelScenarios(),
+  ];
   for (final scenario in scenarios) {
     test('golden (dart dao): ${scenario.name}', () async {
       final boot = await bootstrapTestDb();
@@ -27,6 +35,9 @@ void main() {
       // v1 record-sale path so createOrder writes order_items locally (the v2
       // path defers the line write to the cloud RPC response).
       await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: false);
+      // v1 cancel path likewise: the v2 envelope defers every compensating row
+      // to the cloud RPC's response, so nothing would land locally to assert.
+      await setFlag(db, 'feature.domain_rpcs_v2.cancel_order', on: false);
 
       // ── Seed the input state ────────────────────────────────────────────────
       final storeId = UuidV7.generate();
@@ -167,7 +178,12 @@ void main() {
       final items = <OrderItemsCompanion>[];
       for (final line in scenario.checkout.items) {
         final p = scenario.product(line.productKey);
-        final total = p.unitPriceKobo * line.quantity;
+        // #206 (#176/#183): the product's price is the CATALOGUE (tier list)
+        // price; a line may be charged less (a custom-price concession). The
+        // line records the catalogue price only when the two differ — the same
+        // rule OrderCommands._buildOrderItems applies on the real checkout.
+        final charged = scenario.chargedKobo(line);
+        final total = charged * line.quantity;
         gross += total;
         items.add(OrderItemsCompanion.insert(
           businessId: businessId,
@@ -175,8 +191,10 @@ void main() {
           productId: Value(productIdByKey[line.productKey]!),
           storeId: storeId,
           quantity: line.quantity,
-          unitPriceKobo: p.unitPriceKobo,
+          unitPriceKobo: charged,
           totalKobo: total,
+          cataloguePriceKobo: Value(catalogueSnapshotKobo(
+              catalogueKobo: p.unitPriceKobo, chargedKobo: charged)),
         ));
       }
       // The role discount cap (§12.6/§13.2): clamp the requested discount to the
@@ -286,32 +304,67 @@ void main() {
               type: p.type, method: p.method, amountKobo: p.amountKobo),
       ];
 
-      // Wallet legs THIS sale posted (order_id == this order — excludes the
-      // seeded opening balance) + the customer's derived spendable balance.
+      // ── Readers shared by both steps ───────────────────────────────────────
+      // The checkout and the cancel (#206) read the same three projections, so
+      // each is defined once here and called twice rather than re-typed.
+
+      // Every wallet leg on THIS order (excludes the seeded opening balance,
+      // which carries no order_id) + the customer's derived spendable balance.
+      // Both are null/empty for a walk-in.
       const crateDepositRefs = {
         'crate_deposit',
         'crate_deposit_refunded',
         'crate_deposit_forfeited',
       };
-      final walletLegs = <ActualWalletLeg>[];
-      int? customerBalanceAfter;
-      if (customerId != null) {
+      Future<(List<ActualWalletLeg>, int?)> readWalletState() async {
+        if (customerId == null) return (<ActualWalletLeg>[], null);
         final legRows = await (db.select(db.walletTransactions)
               ..where((w) => w.orderId.equals(orderId)))
             .get();
-        for (final l in legRows) {
-          walletLegs.add(ActualWalletLeg(
-            referenceType: l.referenceType,
-            signedAmountKobo: l.signedAmountKobo,
-          ));
-        }
         final allLegs = await (db.select(db.walletTransactions)
               ..where((w) => w.customerId.equals(customerId!)))
             .get();
-        customerBalanceAfter = allLegs
-            .where((l) => !crateDepositRefs.contains(l.referenceType))
-            .fold<int>(0, (s, l) => s + l.signedAmountKobo);
+        return (
+          [
+            for (final l in legRows)
+              ActualWalletLeg(
+                referenceType: l.referenceType,
+                signedAmountKobo: l.signedAmountKobo,
+              ),
+          ],
+          allLegs
+              .where((l) => !crateDepositRefs.contains(l.referenceType))
+              .fold<int>(0, (s, l) => s + l.signedAmountKobo),
+        );
       }
+
+      /// productKey → on-hand in this store.
+      Future<Map<String, int>> readInventory() async {
+        final out = <String, int>{};
+        for (final entry in productIdByKey.entries) {
+          final invRow = await (db.select(db.inventory)
+                ..where((i) =>
+                    i.productId.equals(entry.value) & i.storeId.equals(storeId)))
+              .getSingleOrNull();
+          if (invRow != null) out[entry.key] = invRow.quantity;
+        }
+        return out;
+      }
+
+      /// key "productKey|receivedAt" → the SEEDED batch's qty_remaining. Batches
+      /// the run appended (a cancel's restore) are deliberately not in here.
+      Future<Map<String, int>> readSeededBatchRemaining() async {
+        final out = <String, int>{};
+        for (final (id, productKey, receivedAt) in seededBatches) {
+          final row = await (db.select(db.costBatches)
+                ..where((b) => b.id.equals(id)))
+              .getSingle();
+          out['$productKey|$receivedAt'] = row.qtyRemaining;
+        }
+        return out;
+      }
+
+      final (walletLegs, customerBalanceAfter) = await readWalletState();
 
       // Crate rows THIS sale posted (Slice 4, #45), keyed by manufacturer:
       // order_crate_lines, the 'issued' crate_ledger movements, and
@@ -351,22 +404,11 @@ void main() {
         }
       }
 
-      final batchRemaining = <String, int>{};
-      for (final (id, productKey, receivedAt) in seededBatches) {
-        final row = await (db.select(db.costBatches)
-              ..where((b) => b.id.equals(id)))
-            .getSingle();
-        batchRemaining['$productKey|$receivedAt'] = row.qtyRemaining;
-      }
+      final batchRemaining = await readSeededBatchRemaining();
+      final inventoryAfter = await readInventory();
 
-      final inventoryAfter = <String, int>{};
       final scalarCost = <String, int>{};
       for (final entry in productIdByKey.entries) {
-        final invRow = await (db.select(db.inventory)
-              ..where((i) =>
-                  i.productId.equals(entry.value) & i.storeId.equals(storeId)))
-            .getSingleOrNull();
-        if (invRow != null) inventoryAfter[entry.key] = invRow.quantity;
         final prodRow = await (db.select(db.products)
               ..where((p) => p.id.equals(entry.value)))
             .getSingle();
@@ -392,6 +434,7 @@ void main() {
               unitPriceKobo: i.unitPriceKobo,
               totalKobo: i.totalKobo,
               buyingPriceKobo: i.buyingPriceKobo,
+              cataloguePriceKobo: i.cataloguePriceKobo,
             ),
         ],
         batchRemaining: batchRemaining,
@@ -410,6 +453,88 @@ void main() {
       );
 
       expectGolden(scenario, outcome, orderNumberScheme: mobileOrderNumberScheme);
+
+      // ── Step 2 (#206): cancel the order and assert the compensated state ───
+      // Only for a fixture carrying a `cancel` block. The checkout assertions
+      // above have already passed, so every reversal below is measured against a
+      // sale whose own rows are pinned.
+      if (scenario.cancel == null) return;
+      final cancel = scenario.cancel!;
+
+      Future<List<PaymentTransactionData>> orderPayments() =>
+          (db.select(db.paymentTransactions)
+                ..where((p) => p.orderId.equals(orderId)))
+              .get();
+      // The FULL state of a payment row, so "the cancel mutated nothing" covers
+      // its created_at — the field that keeps the sale on the sale day (#172).
+      String stateOf(PaymentTransactionData p) =>
+          '${p.type}|${p.method}|${p.amountKobo}'
+          '|at=${p.createdAt.toIso8601String()}|voided=${p.voidedAt != null}';
+
+      final beforeCancel = {
+        for (final p in await orderPayments()) p.id: stateOf(p),
+      };
+
+      await db.ordersDao.markCancelled(orderId, cancel.reason, staffId);
+
+      final cancelledOrder =
+          await (db.select(db.orders)..where((o) => o.id.equals(orderId)))
+              .getSingle();
+
+      // EVERY payment row on the order — the originals must still be here,
+      // unvoided and unedited, alongside the appended compensating rows.
+      final paymentRowsAfter = await orderPayments();
+      final paymentsAfter = [
+        for (final p in paymentRowsAfter)
+          ActualTypedPayment(
+            type: p.type,
+            method: p.method,
+            amountKobo: p.amountKobo,
+            isVoided: p.voidedAt != null,
+          ),
+      ];
+      final survivingIds = {for (final p in paymentRowsAfter) p.id};
+      final mutatedOriginals = <String>[
+        for (final p in paymentRowsAfter)
+          if (beforeCancel.containsKey(p.id) && beforeCancel[p.id] != stateOf(p))
+            '${p.id}: ${beforeCancel[p.id]} → ${stateOf(p)}',
+        for (final entry in beforeCancel.entries)
+          if (!survivingIds.contains(entry.key))
+            '${entry.key}: DELETED (was ${entry.value})',
+      ];
+
+      // EVERY wallet leg on the order — sale legs plus their appended reversals.
+      final (walletLegsAfter, balanceAfterCancel) = await readWalletState();
+
+      // The SEEDED batches keep their post-sale remainders (the restore appends
+      // a layer, it never tops the drawn one back up — #187); every OTHER batch
+      // is a layer the cancel restored.
+      final seededBatchIds = {for (final (id, _, _) in seededBatches) id};
+      final allBatches = await db.select(db.costBatches).get();
+      final restoredLayers = [
+        for (final b in allBatches)
+          if (!seededBatchIds.contains(b.id))
+            ActualRestoredLayer(
+              productKey: keyByProductId[b.productId]!,
+              qty: b.qtyRemaining,
+              costKobo: b.costKobo,
+            ),
+      ];
+
+      expectGoldenCancel(
+        scenario,
+        CancelOutcome(
+          orderStatus: cancelledOrder.status,
+          cancelledAtNull: cancelledOrder.cancelledAt == null,
+          payments: paymentsAfter,
+          mutatedOriginals: mutatedOriginals,
+          walletLegs: walletLegsAfter,
+          customerBalanceAfter: balanceAfterCancel,
+          inventoryAfter: await readInventory(),
+          batchRemaining: await readSeededBatchRemaining(),
+          restoredCostLayers: restoredLayers,
+        ),
+      );
     });
   }
 }

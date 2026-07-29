@@ -17,7 +17,16 @@
     "`method` and splits the tender into distinct types — a goods-only `sale` row,",
     "a `crate_deposit` row (held), and a `wallet_topup` row (overpayment excess).",
     "Scenarios exercising that split carry `dart_arm_only: true` until the web",
-    "`checkout_order` RPC implements the matching split (flagged to the web repo)."
+    "`checkout_order` RPC implements the matching split (flagged to the web repo).",
+    "#206 (#176/#183): a checkout line may carry `charged_unit_price_kobo` — the",
+    "price actually charged when the cashier overrode the tier list price. The",
+    "product's own `unit_price_kobo` stays the CATALOGUE price, and the line",
+    "records the deviation on `order_items.catalogue_price_kobo` (asserted as",
+    "`catalogue_price_kobo` on the expected item; absent ⇒ NULL ⇒ no concession).",
+    "The rule is identical on both arms — record the catalogue price only when it",
+    "DIFFERS from the charged price — implemented as `catalogueSnapshotKobo` on",
+    "the Dart arm (the twin of OrderCommands._buildOrderItems) and as",
+    "`public._catalogue_price_snapshot` (migration 0160) on the SQL arm."
   ],
   "scenarios": [
     {
@@ -274,6 +283,56 @@
           { "product": "P2", "buying_price_kobo": 40000 }
         ],
         "payment": { "method": "transfer", "amount_kobo": 360000 }
+      }
+    },
+    {
+      "name": "custom-price concession (#176/#183): the line records the catalogue price it deviated from",
+      "_note": "The concession column is the ONLY money field no fixture asserted before #206 (every other scenario sells at full price, so it is NULL on both arms and nothing was compared). P1 is charged ₦800 against its ₦1,000 tier list price — a ₦200/unit concession the margin review must be able to derive — while P2 sells at full price in the SAME cart and must record NO catalogue price, so a phantom concession would fail too. Gross is computed from the CHARGED price: 2×₦800 + 5×₦200 = ₦2,600.",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 },
+        { "key": "P2", "name": "Plantain Chips", "unit_price_kobo": 20000, "scalar_cost_kobo": 8000 }
+      ],
+      "inventory": [
+        { "product": "P1", "quantity": 100 },
+        { "product": "P2", "quantity": 100 }
+      ],
+      "batches": [
+        { "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" },
+        { "product": "P2", "qty": 20, "cost_kobo": 8000, "received_at": "2026-01-01" }
+      ],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 260000,
+        "items": [
+          { "product": "P1", "quantity": 2, "charged_unit_price_kobo": 80000 },
+          { "product": "P2", "quantity": 5 }
+        ]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 260000, "discount_kobo": 0,
+          "net_amount_kobo": 260000, "amount_paid_kobo": 260000,
+          "completed_at_null": true
+        },
+        "items": [
+          { "product": "P1", "quantity": 2, "unit_price_kobo": 80000, "total_kobo": 160000, "buying_price_kobo": 50000, "catalogue_price_kobo": 100000 },
+          { "product": "P2", "quantity": 5, "unit_price_kobo": 20000, "total_kobo": 100000, "buying_price_kobo": 8000 }
+        ],
+        "batches_remaining": [
+          { "product": "P1", "received_at": "2026-01-01", "qty_remaining": 18 },
+          { "product": "P2", "received_at": "2026-01-01", "qty_remaining": 15 }
+        ],
+        "inventory_after": [
+          { "product": "P1", "quantity": 98 },
+          { "product": "P2", "quantity": 95 }
+        ],
+        "product_scalar_cost": [
+          { "product": "P1", "buying_price_kobo": 50000 },
+          { "product": "P2", "buying_price_kobo": 8000 }
+        ],
+        "payment": { "method": "cash", "amount_kobo": 260000 }
       }
     },
     {
