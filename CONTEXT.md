@@ -149,11 +149,14 @@ _Avoid_: "closing the books" (nothing is locked); treating it as a cash-drawer
 close (Hard Rule #8 stands).
 
 **Total Sales (the one definition)**:
-Item-line gross minus discounts, deposit-exclusive — `computeTotalSalesKobo`.
-The Home dashboard, Daily Reconciliation and Profit report are all meant to read
-this one helper so a day has one answer.
+Item-line gross minus discounts, deposit-exclusive — `computeTotalSalesKobo`,
+per ORDER `orderGoodsNetKobo`. The Home dashboard, Daily Reconciliation and
+Profit report all read this one helper, over the same period AND the same store
+predicate (`reconStoreFilter`), so a day has one answer at every scope (#195).
+Scoping is per ITEM LINE, with the order's own store carrying the discount.
 _Avoid_: `orders.totalAmountKobo` / `net_amount_kobo` for a "sales" figure (both
-are gross of discounts and deposit-inclusive).
+are gross of discounts and deposit-inclusive); scoping a sales figure by the
+order header's store while another surface scopes by the line's.
 
 **Concession**:
 The gap between a product's catalogue (tier) price and what was actually charged,

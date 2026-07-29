@@ -674,6 +674,12 @@ class ReconData {
     // #147 — the van channel's rollup. Optional-defaulted like the #170/#176
     // additions above, so every existing construction site stays valid.
     this.van = const ReconVanRollup(),
+    // #195 — the headline Total Sales, resolved through `computeTotalSalesKobo`.
+    // REQUIRED, unlike the additive fields above: the whole point of the issue
+    // is that there is no second way to arrive at this figure, and an
+    // optional-defaulted one would let a construction site quietly fall back to
+    // the derivation the issue removed. See [totalSalesKobo].
+    required this.totalSalesKobo,
   });
 
   final int totalRevenueKobo;
@@ -910,12 +916,17 @@ class ReconData {
       vatBasis == VatBasis.inclusive ? 'inclusive' : 'exclusive';
 
   /// The single headline **Total Sales** for the period (#176 / PRD #155 story
-  /// 28): item-line gross MINUS discounts, deposit-exclusive. Equal to
-  /// `computeTotalSalesKobo(orders, …)` by construction (this is the net figure
-  /// the Home dashboard and Profit report also derive from that one helper), so
-  /// all three surfaces report the SAME number for a day. `totalRevenueKobo`
-  /// stays the gross intermediate the P&L card keeps beside its discount line.
-  int get totalSalesKobo => totalRevenueKobo - discountsKobo;
+  /// 28): item-line gross MINUS discounts, deposit-exclusive. The Home
+  /// dashboard, the Daily Reconciliation and the Profit report report the SAME
+  /// number for a day because all three resolve it through the ONE helper
+  /// [computeTotalSalesKobo] — [reconDataFrom] calls it and hands the result in
+  /// here (#195). It used to be a getter deriving the figure from this file's
+  /// own sales loop as `totalRevenueKobo − discountsKobo`, which was equal only
+  /// "by construction" with nothing enforcing it. `totalRevenueKobo` stays the
+  /// gross intermediate the P&L card keeps beside its discount line, and
+  /// `test/dashboard/report_revenue_test.dart` pins the two against each other
+  /// on the real compute path.
+  final int totalSalesKobo;
 
   /// Costed revenue net of discounts given — the real money earned on costed
   /// lines. `costedRevenueKobo` is gross (Σ qty × gross unitPrice), so we
@@ -1094,6 +1105,108 @@ class ReconData {
       crateUnits == 0;
 }
 
+/// Everything one reconciliation roll-up READS — the row sets, the settings,
+/// the period span and the store predicate — gathered into one value so the
+/// money math itself ([reconDataFrom]) is a **pure function of its inputs**
+/// (#195).
+///
+/// Before this split, [computeReconData] could only run inside a widget holding
+/// a live `WidgetRef`, so the one figure three screens must agree on
+/// (`totalSalesKobo`) had no test that could catch it drifting — the #176
+/// acceptance test had to fabricate a `ReconData` from figures it computed
+/// itself. Now a test constructs [ReconInputs] and calls [reconDataFrom].
+///
+/// Every field is optional-defaulted (empty / off / any-store), exactly like
+/// [ReconData]'s own additive fields, so a test supplies only the rows the
+/// figure under test depends on and every existing call site stays valid when a
+/// later slice adds an input.
+class ReconInputs {
+  const ReconInputs({
+    this.orders = const [],
+    this.expenses = const [],
+    this.adjustments = const [],
+    this.supplierLedger = const [],
+    this.payments = const [],
+    this.stockTxns = const [],
+    this.stockCounts = const [],
+    this.productsWithStock = const [],
+    this.creditBalancesKobo = const {},
+    this.manufacturers = const [],
+    this.emptyCrateCounts = const {},
+    this.crateDamages = const [],
+    this.usersById = const {},
+    this.inTransitTransfers = const [],
+    this.vanTrips = const [],
+    this.crateForfeitRows = const [],
+    this.vat = VatConfig.off,
+    this.showCrates = false,
+    this.heldCrateDepositsKobo = 0,
+    this.supplierCrateDebtKobo = 0,
+    this.isCeo = false,
+    this.inScope = _everyStore,
+    this.start,
+    this.endExclusive,
+  });
+
+  final List<OrderWithItems> orders;
+  final List<ExpenseWithCategory> expenses;
+  final List<StockAdjustmentData> adjustments;
+  final List<SupplierLedgerEntryData> supplierLedger;
+  final List<PaymentTransactionData> payments;
+  final List<StockTransactionData> stockTxns;
+  final List<StockCountData> stockCounts;
+
+  /// Products with their stock totals **already scoped** to the compute's store
+  /// basis (the locked store, or unscoped for a business-wide compute).
+  final List<ProductDataWithStock> productsWithStock;
+
+  final Map<String, int> creditBalancesKobo;
+  final List<ManufacturerData> manufacturers;
+  final Map<String, int> emptyCrateCounts;
+
+  /// §17.2 crate-aware: `damaged` crate_ledger rows — the stored-empty fate, a
+  /// crate-only loss that writes no stock_adjustment.
+  final List<CrateLedgerData> crateDamages;
+
+  final Map<String, UserData> usersById;
+  final List<StockTransferData> inTransitTransfers;
+  final List<VanTripData> vanTrips;
+
+  /// Non-voided `crate_deposit_forfeited` wallet rows — the forfeit-income
+  /// source (#176). Empty for a non-crate business.
+  final List<WalletTransactionData> crateForfeitRows;
+
+  final VatConfig vat;
+
+  /// Whether this business tracks empty crates at all — gates every crate
+  /// figure below.
+  final bool showCrates;
+
+  /// Point-in-time crate liabilities, already derived by their own ledger
+  /// providers (business-wide, so there is nothing left to scope or sum here).
+  final int heldCrateDepositsKobo;
+  final int supplierCrateDebtKobo;
+
+  /// Gates the supplier-ledger flows only; every other figure is computed
+  /// either way and the screen decides what to show per the cost wall.
+  final bool isCeo;
+
+  /// The store predicate every figure is filtered through — [reconStoreFilter]
+  /// in production. Defaults to every store so a test need not build one.
+  final bool Function(String? storeId) inScope;
+
+  final DateTime? start;
+  final DateTime? endExclusive;
+
+  /// Whether [t] falls in the half-open period `[start, endExclusive)`. Null
+  /// ends are unbounded (the all-time roll-up).
+  bool inSpan(DateTime t) =>
+      (start == null || !t.isBefore(start!)) &&
+      (endExclusive == null || t.isBefore(endExclusive!));
+}
+
+bool _everyStore(String? _) => true;
+
 /// Full reconciliation roll-up for `[start, endExclusive)` in the active store
 /// scope. `isCeo` only gates the supplier-ledger flows (the rest is computed
 /// either way; the screen decides which figures to show per the cost wall).
@@ -1103,6 +1216,10 @@ class ReconData {
 /// active lock and the viewer's confinement (see [reconStoreFilter]) and reads
 /// the UNSCOPED stock totals, so the frozen record never depends on which store
 /// the first opener happened to be in. Every other caller wants the default.
+///
+/// This is the **gather** half only (#195): every `ref.watch` lives here and the
+/// arithmetic lives in the pure [reconDataFrom]. Keep it that way — a provider
+/// read that sneaks into the math is a figure that can no longer be tested.
 ReconData computeReconData(
   WidgetRef ref, {
   DateTime? start,
@@ -1110,17 +1227,6 @@ ReconData computeReconData(
   required bool isCeo,
   bool businessWide = false,
 }) {
-  final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
-  final expenses = ref.watch(allExpensesProvider).valueOrNull ?? const [];
-  final adjustments =
-      ref.watch(allStockAdjustmentsProvider).valueOrNull ?? const [];
-  final ledger =
-      ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ?? const [];
-  final payments =
-      ref.watch(allPaymentTransactionsProvider).valueOrNull ?? const [];
-  final stockTxns =
-      ref.watch(allStockTransactionsProvider).valueOrNull ?? const [];
-  final counts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
   // Inventory-on-hand must honour the active-store scope like every other
   // figure here (§12.1): pass the locked store so a single-store view doesn't
   // sum every store's stock (null = All Stores). The products list itself is
@@ -1130,27 +1236,80 @@ ReconData computeReconData(
   // store predicate below.
   final storeScope =
       businessWide ? null : ref.watch(lockedStoreProvider).value;
-  final productsWS =
-      ref.watch(productsWithStockProvider(storeScope)).valueOrNull ?? const [];
-  final balances =
-      ref.watch(creditBalancesKoboProvider).valueOrNull ?? const {};
-  final manufacturers =
-      ref.watch(allManufacturersProvider).valueOrNull ?? const [];
-  final crateCounts =
-      ref.watch(emptyCratesByManufacturerProvider).valueOrNull ?? const {};
-  // §17.2 crate-aware: `damaged` crate_ledger rows are the stored-empty fate —
-  // a crate-only loss that writes no stock_adjustment. Drives the forfeited
-  // deposit below.
-  final crateDamages =
-      ref.watch(allCrateDamagesProvider).valueOrNull ?? const [];
-  final users = ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
-  final vat = ref.watch(vatConfigProvider).valueOrNull ?? VatConfig.off;
+  // Crate reads stay behind the opt-in gate, so a business that tracks no
+  // crates opens no crate stream at all (the conditional watch is deliberate).
+  final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
+  return reconDataFrom(
+    ReconInputs(
+      orders: ref.watch(allOrdersProvider).valueOrNull ?? const [],
+      expenses: ref.watch(allExpensesProvider).valueOrNull ?? const [],
+      adjustments:
+          ref.watch(allStockAdjustmentsProvider).valueOrNull ?? const [],
+      supplierLedger:
+          ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ?? const [],
+      payments:
+          ref.watch(allPaymentTransactionsProvider).valueOrNull ?? const [],
+      stockTxns:
+          ref.watch(allStockTransactionsProvider).valueOrNull ?? const [],
+      stockCounts: ref.watch(allStockCountsProvider).valueOrNull ?? const [],
+      productsWithStock:
+          ref.watch(productsWithStockProvider(storeScope)).valueOrNull ??
+          const [],
+      creditBalancesKobo:
+          ref.watch(creditBalancesKoboProvider).valueOrNull ?? const {},
+      manufacturers:
+          ref.watch(allManufacturersProvider).valueOrNull ?? const [],
+      emptyCrateCounts:
+          ref.watch(emptyCratesByManufacturerProvider).valueOrNull ?? const {},
+      crateDamages: ref.watch(allCrateDamagesProvider).valueOrNull ?? const [],
+      usersById: ref.watch(usersByBusinessProvider).valueOrNull ?? const {},
+      inTransitTransfers:
+          ref.watch(allInTransitTransfersProvider).valueOrNull ?? const [],
+      vanTrips: ref.watch(allVanTripsProvider).valueOrNull ?? const [],
+      crateForfeitRows: showCrates
+          ? (ref.watch(crateForfeitRowsProvider).valueOrNull ?? const [])
+          : const [],
+      vat: ref.watch(vatConfigProvider).valueOrNull ?? VatConfig.off,
+      showCrates: showCrates,
+      heldCrateDepositsKobo: showCrates
+          ? (ref.watch(crateDepositSummaryProvider).valueOrNull?.heldKobo ?? 0)
+          : 0,
+      supplierCrateDebtKobo: showCrates
+          ? (ref.watch(supplierCrateDebtValueKoboProvider).valueOrNull ?? 0)
+          : 0,
+      isCeo: isCeo,
+      inScope: reconStoreFilter(ref, businessWide: businessWide),
+      start: start,
+      endExclusive: endExclusive,
+    ),
+  );
+}
+
+/// The reconciliation roll-up itself — **pure** over [ReconInputs] (#195), so
+/// every figure it derives can be pinned by a unit test with no widget, no
+/// database and no `WidgetRef`. [computeReconData] is the provider-reading
+/// wrapper.
+ReconData reconDataFrom(ReconInputs input) {
+  final orders = input.orders;
+  final expenses = input.expenses;
+  final adjustments = input.adjustments;
+  final ledger = input.supplierLedger;
+  final payments = input.payments;
+  final stockTxns = input.stockTxns;
+  final counts = input.stockCounts;
+  final productsWS = input.productsWithStock;
+  final balances = input.creditBalancesKobo;
+  final manufacturers = input.manufacturers;
+  final crateCounts = input.emptyCrateCounts;
+  final crateDamages = input.crateDamages;
+  final users = input.usersById;
+  final vat = input.vat;
+  final isCeo = input.isCeo;
+  final endExclusive = input.endExclusive;
 
   final productById = {for (final p in productsWS) p.product.id: p.product};
-  final inScope = reconStoreFilter(ref, businessWide: businessWide);
-  bool inSpan(DateTime t) =>
-      (start == null || !t.isBefore(start)) &&
-      (endExclusive == null || t.isBefore(endExclusive));
+  final inScope = input.inScope;
+  bool inSpan(DateTime t) => input.inSpan(t);
 
   // ── Sales / P&L (mirrors the Profit Report's costed-line model) ──────────
   var totalRevenueKobo = 0;
@@ -1173,10 +1332,12 @@ ReconData computeReconData(
     if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
       continue;
     }
-    // Order-level discount (contra-revenue). Scoped by the order's store to
-    // match the sales lines; lines carry the same storeId in practice.
+    // Order-level discount (contra-revenue). Scoped by the ORDER's store — the
+    // one rule that decides it lives in [orderDiscountKobo] (#195), so the P&L
+    // card's discount line and the Total Sales headline cannot disagree about
+    // which store wears a discount.
     final orderInScope = inScope(o.order.storeId);
-    if (orderInScope) discountsKobo += o.order.discountKobo;
+    discountsKobo += orderDiscountKobo(o, inScope: inScope);
     var orderRevenue = 0;
     for (final i in o.items) {
       if (!inScope(i.item.storeId)) continue;
@@ -1211,12 +1372,12 @@ ReconData computeReconData(
       );
     }
     // #176 — paid-now vs on-credit split of this order's contribution to Total
-    // Sales. `goodsNet` is exactly the order's Total-Sales share (scoped lines −
-    // scoped discount), so `paidNow + onCredit == totalSalesKobo` by
-    // construction. `goodsPaid` = what was tendered toward the GOODS
-    // (amountPaid − deposit held, capped at the goods net); the rest is debt.
-    final goodsNet =
-        orderRevenue - (orderInScope ? o.order.discountKobo : 0);
+    // Sales. `goodsNet` is exactly the order's Total-Sales share, taken from
+    // the SAME helper the headline sums (#195) rather than re-derived here, so
+    // `paidNow + onCredit == totalSalesKobo` holds by construction and not by
+    // coincidence. `goodsPaid` = what was tendered toward the GOODS (amountPaid
+    // − deposit held, capped at the goods net); the rest is debt.
+    final goodsNet = orderGoodsNetKobo(o, inScope: inScope);
     final split = splitPaidNowOnCredit(
       goodsNet: goodsNet,
       amountPaid: o.order.amountPaidKobo,
@@ -1272,8 +1433,7 @@ ReconData computeReconData(
   // worth. Included when EITHER endpoint is in the active store scope (so a
   // locked source store still sees what it dispatched); business-wide under All
   // Stores.
-  final inTransitTransfers =
-      ref.watch(allInTransitTransfersProvider).valueOrNull ?? const [];
+  final inTransitTransfers = input.inTransitTransfers;
   var inTransitValueKobo = 0;
   for (final t in inTransitTransfers) {
     if (inScope(t.fromLocationId) || inScope(t.toLocationId)) {
@@ -1644,7 +1804,7 @@ ReconData computeReconData(
       .fold<int>(0, (s, b) => s - b);
 
   // ── Empty crates held (Bar / Beer Distributor only; point-in-time) ───────
-  final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
+  final showCrates = input.showCrates;
   var crateUnits = 0;
   var crateDepositKobo = 0;
   final manufacturerEmpties = <({String manufacturerName, int count, int valueKobo})>[];
@@ -1682,10 +1842,8 @@ ReconData computeReconData(
   var heldCrateDepositsKobo = 0;
   var supplierCrateDebtKobo = 0;
   if (showCrates) {
-    heldCrateDepositsKobo =
-        ref.watch(crateDepositSummaryProvider).valueOrNull?.heldKobo ?? 0;
-    supplierCrateDebtKobo =
-        ref.watch(supplierCrateDebtValueKoboProvider).valueOrNull ?? 0;
+    heldCrateDepositsKobo = input.heldCrateDepositsKobo;
+    supplierCrateDebtKobo = input.supplierCrateDebtKobo;
   }
 
   // ── Forfeit income (#176 / PRD #155 story 7) ─────────────────────────────
@@ -1697,8 +1855,7 @@ ReconData computeReconData(
   // showCrates. Added to netProfitKobo below.
   var forfeitIncomeKobo = 0;
   if (showCrates) {
-    final forfeitRows =
-        ref.watch(crateForfeitRowsProvider).valueOrNull ?? const [];
+    final forfeitRows = input.crateForfeitRows;
     for (final w in forfeitRows) {
       if (w.voidedAt != null || !inSpan(w.createdAt)) continue;
       forfeitIncomeKobo += -w.signedAmountKobo; // debit → positive income
@@ -1713,12 +1870,25 @@ ReconData computeReconData(
   // this is Total (gross) revenue minus the costed-line revenue.
   final uncostedTakingsKobo = totalRevenueKobo - costedRevenueKobo;
 
+  // ── The single Total Sales definition (#195 / PRD #155 US 28) ────────────
+  // Resolved through the SAME helper the Home dashboard and the Profit report
+  // call, over the same orders / span / store predicate — so the three surfaces
+  // agree because they run one function, not because three loops happen to
+  // agree today. The gross + discount split above stays for the P&L card; this
+  // is the net headline. `computeReconData`'s own loop and the helper are pinned
+  // equal by `test/dashboard/report_revenue_test.dart`.
+  final totalSalesKobo = computeTotalSalesKobo(
+    orders,
+    inSpan: inSpan,
+    inScope: inScope,
+  );
+
   // ── The van channel's rollup (#147, spec §8.2) ───────────────────────────
   // Four additive lines. Every one of them is attributed through the trip's
   // SOURCE WAREHOUSE, never the van: a van fails `inScope` by construction
   // (#140), so an order or a payment that only knew its own store would be
   // invisible on every scope including All Stores.
-  final vanTrips = ref.watch(allVanTripsProvider).valueOrNull ?? const [];
+  final vanTrips = input.vanTrips;
   final tripById = {for (final t in vanTrips) t.id: t};
 
   var vanSalesKobo = 0;
@@ -1779,6 +1949,9 @@ ReconData computeReconData(
 
   return ReconData(
     totalRevenueKobo: totalRevenueKobo,
+    // #195 — the headline comes from the shared helper, not from this file's
+    // own subtraction. See [ReconData.totalSalesKobo].
+    totalSalesKobo: totalSalesKobo,
     costedRevenueKobo: costedRevenueKobo,
     cogsKobo: cogsKobo,
     discountsKobo: discountsKobo,

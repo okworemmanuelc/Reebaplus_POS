@@ -121,32 +121,59 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// rows (offline-first shared till, a re-onboarded staff account) it summed
   /// both businesses into one business's screen.
   ///
-  /// The figure is the order header's `net_amount_kobo`: gross of discounts and
-  /// inclusive of crate deposits. Unchanged here on purpose — issue #195 (one
-  /// Total Sales definition) owns moving it to the item-line basis.
+  /// The money is the ONE Total Sales definition (#195 / PRD #155 US 28):
+  /// **item lines at gross, minus the order-level discounts, deposit-exclusive**
+  /// — the SQL twin of `computeTotalSalesKobo`. It used to read the order
+  /// header's `net_amount_kobo`, which bundles the refundable crate deposit
+  /// (contra US 5), so a cashier in a crate shop showed a "Total sales" bigger
+  /// than the same sales reported anywhere else in the app.
+  ///
+  /// Two queries, not one join: joining the lines to the header repeats each
+  /// order's `discount_kobo` once per line, which would over-subtract it.
   Future<({int totalKobo, int orderCount})> getSalesTotalsForStaff(
     String staffId,
   ) async {
-    final totalCol = orders.netAmountKobo.sum();
-    final countCol = orders.id.count();
-    final row =
-        await (selectOnly(orders)
-              ..addColumns([totalCol, countCol])
-              ..where(
-                whereBusiness(orders) &
-                    orders.staffId.equals(staffId) &
-                    orders.status.isIn(orderRevenueStatuses.toList()),
-              ))
+    Expression<bool> whereThisStaffsRecognizedSale() =>
+        whereBusiness(orders) &
+        orders.staffId.equals(staffId) &
+        orders.status.isIn(orderRevenueStatuses.toList());
+
+    final grossCol = (orderItems.quantity * orderItems.unitPriceKobo).sum();
+    final grossRow =
+        await (selectOnly(orderItems).join([
+              innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+            ])
+              ..addColumns([grossCol])
+              ..where(whereThisStaffsRecognizedSale()))
             .getSingle();
+
+    final discountCol = orders.discountKobo.sum();
+    final countCol = orders.id.count();
+    final headerRow =
+        await (selectOnly(orders)
+              ..addColumns([discountCol, countCol])
+              ..where(whereThisStaffsRecognizedSale()))
+            .getSingle();
+
+    // Drift types an aggregate over an arithmetic expression as `num`; both
+    // operands are integer columns, so SQLite returns an integer.
+    final int grossKobo = (grossRow.read(grossCol) ?? 0).toInt();
+    final int discountKobo = (headerRow.read(discountCol) ?? 0).toInt();
     return (
-      totalKobo: row.read(totalCol) ?? 0,
-      orderCount: row.read(countCol) ?? 0,
+      totalKobo: grossKobo - discountKobo,
+      orderCount: headerRow.read(countCol) ?? 0,
     );
   }
 
   // ── N+1 fix: single joined query + fold ────────────────────────────────────
 
-  Stream<List<OrderWithItems>> watchAllOrdersWithItems({String? storeId}) {
+  /// [staffId] narrows to one member's own orders in SQL — the Profile screen
+  /// shows only the signed-in user's activity, and filtering the whole
+  /// business's join in Dart would stream every order to read one person's.
+  Stream<List<OrderWithItems>> watchAllOrdersWithItems({
+    String? storeId,
+    String? staffId,
+  }) {
     final query = select(orders).join([
       leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
       leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
@@ -155,6 +182,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     query.where(whereBusiness(orders));
     if (storeId != null) {
       query.where(orders.storeId.equals(storeId));
+    }
+    if (staffId != null) {
+      query.where(orders.staffId.equals(staffId));
     }
     query.orderBy([OrderingTerm.desc(orders.createdAt)]);
 

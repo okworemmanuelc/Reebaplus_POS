@@ -31,18 +31,48 @@ int computeTotalSalesKobo(
     if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
       continue;
     }
-    var net = 0;
-    for (final line in o.items) {
-      if (!inScope(line.item.storeId)) continue;
-      net += line.item.quantity * line.item.unitPriceKobo;
-    }
-    // Order-level discount is contra-revenue; scoped by the order's store to
-    // match the reconciliation (lines carry the same store in practice).
-    if (inScope(o.order.storeId)) net -= o.order.discountKobo;
-    total += net;
+    total += orderGoodsNetKobo(o, inScope: inScope);
   }
   return total;
 }
+
+/// ONE order's contribution to [computeTotalSalesKobo]: its in-scope item lines
+/// at gross, MINUS the order-level discount when the order's own store is in
+/// scope. Deposit-exclusive for the same reason the period figure is — a
+/// refundable crate deposit is never an `order_items` line.
+///
+/// Split out (#195) so every PER-ORDER "what did this sale bring in" surface —
+/// the Home staff breakdown, the Total Sales drill-down — resolves the figure
+/// through the same definition the period headline uses, instead of reaching
+/// for `orders.totalAmountKobo` / `net_amount_kobo` (deposit-IN, so a crate
+/// shop's staff league table was inflated by every deposit that cashier took).
+///
+/// The caller decides whether the order counts as a sale and falls in the
+/// period; this is purely the money on one order.
+int orderGoodsNetKobo(
+  OrderWithItems order, {
+  bool Function(String? storeId) inScope = _anyStore,
+}) {
+  var net = 0;
+  for (final line in order.items) {
+    if (!inScope(line.item.storeId)) continue;
+    net += line.item.quantity * line.item.unitPriceKobo;
+  }
+  return net - orderDiscountKobo(order, inScope: inScope);
+}
+
+/// ONE order's discount as it counts toward a scoped figure: `discountKobo`
+/// when the ORDER's own store is in scope, else 0.
+///
+/// The discount is order-level, so unlike the item lines it cannot be scoped
+/// per line — the order's store is what decides whether it belongs to this
+/// view. Every surface that nets a discount out of a money figure resolves it
+/// here (#195), so "which store wears the discount" is answered in one place
+/// instead of being re-decided per screen.
+int orderDiscountKobo(
+  OrderWithItems order, {
+  bool Function(String? storeId) inScope = _anyStore,
+}) => inScope(order.order.storeId) ? order.order.discountKobo : 0;
 
 bool _always(DateTime _) => true;
 bool _anyStore(String? _) => true;
