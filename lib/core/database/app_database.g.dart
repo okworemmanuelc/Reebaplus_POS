@@ -21986,6 +21986,17 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _unitCostKoboMeta = const VerificationMeta(
+    'unitCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unitCostKobo = GeneratedColumn<int>(
+    'unit_cost_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
   @override
   late final GeneratedColumn<String> reason = GeneratedColumn<String>(
@@ -22087,6 +22098,7 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
     productId,
     storeId,
     quantityDiff,
+    unitCostKobo,
     reason,
     summary,
     requestedBy,
@@ -22145,6 +22157,15 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
       );
     } else if (isInserting) {
       context.missing(_quantityDiffMeta);
+    }
+    if (data.containsKey('unit_cost_kobo')) {
+      context.handle(
+        _unitCostKoboMeta,
+        unitCostKobo.isAcceptableOrUnknown(
+          data['unit_cost_kobo']!,
+          _unitCostKoboMeta,
+        ),
+      );
     }
     if (data.containsKey('reason')) {
       context.handle(
@@ -22236,6 +22257,10 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
         DriftSqlType.int,
         data['${effectivePrefix}quantity_diff'],
       )!,
+      unitCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_kobo'],
+      ),
       reason: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}reason'],
@@ -22284,6 +22309,22 @@ class StockAdjustmentRequestData extends DataClass
   final String productId;
   final String storeId;
   final int quantityDiff;
+
+  /// What the goods cost, **per unit, in kobo** — captured on the request
+  /// itself (#197, PRD #155 US 22) so the FIFO batch the approval mints carries
+  /// REAL cost instead of a guess.
+  ///
+  /// Nullable on purpose: a request legitimately may not know the cost (a
+  /// recount that simply found more units on the shelf has no invoice behind
+  /// it). NULL is handed to `InventoryDao.adjustStock` as an omitted
+  /// `inflowUnitCostKobo`, which falls back to the product's recorded scalar
+  /// price (#189) — so the fallback is what runs when nobody stated a cost, and
+  /// a stated cost always wins.
+  ///
+  /// Only meaningful on an INCREASE. A decrease values itself by drawing this
+  /// store's FIFO queue (#7a) and snapshotting what it drew, so the column is
+  /// left NULL there — the requester is not the authority on what a loss cost.
+  final int? unitCostKobo;
   final String reason;
   final String summary;
   final String? requestedBy;
@@ -22298,6 +22339,7 @@ class StockAdjustmentRequestData extends DataClass
     required this.productId,
     required this.storeId,
     required this.quantityDiff,
+    this.unitCostKobo,
     required this.reason,
     required this.summary,
     this.requestedBy,
@@ -22315,6 +22357,9 @@ class StockAdjustmentRequestData extends DataClass
     map['product_id'] = Variable<String>(productId);
     map['store_id'] = Variable<String>(storeId);
     map['quantity_diff'] = Variable<int>(quantityDiff);
+    if (!nullToAbsent || unitCostKobo != null) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo);
+    }
     map['reason'] = Variable<String>(reason);
     map['summary'] = Variable<String>(summary);
     if (!nullToAbsent || requestedBy != null) {
@@ -22339,6 +22384,9 @@ class StockAdjustmentRequestData extends DataClass
       productId: Value(productId),
       storeId: Value(storeId),
       quantityDiff: Value(quantityDiff),
+      unitCostKobo: unitCostKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitCostKobo),
       reason: Value(reason),
       summary: Value(summary),
       requestedBy: requestedBy == null && nullToAbsent
@@ -22367,6 +22415,7 @@ class StockAdjustmentRequestData extends DataClass
       productId: serializer.fromJson<String>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
       quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
+      unitCostKobo: serializer.fromJson<int?>(json['unitCostKobo']),
       reason: serializer.fromJson<String>(json['reason']),
       summary: serializer.fromJson<String>(json['summary']),
       requestedBy: serializer.fromJson<String?>(json['requestedBy']),
@@ -22386,6 +22435,7 @@ class StockAdjustmentRequestData extends DataClass
       'productId': serializer.toJson<String>(productId),
       'storeId': serializer.toJson<String>(storeId),
       'quantityDiff': serializer.toJson<int>(quantityDiff),
+      'unitCostKobo': serializer.toJson<int?>(unitCostKobo),
       'reason': serializer.toJson<String>(reason),
       'summary': serializer.toJson<String>(summary),
       'requestedBy': serializer.toJson<String?>(requestedBy),
@@ -22403,6 +22453,7 @@ class StockAdjustmentRequestData extends DataClass
     String? productId,
     String? storeId,
     int? quantityDiff,
+    Value<int?> unitCostKobo = const Value.absent(),
     String? reason,
     String? summary,
     Value<String?> requestedBy = const Value.absent(),
@@ -22417,6 +22468,7 @@ class StockAdjustmentRequestData extends DataClass
     productId: productId ?? this.productId,
     storeId: storeId ?? this.storeId,
     quantityDiff: quantityDiff ?? this.quantityDiff,
+    unitCostKobo: unitCostKobo.present ? unitCostKobo.value : this.unitCostKobo,
     reason: reason ?? this.reason,
     summary: summary ?? this.summary,
     requestedBy: requestedBy.present ? requestedBy.value : this.requestedBy,
@@ -22439,6 +22491,9 @@ class StockAdjustmentRequestData extends DataClass
       quantityDiff: data.quantityDiff.present
           ? data.quantityDiff.value
           : this.quantityDiff,
+      unitCostKobo: data.unitCostKobo.present
+          ? data.unitCostKobo.value
+          : this.unitCostKobo,
       reason: data.reason.present ? data.reason.value : this.reason,
       summary: data.summary.present ? data.summary.value : this.summary,
       requestedBy: data.requestedBy.present
@@ -22466,6 +22521,7 @@ class StockAdjustmentRequestData extends DataClass
           ..write('productId: $productId, ')
           ..write('storeId: $storeId, ')
           ..write('quantityDiff: $quantityDiff, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
           ..write('reason: $reason, ')
           ..write('summary: $summary, ')
           ..write('requestedBy: $requestedBy, ')
@@ -22485,6 +22541,7 @@ class StockAdjustmentRequestData extends DataClass
     productId,
     storeId,
     quantityDiff,
+    unitCostKobo,
     reason,
     summary,
     requestedBy,
@@ -22503,6 +22560,7 @@ class StockAdjustmentRequestData extends DataClass
           other.productId == this.productId &&
           other.storeId == this.storeId &&
           other.quantityDiff == this.quantityDiff &&
+          other.unitCostKobo == this.unitCostKobo &&
           other.reason == this.reason &&
           other.summary == this.summary &&
           other.requestedBy == this.requestedBy &&
@@ -22520,6 +22578,7 @@ class StockAdjustmentRequestsCompanion
   final Value<String> productId;
   final Value<String> storeId;
   final Value<int> quantityDiff;
+  final Value<int?> unitCostKobo;
   final Value<String> reason;
   final Value<String> summary;
   final Value<String?> requestedBy;
@@ -22535,6 +22594,7 @@ class StockAdjustmentRequestsCompanion
     this.productId = const Value.absent(),
     this.storeId = const Value.absent(),
     this.quantityDiff = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
     this.reason = const Value.absent(),
     this.summary = const Value.absent(),
     this.requestedBy = const Value.absent(),
@@ -22551,6 +22611,7 @@ class StockAdjustmentRequestsCompanion
     required String productId,
     required String storeId,
     required int quantityDiff,
+    this.unitCostKobo = const Value.absent(),
     required String reason,
     required String summary,
     this.requestedBy = const Value.absent(),
@@ -22572,6 +22633,7 @@ class StockAdjustmentRequestsCompanion
     Expression<String>? productId,
     Expression<String>? storeId,
     Expression<int>? quantityDiff,
+    Expression<int>? unitCostKobo,
     Expression<String>? reason,
     Expression<String>? summary,
     Expression<String>? requestedBy,
@@ -22588,6 +22650,7 @@ class StockAdjustmentRequestsCompanion
       if (productId != null) 'product_id': productId,
       if (storeId != null) 'store_id': storeId,
       if (quantityDiff != null) 'quantity_diff': quantityDiff,
+      if (unitCostKobo != null) 'unit_cost_kobo': unitCostKobo,
       if (reason != null) 'reason': reason,
       if (summary != null) 'summary': summary,
       if (requestedBy != null) 'requested_by': requestedBy,
@@ -22606,6 +22669,7 @@ class StockAdjustmentRequestsCompanion
     Value<String>? productId,
     Value<String>? storeId,
     Value<int>? quantityDiff,
+    Value<int?>? unitCostKobo,
     Value<String>? reason,
     Value<String>? summary,
     Value<String?>? requestedBy,
@@ -22622,6 +22686,7 @@ class StockAdjustmentRequestsCompanion
       productId: productId ?? this.productId,
       storeId: storeId ?? this.storeId,
       quantityDiff: quantityDiff ?? this.quantityDiff,
+      unitCostKobo: unitCostKobo ?? this.unitCostKobo,
       reason: reason ?? this.reason,
       summary: summary ?? this.summary,
       requestedBy: requestedBy ?? this.requestedBy,
@@ -22651,6 +22716,9 @@ class StockAdjustmentRequestsCompanion
     }
     if (quantityDiff.present) {
       map['quantity_diff'] = Variable<int>(quantityDiff.value);
+    }
+    if (unitCostKobo.present) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo.value);
     }
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
@@ -22690,6 +22758,7 @@ class StockAdjustmentRequestsCompanion
           ..write('productId: $productId, ')
           ..write('storeId: $storeId, ')
           ..write('quantityDiff: $quantityDiff, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
           ..write('reason: $reason, ')
           ..write('summary: $summary, ')
           ..write('requestedBy: $requestedBy, ')
@@ -80597,6 +80666,7 @@ typedef $$StockAdjustmentRequestsTableCreateCompanionBuilder =
       required String productId,
       required String storeId,
       required int quantityDiff,
+      Value<int?> unitCostKobo,
       required String reason,
       required String summary,
       Value<String?> requestedBy,
@@ -80614,6 +80684,7 @@ typedef $$StockAdjustmentRequestsTableUpdateCompanionBuilder =
       Value<String> productId,
       Value<String> storeId,
       Value<int> quantityDiff,
+      Value<int?> unitCostKobo,
       Value<String> reason,
       Value<String> summary,
       Value<String?> requestedBy,
@@ -80757,6 +80828,11 @@ class $$StockAdjustmentRequestsTableFilterComposer
 
   ColumnFilters<int> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -80925,6 +81001,11 @@ class $$StockAdjustmentRequestsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get reason => $composableBuilder(
     column: $table.reason,
     builder: (column) => ColumnOrderings(column),
@@ -81085,6 +81166,11 @@ class $$StockAdjustmentRequestsTableAnnotationComposer
 
   GeneratedColumn<int> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
     builder: (column) => column,
   );
 
@@ -81279,6 +81365,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 Value<String> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
                 Value<int> quantityDiff = const Value.absent(),
+                Value<int?> unitCostKobo = const Value.absent(),
                 Value<String> reason = const Value.absent(),
                 Value<String> summary = const Value.absent(),
                 Value<String?> requestedBy = const Value.absent(),
@@ -81294,6 +81381,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 productId: productId,
                 storeId: storeId,
                 quantityDiff: quantityDiff,
+                unitCostKobo: unitCostKobo,
                 reason: reason,
                 summary: summary,
                 requestedBy: requestedBy,
@@ -81311,6 +81399,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 required String productId,
                 required String storeId,
                 required int quantityDiff,
+                Value<int?> unitCostKobo = const Value.absent(),
                 required String reason,
                 required String summary,
                 Value<String?> requestedBy = const Value.absent(),
@@ -81326,6 +81415,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 productId: productId,
                 storeId: storeId,
                 quantityDiff: quantityDiff,
+                unitCostKobo: unitCostKobo,
                 reason: reason,
                 summary: summary,
                 requestedBy: requestedBy,

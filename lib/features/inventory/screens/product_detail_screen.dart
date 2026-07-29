@@ -1712,10 +1712,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   }
 
   /// "Update Stock" modal (master plan §16.6): add / remove a quantity against
-  /// a store, with a required reason on removal, optional notes. A **stock
-  /// keeper**'s change is queued for Manager/CEO approval (§16.6.1) via
-  /// `requestStockAdjustment` — inventory is untouched until approved. A
-  /// Manager/CEO applies it directly through `adjustStock` (cloud delta
+  /// a store, with a required reason on removal, optional notes, and — on an
+  /// add — what the goods cost per unit (#197, PRD #155 US 22), which is what
+  /// prices the FIFO batch the increase mints. A **stock keeper**'s change is
+  /// queued for Manager/CEO approval (§16.6.1) via `requestStockAdjustment`,
+  /// carrying that cost on the request — inventory is untouched until approved.
+  /// A Manager/CEO applies it directly through `adjustStock` (cloud delta
   /// envelope enqueued) and logs to History.
   Future<void> _showUpdateStockModal() async {
     final product = _productData;
@@ -1757,6 +1759,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               required StoreData store,
               String? reason,
               required String notes,
+              int? unitCostKobo,
             }) async {
               final auth = ref.read(authProvider);
               final actorName = auth.currentUser?.name ?? 'Unknown';
@@ -1777,6 +1780,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   // Record a pending request; inventory stays untouched until it is
                   // approved in the Reports hub. The DAO fires the approval-request
                   // notification to the CEO + the affected store's Manager(s).
+                  // #197 (US 22): the captured cost rides ON the request, so the
+                  // batch the approval mints is priced at what the goods
+                  // actually cost instead of whatever could be inferred later.
                   await db.stockAdjustmentRequestsDao.requestStockAdjustment(
                     productId: product.id,
                     storeId: store.id,
@@ -1784,17 +1790,22 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     reason: note,
                     summary: summary,
                     requestedBy: auth.currentUser?.id,
+                    unitCostKobo: unitCostKobo,
                   );
                   sentForApproval = true;
                   return null;
                 }
-                // Manager / CEO adjust directly — no approval needed.
+                // Manager / CEO adjust directly — no approval needed. Their add
+                // mints the same inflow batch an approval does, so the sheet's
+                // cost has to reach it here too (#197); null keeps #189's
+                // recorded-price fallback.
                 await db.inventoryDao.adjustStock(
                   product.id,
                   store.id,
                   delta,
                   note,
                   auth.currentUser?.id,
+                  inflowUnitCostKobo: unitCostKobo,
                 );
                 await ref
                     .read(activityLogProvider)
@@ -2074,12 +2085,15 @@ class _UpdateStockSheet extends ConsumerStatefulWidget {
   final bool Function() canRemoveNow;
   // Performs the movement on the screen. Returns null on success, or an error
   // message to surface in the sheet (the sheet stays open on error).
+  // [unitCostKobo] is what the added goods cost per unit (#197, US 22) — null on
+  // a removal, and null on an add where the user stated nothing.
   final Future<String?> Function({
     required bool isRemove,
     required int qty,
     required StoreData store,
     String? reason,
     required String notes,
+    int? unitCostKobo,
   })
   onSave;
 
@@ -2090,6 +2104,10 @@ class _UpdateStockSheet extends ConsumerStatefulWidget {
 class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
   final _qtyCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  // #197 (US 22): what the added goods cost, per unit. Add mode only — a
+  // removal is valued by drawing this store's FIFO queue, not by the person
+  // filing it.
+  final _costCtrl = TextEditingController();
   static const _reasons = ['Damage', 'Theft', 'Expired', 'Other'];
 
   late bool _isRemove;
@@ -2119,7 +2137,47 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
   void dispose() {
     _qtyCtrl.dispose();
     _notesCtrl.dispose();
+    _costCtrl.dispose();
     super.dispose();
+  }
+
+  /// #197 (US 22): the per-unit cost typed into the sheet, in kobo — `null` when
+  /// none was stated, which is what lets the approval fall back to the product's
+  /// recorded price (#189) instead of minting a phantom-0 batch.
+  ///
+  /// A typed `0` also reads as "not stated": the field is optional and offers no
+  /// way to say "these goods were genuinely free", so honouring it as the
+  /// deliberate Uncosted 0 that `adjustStock` treats an explicit 0 as would turn
+  /// a slip of the finger into units that sell at 0 COGS forever.
+  int? get _unitCostKobo {
+    if (_isRemove) return null;
+    final naira = parseCurrency(_costCtrl.text.trim());
+    final kobo = (naira * 100).round();
+    return kobo > 0 ? kobo : null;
+  }
+
+  /// The product's recorded buying price, shown as the cost field's placeholder
+  /// so the number a blank field will use is visible before it is used. Empty
+  /// when nothing is on file — a `0.00` placeholder there would read as a price
+  /// rather than as the absence of one, contradicting [_blankCostNote] directly
+  /// beneath it.
+  String get _recordedCostHint {
+    final recordedKobo = widget.product.buyingPriceKobo;
+    if (recordedKobo <= 0) return '';
+    return (recordedKobo / 100).toStringAsFixed(2);
+  }
+
+  /// Says out loud what leaving the cost blank will do — the recorded price
+  /// (#189), or nothing at all when the product has no price on file. Naming the
+  /// consequence is the difference between an optional field and a silent one.
+  String get _blankCostNote {
+    final recordedKobo = widget.product.buyingPriceKobo;
+    if (recordedKobo > 0) {
+      return 'Leave blank to use the recorded '
+          '${formatCurrency(recordedKobo / 100)}.';
+    }
+    return 'Leave blank if you don\'t know — these units will carry no cost '
+        'until a price is set.';
   }
 
   Future<void> _doSave() async {
@@ -2158,6 +2216,7 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
       store: _selectedStore,
       reason: _reason,
       notes: _notesCtrl.text.trim(),
+      unitCostKobo: _unitCostKobo,
     );
     if (!mounted) return;
     if (error == null) {
@@ -2284,6 +2343,31 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
               hintText: '0',
               keyboardType: TextInputType.number,
             ),
+            // #197 (US 22): what the goods cost. Add mode only — a removal is
+            // valued by drawing this store's FIFO queue (#7a), which the person
+            // filing the change cannot know. Optional: a recount that simply
+            // found more units has no invoice behind it, and then the recorded
+            // price is used (#189).
+            if (!_isRemove) ...[
+              SizedBox(height: context.getRSize(14)),
+              AppInput(
+                controller: _costCtrl,
+                labelText: 'Cost per unit (optional)',
+                hintText: _recordedCostHint,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [CurrencyInputFormatter()],
+                prefixText: '$activeCurrencySymbol ',
+              ),
+              SizedBox(height: context.getRSize(6)),
+              Text(
+                _blankCostNote,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: _subtext),
+              ),
+            ],
             if (_isRemove) ...[
               const SizedBox(height: 14),
               Text(

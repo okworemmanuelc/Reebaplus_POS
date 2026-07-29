@@ -2372,7 +2372,6 @@ void main() {
       );
     });
   });
-
   group('onUpgrade v74 → v75 (the crate-settlement claim, #188)', () {
     // Seeds a business + a crate line on the reverted (pre-v75) table and
     // returns (businessId, crateLineId).
@@ -2495,6 +2494,158 @@ void main() {
       final rows =
           await db2.customSelect('SELECT id FROM order_crate_lines').get();
       expect(rows.map((r) => r.read<String>('id')), [lineId]);
+    });
+  });
+
+  group('onUpgrade v75 → v76 (a stock request records what the goods cost, '
+      '#197)', () {
+    /// Reverts the v76 delta: drop the one added column.
+    /// `stock_adjustment_requests` has no CHECK mentioning it and nothing
+    /// references it, so a raw DROP COLUMN is enough — no table rebuild.
+    Future<void> dropRequestUnitCost(AppDatabase db) async {
+      await db.customStatement(
+        'ALTER TABLE stock_adjustment_requests DROP COLUMN unit_cost_kobo',
+      );
+    }
+
+    /// A business + store + product + stock-keeper, the FK parents every request
+    /// row needs.
+    Future<Map<String, String>> seedTenant(AppDatabase db) async {
+      final biz = UuidV7.generate();
+      final storeId = UuidV7.generate();
+      final productId = UuidV7.generate();
+      final userId = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Main')",
+        [storeId, biz],
+      );
+      await db.customStatement(
+        "INSERT INTO products (id, business_id, name, buying_price_kobo) "
+        "VALUES (?, ?, 'Star', 15000)",
+        [productId, biz],
+      );
+      await db.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Akin', '0000')",
+        [userId, biz],
+      );
+      return {
+        'biz': biz,
+        'store': storeId,
+        'product': productId,
+        'user': userId,
+      };
+    }
+
+    test('adds stock_adjustment_requests.unit_cost_kobo; requests filed before '
+        'the upgrade keep it NULL and still approve', () async {
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      final legacyRequestId = UuidV7.generate();
+
+      await dropRequestUnitCost(db1);
+      expect(
+        (await columnsOf(db1, 'stock_adjustment_requests'))
+            .contains('unit_cost_kobo'),
+        isFalse,
+      );
+
+      // A request filed on the pre-v76 shape — it captured no cost because there
+      // was nowhere to put one. It must survive the upgrade untouched.
+      await db1.customStatement(
+        'INSERT INTO stock_adjustment_requests (id, business_id, product_id, '
+        'store_id, quantity_diff, reason, summary, requested_by) '
+        "VALUES (?, ?, ?, ?, 10, 'recount found more', 'Akin added 10', ?)",
+        [
+          legacyRequestId,
+          ids['biz']!,
+          ids['product']!,
+          ids['store']!,
+          ids['user']!,
+        ],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 75');
+      await db1.close();
+
+      // Re-open → onUpgrade(75 → 76) adds the nullable column.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(
+        (await columnsOf(db2, 'stock_adjustment_requests'))
+            .contains('unit_cost_kobo'),
+        isTrue,
+      );
+
+      // The legacy request survives, still pending, with a NULL cost — which is
+      // exactly right: it never stated one, so its approval falls back to the
+      // product's recorded price (#189) instead of asserting a made-up figure.
+      final legacy = await db2
+          .customSelect(
+            'SELECT status, quantity_diff, unit_cost_kobo '
+            'FROM stock_adjustment_requests WHERE id = ?',
+            variables: [Variable<String>(legacyRequestId)],
+          )
+          .getSingle();
+      expect(legacy.data['status'], 'pending');
+      expect(legacy.data['quantity_diff'], 10);
+      expect(legacy.data['unit_cost_kobo'], isNull);
+
+      // …and a new request can carry a cost far above the int4 ceiling the cloud
+      // column used to risk (₦21,474,836.47 — see 0130): kobo columns are 64-bit
+      // here and `bigint` in 0168, so a bulk delivery cannot jam the outbox.
+      final bigRequestId = UuidV7.generate();
+      await db2.customStatement(
+        'INSERT INTO stock_adjustment_requests (id, business_id, product_id, '
+        'store_id, quantity_diff, unit_cost_kobo, reason, summary) '
+        "VALUES (?, ?, ?, ?, 5, 3000000000, 'imported pallet', 'Akin added 5')",
+        [bigRequestId, ids['biz']!, ids['product']!, ids['store']!],
+      );
+      final big = await db2
+          .customSelect(
+            'SELECT unit_cost_kobo FROM stock_adjustment_requests WHERE id = ?',
+            variables: [Variable<String>(bigRequestId)],
+          )
+          .getSingle();
+      expect(big.data['unit_cost_kobo'], 3000000000);
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT drop the column — just step user_version back, so the v76 block
+      // runs against a schema that already has it (also the shape a fresh
+      // install lands in: the v34 createTable builds from the CURRENT Dart
+      // definition). The guard must skip the addColumn, losing no rows.
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      final requestId = UuidV7.generate();
+      await db1.customStatement(
+        'INSERT INTO stock_adjustment_requests (id, business_id, product_id, '
+        'store_id, quantity_diff, unit_cost_kobo, reason, summary) '
+        "VALUES (?, ?, ?, ?, 10, 18000, 'delivery', 'Akin added 10')",
+        [requestId, ids['biz']!, ids['product']!, ids['store']!],
+      );
+      await db1.customStatement('PRAGMA user_version = 75');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(
+        (await columnsOf(db2, 'stock_adjustment_requests'))
+            .contains('unit_cost_kobo'),
+        isTrue,
+      );
+      final row = await db2
+          .customSelect(
+            'SELECT unit_cost_kobo FROM stock_adjustment_requests WHERE id = ?',
+            variables: [Variable<String>(requestId)],
+          )
+          .getSingle();
+      expect(row.data['unit_cost_kobo'], 18000);
     });
   });
 }

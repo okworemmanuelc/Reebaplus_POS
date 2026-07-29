@@ -2134,6 +2134,14 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
   /// approval-request notification to the CEO and the Manager(s) of the
   /// affected store. If no Manager is tied to that store, only the CEO is
   /// notified (same audience rule as the old §26.4 post-hoc notice).
+  ///
+  /// [unitCostKobo] is what the goods cost, per unit (#197, PRD #155 US 22).
+  /// The person filing the request is the one holding the invoice, so this is
+  /// the only place that cost can be captured; [approveRequest] threads it into
+  /// the inflow batch. `null` means "not stated" — the approval then falls back
+  /// to the product's recorded price (#189) rather than inventing a 0. Only an
+  /// **increase** carries one: a decrease values itself off this store's FIFO
+  /// queue (#7a), which the requester cannot know.
   Future<void> requestStockAdjustment({
     required String productId,
     required String storeId,
@@ -2141,6 +2149,7 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
     required String reason,
     required String summary,
     required String? requestedBy,
+    int? unitCostKobo,
   }) async {
     final row = StockAdjustmentRequestsCompanion.insert(
       id: Value(UuidV7.generate()),
@@ -2148,6 +2157,7 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
       productId: productId,
       storeId: storeId,
       quantityDiff: quantityDiff,
+      unitCostKobo: Value(quantityDiff > 0 ? unitCostKobo : null),
       reason: reason,
       summary: summary,
       requestedBy: Value(requestedBy),
@@ -2190,6 +2200,12 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
   /// `approved`, and notify the requester. Throws (rolling back the whole
   /// transaction) if the adjustment can't be applied — e.g. a Remove that would
   /// take stock negative — leaving the request `pending` for a retry.
+  ///
+  /// **US 22 (#197):** the increase is batched at the cost the REQUEST captured
+  /// (`unit_cost_kobo`), so the units it adds sell at real COGS. `null` — a
+  /// request that stated no cost, and every request written before this shipped
+  /// — hands `adjustStock` an omitted cost, which falls back to the product's
+  /// recorded scalar price (#189). A stated cost always wins over that fallback.
   Future<void> approveRequest({
     required String requestId,
     required String approverId,
@@ -2206,12 +2222,15 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
       if (req == null || req.status != 'pending') return;
 
       // Apply the actual stock movement (atomic via pos_inventory_delta_v2).
+      // #197: the cost the request captured is what the increase's FIFO batch is
+      // priced at; null defers to #189's recorded-price fallback.
       await db.inventoryDao.adjustStock(
         req.productId,
         req.storeId,
         req.quantityDiff,
         req.reason,
         req.requestedBy,
+        inflowUnitCostKobo: req.unitCostKobo,
       );
 
       final now = DateTime.now();
