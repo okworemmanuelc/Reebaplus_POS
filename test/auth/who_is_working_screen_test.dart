@@ -93,6 +93,18 @@ void main() {
   tearDown(() => db.close());
 
   Future<ProviderContainer> pumpPicker(WidgetTester tester) async {
+    // Pin a real phone surface (375x812 logical). The default 800x600 test
+    // surface is a trap here: `_scaleFactor` keys off WIDTH only, so 800px wide
+    // pegs the responsive scale at its 1.5x cap and inflates the header to
+    // ~277px — while the surface is still only 600px tall. That leaves the
+    // staff ListView a ~205px viewport (~1.5 cards), so the third card lays out
+    // below the fold. It is still *built* (250px cacheExtent), but `find.text`
+    // skips offstage widgets by default, so the assertion can't see it.
+    tester.view.physicalSize = const Size(1125, 2436);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final client = Supabase.instance.client;
     final fake = _FakeAuth(
       db,
