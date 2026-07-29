@@ -10,6 +10,53 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Stores settings — add-a-van crash fixed + Add-a-store shipped (2026-07-29)
+
+Two on-device reports, one code bug and one environment problem. Branch
+`fix/stores-settings-add-store-and-van-crash`.
+
+**1. "Add a van" crashed — FIXED.** `A TextEditingController was used after
+being disposed.` The sheet took its controllers from `_addVan`, which disposed
+them the instant `showModalBottomSheet` returned — but that future completes on
+`Navigator.pop`, while the sheet is still animating out with its `TextFormField`s
+mounted. They then touched disposed controllers and threw.
+
+The fix moves ownership: `_AddLocationSheet` creates and disposes its own
+controllers and returns the values as a `_NewLocation` through `pop`. Lifetime
+and ownership now sit in one place. Regression-proved — reinstating the old
+disposal turns the new tests red with the user's exact error message.
+
+**2. "Adding more stores is coming in a future update" — REMOVED, and adding a
+store now works.** Multi-store was already supported everywhere downstream
+(store lock, transfers, per-store ledgers/reports) and `StoresDao.createStore`
+already took `kind`, but **no surface ever called it with `kStoreKindStore`** —
+onboarding minted the only store a business could ever have. Settings → Stores
+now carries an "Add a store" button beside "Add a van"; both run the single
+`_addLocation({required bool isVan})` path so the gate, the insert and the
+activity-log action can't drift. `stores.manage` owns a store, `van.manage` a
+van, checked at fire time (hard rule #6). New action key:
+`settings.store.create`.
+
+Also fixed the app's only `deviceBottomInset` call site (the documented-wrong
+helper — [[feedback_keyboard_double_inset]]) in that sheet → `deviceBottomPadding`.
+
+**3. "Debug runs sign me out completely" — NOT A CODE BUG.** The emulator's
+`/data` partition is 91% full (579 MB free, 6 GB partition) and the debug APK is
+179 MB (`kernel_blob.bin` alone is 117 MB). `adb install -r` fails with
+`INSTALL_FAILED_INSUFFICIENT_STORAGE`, so the Flutter tool falls back to
+**uninstall + reinstall**, wiping `/data/user/0/com.reebaplus.pos` — meaning
+flutter_secure_storage (`secure_device_user_id`), the Drift DB and the persisted
+Supabase session all vanish, so `_HomeRouter` sees `hasDeviceUser == false` and
+lands on `WelcomeScreen`. Confirmed in the verbose run log and by
+`firstInstallTime == lastUpdateTime` on the installed package. Fix is emulator
+capacity (raise `disk.dataPartition.size` in
+`~/.android/avd/Pixel_7_Pro.avd/config.ini`, or wipe/recreate the AVD), not app
+code. `pm trim-caches` recovered only 45 MB — not enough.
+
+Tests: `test/settings/stores_settings_screen_test.dart` (7 cases — both kinds,
+kind isolation, empty-name rejection, barrier dismiss, retired copy gone, and
+the cashier no-access path).
+
 ### #203 — crate-deposit OUTFLOW settlement: PRD WRITTEN + published (2026-07-29)
 Grilling session on the #155 carve-out. **No code written.** Output is
 **ADR 0023** (`docs/adr/0023-crate-deposit-outflow-settlement.md`), four new

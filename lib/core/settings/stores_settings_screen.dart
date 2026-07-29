@@ -12,14 +12,20 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
-/// CEO Settings > Stores (§10.1). Edits the business's store(s) — name +
-/// single `location` address. Name/address persist to the `stores` row via
-/// [StoresDao.updateStore] (synced). Adding more stores is Phase 2.
+/// CEO Settings > Stores (§10.1). Registers and edits the business's stores —
+/// name + single `location` address. Name/address persist to the `stores` row
+/// via [StoresDao.updateStore] (synced); new stores go through
+/// [StoresDao.createStore].
+///
+/// This is the **only** surface that creates a `stores` row after onboarding
+/// (which mints the first one), so both the store and the van affordances live
+/// here.
 ///
 /// Also the registration desk for **vans** (#140, van-sales spec §4.1). A van
 /// is a `stores` row with `kind = 'van'` — it holds real per-SKU inventory but
 /// is hidden from every normal store surface, so this screen is the one place
-/// it is visible and editable until the Van Sales hub lands in #141.
+/// it is visible and editable (the Van Sales hub operates vans; it does not
+/// register them). Both affordances run through the single [_addLocation] path.
 ///
 /// Note: the `stores` table holds only `name` + a single `location` string
 /// (onboarding fuses street/state/country into it), so there are no separate
@@ -127,53 +133,58 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     }
   }
 
-  /// Register a new van. A van is a location, so this is the same `stores`
-  /// insert a warehouse gets — only `kind` differs, and that one field is what
-  /// keeps it out of every store picker, store list and per-store report.
-  Future<void> _addVan() async {
+  /// Register a new location — a store or a van. A van is the same `stores`
+  /// insert a warehouse gets and only `kind` differs, which is what keeps it out
+  /// of every store picker, store list and per-store report. One method for both
+  /// so the gate, the insert and the activity-log action can never drift apart.
+  Future<void> _addLocation({required bool isVan}) async {
     // Write boundary (hard rule #6) — re-checked at fire time, not just render.
-    if (!Gates.vanManage.allowsNow(ref)) {
-      showGateDenied(context, Gates.vanManage);
+    final gate = isVan ? Gates.vanManage : Gates.manageStores;
+    if (!gate.allowsNow(ref)) {
+      showGateDenied(context, gate);
       return;
     }
-    final nameCtrl = TextEditingController();
-    final noteCtrl = TextEditingController();
-    final created = await showModalBottomSheet<bool>(
+    // The sheet owns its controllers and hands the values back through `pop`,
+    // so there is nothing here to dispose — see [_AddLocationSheet].
+    final created = await showModalBottomSheet<_NewLocation>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetCtx) => _AddVanSheet(
-        nameController: nameCtrl,
-        noteController: noteCtrl,
-      ),
+      builder: (_) => _AddLocationSheet(isVan: isVan),
     );
-    final name = nameCtrl.text.trim();
-    final note = noteCtrl.text.trim();
-    nameCtrl.dispose();
-    noteCtrl.dispose();
-    if (created != true || name.isEmpty) return;
+    // A non-null result means the sheet's validator passed, so the name is
+    // already known non-empty.
+    if (created == null) return;
 
     final db = ref.read(databaseProvider);
     try {
       await db.storesDao.createStore(
-        name: name,
-        location: note,
-        kind: kStoreKindVan,
+        name: created.name,
+        location: created.note,
+        kind: isVan ? kStoreKindVan : kStoreKindStore,
       );
       await db.activityLogDao.log(
-        action: 'settings.van.create',
-        description: 'Registered van "$name"',
+        action: isVan ? 'settings.van.create' : 'settings.store.create',
+        description: isVan
+            ? 'Registered van "${created.name}"'
+            : 'Added store "${created.name}"',
         staffId: db.currentUserId,
       );
       await _load();
       if (!mounted) return;
-      AppNotification.showSuccess(context, 'Van added.');
+      AppNotification.showSuccess(
+        context,
+        isVan ? 'Van added.' : 'Store added.',
+      );
     } catch (_) {
       if (!mounted) return;
-      AppNotification.showError(context, 'Couldn\'t add the van.');
+      AppNotification.showError(
+        context,
+        isVan ? 'Couldn\'t add the van.' : 'Couldn\'t add the store.',
+      );
     }
   }
 
@@ -216,13 +227,10 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    const SizedBox(height: 8),
-                    Text(
-                      'Adding more stores is coming in a future update.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: t.colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
+                    OutlinedButton.icon(
+                      onPressed: () => _addLocation(isVan: false),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Add a store'),
                     ),
                   ],
                   if (canManageVans) ...[
@@ -266,7 +274,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
                         ),
                       ),
                     OutlinedButton.icon(
-                      onPressed: _addVan,
+                      onPressed: () => _addLocation(isVan: true),
                       icon: const Icon(Icons.add_rounded),
                       label: const Text('Add a van'),
                     ),
@@ -331,34 +339,78 @@ class _LocationCard extends StatelessWidget {
   }
 }
 
-/// The "Add a van" bottom sheet — name (required) + an optional note that is
-/// stored in the same `location` column a store's address uses (plate number,
-/// route, whatever the owner calls it).
-class _AddVanSheet extends StatefulWidget {
-  const _AddVanSheet({
-    required this.nameController,
-    required this.noteController,
-  });
+/// What an add-location sheet hands back: a name plus the optional second line
+/// that lands in the `location` column. Returned through `Navigator.pop` rather
+/// than read off caller-owned controllers — that indirection is what lets the
+/// sheet own its own fields (see [_AddLocationSheet]).
+class _NewLocation {
+  const _NewLocation({required this.name, required this.note});
 
-  final TextEditingController nameController;
-  final TextEditingController noteController;
+  /// Non-empty — the sheet only pops once its validator has passed.
+  final String name;
 
-  @override
-  State<_AddVanSheet> createState() => _AddVanSheetState();
+  /// A store's address or a van's plate/route. May be empty; `createStore`
+  /// stores empty as NULL.
+  final String note;
 }
 
-class _AddVanSheetState extends State<_AddVanSheet> {
+/// The "Add a store" / "Add a van" bottom sheet — a name (required) plus an
+/// optional second line stored in the same `location` column (a store's
+/// address; a van's plate number or route). The two differ only in wording and
+/// icon, because a van *is* a `stores` row.
+///
+/// **Owns its controllers.** They are created and disposed inside this State so
+/// they can never be disposed out from under the fields reading them. The
+/// earlier version took them from the caller, which disposed them the moment
+/// `showModalBottomSheet` returned — but that future completes when `pop` is
+/// called, while the sheet is still animating out and its `TextFormField`s are
+/// still mounted, so they touched a disposed `TextEditingController` and threw
+/// "A TextEditingController was used after being disposed." Keeping ownership
+/// and lifetime in one place is the fix; hence [_NewLocation] as the result.
+class _AddLocationSheet extends StatefulWidget {
+  const _AddLocationSheet({required this.isVan});
+
+  final bool isVan;
+
+  @override
+  State<_AddLocationSheet> createState() => _AddLocationSheetState();
+}
+
+class _AddLocationSheetState extends State<_AddLocationSheet> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(
+      context,
+      _NewLocation(
+        name: _nameController.text.trim(),
+        note: _noteController.text.trim(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final isVan = widget.isVan;
     return Padding(
+      // deviceBottomPadding (nav only), never deviceBottomInset: the sheet sits
+      // under MainLayout's Scaffold, which already resizes for the keyboard.
       padding: EdgeInsets.fromLTRB(
         context.getRSize(24),
         context.getRSize(20),
         context.getRSize(24),
-        context.getRSize(24) + context.deviceBottomInset,
+        context.getRSize(24) + context.deviceBottomPadding,
       ),
       child: Form(
         key: _formKey,
@@ -367,48 +419,55 @@ class _AddVanSheetState extends State<_AddVanSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Add a van',
+              isVan ? 'Add a van' : 'Add a store',
               style: t.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             SizedBox(height: context.getRSize(6)),
             Text(
-              'Give it a name your drivers will recognise.',
+              isVan
+                  ? 'Give it a name your drivers will recognise.'
+                  : 'Give it a name your staff will recognise.',
               style: t.textTheme.bodySmall?.copyWith(
                 color: t.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
             SizedBox(height: context.getRSize(20)),
             TextFormField(
-              controller: widget.nameController,
+              controller: _nameController,
               autofocus: true,
               textCapitalization: TextCapitalization.words,
               decoration: AppDecorations.authInputDecoration(
                 context,
-                label: 'Van name',
-                prefixIcon: Icons.local_shipping_rounded,
+                label: isVan ? 'Van name' : 'Store name',
+                prefixIcon: isVan
+                    ? Icons.local_shipping_rounded
+                    : Icons.store_rounded,
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Give the van a name' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? (isVan ? 'Give the van a name' : 'Give the store a name')
+                  : null,
             ),
             SizedBox(height: context.getRSize(16)),
             TextFormField(
-              controller: widget.noteController,
+              controller: _noteController,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _submit(),
               decoration: AppDecorations.authInputDecoration(
                 context,
-                label: 'Plate number or route (optional)',
+                label: isVan
+                    ? 'Plate number or route (optional)'
+                    : 'Address (optional)',
                 prefixIcon: Icons.location_on_rounded,
               ),
             ),
             SizedBox(height: context.getRSize(24)),
             _SaveButton(
               saving: false,
-              label: 'Add van',
-              onPressed: () {
-                if (!_formKey.currentState!.validate()) return;
-                Navigator.pop(context, true);
-              },
+              label: isVan ? 'Add van' : 'Add store',
+              onPressed: _submit,
             ),
           ],
         ),
