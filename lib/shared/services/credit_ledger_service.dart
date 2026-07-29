@@ -17,11 +17,28 @@ class CreditLedgerService {
   ///
   /// Creates a WalletTransaction (credit) and a corresponding PaymentTransaction
   /// (wallet_topup), atomically in one transaction.
+  ///
+  /// [storeId] is the store this collection is stamped against (PRD #155 US 36
+  /// — every NEW payment row carries its store, so store-scoped money reports
+  /// can see it). Callers pass the active write store
+  /// (`activeWriteStoreProvider`: the locked store, else the user's first
+  /// selectable store); null is tolerated and reports business-wide, exactly as
+  /// legacy rows do.
+  ///
+  /// Note: only the v1 (flag-OFF) path keeps this stamp. The v2
+  /// `pos_wallet_topup` RPC takes no store parameter, and the sync service
+  /// restores the row the server returns back over the local one
+  /// (`supabase_sync_service.dart`, the domain-RPC response branch) — so with
+  /// the flag ON the store is lost locally too, not just in the cloud. The flag
+  /// is held off in Phase 1; closing this needs a migration that adds
+  /// `p_store_id` AND drops the old signature (an added param makes an
+  /// overload, not a replacement — PGRST203).
   Future<void> topup({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' or 'transfer'
     required String staffId,
+    String? storeId,
   }) async {
     final businessId = _walletTxDao.requireBusinessId();
     final wallet = await _customerWalletsDao.getByCustomerId(customerId);
@@ -58,6 +75,7 @@ class CreditLedgerService {
       final paymentComp = PaymentTransactionsCompanion.insert(
         id: Value(paymentTxnId),
         businessId: businessId,
+        storeId: Value(storeId),
         amountKobo: amountKobo,
         method: method,
         type: 'wallet_topup',
@@ -151,6 +169,13 @@ class CreditLedgerService {
   /// `refund` debit + cash row. Payment rows link via wallet_txn_id (the
   /// PaymentTransactions exactly-one-reference rule).
   ///
+  /// [storeId] is the store the money leaves from, stamped on every cash-out
+  /// payment row (PRD #155 US 36). This is load-bearing, not cosmetic: the
+  /// Sales card's Refunds figure is store-filtered, and a store-less refund is
+  /// excluded outright under a locked store (#194). Callers pass the active
+  /// write store (`activeWriteStoreProvider`); null reports business-wide, as
+  /// legacy rows do.
+  ///
   /// Also writes an `activity_logs` entry and fires a notification (§24 money
   /// movement / §26.4 refund issued). Returns the amount actually refunded
   /// (after capping) so the caller can confirm or report "nothing to refund".
@@ -159,6 +184,7 @@ class CreditLedgerService {
     required int amountKobo,
     required String method, // 'cash' | 'transfer' | 'pos' | 'other'
     required String staffId,
+    String? storeId,
     String? note,
   }) async {
     if (amountKobo <= 0) return 0;
@@ -211,6 +237,7 @@ class CreditLedgerService {
         final payComp = PaymentTransactionsCompanion.insert(
           id: Value(UuidV7.generate()),
           businessId: businessId,
+          storeId: Value(storeId),
           amountKobo: portion,
           method: method,
           type: 'refund',

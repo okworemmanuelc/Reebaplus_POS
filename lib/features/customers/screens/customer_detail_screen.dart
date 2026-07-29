@@ -382,6 +382,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           );
                           return;
                         }
+                        // PRD #155 US 36 — every new payment row carries the
+                        // store it happened at, resolved the same way an
+                        // expense (§20.8) and a POS sale resolve it.
+                        final storeId = ref.read(activeWriteStoreProvider).id;
                         Navigator.pop(ctx);
                         try {
                           await ref
@@ -391,6 +395,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 amountKobo: (amount * 100).round(),
                                 method: method,
                                 staffId: staffId,
+                                storeId: storeId,
                                 note: note.isEmpty ? null : note,
                               );
                           messenger.showSnackBar(
@@ -689,6 +694,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           );
                           return;
                         }
+                        // The Sales card's Refunds figure is store-filtered, so
+                        // an unstamped cash-out vanishes under a locked store
+                        // (#194). Same store resolution as Add Credit above.
+                        final storeId = ref.read(activeWriteStoreProvider).id;
                         Navigator.pop(ctx);
                         try {
                           final refundedKobo = await ref
@@ -698,6 +707,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 amountKobo: amountKobo,
                                 method: method,
                                 staffId: staffId,
+                                storeId: storeId,
                                 note: note.isEmpty ? null : note,
                               );
                           messenger.showSnackBar(

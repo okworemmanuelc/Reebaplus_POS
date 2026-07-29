@@ -3839,6 +3839,40 @@ server-side; guessing would fabricate a concession). `flutter analyze` clean; th
 PR only. Out of scope: the `checkout_order` deposit-0 hardwire; the reebaplus-web
 repo; the v1 `pos_record_sale` RPC (not a sale enqueue path).
 
+**2026-07-29 — `CreditLedgerService` payment rows stamp `store_id`
+(#194, PRD #155 US 36).** Two live `payment_transactions` insert sites never set
+`store_id`, so both wrote NULL: the `wallet_topup` row in
+`CreditLedgerService.topup` (Add Credit / repayment collection) and `postCashRow`
+in `refundCash` (the §18.3 cash-out `refund` row). That is load-bearing on the
+refund side — the Sales card's Refunds figure is store-scoped (the
+`refundsKobo` loop in `recon_data.dart` calls `inScope(p.storeId)`) and
+`reconStoreFilter` returns false for a null store under a locked store
+(`recon_data.dart:98`), so a customer cash refund **silently disappeared
+from the Sales card whenever a store was locked** while staying visible under All
+Stores. (The `wallet_topup` rows were harmless only by luck: the cash card does
+not filter store.) Fix: an optional `storeId` threaded through
+`CreditLedgerService.topup` / `refundCash` → `CustomerService.topUpWallet` /
+`refundCashFromWallet` → the two Customer Details sheets, which resolve it from
+**`activeWriteStoreProvider`** (locked store, else the user's first selectable
+store, else their home store) — the same resolution an expense (§20.8), a
+supplier activity (§21.11) and a POS sale already use, and one that never returns
+a van. Null is still accepted and reports business-wide exactly as legacy rows
+do. Matches the other stamped writers (`daos_orders.dart:934`/`:1211`,
+`daos_expenses.dart:141`, the `daos_payments.dart:59` reversal seam). No schema
+change, no payment-type change, no reporting change. New regression
+`test/wallet/credit_ledger_store_stamp_test.dart` (4) pins the stamp on the local
+row **and** on the pushed payload for both paths, plus the store-less fallback.
+**Known gap — SHOULD BE FILED as a follow-up:** only the v1 (flag-OFF) path
+keeps the stamp. The v2 `pos_wallet_topup` RPC takes no store parameter, and the
+sync service routes the row the server returns through `_restoreTableData`,
+which overwrites the pre-inserted local row — so with
+`feature.domain_rpcs_v2.wallet_topup` ON the store is lost **locally as well as
+in the cloud**, not merely omitted from the cloud. The flag is held off in Phase
+1, and closing it needs a migration adding `p_store_id` **plus** dropping the
+old signature (an added param creates an overload → PGRST203,
+[[project_rpc_param_add_overload_trap]]), which is a deploy-ordering change well
+outside this fix. Documented at the call site; not filed by this session.
+
 **To resume in a new session:**
 Read this file first, then `CLAUDE.md`, then the master plan section relevant
 to the unit being picked up.

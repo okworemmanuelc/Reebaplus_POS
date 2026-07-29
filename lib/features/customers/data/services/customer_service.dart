@@ -141,11 +141,15 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
   /// §18 Add Credit — top up a registered customer's credit balance. The credit + payment
   /// ledger writes are atomic via CreditLedgerService.topup.
+  ///
+  /// [storeId] is the active write store the collection is stamped against
+  /// (PRD #155 US 36) — the caller resolves it from `activeWriteStoreProvider`.
   Future<void> topUpWallet({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' | 'transfer'
     required String staffId,
+    String? storeId,
     String? note,
   }) async {
     final customer = getById(customerId);
@@ -154,6 +158,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
       amountKobo: amountKobo,
       method: method,
       staffId: staffId,
+      storeId: storeId,
     );
     final naira = (amountKobo / 100).round();
     await _log.logAction(
@@ -169,11 +174,17 @@ class CustomerService extends ValueNotifier<List<Customer>> {
   /// spendable credit). Delegates to CreditLedgerService.refundCash, which writes the
   /// wallet + payment ledger, the activity log, and the notification atomically.
   /// Returns the amount actually refunded after capping at what's available.
+  ///
+  /// [storeId] is the active write store the cash-out is stamped against — the
+  /// Refunds figure is store-filtered, so an unstamped refund disappears from
+  /// the Sales card under a locked store (#194). The caller resolves it from
+  /// `activeWriteStoreProvider`.
   Future<int> refundCashFromWallet({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' | 'transfer' | 'pos' | 'other'
     required String staffId,
+    String? storeId,
     String? note,
   }) {
     return CreditLedgerService(_db).refundCash(
@@ -181,6 +192,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
       amountKobo: amountKobo,
       method: method,
       staffId: staffId,
+      storeId: storeId,
       note: note,
     );
   }
