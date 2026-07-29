@@ -182,6 +182,7 @@ void main() {
         dateReceived: DateTime(2026, 6, 1),
         staffId: userId,
         lines: lines,
+        fullCratesReceivedByManufacturer: const {},
         emptiesReturnedByManufacturer: const {manufacturerId: 2},
         note: 'Inv #42',
       );
@@ -216,6 +217,7 @@ void main() {
           dateReceived: DateTime(2026, 6, 1),
           staffId: userId,
           lines: const [],
+          fullCratesReceivedByManufacturer: const {},
           emptiesReturnedByManufacturer: const {},
         ),
         throwsA(isA<ArgumentError>()),
@@ -249,6 +251,7 @@ void main() {
           dateReceived: DateTime(2026, 6, 1),
           staffId: userId,
           lines: lines,
+          fullCratesReceivedByManufacturer: const {},
           emptiesReturnedByManufacturer: const {'mfr-does-not-exist': 1},
         ),
         throwsA(anything),
@@ -282,6 +285,7 @@ void main() {
         dateReceived: DateTime(2026, 6, 1),
         staffId: userId,
         lines: lines,
+        fullCratesReceivedByManufacturer: const {},
         emptiesReturnedByManufacturer: const {},
       );
 
@@ -313,6 +317,7 @@ void main() {
         dateReceived: DateTime(2026, 6, 1),
         staffId: userId,
         lines: lines,
+        fullCratesReceivedByManufacturer: const {},
         emptiesReturnedByManufacturer: const {},
         amountPaidKobo: 5000,
         paymentMethod: 'cash',

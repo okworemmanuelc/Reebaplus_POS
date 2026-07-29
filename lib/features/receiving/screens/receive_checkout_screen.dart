@@ -21,8 +21,9 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart
 
 /// Invoice / checkout screen for the Receive Stock flow (spec Sections 7–9).
 /// Picks ONE supplier, shows a read-only Invoice Total, captures the receipt
-/// date + an optional note + empties returned per bottle line, then commits
-/// atomically via [receiveStockServiceProvider]. Optionally captures an
+/// date + an optional note + the crates moved with the delivery (full crates in
+/// and empty crates back, per manufacturer — #210), then commits atomically via
+/// [receiveStockServiceProvider]. Optionally captures an
 /// "Amount Paid Now" + payment method, recorded against the supplier ledger
 /// (that payment section is gated on `suppliers.manage`). This is a purchase,
 /// not a sale.
@@ -56,10 +57,17 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   /// Stores the user may receive into (already access-scoped upstream).
   List<StoreData> _stores = const [];
 
-  // manufacturerId → empty crates returned to the supplier on this receipt.
-  // Empties are a per-manufacturer figure (the manufacturer owns the crate
-  // deposit), so one input per manufacturer even when several of its SKUs are
-  // on the receipt — never one per product.
+  // manufacturerId → full crates that arrived on this receipt (#210), and
+  // manufacturerId → empty crates handed back to the supplier. Both are
+  // per-manufacturer figures (the manufacturer owns the crate deposit), so one
+  // input per manufacturer per direction even when several of its SKUs are on
+  // the receipt — never one per product.
+  //
+  // Crate size is a CATEGORY here (Big/Medium/Small), never a bottle count, so
+  // neither figure can be worked out from the quantity delivered — both are
+  // typed by whoever took the delivery (ADR 0023).
+  final Map<String, int> _fullCratesReceivedByManufacturer = {};
+  final Map<String, TextEditingController> _fullCratesControllers = {};
   final Map<String, int> _emptiesReturnedByManufacturer = {};
   final Map<String, TextEditingController> _emptiesControllers = {};
 
@@ -75,6 +83,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   void dispose() {
     _noteCtrl.dispose();
     _amountPaidCtrl.dispose();
+    for (final c in _fullCratesControllers.values) {
+      c.dispose();
+    }
     for (final c in _emptiesControllers.values) {
       c.dispose();
     }
@@ -97,18 +108,28 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       _isLoading = false;
     });
 
-    // One empties controller per distinct manufacturer carrying a bottle +
-    // trackEmpties line (not one per product).
+    // One controller pair (full crates in, empties back) per distinct
+    // manufacturer carrying a bottle + trackEmpties line — not one per product.
+    // The same gate the commit uses, so PET / Can lines never get a crate box.
     for (final line in ref.read(receiveCartProvider)) {
       final mfrId = line.manufacturerId;
       if (line.trackEmpties &&
           mfrId != null &&
           !_emptiesControllers.containsKey(mfrId)) {
-        final c = TextEditingController(text: '0');
-        c.addListener(() {
-          _emptiesReturnedByManufacturer[mfrId] = int.tryParse(c.text) ?? 0;
+        final fullCratesCtrl = TextEditingController(text: '0');
+        fullCratesCtrl.addListener(() {
+          _fullCratesReceivedByManufacturer[mfrId] =
+              int.tryParse(fullCratesCtrl.text) ?? 0;
         });
-        _emptiesControllers[mfrId] = c;
+        _fullCratesControllers[mfrId] = fullCratesCtrl;
+        _fullCratesReceivedByManufacturer[mfrId] = 0;
+
+        final emptiesCtrl = TextEditingController(text: '0');
+        emptiesCtrl.addListener(() {
+          _emptiesReturnedByManufacturer[mfrId] =
+              int.tryParse(emptiesCtrl.text) ?? 0;
+        });
+        _emptiesControllers[mfrId] = emptiesCtrl;
         _emptiesReturnedByManufacturer[mfrId] = 0;
       }
     }
@@ -180,6 +201,17 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final invoiceTotalKobo = notifier.invoiceTotalKobo;
     final totalUnits = notifier.totalUnits;
 
+    // Only manufacturers still eligible on the current cart count — the same
+    // gate the commit applies, so a line removed after the boxes were filled
+    // cannot carry a stale crate figure into the dialog.
+    final eligibleManufacturerIds = <String>{
+      for (final line in cart)
+        if (line.trackEmpties && line.manufacturerId != null)
+          line.manufacturerId!,
+    };
+    int crateTotal(Map<String, int> byManufacturer) => eligibleManufacturerIds
+        .fold(0, (sum, id) => sum + (byManufacturer[id] ?? 0));
+
     final confirmed = await _showConfirmationDialog(
       supplierName: supplier.name,
       productCount: cart.length,
@@ -187,6 +219,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       invoiceTotalKobo: invoiceTotalKobo,
       storeName: _storeName(),
       uncostedItemCount: notifier.uncostedLineCount,
+      fullCratesReceived: crateTotal(_fullCratesReceivedByManufacturer),
+      emptiesReturned: crateTotal(_emptiesReturnedByManufacturer),
     );
     if (confirmed != true) return;
 
@@ -208,6 +242,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
             dateReceived: _dateReceived,
             staffId: staffId,
             lines: cart,
+            fullCratesReceivedByManufacturer:
+                Map<String, int>.from(_fullCratesReceivedByManufacturer),
             emptiesReturnedByManufacturer:
                 Map<String, int>.from(_emptiesReturnedByManufacturer),
             note: note.isEmpty ? null : note,
@@ -242,9 +278,15 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     required int invoiceTotalKobo,
     required String storeName,
     required int uncostedItemCount,
+    required int fullCratesReceived,
+    required int emptiesReturned,
   }) {
     final theme = Theme.of(context);
     final semantic = theme.extension<AppSemanticColors>()!;
+    final crateParts = <String>[
+      if (fullCratesReceived > 0) '$fullCratesReceived full in',
+      if (emptiesReturned > 0) '$emptiesReturned empty back',
+    ];
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -260,6 +302,10 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
               'Invoice Total',
               formatCurrency(invoiceTotalKobo / 100),
             ),
+            // #210: the crate movement is committed with the goods, so it is
+            // disclosed with them — the receipt is all-or-nothing.
+            if (crateParts.isNotEmpty)
+              _dialogRow('Crates', crateParts.join(', ')),
             SizedBox(height: context.getRSize(12)),
             Text(
               'This posts ${formatCurrency(invoiceTotalKobo / 100)} to '
@@ -347,26 +393,29 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final totalValueStr = formatCurrency(notifier.invoiceTotalKobo / 100);
     final uncostedLineCount = notifier.uncostedLineCount;
 
-    // Empties are grouped by manufacturer: one row per manufacturer, with the
-    // full crates received summed across all of its bottle + trackEmpties lines.
+    // Crates are grouped by manufacturer: one row per manufacturer carrying a
+    // bottle + trackEmpties line, with the units it delivered on this receipt
+    // shown for context only. `unitsDelivered` is a BOTTLE count and is never
+    // the crate figure — crate size is a category (Big/Medium/Small), so both
+    // crate numbers are typed rather than derived (ADR 0023).
     final manufacturers =
         ref.watch(allManufacturersProvider).valueOrNull ??
             const <ManufacturerData>[];
     final mfrNames = {for (final m in manufacturers) m.id: m.name};
-    final emptiesGroups =
-        <({String manufacturerId, String name, int fullCrates})>[];
+    final crateGroups =
+        <({String manufacturerId, String name, int unitsDelivered})>[];
     final seenManufacturers = <String>{};
     for (final l in cart) {
       final mfrId = l.manufacturerId;
       if (!l.trackEmpties || mfrId == null) continue;
       if (!seenManufacturers.add(mfrId)) continue;
-      final fullCrates = cart
+      final unitsDelivered = cart
           .where((x) => x.trackEmpties && x.manufacturerId == mfrId)
           .fold<int>(0, (sum, x) => sum + x.qty);
-      emptiesGroups.add((
+      crateGroups.add((
         manufacturerId: mfrId,
         name: mfrNames[mfrId] ?? 'Manufacturer',
-        fullCrates: fullCrates,
+        unitsDelivered: unitsDelivered,
       ));
     }
 
@@ -559,16 +608,30 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                     ),
                   ),
 
-                  // Empties returned (grouped by manufacturer)
-                  if (emptiesGroups.isNotEmpty) ...[
+                  // Crates moved with this delivery (grouped by manufacturer).
+                  // Both directions sit together because they happen together:
+                  // the driver drops full crates off and takes empties away in
+                  // the same visit, and recording only one side is what drove
+                  // supplier crate debt negative (#210 / ADR 0023).
+                  if (crateGroups.isNotEmpty) ...[
                     SizedBox(height: context.getRSize(24)),
                     Row(
                       children: [
                         Icon(FontAwesomeIcons.wineBottle.data,
                             size: context.getRSize(14), color: subtext),
                         SizedBox(width: context.getRSize(8)),
-                        _fieldLabel('EMPTY CRATES RETURNED TO SUPPLIER', subtext),
+                        _fieldLabel('CRATES WITH THIS DELIVERY', subtext),
                       ],
+                    ),
+                    SizedBox(height: context.getRSize(6)),
+                    Text(
+                      'Count the crates and type them in. Crate sizes differ, so '
+                      'the number cannot be worked out from the drinks '
+                      'delivered. Leave a box at 0 if nothing moved.',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(12),
+                        color: subtext,
+                      ),
                     ),
                     SizedBox(height: context.getRSize(12)),
                     Container(
@@ -579,9 +642,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                       ),
                       child: Column(
                         children: [
-                          for (var i = 0; i < emptiesGroups.length; i++) ...[
+                          for (var i = 0; i < crateGroups.length; i++) ...[
                             if (i > 0) Divider(height: 1, color: border),
-                            _emptiesRow(emptiesGroups[i], textColor, subtext),
+                            _crateRow(crateGroups[i], textColor, subtext),
                           ],
                         ],
                       ),
@@ -666,8 +729,11 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     );
   }
 
-  Widget _emptiesRow(
-    ({String manufacturerId, String name, int fullCrates}) group,
+  /// One manufacturer's crate row: full crates that arrived, and empties handed
+  /// back. Both are typed — `unitsDelivered` is shown only as context and is a
+  /// bottle count, never a crate count.
+  Widget _crateRow(
+    ({String manufacturerId, String name, int unitsDelivered}) group,
     Color textColor,
     Color? subtext,
   ) {
@@ -676,34 +742,43 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         horizontal: context.getRSize(16),
         vertical: context.getRSize(12),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  group.name,
-                  style:
-                      TextStyle(fontWeight: FontWeight.w600, color: textColor),
-                ),
-                SizedBox(height: context.getRSize(2)),
-                Text(
-                  'Full crates received: ${group.fullCrates}',
-                  style: TextStyle(
-                      fontSize: context.getRFontSize(12), color: subtext),
-                ),
-              ],
-            ),
+          Text(
+            group.name,
+            style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
           ),
-          SizedBox(
-            width: context.getRSize(72),
-            child: AppInput(
-              controller: _emptiesControllers[group.manufacturerId],
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              textAlign: TextAlign.center,
-            ),
+          SizedBox(height: context.getRSize(2)),
+          Text(
+            '${group.unitsDelivered} '
+            '${group.unitsDelivered == 1 ? 'drink' : 'drinks'} on this delivery',
+            style:
+                TextStyle(fontSize: context.getRFontSize(12), color: subtext),
+          ),
+          SizedBox(height: context.getRSize(10)),
+          Row(
+            children: [
+              Expanded(
+                child: AppInput(
+                  controller: _fullCratesControllers[group.manufacturerId],
+                  labelText: 'Full crates in',
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: AppInput(
+                  controller: _emptiesControllers[group.manufacturerId],
+                  labelText: 'Empty crates back',
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
           ),
         ],
       ),

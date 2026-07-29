@@ -218,6 +218,7 @@ void main() {
           trackEmpties: false,
         ),
       ],
+      fullCratesReceivedByManufacturer: const {},
       emptiesReturnedByManufacturer: const {},
     );
 
@@ -296,6 +297,7 @@ void main() {
           trackEmpties: false,
         ),
       ],
+      fullCratesReceivedByManufacturer: const {},
       emptiesReturnedByManufacturer: const {},
     );
 
