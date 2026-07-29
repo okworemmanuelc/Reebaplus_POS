@@ -26,10 +26,15 @@
 ///   3. Uncosted (0) — only when neither is on file. Batching at 0 with a price
 ///      on file sold those units at 0 COGS forever (#41's backfill fires only on
 ///      a 0 → positive cost edit, which such a product can never make again).
-/// The web RPC (approve_stock_adjustment, 0141) does not yet move cost — flagged
-/// to the web repo — so the cost scenarios are `dartArmOnly` (the RPC arm skips
-/// them, the same precedent as the #175 money-track scenarios). status +
-/// inventory stay pinned on BOTH arms.
+/// The web RPC arm walks the SAME ladder as of #201 / migration 0170
+/// (`_apply_stock_adjustment` mints or draws the layer; `request_stock_adjustment`
+/// captures the stated cost; `approve_stock_adjustment` reads it back off the
+/// request row). The cost scenarios stay `dartArmOnly` until that migration is
+/// DEPLOYED — the RPC arm runs against live Supabase and would fail against a
+/// cloud that predates it — and un-flagging them also needs the RPC arm to seed
+/// `unit_cost_kobo` / `buying_price_kobo` / the starting batch and to read the
+/// cost back (it asserts only status + inventory today). status + inventory stay
+/// pinned on BOTH arms meanwhile.
 library;
 
 import 'dart:convert';
@@ -59,8 +64,8 @@ class StockAdjScenario {
   /// #189 (dartArmOnly): seed the product's scalar `buying_price_kobo` at this
   /// value — the cost basis an approved increase falls back to when the request
   /// captured none. Null → no cost on file (a genuinely Uncosted increase). The
-  /// RPC arm never reads it: its cost pass is out of scope, so every scenario
-  /// using it is `dartArmOnly`.
+  /// RPC arm reads the same column as of migration 0170, but does not seed it
+  /// yet, so every scenario using it stays `dartArmOnly` until that lands.
   final int? productBuyingPriceKobo;
 
   /// #197 (dartArmOnly): the per-unit cost the REQUEST captures
@@ -68,8 +73,10 @@ class StockAdjScenario {
   /// actually cost, stated by the person holding the invoice. Null → the request
   /// states nothing, and the approval falls back to
   /// [productBuyingPriceKobo] (#189). A stated cost WINS over that fallback,
-  /// which is the whole point of the column. The RPC arm never sends it: the web
-  /// `request_stock_adjustment` (0141) has no cost parameter.
+  /// which is the whole point of the column. The web
+  /// `request_stock_adjustment` gained a `p_unit_cost_kobo` parameter in
+  /// migration 0170 (#201) and `approve_stock_adjustment` reads the column back,
+  /// but the RPC arm here still seeds its request without one.
   final int? requestUnitCostKobo;
 
   /// #7a (dartArmOnly): the value_kobo the approved DECREASE must snapshot.
@@ -80,9 +87,9 @@ class StockAdjScenario {
   /// recorded cost (#189), else 0 = Uncosted when neither is on file.
   final int? expectedNewBatchCostKobo;
 
-  /// Skips the RPC arm: the web cost pass is out of scope for #170 (flagged to
-  /// the web repo). status + inventory still run on both arms for non-dartArmOnly
-  /// scenarios.
+  /// Skips the RPC arm: the web cost pass exists as of migration 0170 but is not
+  /// deployed and not yet seeded here. status + inventory still run on both arms
+  /// for non-dartArmOnly scenarios.
   final bool dartArmOnly;
 
   StockAdjScenario._({
