@@ -73,14 +73,22 @@ Future<String> _seedStaff(AppDatabase db, _Biz home) async {
   return userId;
 }
 
+/// One order plus its single item line. [netKobo] is the line's GROSS goods
+/// value (qty 1 × unit price), which is what the staff sales total is summed
+/// from since #195 — the order header's `net_amount_kobo` is seeded the way
+/// production writes it (goods − discount + deposit) precisely so a test can
+/// tell the two bases apart.
 Future<String> _insertOrder(
   AppDatabase db,
   _Biz biz, {
   required String staffId,
   required int netKobo,
   required String status,
+  int discountKobo = 0,
+  int crateDepositPaidKobo = 0,
 }) async {
   final id = UuidV7.generate();
+  final headerKobo = netKobo - discountKobo + crateDepositPaidKobo;
   await db.into(db.orders).insert(
         OrdersCompanion.insert(
           id: Value(id),
@@ -88,12 +96,26 @@ Future<String> _insertOrder(
           // UUIDv7 is time-ordered, so its PREFIX repeats within a millisecond
           // — the random tail is what keeps `(business_id, order_number)` unique.
           orderNumber: 'ORD-${id.substring(id.length - 6)}-AAAAAA',
-          totalAmountKobo: netKobo,
-          netAmountKobo: netKobo,
+          totalAmountKobo: headerKobo,
+          discountKobo: Value(discountKobo),
+          netAmountKobo: headerKobo,
           paymentType: 'cash',
           status: status,
           staffId: Value(staffId),
           storeId: Value(biz.storeId),
+          crateDepositPaidKobo: Value(crateDepositPaidKobo),
+        ),
+      );
+  await db.into(db.orderItems).insert(
+        OrderItemsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: biz.id,
+          orderId: id,
+          productId: Value(biz.productId),
+          storeId: biz.storeId,
+          quantity: 1,
+          unitPriceKobo: netKobo,
+          totalKobo: netKobo,
         ),
       );
   return id;
@@ -244,6 +266,63 @@ void main() {
 
     expect(totals.totalKobo, 0);
     expect(totals.orderCount, 0);
+  });
+
+  // #195 (PRD #155 US 28) — the staff figure is the ONE Total Sales definition:
+  // item lines minus discounts, DEPOSIT-EXCLUSIVE. It used to read the order
+  // header's `net_amount_kobo`, which bundles the refundable crate deposit
+  // (contra US 5), so a cashier in a crate shop showed a bigger "Total sales"
+  // than the same sales reported anywhere else in the app.
+  test('the total is item lines minus discounts, never the deposit (#195)',
+      () async {
+    await _insertOrder(
+      db,
+      mine,
+      staffId: staffId,
+      netKobo: 100000, // ₦1,000 of goods
+      discountKobo: 15000, // − ₦150 given away
+      crateDepositPaidKobo: 200000, // ₦2,000 held, never earned
+      status: 'pending',
+    );
+
+    final totals = await db.ordersDao.getSalesTotalsForStaff(staffId);
+
+    expect(totals.totalKobo, 85000);
+    expect(totals.orderCount, 1);
+  });
+
+  test('one order\'s discount is subtracted ONCE however many lines it has',
+      () async {
+    // The two-query shape exists for this: joining the lines to the header
+    // repeats `discount_kobo` per line, which would over-subtract it.
+    final orderId = await _insertOrder(
+      db,
+      mine,
+      staffId: staffId,
+      netKobo: 60000,
+      discountKobo: 10000,
+      status: 'pending',
+    );
+    for (final unitPriceKobo in [40000, 25000]) {
+      await db.into(db.orderItems).insert(
+            OrderItemsCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: mine.id,
+              orderId: orderId,
+              productId: Value(mine.productId),
+              storeId: mine.storeId,
+              quantity: 1,
+              unitPriceKobo: unitPriceKobo,
+              totalKobo: unitPriceKobo,
+            ),
+          );
+    }
+
+    final totals = await db.ordersDao.getSalesTotalsForStaff(staffId);
+
+    // (600 + 400 + 250) − 100, not − 300.
+    expect(totals.totalKobo, 115000);
+    expect(totals.orderCount, 1);
   });
 
   test('stock-movement count is scoped to the bound business (#205)', () async {

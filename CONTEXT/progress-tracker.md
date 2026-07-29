@@ -10,6 +10,132 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #202 — the PRD #155 dead-code sweep (3 promised removals) — CODE-COMPLETE (2026-07-29)
+Process debt from the #155 close-out audit: the PRD's "Further Notes" promised a
+dead-code sweep that never ran. All three items were still present, and all three
+were **dangerous** dead code — code that is wrong, not merely unused. Branch
+`fix/202-dead-code-sweep` off `main` (HEAD `9930137`, includes #194 + #197).
+
+1. **Legacy customer-payment paths — deleted.** `CustomerService.addPayment`,
+   `refundToWallet` and `updateWalletBalance` had zero callers and each appended
+   a `wallet_transactions` row with **no `payment_transactions` row** and
+   `staffId: ''` — the exact discipline #155 established (both legs, atomic, via
+   `CreditLedgerService`). Their shared primitive `CustomersDao
+   .updateWalletBalance` was deleted with them (its doc named those flows as its
+   only users), so the wallet-only write path no longer exists; a comment in
+   `daos_customers.dart` records why. Also removed: the in-memory `PaymentService`
+   + `paymentServiceProvider` (defined, never consumed — supplier payments live
+   in `SupplierLedgerDao`), both orphaned `Payment` models, and `Customer
+   .payments` (hardcoded `const []`, no reader).
+2. **Cart crate-credit block — deleted.** `cart_screen.dart` computed
+   `customerCrateCredit`, **subtracted it from the payable**, and rendered a
+   "Deposit Paid" line — all from `Customer.emptyCratesBalance`, hardcoded
+   `const {}` everywhere, so always ₦0. Completing the TODO as written would have
+   been a money bug: the sign convention is positive = the customer OWES us
+   empties, so crate **debtors** would have been discounted, keyed by manufacturer
+   *name* (`CRATE_TRACKING_AUDIT.md` §D). The model field is gone so the trap
+   cannot be re-armed. Consequence: the cart's goods total is now exactly
+   `subtotal − discounts` — the same two terms `ReceiptTotals.totalKobo` nets — so
+   the checkout print and a reprint agree **by construction**, not by both being 0
+   (stale notes in `receipt_totals.dart` / `checkout_page.dart` updated).
+3. **`purchase` payment type — DROPPED** (not documented-and-kept). Verified no
+   writer exists anywhere: every Dart insert seam passes a literal
+   (`sale`/`crate_deposit`/`wallet_topup`/`expense`/`refund`/`van_remittance`),
+   the one parameterised writer (`PaymentsDao.postReversalPayment`) is called with
+   `refund`/`expense`/`wallet_topup` or copies the original's type, and all 17
+   cloud RPCs that insert a payment row hardcode a server-side literal. The other
+   `'purchase'` strings in the tree are `stock_transactions`' ref-type
+   discriminator for `purchase_id` — a different table. Drift **schemaVersion
+   76 → 77** + cloud **`0169_drop_purchase_payment_type.sql`**.
+
+**New invariant worth carrying forward — narrowing a CHECK is not the mirror of
+widening one.** #169 and #144 widened this CHECK and could not fail on existing
+data. A narrowing rebuild aborts on a single offending row: client-side that
+bricks the app on open, and a payment row is append-only money that must never be
+deleted to make a constraint fit. So both halves **guard and skip** instead of
+failing — the v77 Drift step probes `WHERE type = 'purchase' LIMIT 1` before
+`m.alterTable` (safe to skip: `SchemaAudit` only checks for missing tables and
+columns), and 0169 counts the rows and `RAISE WARNING`s rather than aborting the
+deploy. No `columnTransformer` is needed in v77 (unlike v64): no column changes,
+and a DB reaching v77 has already passed v64/v72, so every current column exists
+on the table being copied. Deploy order is free either way — a v76 client can only
+produce the six live types. Three new cases in
+`test/database/migration_upgrade_test.dart` pin the narrowing, the row-survival,
+the skip-on-legacy-row path, and idempotency. `flutter analyze` clean; full suite
+1506 pass / 121 skipped / 0 fail.
+
+The skip is **one-shot on both sides** — `user_version` reaches 77 and 0169 is
+recorded in `schema_migrations` whether or not either narrowed anything — so
+recovery from a stray row is deliberate: reclassify the rows, then ship a NEW
+numbered migration plus its own Drift step (which also re-narrows the affected
+clients), rather than replaying 0169. The client logs the skip so a field report
+can explain a device left on the wide CHECK. `CONTEXT.md`'s **Payment row** entry
+was corrected in the same pass: it listed `purchase` as "legacy, never written"
+and had never listed `van_remittance` at all; it now names the six live types and
+says why `purchase` is not coming back.
+
+**Deliberately NOT done (and why):** the v77 rebuild is a near-verbatim copy of
+v72's index/trigger re-emission, which reads as Duplicated Code. It is left
+inline because `ai-workflow-rules.md` §Protected Files forbids rewriting a
+shipped migration, and extracting a helper that only the newest step uses would
+make the three steps *less* alike, not more. Each `onUpgrade` block is frozen
+history by design.
+
+### #197 — US 22: a stock request records what the goods cost — CODE-COMPLETE (2026-07-29)
+One of the three PRD #155 stories the close-out audit found **never
+implemented**. `stock_adjustment_requests` had no cost column, so
+`StockAdjustmentRequestsDao.approveRequest` called `InventoryDao.adjustStock`
+with no `inflowUnitCostKobo` and every approved increase minted a batch at
+whatever could be inferred — 0 before #189, the product's recorded scalar price
+after it. The person filing the request is the one holding the invoice, so that
+is where the cost is now captured.
+
+- **Schema.** ONE nullable column, `stock_adjustment_requests.unit_cost_kobo` —
+  Drift **schemaVersion 76** (`onUpgrade` `from < 76`, plain `ADD COLUMN`, the
+  table's only CHECK is on `status`) mirrored by cloud
+  **`0168_stock_request_unit_cost.sql`** (`bigint` — an int4 `_kobo` column caps
+  at ₦21.4M and jams the outbox on push, the 0130 lesson). Additive both ways:
+  `pos_pull_snapshot` serialises with `to_jsonb(t)` and the table has no
+  `pushColumns` whitelist entry (pass-through), so **no sync-registry or RPC
+  change** was needed.
+- **Cost ladder.** (1) the cost the REQUEST captured always wins; (2) else the
+  product's recorded price (#189); (3) Uncosted 0 only when neither is on file.
+  NULL is load-bearing — a recount that found more units has no invoice behind
+  it, and NULL is what keeps #189's fallback running instead of asserting a
+  made-up 0. Every pre-existing row is correctly NULL; no repair needed.
+- **Increase only.** `requestStockAdjustment` stores the cost only when
+  `quantityDiff > 0`; a decrease is valued by drawing this store's FIFO queue at
+  approval time and snapshotting what it drew (#7a) — the requester is not the
+  authority on what a loss cost. Not enforced by a cloud CHECK on purpose (it
+  would reject a legacy row on re-push over a value that is simply ignored).
+- **UI.** An optional "Cost per unit" field on the Update Stock sheet (add mode
+  only; hints the recorded price and names what leaving it blank will do),
+  threaded into BOTH arms — the stock keeper's `requestStockAdjustment` and the
+  Manager/CEO's direct `adjustStock`. The approvals card shows cost-per-unit +
+  total cost; when nothing was stated it names the actual fallback — the
+  product's recorded figure, or "no price is on file — these units will carry no
+  cost", which is the 0-COGS failure US 22 exists to stop and must not be
+  reported as if a price existed. A typed `0` reads as "not stated": the field
+  cannot express "genuinely free", so honouring it as the deliberate Uncosted 0
+  would turn a slip of the finger into units that sell at 0 COGS forever.
+- **Tests.** `test/costing/adjust_stock_cost_coverage_test.dart` gains the four
+  approval-path cases (captured cost beats the recorded price; wins with no
+  recorded price at all; no cost still falls back to #189; a removal never
+  records one and is valued off the queue); golden fixture
+  `stock_adjustment_scenarios.json` gains two `dart_arm_only` scenarios and the
+  scenario model gains `request_unit_cost_kobo`;
+  `test/database/migration_upgrade_test.dart` gains the v75 → v76 group
+  (legacy rows stay NULL; a > ₦21.4M cost round-trips; the step is idempotent).
+- **Out of scope.** The web RPCs (`request_stock_adjustment` /
+  `approve_stock_adjustment`, 0141) have no cost parameter and are flagged to the
+  reebaplus-web repo, same precedent as the #175 money-track scenarios.
+- **DEPLOY ORDER:** push cloud `0168` BEFORE a v76 app reaches a device, or the
+  `stock_adjustment_requests` upserts carrying `unit_cost_kobo` are rejected
+  cloud-side (PGRST204). Branch
+  `feat/197-capture-inflow-cost-on-stock-request` (rebased onto main at
+  `4c79d20`; Drift renumbered 79 → 76 and cloud 0171 → 0168, since 0169 is
+  reserved for #201 and 0170 for #202).
+
 ### Money integrity PRD #155 — DEPLOYED to production (2026-07-25)
 All 8 slices (#169/#171/#172/#173/#175 payment-chain + #170 cost-batch + #174
 day-close + #176 report-truth) are on `main` AND live on the prod DB. Cloud
@@ -85,6 +211,135 @@ decisions that previously lived only in this tracker; ADR 0014's deferred day-cl
 alternative now points at #174, plus a loss-valuation-basis addendum; `CONTEXT.md`
 gained the **Money & Payments** section it never had; this file gained the missing
 #172 section. **Umbrella #155 closed** with the audit summary.
+
+### #190 — deposit releases are an in-family reversal, not a refund — CODE-COMPLETE (2026-07-29)
+Fourth of the close-out audit's live money defects. `markCancelled` has stated the
+rule since #175: releasing a held `crate_deposit` posts a **negative
+`crate_deposit`** row, **not** a `refund` — a refund lands in Cash refunds while
+the collection was never in Cash sales. Two other release paths broke it:
+**Confirm** (`OrdersDao.settleCrateDepositReturn`, cash branch) and **§18.3
+Refund Cash** (`CreditLedgerService.refundCash`, deposit portion) both wrote a
+positive `type: 'refund'`. `refundsKobo` is subtracted from
+`periodNetResultKobo` and shown as "Refunds" on the Sales card, so returning a
+₦2,500 deposit read as a flat ₦2,500 loss plus a ₦2,500 sales refund that never
+happened, while "Crate deposits held (cash)" never netted down. (A same-period
+collect-then-return still tied at the drawer total — the two errors cancel —
+which is why it survived to production.)
+Both paths now post the negative `crate_deposit`. Took the issue's **preferred**
+option deliberately: the held line already sums `crate_deposit` rows, so
+**`recon_data.dart` was not touched** (#195 is restructuring it concurrently).
+Secondary fix: Confirm hardcoded `method: 'cash'`, refunding a transfer-collected
+deposit out of the drawer; the tender **and** store now come from the order's
+original `crate_deposit` collection row, falling back to the order's store + cash
+for a legacy pre-#175 order that bundled its deposit into the `sale` row.
+`PaymentTransactionsDao.postReversalPayment` is the precedent for that rule but is
+**not** reused at this call site — it mints a fresh `UuidV7` (#188 needs a
+deterministic `settlementLegId`, else two offline tills refund twice) and copies
+the original's `order_id` (which would pull the release into `markCancelled`'s
+reversal set). §18.3's credit portion stays a real `refund` — spendable credit,
+not held money. New `test/dashboard/recon_deposit_release_test.dart` pins the
+report consequence (only the held line may move) plus a counter-example
+reproducing the old shape. `flutter analyze` clean; full suite 1500 pass /
+119 skipped. Branch `fix/190-deposit-release-not-a-refund`.
+
+**OPEN QUESTION (found in review, not fixed — needs a product call):** four
+cases reach the Confirm cash branch with **no `crate_deposit` collection row**,
+and the right family for the release differs per case. (1) A LEGACY pre-#175
+order bundled the deposit into its `sale` row, so it WAS counted in Cash sales —
+`markCancelled`'s own carve-out reverses that in the `sale` family (a positive
+`refund`). (2) The v2 `pos_record_sale_v2` path is the same shape: the #175
+payment split sits after that path's early return, so with
+`feature.domain_rpcs_v2.record_sale` ON (held off in Phase 1) EVERY release hits
+this branch. (3) A ROAD sale writes no payment row at all (#142 — the driver
+holds the cash) and (4) a pure-credit sale (`amountPaidKobo == 0`) moved no cash;
+for those two neither family is right. The shipped behaviour posts the negative
+`crate_deposit` unconditionally, which is strictly better than pre-#190 in all
+four (the drawer total still ties, no phantom refund or loss) but leaves the
+held-deposit line reading negative for (1) and (2). Deciding per case is beyond
+what #190 specified — worth its own issue before the v2 record-sale flag is
+flipped.
+### #195 — Profit report store-scoped; the single Total Sales definition actually shared — CODE-COMPLETE (2026-07-29)
+Follow-up from the #155 close-out audit. #176 created `computeTotalSalesKobo`
+(`lib/features/dashboard/reconciliation/report_revenue.dart`) but only Home and
+the Profit report called it, so US 28's "three screens, one answer" was never
+enforced. Branch `fix/195-profit-report-store-scoping` off `main` (4c79d20).
+
+**The four divergences, fixed:**
+1. **Profit report was not store-scoped at all** — `allOrdersProvider` +
+   `inSpan` only, so under a store lock Home/Recon showed the store and Profit
+   showed the business. It now takes `reconStoreFilter(ref)` (the reconciliation's
+   own predicate — active store, non-CEO confinement, #140 van exclusion) and
+   applies it **per LINE** in the costed loop and to `computeTotalSalesKobo`.
+   The order-level `vans.isVan` skip is deleted: a van fails `reconStoreFilter`
+   by construction.
+2. **Recon consumes the helper.** `ReconData.totalSalesKobo` is now a stored
+   field fed by `computeTotalSalesKobo(orders, inSpan:, inScope:)`, not the
+   getter's own `totalRevenueKobo − discountsKobo`. The gross + discount pair
+   stays for the P&L card. A ReconData fabricated WITHOUT the field falls back
+   to the old identity, so the getter-only harnesses (`recon_data_test.dart`)
+   still work.
+3. **Home scopes per LINE**, like Recon. The order list keeps a coarse
+   order-level pre-filter (any in-scope line, or the order's own store — which
+   carries the discount) so the drill-down list matches what the tiles counted.
+4. **The drill-down matches its tile.** `SalesDetailScreen` takes the tile's
+   `inScope` and subtracts the orders' discounts from the header in BOTH modes,
+   with a "Less discounts" chip and a TOTAL row in the CSV so the per-item rows
+   visibly reconcile to the headline.
+
+**Four deposit-inclusive stragglers converted** to the one basis through a new
+per-order helper `orderGoodsNetKobo` (in-scope lines − scoped discount,
+deposit-exclusive) that `computeTotalSalesKobo` now delegates to: Home's staff
+league table (was Σ`totalAmountKobo` — deposits outranked goods), Home's Net
+Profit tile (nets discounts, scopes per line), `OrdersDao.getSalesTotalsForStaff`
+(was `net_amount_kobo`; now two queries — joining lines to the header repeats
+`discount_kobo` per line and over-subtracts it), and the Profile "Sales Volume"
+stat (which also stopped raw-selecting `orders` with no `business_id`,
+architecture invariant #5).
+
+**One rule, one place.** `orderGoodsNetKobo` (per-order Total Sales share) and
+`orderDiscountKobo` ("which store wears an order's discount") are the only two
+definitions; the recon P&L's discount line, its paid-now/on-credit split, Home's
+Net Profit loop and the drill-down's header all resolve through them instead of
+re-deciding the rule. `ReconData.totalSalesKobo` is a **required** field — not
+optional-defaulted like the other additive fields — so no construction site can
+silently fall back to `totalRevenueKobo − discountsKobo`.
+
+**Structural: `computeReconData` is now gather + pure compute.** New
+`ReconInputs` (every row set, the settings, the span and `inScope`, all
+optional-defaulted) and `ReconData reconDataFrom(ReconInputs)`;
+`computeReconData(ref, …)` holds every `ref.watch` and delegates. Crate reads
+stay behind the `showCrates` gate so a non-crate business opens no crate stream.
+**Keep the split** — a provider read that migrates back into the math is a
+figure that stops being testable. #192 (changed-since-review delta) builds here
+next.
+
+The AC test was the point: `test/dashboard/report_revenue_test.dart` used to
+fabricate a `ReconData` from figures it computed itself and never ran the
+roll-up, so it could not fail. It now runs `reconDataFrom` for real across
+All-Stores and a locked store, and pins `totalSalesKobo` against both the helper
+and the P&L identity. Verified by mutation: dropping the discount's store scope
+in recon's loop, and making the helper deposit-inclusive, each turn it red.
+`flutter analyze` clean; full suite **1494 pass / 119 skipped**, sole failure the
+pre-existing `test/auth/who_is_working_screen_test.dart` (fails on `main` too).
+
+**Left open (deliberate, worth filing if it matters):** Home's Net Profit tile is
+goods margin less expenses — it does not include forfeit income, nor recon's
+damages / shortages / write-offs, so it is NOT equal to
+`ReconData.netProfitKobo`. Forfeit income specifically stays out for a reason
+rather than by omission: wallet rows carry no store, so that figure is
+business-wide, and adding it to a store-scoped tile would re-open the very
+cross-scope contradiction this issue closes (under a store lock it would credit
+one store with the whole business's forfeits). It belongs there only alongside a
+store-attributed forfeit source. Only the Total Sales definition is unified here.
+
+**Reviewed** (`/review` since `main`, both axes). Acted on: the nullable
+`totalSalesKobo` fallback became a required field; the paid-now/on-credit split
+and the two discount call sites now go through the helpers instead of re-deriving
+them; the locked-store test gained the load-bearing
+`totalRevenue − discounts == totalSales` assertion (verified: mutating recon's
+per-line scoping turns it red); `watchAllOrdersWithItems` gained a SQL-level
+`staffId` filter so the Profile screen stops streaming the whole business's
+orders to read one person's.
 
 ### #182 — count-shortage loss valued at the #170 write-time snapshot (audit #30) — CODE-COMPLETE (2026-07-25)
 The last loss surface still recomputed at *current* cost. #170 gave damages a
@@ -3838,6 +4093,40 @@ server-side; guessing would fabricate a concession). `flutter analyze` clean; th
 `catalogue_price_kobo` on a concession line). NOT deployed (no `db push`); draft
 PR only. Out of scope: the `checkout_order` deposit-0 hardwire; the reebaplus-web
 repo; the v1 `pos_record_sale` RPC (not a sale enqueue path).
+
+**2026-07-29 — `CreditLedgerService` payment rows stamp `store_id`
+(#194, PRD #155 US 36).** Two live `payment_transactions` insert sites never set
+`store_id`, so both wrote NULL: the `wallet_topup` row in
+`CreditLedgerService.topup` (Add Credit / repayment collection) and `postCashRow`
+in `refundCash` (the §18.3 cash-out `refund` row). That is load-bearing on the
+refund side — the Sales card's Refunds figure is store-scoped (the
+`refundsKobo` loop in `recon_data.dart` calls `inScope(p.storeId)`) and
+`reconStoreFilter` returns false for a null store under a locked store
+(`recon_data.dart:98`), so a customer cash refund **silently disappeared
+from the Sales card whenever a store was locked** while staying visible under All
+Stores. (The `wallet_topup` rows were harmless only by luck: the cash card does
+not filter store.) Fix: an optional `storeId` threaded through
+`CreditLedgerService.topup` / `refundCash` → `CustomerService.topUpWallet` /
+`refundCashFromWallet` → the two Customer Details sheets, which resolve it from
+**`activeWriteStoreProvider`** (locked store, else the user's first selectable
+store, else their home store) — the same resolution an expense (§20.8), a
+supplier activity (§21.11) and a POS sale already use, and one that never returns
+a van. Null is still accepted and reports business-wide exactly as legacy rows
+do. Matches the other stamped writers (`daos_orders.dart:934`/`:1211`,
+`daos_expenses.dart:141`, the `daos_payments.dart:59` reversal seam). No schema
+change, no payment-type change, no reporting change. New regression
+`test/wallet/credit_ledger_store_stamp_test.dart` (4) pins the stamp on the local
+row **and** on the pushed payload for both paths, plus the store-less fallback.
+**Known gap — SHOULD BE FILED as a follow-up:** only the v1 (flag-OFF) path
+keeps the stamp. The v2 `pos_wallet_topup` RPC takes no store parameter, and the
+sync service routes the row the server returns through `_restoreTableData`,
+which overwrites the pre-inserted local row — so with
+`feature.domain_rpcs_v2.wallet_topup` ON the store is lost **locally as well as
+in the cloud**, not merely omitted from the cloud. The flag is held off in Phase
+1, and closing it needs a migration adding `p_store_id` **plus** dropping the
+old signature (an added param creates an overload → PGRST203,
+[[project_rpc_param_add_overload_trap]]), which is a deploy-ordering change well
+outside this fix. Documented at the call site; not filed by this session.
 
 **To resume in a new session:**
 Read this file first, then `CLAUDE.md`, then the master plan section relevant

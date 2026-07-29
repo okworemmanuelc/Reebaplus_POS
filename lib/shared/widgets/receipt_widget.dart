@@ -10,6 +10,15 @@ class ReceiptWidget extends StatelessWidget {
   final String orderId;
   final List<Map<String, dynamic>> cart;
   final double subtotal;
+
+  /// Discount given on this sale (#200 / US 33). [subtotal] is always the goods
+  /// at their FULL price, so the discount prints on its own line between the
+  /// subtotal and the total — otherwise a discounted receipt shows a total that
+  /// is lower than its subtotal with nothing on paper explaining why, and the
+  /// original and a reprint disagree about which figure "Subtotal" means. 0
+  /// (the default) prints no line. See [ReceiptTotals].
+  final double discount;
+
   final double crateDeposit;
   final double total;
   final String paymentMethod;
@@ -51,6 +60,7 @@ class ReceiptWidget extends StatelessWidget {
     required this.orderId,
     required this.cart,
     required this.subtotal,
+    this.discount = 0,
     required this.crateDeposit,
     required this.total,
     required this.paymentMethod,
@@ -363,6 +373,13 @@ class ReceiptWidget extends StatelessWidget {
           SizedBox(height: context.getRSize(12)),
 
           _infoRow(context, 'Subtotal', subtotal, sub),
+          // #200 / US 33 — the discount that explains Total < Subtotal. Printed
+          // negative (formatCurrency renders the minus sign) so the three lines
+          // read as an addition down to TOTAL.
+          if (discount > 0) ...[
+            SizedBox(height: context.getRSize(4)),
+            _infoRow(context, 'Discount', -discount, sub),
+          ],
           if (crateDeposit > 0) ...[
             SizedBox(height: context.getRSize(4)),
             _infoRow(context, 'Crate Deposit', crateDeposit, sub),

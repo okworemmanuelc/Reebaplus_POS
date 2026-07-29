@@ -7,12 +7,20 @@ import '../helpers/dispatch_test_utils.dart';
 
 /// Money-integrity #7a (#170, PRD #155): the central mutator
 /// `InventoryDao.adjustStock` now carries value with quantity. An increase
-/// creates a Cost Batch (costed when the caller knows the price, Uncosted
-/// otherwise) so later sales draw real COGS not phantom 0; a decrease draws the
-/// FIFO queue down oldest-first and SNAPSHOTS the drawn value onto its
+/// creates a Cost Batch so later sales draw real COGS not phantom 0; a decrease
+/// draws the FIFO queue down oldest-first and SNAPSHOTS the drawn value onto its
 /// `stock_adjustments` row, so a later cost-price edit cannot restate the loss.
 ///
-/// Seam: the DAO transaction boundary against in-memory Drift.
+/// What an increase's batch COSTS runs down a three-step ladder:
+///   1. #197 (US 22) — the cost the stock-adjustment REQUEST captured, stated by
+///      the person holding the invoice. It always wins.
+///   2. #189 — else the product's recorded scalar price (ADR 0005's derived
+///      display cache over the batch queue).
+///   3. Uncosted (0) — only when neither is on file, or when a caller states 0.
+///
+/// Seam: the DAO transaction boundary against in-memory Drift — `adjustStock`
+/// itself for the ladder's lower rungs, and `StockAdjustmentRequestsDao`
+/// (request → approve) for the captured-cost rung.
 void main() {
   late AppDatabase db;
   late String businessId;
@@ -208,6 +216,144 @@ void main() {
 
     final batch = (await batchesFor(productId)).single;
     expect(batch.costKobo, 0);
+  });
+
+  // ─── #197 (US 22): the approval path carries a REAL cost ───────────────────
+  //
+  // The seam one level up from `adjustStock`: `StockAdjustmentRequestsDao`. The
+  // stock keeper filing the request is the one holding the invoice, so the cost
+  // is captured on the request row and threaded into the approval's inflow
+  // batch. #189's recorded-price fallback becomes what runs only when nobody
+  // stated a cost.
+
+  Future<String> fileRequest({
+    required String productId,
+    required int quantityDiff,
+    int? unitCostKobo,
+  }) async {
+    await db.stockAdjustmentRequestsDao.requestStockAdjustment(
+      productId: productId,
+      storeId: storeId,
+      quantityDiff: quantityDiff,
+      reason: 'delivery from supplier',
+      summary: 'Stock Keeper added $quantityDiff',
+      requestedBy: staffId,
+      unitCostKobo: unitCostKobo,
+    );
+    final row = await (db.select(
+      db.stockAdjustmentRequests,
+    )..where((r) => r.productId.equals(productId))).getSingle();
+    return row.id;
+  }
+
+  test('#197: the cost captured on the request prices the approved increase\'s '
+      'batch, beating the recorded price', () async {
+    // The product's recorded price is stale (15000); this delivery cost 18000.
+    final productId = await newProduct(buyingKobo: 15000);
+    final requestId = await fileRequest(
+      productId: productId,
+      quantityDiff: 10,
+      unitCostKobo: 18000,
+    );
+
+    // The cost survives the pending round-trip — the approval may happen days
+    // later, on another device, off a pull.
+    final pending = await (db.select(
+      db.stockAdjustmentRequests,
+    )..where((r) => r.id.equals(requestId))).getSingle();
+    expect(pending.unitCostKobo, 18000);
+
+    await db.stockAdjustmentRequestsDao.approveRequest(
+      requestId: requestId,
+      approverId: staffId,
+    );
+
+    final batch = (await batchesFor(productId)).single;
+    expect(batch.qtyRemaining, 10);
+    expect(batch.costKobo, 18000);
+
+    // …and the units sell at what they actually cost.
+    final perUnit = await db.costBatchesDao.drawDownSale([
+      SaleCostLine(
+        index: 0,
+        productId: productId,
+        storeId: storeId,
+        quantity: 4,
+      ),
+    ]);
+    expect(perUnit[0], 18000);
+  });
+
+  test('#197: a captured cost prices the batch even when the product has no '
+      'recorded price at all', () async {
+    final productId = await newProduct();
+    final requestId = await fileRequest(
+      productId: productId,
+      quantityDiff: 10,
+      unitCostKobo: 18000,
+    );
+
+    await db.stockAdjustmentRequestsDao.approveRequest(
+      requestId: requestId,
+      approverId: staffId,
+    );
+
+    // Before #197 this was the worst case: an Uncosted batch on a product with
+    // no price on file, sellable at 0 COGS until someone noticed.
+    final batch = (await batchesFor(productId)).single;
+    expect(batch.costKobo, 18000);
+  });
+
+  test('#197: a request that states NO cost still falls back to the recorded '
+      'price (#189)', () async {
+    final productId = await newProduct(buyingKobo: 15000);
+    final requestId = await fileRequest(productId: productId, quantityDiff: 10);
+
+    final pending = await (db.select(
+      db.stockAdjustmentRequests,
+    )..where((r) => r.id.equals(requestId))).getSingle();
+    expect(pending.unitCostKobo, isNull);
+
+    await db.stockAdjustmentRequestsDao.approveRequest(
+      requestId: requestId,
+      approverId: staffId,
+    );
+
+    final batch = (await batchesFor(productId)).single;
+    expect(batch.costKobo, 15000);
+  });
+
+  test('#197: a REMOVAL request never records a cost — the loss is valued by '
+      'the store\'s FIFO queue, not by the requester', () async {
+    final productId = await newProduct(buyingKobo: 15000, stock: 20);
+    await db.costBatchesDao.recordInflowBatch(
+      productId: productId,
+      storeId: storeId,
+      quantity: 20,
+      costKobo: 12000,
+    );
+
+    // Even handed a cost, a decrease must not keep it: the requester is not the
+    // authority on what a loss cost, and `adjustStock` would ignore it anyway.
+    final requestId = await fileRequest(
+      productId: productId,
+      quantityDiff: -5,
+      unitCostKobo: 99000,
+    );
+    final pending = await (db.select(
+      db.stockAdjustmentRequests,
+    )..where((r) => r.id.equals(requestId))).getSingle();
+    expect(pending.unitCostKobo, isNull);
+
+    await db.stockAdjustmentRequestsDao.approveRequest(
+      requestId: requestId,
+      approverId: staffId,
+    );
+
+    // Valued at the 12000 the queue actually held, not the 99000 handed over.
+    final adj = await adjustmentWithDiff(productId, -5);
+    expect(adj.valueKobo, 60000);
+    expect(adj.unitCostKobo, 12000);
   });
 
   // ─── Decrease: snapshots the drawn value ───────────────────────────────────

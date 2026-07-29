@@ -88,19 +88,25 @@ class _DailyReconciliationDetailScreenState
   /// gates on every source stream having loaded (see [_frozenFiguresReady]) so a
   /// zeroed mid-load snapshot can't freeze permanently. Deferred past the current
   /// build so it never mutates a provider mid-build.
-  void _maybeWriteSnapshot(ReconData d, {required bool dataReady}) {
+  ///
+  /// [businessWideFigures] — NOT the viewer's scoped figures (#191, ADR 0022).
+  /// The natural key is (business, day) with first-writer-wins, so freezing
+  /// whatever store the opener happened to be locked to let that accident decide
+  /// the day's baseline forever, and left every other scope with none.
+  void _maybeWriteSnapshot(
+    ReconData businessWideFigures, {
+    required bool dataReady,
+  }) {
     if (_snapshotAttempted || !_isFinishedDay || !dataReady) return;
     if (!Gates.dailyReconciliation.allows(ref)) return;
     _snapshotAttempted = true;
-    final storeScopeId = ref.read(lockedStoreProvider).value;
     final reviewedBy = ref.read(currentUserIdProvider);
     final db = ref.read(databaseProvider);
     Future.microtask(() async {
       try {
         await db.dailyClosingsDao.snapshotIfAbsent(
           businessDate: _businessDate,
-          storeScopeId: storeScopeId,
-          figures: dailyClosingFiguresFrom(d),
+          figures: dailyClosingFiguresFrom(businessWideFigures),
           reviewedBy: reviewedBy,
         );
       } on Exception catch (e) {
@@ -124,26 +130,47 @@ class _DailyReconciliationDetailScreenState
     final start = widget.start;
     final endExclusive = widget.endExclusive;
     final title = widget.title;
-    final activeStoreId = ref.watch(lockedStoreProvider).value;
     final d = computeReconData(
       ref,
       start: start,
       endExclusive: endExclusive,
       isCeo: isCeo,
     );
-    _maybeWriteSnapshot(d, dataReady: _frozenFiguresReady(activeStoreId));
 
-    // As-reviewed-vs-current delta (#174): only for a FINISHED Day that HAS a
-    // snapshot AND whose captured store scope matches the current viewer's scope
-    // (figures from different scopes are not comparable). Null everywhere else,
-    // so a week/month/year, an unreviewed day, or a mismatched scope renders
-    // exactly as before — no badges.
+    // The day close's basis (#191, ADR 0022): the BUSINESS-WIDE figures, so one
+    // durable record says what the whole business's day looked like whatever
+    // store the opener was locked to — and the same record is comparable from
+    // every scope. Deliberately computed ONLY for a FINISHED Day — a
+    // week/month/year bucket must not pay for a second full aggregate pass it
+    // has no snapshot for — so this and the snapshot read below register their
+    // watches conditionally; Riverpod re-resolves the dependency set on every
+    // build, so a bucket that becomes a finished day simply picks them up.
+    final dayCloseBasis = _isFinishedDay
+        ? computeReconData(
+            ref,
+            start: start,
+            endExclusive: endExclusive,
+            isCeo: isCeo,
+            businessWide: true,
+          )
+        : null;
+    if (dayCloseBasis != null) {
+      // null = All Stores: the frozen figures read the UNSCOPED stock totals, so
+      // that is the stream whose warmth the readiness gate must check.
+      _maybeWriteSnapshot(dayCloseBasis, dataReady: _frozenFiguresReady(null));
+    }
+
+    // As-reviewed-vs-current delta (#174): for a FINISHED Day that HAS a
+    // snapshot, at EVERY viewing scope (#191 — a snapshot is business-wide, so
+    // the badges are no longer gated on the scope that happened to capture it).
+    // Null for a week/month/year or an unreviewed day, which render exactly as
+    // before — no banner, no badges.
     final snapshot = _isFinishedDay
         ? ref.watch(dailyClosingForDayProvider(_businessDate)).valueOrNull
         : null;
-    final comparison = (snapshot != null && snapshot.storeScopeId == activeStoreId)
-        ? reconClosingComparison(snapshot, d)
-        : null;
+    final comparison = dayCloseBasis == null
+        ? null
+        : reconClosingComparisonOrNull(snapshot, dayCloseBasis);
     final reviewerName = comparison?.reviewedBy == null
         ? null
         : (ref.watch(usersByBusinessProvider).valueOrNull ??
@@ -407,6 +434,16 @@ class _DailyReconciliationDetailScreenState
             'Crate deposit loss',
             '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}',
           ),
+        // #193 — stock written off because its product was deleted. One family
+        // with Damages: value the business paid for and no longer has, so it is
+        // netted out of the result rather than only noted on the stock card.
+        if (d.deletionCostKobo > 0)
+          _line(
+            context,
+            theme,
+            'Product deletions (at cost)',
+            '− ${formatCurrency(d.deletionCostKobo / 100.0)}',
+          ),
         _divider(theme),
         _line(
           context,
@@ -423,6 +460,20 @@ class _DailyReconciliationDetailScreenState
             'buying price (e.g. quick sales) as takings — counted in full above '
             'because no cost was recorded to deduct, so they carry no COGS or '
             'gross margin.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+        // #200 / US 20 — label the current-cost fallback. Newer damages are held
+        // at the cost they actually drew, so editing a buying price today cannot
+        // move them; older records kept only a quantity, so they DO move. Saying
+        // so is the difference between a frozen figure and one that looks frozen.
+        if (d.legacyValuedDamageRows > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            '${fmtNumber(d.legacyValuedDamageRows)} older damage record(s) are '
+            'valued at today\'s cost — they were saved before the cost of each '
+            'loss was recorded, so changing a buying price also changes this '
+            'figure.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -755,11 +806,33 @@ class _DailyReconciliationDetailScreenState
                       'and expiries — reported profit reconciles.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
-        ] else ...[
+        ],
+        // #200 — the card's valuation basis, stated on EVERY view rather than
+        // only when no count exists (the old `else` branch). The flow lines above
+        // price the units that MOVED at today's cost, which is what lets the
+        // column add up to Expected closing; the Profit & Loss card values the
+        // same losses at what they actually cost when they happened. One event,
+        // two figures, each labelled — see the report note on #186.
+        const SizedBox(height: 6),
+        Text(
+          d.hasStockCount
+              ? 'The lines above value the units that moved at today\'s cost, so '
+                    'the column adds up to Expected closing. What those losses '
+                    'actually cost you is on the Profit & Loss card.'
+              : 'The lines above value the units that moved at today\'s cost. No '
+                    'stock count in this period, so there is no variance to '
+                    'reconcile against.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+        // #200 / US 20 — the shortage/variance figure's own current-cost
+        // fallback, labelled where that figure is shown.
+        if (d.legacyValuedShortageRows > 0) ...[
           const SizedBox(height: 6),
           Text(
-            'Valued at current cost. No stock count in this period, so there is '
-            'no variance to reconcile against.',
+            '${fmtNumber(d.legacyValuedShortageRows)} older shortage record(s) '
+            'are valued at today\'s cost — they were saved before the cost of '
+            'each shortage was recorded, so changing a buying price also changes '
+            'the variance.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -1229,7 +1302,28 @@ class _DailyReconciliationDetailScreenState
         ['Damages (at cost)', money(d.damageCostKobo)],
         if (d.crateDamageDepositKobo > 0)
           ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
+        // #193 — the deleted-product write-off as a loss, beside Damages, at the
+        // write-time snapshot. The stock-card row further down is the SAME event
+        // on that card's current-cost basis (ADR 0014), so it is disambiguated as
+        // "(stock, at cost)" exactly as Damages already is. Conditional like the
+        // crate row above, so an export from a business that deleted nothing is
+        // byte-identical to before.
+        if (d.deletionCostKobo > 0)
+          ['Product deletions (at cost)', money(d.deletionCostKobo)],
         ['Stock shortages (at cost)', money(d.shortageCostKobo)],
+        // #200 / US 20 — the export carries the same disclosure the screen shows:
+        // which of the two loss figures above lean on today's cost because the
+        // record predates loss-cost snapshotting. Omitted when nothing does.
+        if (d.legacyValuedDamageRows > 0)
+          [
+            'Damages — older records valued at today\'s cost',
+            '${d.legacyValuedDamageRows}',
+          ],
+        if (d.legacyValuedShortageRows > 0)
+          [
+            'Stock shortages — older records valued at today\'s cost',
+            '${d.legacyValuedShortageRows}',
+          ],
         ['Net result for period', money(d.periodNetResultKobo)],
         // Profit & Loss — mirrors _plCard.
         ['Revenue (costed, gross)', money(d.costedRevenueKobo)],
@@ -1273,11 +1367,21 @@ class _DailyReconciliationDetailScreenState
         ['Opening stock (at cost)', money(d.stockOpeningKobo)],
         ['Goods received (at cost)', money(d.stockReceivedKobo)],
         ['COGS (at current cost)', money(d.stockCogsKobo)],
-        ['Damages (stock, at cost)', money(d.stockDamagesKobo)],
+        // #200 — this block is the stock FLOW: every line prices the units that
+        // moved at TODAY's cost, which is what makes it add up to Expected
+        // closing. Spelled out here because the same export also carries the
+        // Profit & Loss "Damages (at cost)" row above, which is the write-time
+        // cost of the very same damages — one event, two labelled figures.
+        ['Damages (stock, units at today\'s cost)', money(d.stockDamagesKobo)],
         ['Expired (at cost)', money(d.stockExpiredKobo)],
         ['Store transfers (at cost)', money(d.stockTransfersKobo)],
-        ['Count corrections (at cost)', money(d.stockCountAdjustmentsKobo)],
-        ['Product deletions (at cost)', money(d.stockDeletionsKobo)],
+        [
+          'Count corrections (units at today\'s cost)',
+          money(d.stockCountAdjustmentsKobo),
+        ],
+        // #193 renamed this one to disambiguate it from the P&L's own
+        // "Product deletions (at cost)", which carries the snapshot value.
+        ['Product deletions (stock, at cost)', money(d.stockDeletionsKobo)],
         ['Other stock movements (at cost)', money(d.stockOtherMovementsKobo)],
         ['Expected closing (at cost)', money(d.stockExpectedClosingKobo)],
         ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],

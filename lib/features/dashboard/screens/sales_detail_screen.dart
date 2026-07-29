@@ -8,25 +8,39 @@ import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 
 /// Shows when the user taps "Total Sales" or "Net Profit" on the dashboard.
 /// [mode] = 'sales' → revenue-focused columns.
 /// [mode] = 'profit' → adds a Profit/Loss column per item.
+///
+/// #195 — the headline here must equal the tile that opened it. Two things make
+/// that true: the per-line [inScope] predicate (the same one the tile summed
+/// with), and subtracting the orders' discounts from the header total. The
+/// header used to sum item lines with NO discount subtracted, so tapping Total
+/// Sales opened a BIGGER number than the tile it came from.
 class SalesDetailScreen extends ConsumerStatefulWidget {
   final List<OrderWithItems> orders;
   final String mode; // 'sales' | 'profit'
   final String period;
+
+  /// Store predicate applied per line, matching the tile's own scope. Defaults
+  /// to every store for a caller that has already filtered its orders.
+  final bool Function(String? storeId) inScope;
 
   const SalesDetailScreen({
     super.key,
     required this.orders,
     required this.mode,
     required this.period,
+    this.inScope = _anyStore,
   });
 
   @override
   ConsumerState<SalesDetailScreen> createState() => _SalesDetailScreenState();
 }
+
+bool _anyStore(String? _) => true;
 
 class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
   bool _loading = true;
@@ -37,11 +51,24 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
     _loading = false;
   }
 
+  /// The discounts given on the orders in view, scoped by each order's own
+  /// store exactly as [computeTotalSalesKobo] scopes them. Contra-revenue: it
+  /// is subtracted from BOTH the revenue and the profit totals, since a
+  /// discount is money neither earned nor kept.
+  double _discountTotal() {
+    var kobo = 0;
+    for (final o in widget.orders) {
+      kobo += orderDiscountKobo(o, inScope: widget.inScope);
+    }
+    return kobo / 100.0;
+  }
+
   // Flat list of rows — one row per item per order, newest first.
   List<_SaleRow> _buildRows() {
     final rows = <_SaleRow>[];
     for (final o in widget.orders) {
       for (final i in o.items) {
+        if (!widget.inScope(i.item.storeId)) continue;
         final revenue = i.item.quantity * i.item.unitPriceKobo / 100.0;
         final cogs = i.item.buyingPriceKobo > 0
             ? i.item.quantity * i.item.buyingPriceKobo / 100.0
@@ -66,8 +93,9 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
   // CSV columns mirror the on-screen table: the Profit column only in profit mode.
   Future<void> _exportCsv() async {
     final isProfit = widget.mode == 'profit';
+    final rows = _buildRows();
     final csvRows = <List<String>>[
-      for (final r in _buildRows())
+      for (final r in rows)
         [
           DateFormat('yyyy-MM-dd HH:mm').format(r.date),
           r.productName,
@@ -76,6 +104,32 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
           if (isProfit) (r.profit != null ? r.profit!.toStringAsFixed(2) : ''),
         ],
     ];
+    // #195 — the order-level discount lives on no row, so the export closes
+    // with the same netted totals the screen shows. Summing the item rows alone
+    // would reproduce exactly the gross-vs-net contradiction this issue fixed.
+    final discounts = _discountTotal();
+    if (discounts != 0) {
+      csvRows.add([
+        '',
+        'Less discounts',
+        '',
+        (-discounts).toStringAsFixed(2),
+        if (isProfit) (-discounts).toStringAsFixed(2),
+      ]);
+    }
+    final grossRevenue = rows.fold<double>(0, (s, r) => s + r.revenue);
+    final hasProfit = rows.any((r) => r.profit != null);
+    csvRows.add([
+      '',
+      'TOTAL',
+      '${rows.fold<int>(0, (s, r) => s + r.qty)}',
+      (grossRevenue - discounts).toStringAsFixed(2),
+      if (isProfit)
+        hasProfit
+            ? (rows.fold<double>(0, (s, r) => s + (r.profit ?? 0)) - discounts)
+                  .toStringAsFixed(2)
+            : '',
+    ]);
     try {
       await shareCsv(
         csv: buildCsv(
@@ -108,11 +162,17 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
 
     final rows = _buildRows();
 
-    // Totals
-    final totalRevenue = rows.fold<double>(0, (s, r) => s + r.revenue);
+    // Totals. #195 — the discount is order-level, so it cannot live on a row;
+    // it is netted out of both totals here so this screen states the same
+    // "Total Sales" (item lines − discounts, deposit-exclusive) the dashboard
+    // tile did. The discount chip below shows the amount, so the rows still add
+    // up to a figure the reader can see.
+    final discounts = _discountTotal();
+    final grossRevenue = rows.fold<double>(0, (s, r) => s + r.revenue);
+    final totalRevenue = grossRevenue - discounts;
     final hasProfit = rows.any((r) => r.profit != null);
     final totalProfit = hasProfit
-        ? rows.fold<double>(0, (s, r) => s + (r.profit ?? 0))
+        ? rows.fold<double>(0, (s, r) => s + (r.profit ?? 0)) - discounts
         : null;
 
     final isProfitMode = widget.mode == 'profit';
@@ -182,6 +242,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
                   rowCount: rows.length,
                   totalRevenue: totalRevenue,
                   totalProfit: totalProfit,
+                  discounts: discounts,
                   isProfitMode: isProfitMode,
                 ),
                 // ── Table header ─────────────────────────────────────────
@@ -246,6 +307,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
     required int rowCount,
     required double totalRevenue,
     required double? totalProfit,
+    required double discounts,
     required bool isProfitMode,
   }) {
     final theme = Theme.of(context);
@@ -291,13 +353,18 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
             ),
           ),
           SizedBox(height: context.getRSize(4)),
-          Row(
+          Wrap(
+            spacing: context.getRSize(8),
+            runSpacing: context.getRSize(4),
             children: [
               _chip(context, '$rowCount item${rowCount == 1 ? '' : 's'} sold'),
-              if (isProfitMode && totalProfit != null) ...[
-                SizedBox(width: context.getRSize(8)),
+              if (isProfitMode && totalProfit != null)
                 _chip(context, 'Revenue: ${formatCurrency(totalRevenue)}'),
-              ],
+              // #195 — the order-level discount that the per-item rows below
+              // cannot show. Without it the rows would look like they don't add
+              // up to the headline.
+              if (discounts != 0)
+                _chip(context, 'Less discounts: ${formatCurrency(discounts)}'),
             ],
           ),
         ],

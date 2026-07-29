@@ -21986,6 +21986,17 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _unitCostKoboMeta = const VerificationMeta(
+    'unitCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unitCostKobo = GeneratedColumn<int>(
+    'unit_cost_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
   @override
   late final GeneratedColumn<String> reason = GeneratedColumn<String>(
@@ -22087,6 +22098,7 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
     productId,
     storeId,
     quantityDiff,
+    unitCostKobo,
     reason,
     summary,
     requestedBy,
@@ -22145,6 +22157,15 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
       );
     } else if (isInserting) {
       context.missing(_quantityDiffMeta);
+    }
+    if (data.containsKey('unit_cost_kobo')) {
+      context.handle(
+        _unitCostKoboMeta,
+        unitCostKobo.isAcceptableOrUnknown(
+          data['unit_cost_kobo']!,
+          _unitCostKoboMeta,
+        ),
+      );
     }
     if (data.containsKey('reason')) {
       context.handle(
@@ -22236,6 +22257,10 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
         DriftSqlType.int,
         data['${effectivePrefix}quantity_diff'],
       )!,
+      unitCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_kobo'],
+      ),
       reason: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}reason'],
@@ -22284,6 +22309,22 @@ class StockAdjustmentRequestData extends DataClass
   final String productId;
   final String storeId;
   final int quantityDiff;
+
+  /// What the goods cost, **per unit, in kobo** — captured on the request
+  /// itself (#197, PRD #155 US 22) so the FIFO batch the approval mints carries
+  /// REAL cost instead of a guess.
+  ///
+  /// Nullable on purpose: a request legitimately may not know the cost (a
+  /// recount that simply found more units on the shelf has no invoice behind
+  /// it). NULL is handed to `InventoryDao.adjustStock` as an omitted
+  /// `inflowUnitCostKobo`, which falls back to the product's recorded scalar
+  /// price (#189) — so the fallback is what runs when nobody stated a cost, and
+  /// a stated cost always wins.
+  ///
+  /// Only meaningful on an INCREASE. A decrease values itself by drawing this
+  /// store's FIFO queue (#7a) and snapshotting what it drew, so the column is
+  /// left NULL there — the requester is not the authority on what a loss cost.
+  final int? unitCostKobo;
   final String reason;
   final String summary;
   final String? requestedBy;
@@ -22298,6 +22339,7 @@ class StockAdjustmentRequestData extends DataClass
     required this.productId,
     required this.storeId,
     required this.quantityDiff,
+    this.unitCostKobo,
     required this.reason,
     required this.summary,
     this.requestedBy,
@@ -22315,6 +22357,9 @@ class StockAdjustmentRequestData extends DataClass
     map['product_id'] = Variable<String>(productId);
     map['store_id'] = Variable<String>(storeId);
     map['quantity_diff'] = Variable<int>(quantityDiff);
+    if (!nullToAbsent || unitCostKobo != null) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo);
+    }
     map['reason'] = Variable<String>(reason);
     map['summary'] = Variable<String>(summary);
     if (!nullToAbsent || requestedBy != null) {
@@ -22339,6 +22384,9 @@ class StockAdjustmentRequestData extends DataClass
       productId: Value(productId),
       storeId: Value(storeId),
       quantityDiff: Value(quantityDiff),
+      unitCostKobo: unitCostKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitCostKobo),
       reason: Value(reason),
       summary: Value(summary),
       requestedBy: requestedBy == null && nullToAbsent
@@ -22367,6 +22415,7 @@ class StockAdjustmentRequestData extends DataClass
       productId: serializer.fromJson<String>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
       quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
+      unitCostKobo: serializer.fromJson<int?>(json['unitCostKobo']),
       reason: serializer.fromJson<String>(json['reason']),
       summary: serializer.fromJson<String>(json['summary']),
       requestedBy: serializer.fromJson<String?>(json['requestedBy']),
@@ -22386,6 +22435,7 @@ class StockAdjustmentRequestData extends DataClass
       'productId': serializer.toJson<String>(productId),
       'storeId': serializer.toJson<String>(storeId),
       'quantityDiff': serializer.toJson<int>(quantityDiff),
+      'unitCostKobo': serializer.toJson<int?>(unitCostKobo),
       'reason': serializer.toJson<String>(reason),
       'summary': serializer.toJson<String>(summary),
       'requestedBy': serializer.toJson<String?>(requestedBy),
@@ -22403,6 +22453,7 @@ class StockAdjustmentRequestData extends DataClass
     String? productId,
     String? storeId,
     int? quantityDiff,
+    Value<int?> unitCostKobo = const Value.absent(),
     String? reason,
     String? summary,
     Value<String?> requestedBy = const Value.absent(),
@@ -22417,6 +22468,7 @@ class StockAdjustmentRequestData extends DataClass
     productId: productId ?? this.productId,
     storeId: storeId ?? this.storeId,
     quantityDiff: quantityDiff ?? this.quantityDiff,
+    unitCostKobo: unitCostKobo.present ? unitCostKobo.value : this.unitCostKobo,
     reason: reason ?? this.reason,
     summary: summary ?? this.summary,
     requestedBy: requestedBy.present ? requestedBy.value : this.requestedBy,
@@ -22439,6 +22491,9 @@ class StockAdjustmentRequestData extends DataClass
       quantityDiff: data.quantityDiff.present
           ? data.quantityDiff.value
           : this.quantityDiff,
+      unitCostKobo: data.unitCostKobo.present
+          ? data.unitCostKobo.value
+          : this.unitCostKobo,
       reason: data.reason.present ? data.reason.value : this.reason,
       summary: data.summary.present ? data.summary.value : this.summary,
       requestedBy: data.requestedBy.present
@@ -22466,6 +22521,7 @@ class StockAdjustmentRequestData extends DataClass
           ..write('productId: $productId, ')
           ..write('storeId: $storeId, ')
           ..write('quantityDiff: $quantityDiff, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
           ..write('reason: $reason, ')
           ..write('summary: $summary, ')
           ..write('requestedBy: $requestedBy, ')
@@ -22485,6 +22541,7 @@ class StockAdjustmentRequestData extends DataClass
     productId,
     storeId,
     quantityDiff,
+    unitCostKobo,
     reason,
     summary,
     requestedBy,
@@ -22503,6 +22560,7 @@ class StockAdjustmentRequestData extends DataClass
           other.productId == this.productId &&
           other.storeId == this.storeId &&
           other.quantityDiff == this.quantityDiff &&
+          other.unitCostKobo == this.unitCostKobo &&
           other.reason == this.reason &&
           other.summary == this.summary &&
           other.requestedBy == this.requestedBy &&
@@ -22520,6 +22578,7 @@ class StockAdjustmentRequestsCompanion
   final Value<String> productId;
   final Value<String> storeId;
   final Value<int> quantityDiff;
+  final Value<int?> unitCostKobo;
   final Value<String> reason;
   final Value<String> summary;
   final Value<String?> requestedBy;
@@ -22535,6 +22594,7 @@ class StockAdjustmentRequestsCompanion
     this.productId = const Value.absent(),
     this.storeId = const Value.absent(),
     this.quantityDiff = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
     this.reason = const Value.absent(),
     this.summary = const Value.absent(),
     this.requestedBy = const Value.absent(),
@@ -22551,6 +22611,7 @@ class StockAdjustmentRequestsCompanion
     required String productId,
     required String storeId,
     required int quantityDiff,
+    this.unitCostKobo = const Value.absent(),
     required String reason,
     required String summary,
     this.requestedBy = const Value.absent(),
@@ -22572,6 +22633,7 @@ class StockAdjustmentRequestsCompanion
     Expression<String>? productId,
     Expression<String>? storeId,
     Expression<int>? quantityDiff,
+    Expression<int>? unitCostKobo,
     Expression<String>? reason,
     Expression<String>? summary,
     Expression<String>? requestedBy,
@@ -22588,6 +22650,7 @@ class StockAdjustmentRequestsCompanion
       if (productId != null) 'product_id': productId,
       if (storeId != null) 'store_id': storeId,
       if (quantityDiff != null) 'quantity_diff': quantityDiff,
+      if (unitCostKobo != null) 'unit_cost_kobo': unitCostKobo,
       if (reason != null) 'reason': reason,
       if (summary != null) 'summary': summary,
       if (requestedBy != null) 'requested_by': requestedBy,
@@ -22606,6 +22669,7 @@ class StockAdjustmentRequestsCompanion
     Value<String>? productId,
     Value<String>? storeId,
     Value<int>? quantityDiff,
+    Value<int?>? unitCostKobo,
     Value<String>? reason,
     Value<String>? summary,
     Value<String?>? requestedBy,
@@ -22622,6 +22686,7 @@ class StockAdjustmentRequestsCompanion
       productId: productId ?? this.productId,
       storeId: storeId ?? this.storeId,
       quantityDiff: quantityDiff ?? this.quantityDiff,
+      unitCostKobo: unitCostKobo ?? this.unitCostKobo,
       reason: reason ?? this.reason,
       summary: summary ?? this.summary,
       requestedBy: requestedBy ?? this.requestedBy,
@@ -22651,6 +22716,9 @@ class StockAdjustmentRequestsCompanion
     }
     if (quantityDiff.present) {
       map['quantity_diff'] = Variable<int>(quantityDiff.value);
+    }
+    if (unitCostKobo.present) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo.value);
     }
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
@@ -22690,6 +22758,7 @@ class StockAdjustmentRequestsCompanion
           ..write('productId: $productId, ')
           ..write('storeId: $storeId, ')
           ..write('quantityDiff: $quantityDiff, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
           ..write('reason: $reason, ')
           ..write('summary: $summary, ')
           ..write('requestedBy: $requestedBy, ')
@@ -24393,6 +24462,31 @@ class $OrderCrateLinesTable extends OrderCrateLines
         requiredDuringInsert: false,
         defaultValue: currentDateAndTime,
       );
+  static const VerificationMeta _settledAtMeta = const VerificationMeta(
+    'settledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> settledAt = GeneratedColumn<DateTime>(
+    'settled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _settledByMeta = const VerificationMeta(
+    'settledBy',
+  );
+  @override
+  late final GeneratedColumn<String> settledBy = GeneratedColumn<String>(
+    'settled_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -24404,6 +24498,8 @@ class $OrderCrateLinesTable extends OrderCrateLines
     depositPaidKobo,
     createdAt,
     lastUpdatedAt,
+    settledAt,
+    settledBy,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -24491,6 +24587,18 @@ class $OrderCrateLinesTable extends OrderCrateLines
         ),
       );
     }
+    if (data.containsKey('settled_at')) {
+      context.handle(
+        _settledAtMeta,
+        settledAt.isAcceptableOrUnknown(data['settled_at']!, _settledAtMeta),
+      );
+    }
+    if (data.containsKey('settled_by')) {
+      context.handle(
+        _settledByMeta,
+        settledBy.isAcceptableOrUnknown(data['settled_by']!, _settledByMeta),
+      );
+    }
     return context;
   }
 
@@ -24536,6 +24644,14 @@ class $OrderCrateLinesTable extends OrderCrateLines
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_updated_at'],
       )!,
+      settledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}settled_at'],
+      ),
+      settledBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settled_by'],
+      ),
     );
   }
 
@@ -24556,6 +24672,26 @@ class OrderCrateLineData extends DataClass
   final int depositPaidKobo;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
+
+  /// **The settlement claim (#188, PRD #155 US 14).** Stamped — inside the ONE
+  /// Confirm transaction — the moment this `(order, manufacturer)` pair's crate
+  /// returns are settled (physical empties, crate-track netting, AND the
+  /// money-track deposit). A stamped line is SKIPPED by a later Confirm, so the
+  /// deposit can never be refunded twice and the empties pool can never be
+  /// credited twice for the same pair.
+  ///
+  /// The status re-read on `orders` alone could not close this: it only catches
+  /// the CONVERGED case (the second device has already pulled `completed`). Two
+  /// devices both offline each read `pending`, so the per-pair claim — which
+  /// rides the same natural-key row both devices already share, and therefore
+  /// converges through the `order_crate_lines` dedup restore — is what makes the
+  /// settlement idempotent ACROSS devices. Nullable: every pre-v75 row, and
+  /// every still-unsettled line, is NULL.
+  final DateTime? settledAt;
+
+  /// Who won the settlement claim (the confirmer). Recorded alongside
+  /// [settledAt] for audit; never used to gate anything.
+  final String? settledBy;
   const OrderCrateLineData({
     required this.id,
     required this.businessId,
@@ -24566,6 +24702,8 @@ class OrderCrateLineData extends DataClass
     required this.depositPaidKobo,
     required this.createdAt,
     required this.lastUpdatedAt,
+    this.settledAt,
+    this.settledBy,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -24579,6 +24717,12 @@ class OrderCrateLineData extends DataClass
     map['deposit_paid_kobo'] = Variable<int>(depositPaidKobo);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    if (!nullToAbsent || settledAt != null) {
+      map['settled_at'] = Variable<DateTime>(settledAt);
+    }
+    if (!nullToAbsent || settledBy != null) {
+      map['settled_by'] = Variable<String>(settledBy);
+    }
     return map;
   }
 
@@ -24593,6 +24737,12 @@ class OrderCrateLineData extends DataClass
       depositPaidKobo: Value(depositPaidKobo),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
+      settledAt: settledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledAt),
+      settledBy: settledBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledBy),
     );
   }
 
@@ -24611,6 +24761,8 @@ class OrderCrateLineData extends DataClass
       depositPaidKobo: serializer.fromJson<int>(json['depositPaidKobo']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+      settledAt: serializer.fromJson<DateTime?>(json['settledAt']),
+      settledBy: serializer.fromJson<String?>(json['settledBy']),
     );
   }
   @override
@@ -24626,6 +24778,8 @@ class OrderCrateLineData extends DataClass
       'depositPaidKobo': serializer.toJson<int>(depositPaidKobo),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+      'settledAt': serializer.toJson<DateTime?>(settledAt),
+      'settledBy': serializer.toJson<String?>(settledBy),
     };
   }
 
@@ -24639,6 +24793,8 @@ class OrderCrateLineData extends DataClass
     int? depositPaidKobo,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
+    Value<DateTime?> settledAt = const Value.absent(),
+    Value<String?> settledBy = const Value.absent(),
   }) => OrderCrateLineData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
@@ -24649,6 +24805,8 @@ class OrderCrateLineData extends DataClass
     depositPaidKobo: depositPaidKobo ?? this.depositPaidKobo,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+    settledAt: settledAt.present ? settledAt.value : this.settledAt,
+    settledBy: settledBy.present ? settledBy.value : this.settledBy,
   );
   OrderCrateLineData copyWithCompanion(OrderCrateLinesCompanion data) {
     return OrderCrateLineData(
@@ -24673,6 +24831,8 @@ class OrderCrateLineData extends DataClass
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
           : this.lastUpdatedAt,
+      settledAt: data.settledAt.present ? data.settledAt.value : this.settledAt,
+      settledBy: data.settledBy.present ? data.settledBy.value : this.settledBy,
     );
   }
 
@@ -24687,7 +24847,9 @@ class OrderCrateLineData extends DataClass
           ..write('depositRateKobo: $depositRateKobo, ')
           ..write('depositPaidKobo: $depositPaidKobo, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('settledAt: $settledAt, ')
+          ..write('settledBy: $settledBy')
           ..write(')'))
         .toString();
   }
@@ -24703,6 +24865,8 @@ class OrderCrateLineData extends DataClass
     depositPaidKobo,
     createdAt,
     lastUpdatedAt,
+    settledAt,
+    settledBy,
   );
   @override
   bool operator ==(Object other) =>
@@ -24716,7 +24880,9 @@ class OrderCrateLineData extends DataClass
           other.depositRateKobo == this.depositRateKobo &&
           other.depositPaidKobo == this.depositPaidKobo &&
           other.createdAt == this.createdAt &&
-          other.lastUpdatedAt == this.lastUpdatedAt);
+          other.lastUpdatedAt == this.lastUpdatedAt &&
+          other.settledAt == this.settledAt &&
+          other.settledBy == this.settledBy);
 }
 
 class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
@@ -24729,6 +24895,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
   final Value<int> depositPaidKobo;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
+  final Value<DateTime?> settledAt;
+  final Value<String?> settledBy;
   final Value<int> rowid;
   const OrderCrateLinesCompanion({
     this.id = const Value.absent(),
@@ -24740,6 +24908,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     this.depositPaidKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.settledAt = const Value.absent(),
+    this.settledBy = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OrderCrateLinesCompanion.insert({
@@ -24752,6 +24922,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     this.depositPaidKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.settledAt = const Value.absent(),
+    this.settledBy = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        orderId = Value(orderId),
@@ -24767,6 +24939,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     Expression<int>? depositPaidKobo,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
+    Expression<DateTime>? settledAt,
+    Expression<String>? settledBy,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -24779,6 +24953,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
       if (depositPaidKobo != null) 'deposit_paid_kobo': depositPaidKobo,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (settledAt != null) 'settled_at': settledAt,
+      if (settledBy != null) 'settled_by': settledBy,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -24793,6 +24969,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     Value<int>? depositPaidKobo,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
+    Value<DateTime?>? settledAt,
+    Value<String?>? settledBy,
     Value<int>? rowid,
   }) {
     return OrderCrateLinesCompanion(
@@ -24805,6 +24983,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
       depositPaidKobo: depositPaidKobo ?? this.depositPaidKobo,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      settledAt: settledAt ?? this.settledAt,
+      settledBy: settledBy ?? this.settledBy,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -24839,6 +25019,12 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     if (lastUpdatedAt.present) {
       map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
     }
+    if (settledAt.present) {
+      map['settled_at'] = Variable<DateTime>(settledAt.value);
+    }
+    if (settledBy.present) {
+      map['settled_by'] = Variable<String>(settledBy.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -24857,6 +25043,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
           ..write('depositPaidKobo: $depositPaidKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('settledAt: $settledAt, ')
+          ..write('settledBy: $settledBy, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -56215,6 +56403,26 @@ final class $$UsersTableReferences
     );
   }
 
+  static MultiTypedResultKey<$OrderCrateLinesTable, List<OrderCrateLineData>>
+  _orderCrateLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.orderCrateLines,
+    aliasName: $_aliasNameGenerator(db.users.id, db.orderCrateLines.settledBy),
+  );
+
+  $$OrderCrateLinesTableProcessedTableManager get orderCrateLinesRefs {
+    final manager = $$OrderCrateLinesTableTableManager(
+      $_db,
+      $_db.orderCrateLines,
+    ).filter((f) => f.settledBy.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _orderCrateLinesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$StockCountsTable, List<StockCountData>>
   _stockCountsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.stockCounts,
@@ -56538,6 +56746,31 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
           }) => $$StockAdjustmentsTableFilterComposer(
             $db: $db,
             $table: $db.stockAdjustments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> orderCrateLinesRefs(
+    Expression<bool> Function($$OrderCrateLinesTableFilterComposer f) f,
+  ) {
+    final $$OrderCrateLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.orderCrateLines,
+      getReferencedColumn: (t) => t.settledBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrderCrateLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.orderCrateLines,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -57042,6 +57275,31 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> orderCrateLinesRefs<T extends Object>(
+    Expression<T> Function($$OrderCrateLinesTableAnnotationComposer a) f,
+  ) {
+    final $$OrderCrateLinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.orderCrateLines,
+      getReferencedColumn: (t) => t.settledBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrderCrateLinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.orderCrateLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> stockCountsRefs<T extends Object>(
     Expression<T> Function($$StockCountsTableAnnotationComposer a) f,
   ) {
@@ -57287,6 +57545,7 @@ class $$UsersTableTableManager
             bool businessId,
             bool storeId,
             bool stockAdjustmentsRefs,
+            bool orderCrateLinesRefs,
             bool stockCountsRefs,
             bool dailyClosingsRefs,
             bool vanReturnEventsRefs,
@@ -57400,6 +57659,7 @@ class $$UsersTableTableManager
                 businessId = false,
                 storeId = false,
                 stockAdjustmentsRefs = false,
+                orderCrateLinesRefs = false,
                 stockCountsRefs = false,
                 dailyClosingsRefs = false,
                 vanReturnEventsRefs = false,
@@ -57414,6 +57674,7 @@ class $$UsersTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (stockAdjustmentsRefs) db.stockAdjustments,
+                    if (orderCrateLinesRefs) db.orderCrateLines,
                     if (stockCountsRefs) db.stockCounts,
                     if (dailyClosingsRefs) db.dailyClosings,
                     if (vanReturnEventsRefs) db.vanReturnEvents,
@@ -57489,6 +57750,27 @@ class $$UsersTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.performedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (orderCrateLinesRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          OrderCrateLineData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._orderCrateLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).orderCrateLinesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.settledBy == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -57705,6 +57987,7 @@ typedef $$UsersTableProcessedTableManager =
         bool businessId,
         bool storeId,
         bool stockAdjustmentsRefs,
+        bool orderCrateLinesRefs,
         bool stockCountsRefs,
         bool dailyClosingsRefs,
         bool vanReturnEventsRefs,
@@ -80383,6 +80666,7 @@ typedef $$StockAdjustmentRequestsTableCreateCompanionBuilder =
       required String productId,
       required String storeId,
       required int quantityDiff,
+      Value<int?> unitCostKobo,
       required String reason,
       required String summary,
       Value<String?> requestedBy,
@@ -80400,6 +80684,7 @@ typedef $$StockAdjustmentRequestsTableUpdateCompanionBuilder =
       Value<String> productId,
       Value<String> storeId,
       Value<int> quantityDiff,
+      Value<int?> unitCostKobo,
       Value<String> reason,
       Value<String> summary,
       Value<String?> requestedBy,
@@ -80543,6 +80828,11 @@ class $$StockAdjustmentRequestsTableFilterComposer
 
   ColumnFilters<int> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -80711,6 +81001,11 @@ class $$StockAdjustmentRequestsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get reason => $composableBuilder(
     column: $table.reason,
     builder: (column) => ColumnOrderings(column),
@@ -80871,6 +81166,11 @@ class $$StockAdjustmentRequestsTableAnnotationComposer
 
   GeneratedColumn<int> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
     builder: (column) => column,
   );
 
@@ -81065,6 +81365,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 Value<String> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
                 Value<int> quantityDiff = const Value.absent(),
+                Value<int?> unitCostKobo = const Value.absent(),
                 Value<String> reason = const Value.absent(),
                 Value<String> summary = const Value.absent(),
                 Value<String?> requestedBy = const Value.absent(),
@@ -81080,6 +81381,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 productId: productId,
                 storeId: storeId,
                 quantityDiff: quantityDiff,
+                unitCostKobo: unitCostKobo,
                 reason: reason,
                 summary: summary,
                 requestedBy: requestedBy,
@@ -81097,6 +81399,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 required String productId,
                 required String storeId,
                 required int quantityDiff,
+                Value<int?> unitCostKobo = const Value.absent(),
                 required String reason,
                 required String summary,
                 Value<String?> requestedBy = const Value.absent(),
@@ -81112,6 +81415,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 productId: productId,
                 storeId: storeId,
                 quantityDiff: quantityDiff,
+                unitCostKobo: unitCostKobo,
                 reason: reason,
                 summary: summary,
                 requestedBy: requestedBy,
@@ -82815,6 +83119,8 @@ typedef $$OrderCrateLinesTableCreateCompanionBuilder =
       Value<int> depositPaidKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<DateTime?> settledAt,
+      Value<String?> settledBy,
       Value<int> rowid,
     });
 typedef $$OrderCrateLinesTableUpdateCompanionBuilder =
@@ -82828,6 +83134,8 @@ typedef $$OrderCrateLinesTableUpdateCompanionBuilder =
       Value<int> depositPaidKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<DateTime?> settledAt,
+      Value<String?> settledBy,
       Value<int> rowid,
     });
 
@@ -82902,6 +83210,24 @@ final class $$OrderCrateLinesTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static $UsersTable _settledByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.orderCrateLines.settledBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get settledBy {
+    final $_column = $_itemColumn<String>('settled_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_settledByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 }
 
 class $$OrderCrateLinesTableFilterComposer
@@ -82940,6 +83266,11 @@ class $$OrderCrateLinesTableFilterComposer
 
   ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get settledAt => $composableBuilder(
+    column: $table.settledAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -83011,6 +83342,29 @@ class $$OrderCrateLinesTableFilterComposer
     );
     return composer;
   }
+
+  $$UsersTableFilterComposer get settledBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.settledBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$OrderCrateLinesTableOrderingComposer
@@ -83049,6 +83403,11 @@ class $$OrderCrateLinesTableOrderingComposer
 
   ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get settledAt => $composableBuilder(
+    column: $table.settledAt,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -83120,6 +83479,29 @@ class $$OrderCrateLinesTableOrderingComposer
     );
     return composer;
   }
+
+  $$UsersTableOrderingComposer get settledBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.settledBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$OrderCrateLinesTableAnnotationComposer
@@ -83156,6 +83538,9 @@ class $$OrderCrateLinesTableAnnotationComposer
     column: $table.lastUpdatedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<DateTime> get settledAt =>
+      $composableBuilder(column: $table.settledAt, builder: (column) => column);
 
   $$BusinessesTableAnnotationComposer get businessId {
     final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
@@ -83225,6 +83610,29 @@ class $$OrderCrateLinesTableAnnotationComposer
     );
     return composer;
   }
+
+  $$UsersTableAnnotationComposer get settledBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.settledBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$OrderCrateLinesTableTableManager
@@ -83244,6 +83652,7 @@ class $$OrderCrateLinesTableTableManager
             bool businessId,
             bool orderId,
             bool manufacturerId,
+            bool settledBy,
           })
         > {
   $$OrderCrateLinesTableTableManager(
@@ -83270,6 +83679,8 @@ class $$OrderCrateLinesTableTableManager
                 Value<int> depositPaidKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<DateTime?> settledAt = const Value.absent(),
+                Value<String?> settledBy = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrderCrateLinesCompanion(
                 id: id,
@@ -83281,6 +83692,8 @@ class $$OrderCrateLinesTableTableManager
                 depositPaidKobo: depositPaidKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                settledAt: settledAt,
+                settledBy: settledBy,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -83294,6 +83707,8 @@ class $$OrderCrateLinesTableTableManager
                 Value<int> depositPaidKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<DateTime?> settledAt = const Value.absent(),
+                Value<String?> settledBy = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrderCrateLinesCompanion.insert(
                 id: id,
@@ -83305,6 +83720,8 @@ class $$OrderCrateLinesTableTableManager
                 depositPaidKobo: depositPaidKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                settledAt: settledAt,
+                settledBy: settledBy,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -83316,7 +83733,12 @@ class $$OrderCrateLinesTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({businessId = false, orderId = false, manufacturerId = false}) {
+              ({
+                businessId = false,
+                orderId = false,
+                manufacturerId = false,
+                settledBy = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [],
@@ -83381,6 +83803,21 @@ class $$OrderCrateLinesTableTableManager
                                   )
                                   as T;
                         }
+                        if (settledBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.settledBy,
+                                    referencedTable:
+                                        $$OrderCrateLinesTableReferences
+                                            ._settledByTable(db),
+                                    referencedColumn:
+                                        $$OrderCrateLinesTableReferences
+                                            ._settledByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
                         return state;
                       },
@@ -83409,6 +83846,7 @@ typedef $$OrderCrateLinesTableProcessedTableManager =
         bool businessId,
         bool orderId,
         bool manufacturerId,
+        bool settledBy,
       })
     >;
 typedef $$PurchaseItemsTableCreateCompanionBuilder =

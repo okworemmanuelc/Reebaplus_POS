@@ -371,12 +371,21 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// [ledgerId] lets the CALLER pin the appended row's id (#188). Confirm's
+  /// crate-track settlement passes a DETERMINISTIC id derived from
+  /// `(order, manufacturer)` so two devices that both settle the order offline
+  /// mint the same row and the cloud's primary-key upsert collapses the
+  /// duplicate instead of netting the customer's crate debt twice. Every other
+  /// caller omits it and keeps a fresh [UuidV7.generate]: two manual returns of
+  /// the same brand by the same customer are two REAL events and must not
+  /// collapse into one.
   Future<void> recordCrateReturnByCustomer({
     required String customerId,
     required String manufacturerId,
     required int quantity,
     required String performedBy,
     String? orderId,
+    String? ledgerId,
   }) async {
     final delta = -quantity; // customer returning reduces balance
 
@@ -389,9 +398,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       // v29: a customer crate row sets BOTH customer_id (owner) AND
       // manufacturer_id (whose crates), keyed by manufacturer. crate_size_group
       // is null (vestigial).
-      final ledgerId = UuidV7.generate();
+      final rowId = ledgerId ?? UuidV7.generate();
       final ledgerComp = CrateLedgerCompanion.insert(
-        id: Value(ledgerId),
+        id: Value(rowId),
         businessId: requireBusinessId(),
         customerId: Value(customerId),
         manufacturerId: Value(manufacturerId),
@@ -424,7 +433,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         final payload = <String, dynamic>{
           'p_business_id': requireBusinessId(),
           'p_actor_id': performedBy,
-          'p_ledger_id': ledgerId,
+          'p_ledger_id': rowId,
           'p_owner_kind': 'customer',
           'p_owner_id': customerId,
           'p_manufacturer_id': manufacturerId,
@@ -764,10 +773,24 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// scalar and, when a store is active, the per-store cache. #157: now ALWAYS
   /// appends a store-stamped `adjusted` crate_ledger row — including the
   /// store-less case, which previously skipped the ledger entirely.
+  ///
+  /// **[orderId] makes the credit idempotent across devices (#188).** When the
+  /// crates come back against a specific ORDER (Confirm's crate returns), the
+  /// appended ledger row is stamped with that order AND given a DETERMINISTIC id
+  /// derived from `(order, manufacturer, store, movement)`, so two devices that
+  /// both settle the order offline mint the SAME row and the cloud's primary-key
+  /// upsert collapses the duplicate instead of crediting the pool twice
+  /// (`CRATE_TRACKING_AUDIT.md` A3). The pool is DERIVED from these rows (ADR
+  /// 0020) — the `empty_crate_stock` scalar and the per-store cache are unpushed
+  /// local projections — so collapsing the ledger row IS collapsing the credit.
+  /// Omit [orderId] for an order-less credit (a manual return, a delivery): the
+  /// row keeps a fresh id, exactly as before, because two such credits are two
+  /// real events.
   Future<void> addEmptiesToPool(
     String manufacturerId,
     int quantity, {
     String? storeId,
+    String? orderId,
   }) async {
     if (quantity == 0) return;
     await transaction(() async {
@@ -795,6 +818,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         storeId: storeId,
         quantityDelta: quantity,
         movementType: 'adjusted',
+        orderId: orderId,
       );
     });
   }
@@ -1204,20 +1228,42 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
 
   /// Append an append-only, store-stamped business-pool ledger row and enqueue
   /// it. Used by the physical-pool verbs above.
+  ///
+  /// [orderId] stamps the row's `reference_order_id` AND switches the id to a
+  /// DETERMINISTIC one derived from `(order, manufacturer, movement)` — see
+  /// [addEmptiesToPool] for why (#188). Without it the id stays a fresh
+  /// [UuidV7.generate], which is correct for an order-less pool movement.
+  ///
+  /// [storeId] is deliberately NOT part of that seed. It is the CONFIRMING
+  /// DEVICE's active store, not a fact about the order, so two tills settling
+  /// the same order from different active stores would otherwise seed two
+  /// different ids and credit the pool twice — the exact partition this closes.
+  /// `crate_ledger.store_id` is outside the append-only immutable set, so the
+  /// collapsed row's store is a last-write-wins detail (as device-dependent as
+  /// it always was) while the business-wide pool total — the figure that must
+  /// not double — is right.
   Future<void> _appendPoolLedgerRow({
     required String manufacturerId,
     String? storeId,
     required int quantityDelta,
     required String movementType,
     String? performedBy,
+    String? orderId,
   }) async {
     final ledgerComp = CrateLedgerCompanion.insert(
-      id: Value(UuidV7.generate()),
+      id: Value(
+        orderId == null
+            ? UuidV7.generate()
+            : UuidV7.deterministic(
+                'crate_pool:$orderId:$manufacturerId:$movementType',
+              ),
+      ),
       businessId: requireBusinessId(),
       manufacturerId: Value(manufacturerId),
       storeId: Value(storeId),
       quantityDelta: quantityDelta,
       movementType: movementType,
+      referenceOrderId: Value(orderId),
       performedBy: Value(performedBy),
       lastUpdatedAt: Value(DateTime.now()),
     );

@@ -31,21 +31,75 @@ int computeTotalSalesKobo(
     if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
       continue;
     }
-    var net = 0;
-    for (final line in o.items) {
-      if (!inScope(line.item.storeId)) continue;
-      net += line.item.quantity * line.item.unitPriceKobo;
-    }
-    // Order-level discount is contra-revenue; scoped by the order's store to
-    // match the reconciliation (lines carry the same store in practice).
-    if (inScope(o.order.storeId)) net -= o.order.discountKobo;
-    total += net;
+    total += orderGoodsNetKobo(o, inScope: inScope);
   }
   return total;
 }
 
+/// ONE order's contribution to [computeTotalSalesKobo]: its in-scope item lines
+/// at gross, MINUS the order-level discount when the order's own store is in
+/// scope. Deposit-exclusive for the same reason the period figure is — a
+/// refundable crate deposit is never an `order_items` line.
+///
+/// Split out (#195) so every PER-ORDER "what did this sale bring in" surface —
+/// the Home staff breakdown, the Total Sales drill-down — resolves the figure
+/// through the same definition the period headline uses, instead of reaching
+/// for `orders.totalAmountKobo` / `net_amount_kobo` (deposit-IN, so a crate
+/// shop's staff league table was inflated by every deposit that cashier took).
+///
+/// The caller decides whether the order counts as a sale and falls in the
+/// period; this is purely the money on one order.
+int orderGoodsNetKobo(
+  OrderWithItems order, {
+  bool Function(String? storeId) inScope = _anyStore,
+}) {
+  var net = 0;
+  for (final line in order.items) {
+    if (!inScope(line.item.storeId)) continue;
+    net += line.item.quantity * line.item.unitPriceKobo;
+  }
+  return net - orderDiscountKobo(order, inScope: inScope);
+}
+
+/// ONE order's discount as it counts toward a scoped figure: `discountKobo`
+/// when the ORDER's own store is in scope, else 0.
+///
+/// The discount is order-level, so unlike the item lines it cannot be scoped
+/// per line — the order's store is what decides whether it belongs to this
+/// view. Every surface that nets a discount out of a money figure resolves it
+/// here (#195), so "which store wears the discount" is answered in one place
+/// instead of being re-decided per screen.
+int orderDiscountKobo(
+  OrderWithItems order, {
+  bool Function(String? storeId) inScope = _anyStore,
+}) => inScope(order.order.storeId) ? order.order.discountKobo : 0;
+
 bool _always(DateTime _) => true;
 bool _anyStore(String? _) => true;
+
+/// The **catalogue-price concession** on ONE sold line (#200 / PRD #155 US 32):
+/// how much less than the product's list price the line was actually charged.
+///
+/// `order_items.catalogue_price_kobo` (#176, migration 0158; cloud parity #183,
+/// migration 0160) is written ONLY when the cashier overrode the tier list price
+/// — it is NULL when the line went out at list, and NULL for product-less quick
+/// sales, so a NULL means "no concession to report", never "unknown". A charge
+/// ABOVE list yields a negative figure and is kept signed rather than clamped:
+/// an over-charge is as much a margin-review fact as a give-away, and clamping
+/// would let one line's markup hide behind another's discount.
+///
+/// This is DISTINCT from `orders.discount_kobo` (§13.3), which is an explicit,
+/// order-level discount already netted out of Total Sales. A concession is the
+/// under-the-counter version — the price itself was quietly changed — which is
+/// exactly why it needs its own reader.
+int lineConcessionKobo({
+  required int? cataloguePriceKobo,
+  required int unitPriceKobo,
+  required int quantity,
+}) {
+  if (cataloguePriceKobo == null) return 0;
+  return (cataloguePriceKobo - unitPriceKobo) * quantity;
+}
 
 /// The goods-paid-now vs on-credit split of ONE order's contribution to Total
 /// Sales (#176 / PRD #155 story 29). [goodsNet] is the order's Total-Sales share

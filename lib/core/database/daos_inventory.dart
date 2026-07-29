@@ -484,41 +484,56 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// write-off is visible. Idempotent for a re-tapped delete: a store already at
   /// 0 on-hand is skipped, and the value is read back from the row this call
   /// wrote.
+  /// **All-or-nothing across stores (#193).** The whole multi-store sweep runs in
+  /// ONE transaction, so a failure part-way cannot leave some stores written off
+  /// and others not. That mattered less when the write-off was only an
+  /// informational stock-card line; now that the reconciliation books it as a
+  /// realized LOSS against net profit (#193), a partial sweep would post a
+  /// phantom loss for a product the caller then leaves alive — real money against
+  /// stock that is still on the shelf.
   Future<int> writeOffAllStockForDelete(
     String productId,
     String? staffId,
   ) async {
-    var totalValueKobo = 0;
-    final stores = await db.storesDao.getActiveStores();
-    for (final store in stores) {
-      final invRow =
-          await (select(inventory)..where(
-                (t) =>
-                    t.productId.equals(productId) &
-                    t.storeId.equals(store.id) &
-                    whereBusiness(t),
-              ))
-              .getSingleOrNull();
-      final qty = invRow?.quantity ?? 0;
-      if (qty <= 0) continue;
+    return transaction(() async {
+      var totalValueKobo = 0;
+      final stores = await db.storesDao.getActiveStores();
+      for (final store in stores) {
+        final invRow =
+            await (select(inventory)..where(
+                  (t) =>
+                      t.productId.equals(productId) &
+                      t.storeId.equals(store.id) &
+                      whereBusiness(t),
+                ))
+                .getSingleOrNull();
+        final qty = invRow?.quantity ?? 0;
+        if (qty <= 0) continue;
 
-      await adjustStock(productId, store.id, -qty, productDeletedReason, staffId);
+        await adjustStock(
+          productId,
+          store.id,
+          -qty,
+          productDeletedReason,
+          staffId,
+        );
 
-      final adj =
-          await (select(stockAdjustments)
-                ..where(
-                  (a) =>
-                      a.productId.equals(productId) &
-                      a.storeId.equals(store.id) &
-                      a.reason.equals(productDeletedReason) &
-                      whereBusiness(a),
-                )
-                ..orderBy([(a) => OrderingTerm.desc(a.createdAt)])
-                ..limit(1))
-              .getSingleOrNull();
-      totalValueKobo += adj?.valueKobo ?? 0;
-    }
-    return totalValueKobo;
+        final adj =
+            await (select(stockAdjustments)
+                  ..where(
+                    (a) =>
+                        a.productId.equals(productId) &
+                        a.storeId.equals(store.id) &
+                        a.reason.equals(productDeletedReason) &
+                        whereBusiness(a),
+                  )
+                  ..orderBy([(a) => OrderingTerm.desc(a.createdAt)])
+                  ..limit(1))
+                .getSingleOrNull();
+        totalValueKobo += adj?.valueKobo ?? 0;
+      }
+      return totalValueKobo;
+    });
   }
 
   Stream<List<CategoryData>> watchAllCategories() {
@@ -578,15 +593,22 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// receive-delivery and crate-return flows to credit the physical pool of
   /// returnable crates held against a manufacturer. Delegates to the Crate Pool
   /// seam (#157).
+  ///
+  /// [orderId] identifies the ORDER the crates came back against, when there is
+  /// one (Confirm's crate returns). It makes the credit idempotent across
+  /// offline devices — see [CratePoolDao.addEmptiesToPool] (#188). An order-less
+  /// credit (manual return, delivery) omits it.
   Future<void> addEmptyCrates(
     String manufacturerId,
     int quantity, {
     String? storeId,
+    String? orderId,
   }) async {
     await db.cratePoolDao.addEmptiesToPool(
       manufacturerId,
       quantity,
       storeId: storeId,
+      orderId: orderId,
     );
   }
 
@@ -2112,6 +2134,14 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
   /// approval-request notification to the CEO and the Manager(s) of the
   /// affected store. If no Manager is tied to that store, only the CEO is
   /// notified (same audience rule as the old §26.4 post-hoc notice).
+  ///
+  /// [unitCostKobo] is what the goods cost, per unit (#197, PRD #155 US 22).
+  /// The person filing the request is the one holding the invoice, so this is
+  /// the only place that cost can be captured; [approveRequest] threads it into
+  /// the inflow batch. `null` means "not stated" — the approval then falls back
+  /// to the product's recorded price (#189) rather than inventing a 0. Only an
+  /// **increase** carries one: a decrease values itself off this store's FIFO
+  /// queue (#7a), which the requester cannot know.
   Future<void> requestStockAdjustment({
     required String productId,
     required String storeId,
@@ -2119,6 +2149,7 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
     required String reason,
     required String summary,
     required String? requestedBy,
+    int? unitCostKobo,
   }) async {
     final row = StockAdjustmentRequestsCompanion.insert(
       id: Value(UuidV7.generate()),
@@ -2126,6 +2157,7 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
       productId: productId,
       storeId: storeId,
       quantityDiff: quantityDiff,
+      unitCostKobo: Value(quantityDiff > 0 ? unitCostKobo : null),
       reason: reason,
       summary: summary,
       requestedBy: Value(requestedBy),
@@ -2168,6 +2200,12 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
   /// `approved`, and notify the requester. Throws (rolling back the whole
   /// transaction) if the adjustment can't be applied — e.g. a Remove that would
   /// take stock negative — leaving the request `pending` for a retry.
+  ///
+  /// **US 22 (#197):** the increase is batched at the cost the REQUEST captured
+  /// (`unit_cost_kobo`), so the units it adds sell at real COGS. `null` — a
+  /// request that stated no cost, and every request written before this shipped
+  /// — hands `adjustStock` an omitted cost, which falls back to the product's
+  /// recorded scalar price (#189). A stated cost always wins over that fallback.
   Future<void> approveRequest({
     required String requestId,
     required String approverId,
@@ -2184,12 +2222,15 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
       if (req == null || req.status != 'pending') return;
 
       // Apply the actual stock movement (atomic via pos_inventory_delta_v2).
+      // #197: the cost the request captured is what the increase's FIFO batch is
+      // priced at; null defers to #189's recorded-price fallback.
       await db.inventoryDao.adjustStock(
         req.productId,
         req.storeId,
         req.quantityDiff,
         req.reason,
         req.requestedBy,
+        inflowUnitCostKobo: req.unitCostKobo,
       );
 
       final now = DateTime.now();

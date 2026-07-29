@@ -56,9 +56,9 @@ void main() {
                 id: Value(productId),
                 businessId: businessId,
                 name: 'Widget',
-                // #189: the cost basis an approved increase falls back to (the
-                // approval carries no price of its own). Absent → no cost on
-                // file, so the increase's batch is genuinely Uncosted.
+                // #189: the cost basis an approved increase falls back to when
+                // the request captured none. Absent → no cost on file either, so
+                // the increase's batch is genuinely Uncosted.
                 buyingPriceKobo: Value(s.productBuyingPriceKobo ?? 0)),
           );
       await db.into(db.inventory).insert(
@@ -89,11 +89,20 @@ void main() {
         reason: s.reason,
         summary: s.reason,
         requestedBy: requesterId,
+        // #197 (US 22): what the goods cost, captured ON the request. Null → the
+        // request states nothing and the approval falls back to #189.
+        unitCostKobo: s.requestUnitCostKobo,
       );
 
       final pending = await (db.select(db.stockAdjustmentRequests)
             ..where((r) => r.productId.equals(productId)))
           .getSingle();
+      // #197: the cost survives the pending round-trip — an approval days later
+      // (on another device, off another pull) still knows what was paid.
+      if (s.requestUnitCostKobo != null && s.quantityDiff > 0) {
+        expect(pending.unitCostKobo, s.requestUnitCostKobo,
+            reason: '${s.name}: cost captured on the pending request');
+      }
 
       if (s.operation == 'approve') {
         await reqDao.approveRequest(
@@ -113,7 +122,8 @@ void main() {
 
       // #7a cost outcomes: the value snapshotted onto an applied decrease, and
       // the cost of the batch an applied increase created (the newest batch) —
-      // the product's recorded cost, or 0 when it has none (#189).
+      // the cost the request captured (#197), else the product's recorded cost
+      // (#189), else 0.
       int? snapshotValueKobo;
       if (finalReq.status == 'approved' && s.quantityDiff < 0) {
         final adj = await (db.select(db.stockAdjustments)

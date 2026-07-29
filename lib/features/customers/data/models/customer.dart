@@ -1,8 +1,14 @@
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/features/customers/data/models/payment.dart';
 
 enum PriceTier { retailer, wholesaler }
 
+/// #202: this model used to carry two never-populated legacy fields —
+/// `emptyCratesBalance` (hardcoded `const {}`) and `payments` (hardcoded
+/// `const []`), each with a "fetch it from the table one day" TODO. Neither had
+/// a reader other than the dead cart crate-credit block, and completing the
+/// crate one as written would have discounted crate DEBTORS. Crate balances are
+/// derived from `crate_ledger` (ADR 0020) and payment history from
+/// `payment_transactions`; read those, never a field on this snapshot.
 class Customer {
   // Walk-in sentinel — replaces the legacy `id == -1` integer sentinel.
   static const String walkInId = '__walk_in__';
@@ -16,8 +22,6 @@ class Customer {
   final DateTime createdAt;
   final PriceTier priceTier;
   final bool isWalkIn;
-  final Map<String, int> emptyCratesBalance;
-  final List<Payment> payments;
   final String? storeId;
 
   Customer({
@@ -30,8 +34,6 @@ class Customer {
     DateTime? createdAt,
     this.priceTier = PriceTier.retailer,
     this.isWalkIn = false,
-    this.emptyCratesBalance = const {},
-    this.payments = const [],
     this.storeId,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -47,8 +49,6 @@ class Customer {
     DateTime? createdAt,
     PriceTier? priceTier,
     bool? isWalkIn,
-    Map<String, int>? emptyCratesBalance,
-    List<Payment>? payments,
     String? storeId,
   }) {
     return Customer(
@@ -61,8 +61,6 @@ class Customer {
       createdAt: createdAt ?? this.createdAt,
       priceTier: priceTier ?? this.priceTier,
       isWalkIn: isWalkIn ?? this.isWalkIn,
-      emptyCratesBalance: emptyCratesBalance ?? this.emptyCratesBalance,
-      payments: payments ?? this.payments,
       storeId: storeId ?? this.storeId,
     );
   }
@@ -83,8 +81,6 @@ class Customer {
       createdAt: data.createdAt,
       priceTier: group,
       isWalkIn: data.id == walkInId,
-      emptyCratesBalance: const {}, // TODO: Fetch from CrateBalances table
-      payments: const [], // TODO: Fetch from Payments table
       storeId: data.storeId,
     );
   }
@@ -95,7 +91,5 @@ class Customer {
     addressText: 'N/A',
     googleMapsLocation: 'N/A',
     isWalkIn: true,
-    emptyCratesBalance: const {},
-    payments: const [],
   );
 }

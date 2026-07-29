@@ -12,6 +12,9 @@ import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.d
 
 DateTime _day(int d) => DateTime(2026, 7, d);
 
+bool _anyDay(DateTime _) => true;
+bool _anyStore(String? _) => true;
+
 /// Builds one [OrderWithItems]. Item lines are `(qty, unitPriceKobo)` — the
 /// product is left null (the helper only sums lines; `productId` decides whether
 /// a line is a quick sale). `totalAmountKobo` deliberately BUNDLES the deposit
@@ -133,7 +136,37 @@ void main() {
     });
   });
 
-  group('Single Total Sales across the three surfaces (#176 AC)', () {
+  group('Single Total Sales across the three surfaces (#176 AC / #195)', () {
+    // The three surfaces, each resolved the way its own screen resolves it.
+    // The reconciliation one runs the REAL roll-up (`reconDataFrom`, the pure
+    // half of `computeReconData` extracted in #195) — the previous version of
+    // this test fabricated a `ReconData` from figures it computed itself, so it
+    // could not fail when the reconciliation's own loop drifted.
+    ({int home, int recon, int profit, ReconData reconData}) surfacesFor(
+      List<OrderWithItems> orders, {
+      bool Function(DateTime) inSpan = _anyDay,
+      bool Function(String?) inScope = _anyStore,
+    }) {
+      final reconData = reconDataFrom(
+        ReconInputs(
+          orders: orders,
+          inScope: inScope,
+          // The roll-up spans on start/endExclusive; the two callers below span
+          // on a period label, so bound the roll-up to the same single day.
+          start: _day(10),
+          endExclusive: _day(11),
+        ),
+      );
+      return (
+        // Home passes its already period-filtered orders + the store predicate.
+        home: computeTotalSalesKobo(orders, inScope: inScope),
+        recon: reconData.totalSalesKobo,
+        // The Profit report passes both predicates.
+        profit: computeTotalSalesKobo(orders, inSpan: inSpan, inScope: inScope),
+        reconData: reconData,
+      );
+    }
+
     test('Home, Recon, and Profit resolve the SAME figure for one order set',
         () {
       final orders = [
@@ -157,84 +190,104 @@ void main() {
       // Hand-computed expectation: (2,000 − 300) + (1,100) = 2,800 → 280000.
       const expected = 280000;
 
-      // The one helper both the Home dashboard and the Profit report call.
-      final homeSurface = computeTotalSalesKobo(orders);
-      final profitSurface =
-          computeTotalSalesKobo(orders, inSpan: (_) => true);
+      final s = surfacesFor(orders);
 
-      // The reconciliation surface: totalRevenueKobo (gross item lines) −
-      // discountsKobo, its documented `totalSalesKobo` getter. Feed the same
-      // gross + discount the recon compute derives, computed INDEPENDENTLY here.
-      final grossLines = orders
-          .where((o) => o.order.status != 'cancelled')
-          .expand((o) => o.items)
-          .fold<int>(0, (s, i) => s + i.item.quantity * i.item.unitPriceKobo);
-      final discounts = orders
-          .where((o) => o.order.status != 'cancelled')
-          .fold<int>(0, (s, o) => s + o.order.discountKobo);
-      final reconSurface = ReconData(
-        totalRevenueKobo: grossLines,
-        costedRevenueKobo: 0,
-        cogsKobo: 0,
-        discountsKobo: discounts,
-        vatEnabled: false,
-        vatRateBps: 0,
-        vatKobo: 0,
-        itemsSold: 0,
-        skus: 0,
-        uncostedItems: 0,
-        refundsKobo: 0,
-        cashSalesKobo: 0,
-        cashDebtsCollectedKobo: 0,
-        cashRefundsKobo: 0,
-        cashExpensesKobo: 0,
-        cashSupplierPaidKobo: 0,
-        cashCrateDepositsKobo: 0,
-        bestStaff: null,
-        bestStaffKobo: 0,
-        expensesKobo: 0,
-        expensesCount: 0,
-        damageUnits: 0,
-        damageCostKobo: 0,
-        damageRetailKobo: 0,
-        crateDamageDepositKobo: 0,
-        hasStockCount: false,
-        productsCounted: 0,
-        shortageCount: 0,
-        shortageUnits: 0,
-        surplusCount: 0,
-        surplusUnits: 0,
-        shortageCostKobo: 0,
-        shortageRetailKobo: 0,
-        shortages: const [],
-        goodsReceivedKobo: 0,
-        supplierPaidKobo: 0,
-        totalOwedKobo: 0,
-        showCrates: false,
-        crateUnits: 0,
-        crateDepositKobo: 0,
-        heldCrateDepositsKobo: 0,
-        supplierCrateDebtKobo: 0,
-        supplierPayableKobo: 0,
-        inventoryOnHandKobo: 0,
-        uncostedInventoryItems: 0,
-        surplusCostKobo: 0,
-        stockOpeningKobo: 0,
-        stockReceivedKobo: 0,
-        stockCogsKobo: 0,
-        stockDamagesKobo: 0,
-        stockExpiredKobo: 0,
-        stockOtherMovementsKobo: 0,
-        stockExpectedClosingKobo: 0,
-        topItems: const [],
-        manufacturerEmpties: const [],
-      ).totalSalesKobo;
-
-      expect(homeSurface, expected);
-      expect(profitSurface, expected);
-      expect(reconSurface, expected);
+      expect(s.home, expected);
+      expect(s.profit, expected);
+      expect(s.recon, expected);
       // The AC: all three agree.
-      expect({homeSurface, profitSurface, reconSurface}, {expected});
+      expect({s.home, s.profit, s.recon}, {expected});
+      // …and the reconciliation's P&L split still reconciles to the headline,
+      // so the gross + discount card and the Total Sales card cannot disagree.
+      expect(
+        s.reconData.totalRevenueKobo - s.reconData.discountsKobo,
+        expected,
+      );
+    });
+
+    test('a locked store scopes all three surfaces to the SAME figure (#195)',
+        () {
+      // The bug: with a store locked, Home and Recon showed the store while the
+      // Profit report showed the whole business.
+      final orders = [
+        _order(
+          status: 'pending',
+          createdAt: _day(10),
+          lines: [(2, 100000)], // ₦2,000 in store s1
+          discountKobo: 30000, // − ₦300, charged to s1
+        ),
+        _order(
+          status: 'pending',
+          createdAt: _day(10),
+          lines: [(5, 100000)], // ₦5,000 in the OTHER store
+          discountKobo: 100000,
+          storeId: 's2',
+        ),
+      ];
+
+      final locked = surfacesFor(orders, inScope: (s) => s == 's1');
+      expect({locked.home, locked.profit, locked.recon}, {170000});
+      // The load-bearing one: the reconciliation's OWN gross/discount loop —
+      // which scopes lines and the discount independently of the helper — must
+      // land on the same store-scoped figure. Scoping is precisely what this
+      // issue is named for, so the scoped case is pinned, not just All Stores.
+      expect(
+        locked.reconData.totalRevenueKobo - locked.reconData.discountsKobo,
+        170000,
+      );
+
+      // All Stores is the business-wide figure — the same three surfaces again.
+      final all = surfacesFor(orders);
+      expect({all.home, all.profit, all.recon}, {170000 + 400000});
+      expect(
+        all.reconData.totalRevenueKobo - all.reconData.discountsKobo,
+        170000 + 400000,
+      );
+    });
+
+    test('the reconciliation headline IS the shared helper, not its own loop',
+        () {
+      // The regression guard: whatever the roll-up's internal revenue loop
+      // does, `totalSalesKobo` must equal `computeTotalSalesKobo` over the same
+      // orders, span and scope. A future edit to either side that changes the
+      // answer fails here.
+      final orders = [
+        _order(
+          status: 'pending',
+          createdAt: _day(10),
+          lines: [(3, 45000), (1, 120000)],
+          discountKobo: 15000,
+          crateDepositPaidKobo: 250000,
+          amountPaidKobo: 300000,
+        ),
+        _order(
+          status: 'completed',
+          createdAt: _day(10),
+          lines: [(2, 60000)],
+          quickSale: true,
+          storeId: 's2',
+        ),
+        _order(status: 'cancelled', createdAt: _day(10), lines: [(4, 80000)]),
+        // Outside the span — must be excluded by BOTH sides.
+        _order(status: 'pending', createdAt: _day(12), lines: [(7, 90000)]),
+      ];
+
+      for (final scope in <bool Function(String?)>[
+        _anyStore,
+        (s) => s == 's1',
+        (s) => s == 's2',
+      ]) {
+        final s = surfacesFor(
+          orders,
+          inSpan: (t) => t == _day(10),
+          inScope: scope,
+        );
+        expect(s.recon, s.profit);
+        expect(
+          s.reconData.totalRevenueKobo - s.reconData.discountsKobo,
+          s.recon,
+        );
+      }
     });
   });
 

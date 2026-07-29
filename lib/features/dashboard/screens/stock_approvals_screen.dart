@@ -31,6 +31,15 @@ class StockApprovalsScreen extends ConsumerWidget {
     final usersById =
         ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
     final storeNames = {for (final s in stores) s.id: s.name};
+    // #197: what each product has on file as its buying price. A request that
+    // stated no cost is approved at THIS number (#189), so the card has to know
+    // it — including when it is 0, which is the one case where the approval
+    // mints an Uncosted batch and US 22's promise quietly fails.
+    final recordedCostByProduct = {
+      for (final p in ref.watch(productsWithStockProvider(null)).valueOrNull ??
+          const <ProductDataWithStock>[])
+        p.product.id: p.product.buyingPriceKobo,
+    };
 
     // One unified list: Quick Sale requests first (a cashier is actively
     // waiting on these), then stock-adjustment requests.
@@ -46,6 +55,7 @@ class StockApprovalsScreen extends ConsumerWidget {
           request: r,
           storeName: storeNames[r.storeId] ?? 'Unknown store',
           requesterName: usersById[r.requestedBy]?.name ?? 'A stock keeper',
+          recordedCostKobo: recordedCostByProduct[r.productId] ?? 0,
         ),
     ];
 
@@ -107,11 +117,17 @@ class _ApprovalCard extends ConsumerStatefulWidget {
     required this.request,
     required this.storeName,
     required this.requesterName,
+    required this.recordedCostKobo,
   });
 
   final StockAdjustmentRequestData request;
   final String storeName;
   final String requesterName;
+
+  /// The product's buying price on file (#189) — what an approval falls back to
+  /// when [request] states no cost of its own. 0 means nothing is on file, and
+  /// the approval would mint an Uncosted batch.
+  final int recordedCostKobo;
 
   @override
   ConsumerState<_ApprovalCard> createState() => _ApprovalCardState();
@@ -174,6 +190,33 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
     }
   }
 
+  /// The cost the request captured (#197). The "not stated" wording is not a
+  /// formatting nicety — it names what the approval will do instead, which is
+  /// the one case where the figures the approver later reads are an inference
+  /// rather than an invoice. It has to distinguish the two fallbacks: the
+  /// product's recorded price (#189) when there is one, and NO cost at all when
+  /// there is not — the latter being exactly the 0-COGS failure US 22 exists to
+  /// stop, so it must not be reported as if a price were on file.
+  String get _unitCostLabel {
+    final kobo = widget.request.unitCostKobo;
+    if (kobo != null) return formatCurrency(kobo / 100.0);
+    final recorded = widget.recordedCostKobo;
+    if (recorded > 0) {
+      return 'Not stated — will use the recorded '
+          '${formatCurrency(recorded / 100.0)}';
+    }
+    return 'Not stated, and no price is on file — these units will carry '
+        'no cost';
+  }
+
+  /// What the whole delivery comes to — the figure the approver is actually
+  /// signing off. Null when no cost was stated (there is nothing to total).
+  String? get _totalCostLabel {
+    final kobo = widget.request.unitCostKobo;
+    if (kobo == null) return null;
+    return formatCurrency(kobo * widget.request.quantityDiff / 100.0);
+  }
+
   // Surface the common "not enough stock to remove" case in plain English.
   String _friendly(Object e) {
     final s = e.toString();
@@ -188,6 +231,7 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
     final r = widget.request;
     final isRemove = r.quantityDiff < 0;
     final qtyLabel = '${isRemove ? '−' : '+'}${r.quantityDiff.abs()}';
+    final totalCostLabel = _totalCostLabel;
 
     return Container(
       decoration: BoxDecoration(
@@ -253,6 +297,16 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
             _detailRow(context, 'Requested by', widget.requesterName),
             _detailRow(context, 'Store', widget.storeName),
             _detailRow(context, 'Reason', r.reason),
+            // #197 (PRD #155 US 22): what the goods cost, so the approver sees
+            // the money they are letting in — and can reject a wrong price
+            // instead of discovering it as a wrong profit figure later. Shown on
+            // an INCREASE only: a removal is valued by drawing the store's FIFO
+            // queue at approval time, not by the requester.
+            if (!isRemove) ...[
+              _detailRow(context, 'Cost per unit', _unitCostLabel),
+              if (totalCostLabel != null)
+                _detailRow(context, 'Total cost', totalCostLabel),
+            ],
             _detailRow(context, 'When', _fullStamp(r.createdAt)),
             SizedBox(height: context.spacingM),
             if (_busy)

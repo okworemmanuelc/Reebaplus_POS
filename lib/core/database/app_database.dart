@@ -621,9 +621,14 @@ class DailyClosings extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   // The calendar day being closed, YYYY-MM-DD (matches StockCounts.businessDate).
   TextColumn get businessDate => text()();
-  // The §12.1 active-store scope the figures were captured in (null = All
-  // Stores). Informational only: the natural key is (business, day), so the
-  // delta badges render only when the current viewer's scope matches this.
+  // LEGACY (#191, ADR 0022). The figures are always BUSINESS-WIDE now, so this
+  // is always written NULL and never read: the natural key is (business, day)
+  // with first-writer-wins, so a per-store capture let whichever scope opened
+  // the day first decide that day's baseline forever and left every other scope
+  // badge-blind. Rows written before #191 carry the opener's active store here;
+  // they are read as business-wide too (the column is ignored), which is what
+  // makes the fix retroactive with no data change. Kept — not dropped — so the
+  // cloud table (0157) needs no migration.
   TextColumn get storeScopeId => text().nullable().references(Stores, #id)();
   // ── Frozen figure set (period-scoped; see ReconData in recon_data.dart) ──
   IntColumn get totalSalesKobo => integer().withDefault(const Constant(0))();
@@ -1418,8 +1423,10 @@ class StockTransactions extends Table {
 // the atomic pos_inventory_delta_v2 envelope still applies the inventory +
 // ledger). `reason` is the note carried into the eventual adjustment; `summary`
 // is a denormalised human headline (like notifications.message) so the approval
-// card renders without cross-table joins. Direct Manager/CEO adjustments never
-// pass through here.
+// card renders without cross-table joins. `unit_cost_kobo` is what the goods
+// cost (#197, US 22) — the request is the only place that knows, so it is
+// captured here and threaded into the approval's inflow batch. Direct
+// Manager/CEO adjustments never pass through here.
 @DataClassName('StockAdjustmentRequestData')
 class StockAdjustmentRequests extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -1428,6 +1435,22 @@ class StockAdjustmentRequests extends Table {
   TextColumn get storeId => text().references(Stores, #id)();
   // Signed: positive = add, negative = remove.
   IntColumn get quantityDiff => integer()();
+
+  /// What the goods cost, **per unit, in kobo** — captured on the request
+  /// itself (#197, PRD #155 US 22) so the FIFO batch the approval mints carries
+  /// REAL cost instead of a guess.
+  ///
+  /// Nullable on purpose: a request legitimately may not know the cost (a
+  /// recount that simply found more units on the shelf has no invoice behind
+  /// it). NULL is handed to `InventoryDao.adjustStock` as an omitted
+  /// `inflowUnitCostKobo`, which falls back to the product's recorded scalar
+  /// price (#189) — so the fallback is what runs when nobody stated a cost, and
+  /// a stated cost always wins.
+  ///
+  /// Only meaningful on an INCREASE. A decrease values itself by drawing this
+  /// store's FIFO queue (#7a) and snapshotting what it drew, so the column is
+  /// left NULL there — the requester is not the authority on what a loss cost.
+  IntColumn get unitCostKobo => integer().nullable()();
   TextColumn get reason => text()();
   // Denormalised headline ("Akin added 5 bottle(s) of Star (Main Store)").
   TextColumn get summary => text()();
@@ -1511,6 +1534,26 @@ class OrderCrateLines extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
+
+  /// **The settlement claim (#188, PRD #155 US 14).** Stamped — inside the ONE
+  /// Confirm transaction — the moment this `(order, manufacturer)` pair's crate
+  /// returns are settled (physical empties, crate-track netting, AND the
+  /// money-track deposit). A stamped line is SKIPPED by a later Confirm, so the
+  /// deposit can never be refunded twice and the empties pool can never be
+  /// credited twice for the same pair.
+  ///
+  /// The status re-read on `orders` alone could not close this: it only catches
+  /// the CONVERGED case (the second device has already pulled `completed`). Two
+  /// devices both offline each read `pending`, so the per-pair claim — which
+  /// rides the same natural-key row both devices already share, and therefore
+  /// converges through the `order_crate_lines` dedup restore — is what makes the
+  /// settlement idempotent ACROSS devices. Nullable: every pre-v75 row, and
+  /// every still-unsettled line, is NULL.
+  DateTimeColumn get settledAt => dateTime().nullable()();
+
+  /// Who won the settlement claim (the confirmer). Recorded alongside
+  /// [settledAt] for audit; never used to gate anything.
+  TextColumn get settledBy => text().nullable().references(Users, #id)();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1909,8 +1952,18 @@ class PaymentTransactions extends Table {
     // stay out of "Cash sales" and land on its own "Cash from drivers" line
     // (#147). Existing installs rebuild the table under the widened CHECK via
     // the schemaVersion 72 upgrade step. Mirrors 0163_van_sales_remittance.sql.
+    //
+    // #202 NARROWED it for the first time: `purchase` was inherited from the
+    // 0001 schema and never written by anything — no Dart DAO, no cloud RPC, no
+    // web arm. It survived two widenings (#169, #144) purely by being copied
+    // along, advertising a money type the ledger has no concept of. Existing
+    // installs rebuild under the narrowed CHECK via the schemaVersion 77 upgrade
+    // step, which SKIPS the rebuild if any `purchase` row somehow exists rather
+    // than aborting the upgrade. Mirrors 0169_drop_purchase_payment_type.sql.
+    // A goods purchase is a SUPPLIER invoice + `expense`/supplier-ledger payment
+    // — do not resurrect this value for it.
     "CHECK (type IN "
-        "('sale','purchase','expense','refund','wallet_topup','crate_deposit',"
+        "('sale','expense','refund','wallet_topup','crate_deposit',"
         "'van_remittance'))",
     '''CHECK (
           (CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) +
@@ -2517,7 +2570,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 74;
+  int get schemaVersion => 77;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5225,6 +5278,202 @@ class AppDatabase extends _$AppDatabase {
         );
         for (final stmt in _vanReturnIndexStatements) {
           await customStatement(stmt);
+        }
+      }
+
+      if (from < 75) {
+        // ── v75 — the crate-settlement claim (#188, PRD #155 US 14) ─────────
+        //
+        // `order_crate_lines` gains TWO nullable columns, `settled_at` and
+        // `settled_by`: the per-`(order, manufacturer)` record that this pair's
+        // crate returns have already been settled. Confirm stamps them inside
+        // the ONE transaction that also flips the order, and SKIPS a stamped
+        // line — so the held deposit cannot be refunded twice and the empties
+        // pool cannot be credited twice for the same pair.
+        //
+        // The pre-existing `orders.status` re-read only closed the CONVERGED
+        // double-Confirm (device B had already pulled `completed`). Two devices
+        // BOTH offline each read `pending`; the claim rides the natural-key row
+        // they already share, so it converges through the `order_crate_lines`
+        // dedup restore and closes the partition case too.
+        //
+        // Nullable + additive, and `order_crate_lines` carries no CHECK that
+        // mentions either column, so this is a plain ADD COLUMN — no table
+        // rebuild (v73's shape, not v72's). Every existing row stays NULL, which
+        // is exactly right: an unsettled line and a line settled before this
+        // column existed are both "no claim recorded", and the `orders.status`
+        // re-read still guards the already-completed ones.
+        //
+        // `settled_by` is a nullable FK with no default, which is the one shape
+        // SQLite's ALTER TABLE ADD COLUMN accepts while `PRAGMA foreign_keys`
+        // is ON (the added column must default to NULL).
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69/v70/v72/v73 so a DB stepped
+        // back to < 75 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        // It is per-column on purpose: v37 `createTable`s `order_crate_lines`
+        // from the CURRENT Drift schema, so a device upgrading from < 37 already
+        // has both columns and must not re-add either.
+        final hasSettledAt = await customSelect(
+          "SELECT 1 FROM pragma_table_info('order_crate_lines') "
+          "WHERE name = 'settled_at'",
+        ).get();
+        if (hasSettledAt.isEmpty) {
+          await m.addColumn(orderCrateLines, orderCrateLines.settledAt);
+        }
+        final hasSettledBy = await customSelect(
+          "SELECT 1 FROM pragma_table_info('order_crate_lines') "
+          "WHERE name = 'settled_by'",
+        ).get();
+        if (hasSettledBy.isEmpty) {
+          await m.addColumn(orderCrateLines, orderCrateLines.settledBy);
+        }
+      }
+
+      if (from < 76) {
+        // ── v76 — US 22: a stock request records what the goods cost (#197) ──
+        //
+        // `stock_adjustment_requests` gains ONE nullable column,
+        // `unit_cost_kobo`. That is the whole schema half of US 22: the stock
+        // keeper filing the request is the only person who knows what the goods
+        // cost, and until now there was nowhere to put it, so every approved
+        // increase minted a batch at whatever `adjustStock` could infer (0
+        // before #189, the product's recorded scalar price after it).
+        //
+        // Nullable + additive, and the table's only CHECK is on `status`, so
+        // this is a plain ADD COLUMN — no table rebuild (v73's shape). Every
+        // existing request stays NULL, which is exactly right: none of them
+        // captured a cost, so an approval of a legacy row keeps falling back to
+        // the recorded price (#189).
+        //
+        // Mirrors supabase/migrations/0168_stock_request_unit_cost.sql, where
+        // the column is `bigint` — a `_kobo` column declared `integer` caps at
+        // ₦21.4M and jams the outbox on push (22003), the wholesale fix in 0130.
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69/v70/v72/v73 so a DB stepped
+        // back to < 76 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        // It also covers the fresh-install-then-step-back case: `createTable`
+        // in the v34 block builds the table from the CURRENT Dart definition,
+        // so the column can already be there.
+        final hasRequestUnitCost = await customSelect(
+          "SELECT 1 FROM pragma_table_info('stock_adjustment_requests') "
+          "WHERE name = 'unit_cost_kobo'",
+        ).get();
+        if (hasRequestUnitCost.isEmpty) {
+          await m.addColumn(
+            stockAdjustmentRequests,
+            stockAdjustmentRequests.unitCostKobo,
+          );
+        }
+      }
+
+      if (from < 77) {
+        // ── v77 — #202: drop the never-written `purchase` payment type ───────
+        //
+        // `payment_transactions.type` has advertised `purchase` since the 0001
+        // schema and NOTHING has ever written it — not a DAO, not a cloud RPC,
+        // not the web arm. Both prior CHECK edits (#169's `crate_deposit`, #144's
+        // `van_remittance`) were widenings that copied it along. PRD #155
+        // established that every money movement is one of the six real types; a
+        // seventh that no writer produces is a trap for the next reader, who
+        // will reasonably assume goods purchases land here. (They don't: a
+        // purchase is a SUPPLIER INVOICE plus an `expense` / supplier-ledger
+        // payment.)
+        //
+        // NO column changes — this is a CHECK edit only, and SQLite cannot ALTER
+        // a CHECK in place, so it is the v64/v72 table-rebuild recipe once more:
+        //   1. alterTable(TableMigration(...)) rebuilds from the CURRENT Drift
+        //      schema and copies every row 1:1.
+        //   2. drift re-applies the table's EXISTING indexes but NOT its
+        //      triggers, so DROP-then-CREATE each index (idempotent, same fix as
+        //      the v29/v61/v64/v72 rebuilds) and re-emit the two append-only
+        //      ledger triggers from the single `_ledgerTables` source, plus the
+        //      last_updated_at bump trigger.
+        //
+        // `columnTransformer` — READ THIS BEFORE ADDING A COLUMN TO
+        // payment_transactions (the same warning v64 carries; it applies to
+        // EVERY rebuild step, and this is now the third). `TableMigration`
+        // rebuilds from the CURRENT Drift schema, not from the schema as of
+        // v77, so a column the table grows LATER also appears in this copy's
+        // SELECT list. A column that does not exist on the v76-shaped table is
+        // emitted as a bare `"name"` identifier, which SQLite (by its legacy
+        // double-quote fallback) silently degrades to the STRING 'name' — a
+        // non-null value in a column that should be NULL, which is what aborted
+        // the v72 upgrade for `van_trip_id`. NO transformer is needed TODAY
+        // (a DB reaching here has already passed v64 and v72, so every column
+        // in the current schema exists on the table being copied) — but a v78
+        // that adds a column MUST map it to NULL here as well as in v64.
+        //
+        // Rebuilding an APPEND-ONLY table is safe because drift's copy-and-swap
+        // drops the source table rather than deleting rows, and SQLite fires no
+        // row triggers on DROP TABLE; the triggers are then re-created below,
+        // without which the ledger silently stops being append-only.
+        //
+        // **This is the first NARROWING**, so unlike every rebuild before it the
+        // copy CAN fail on existing data — a single legacy `purchase` row would
+        // abort the whole upgrade and brick the app on open. A money row can't
+        // be deleted (append-only, and it would be destroying a record), so the
+        // guard below SKIPS the narrowing on such a device instead: it keeps the
+        // wider CHECK locally, which is harmless (`SchemaAudit` only checks for
+        // missing tables/columns), and the row stays visible and pushable. The
+        // cloud twin, 0169_drop_purchase_payment_type.sql, makes the same call.
+        //
+        // The skip is ONE-SHOT: `user_version` still lands on 77, so the step
+        // never runs again on that device. It is logged (not silent) so a field
+        // report can explain a device whose CHECK is still wide; re-narrowing it
+        // would need its own later step, which is the right place for that
+        // decision anyway — by then the stray rows will have been classified.
+        final hasPurchasePayments = await customSelect(
+          "SELECT 1 FROM payment_transactions WHERE type = 'purchase' LIMIT 1",
+        ).get();
+        if (hasPurchasePayments.isEmpty) {
+          await m.alterTable(TableMigration(paymentTransactions));
+          await customStatement(
+            'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
+          );
+          await customStatement(
+            'CREATE INDEX idx_payment_transactions_business_lua '
+            'ON payment_transactions (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'DROP INDEX IF EXISTS idx_payment_txn_business_type',
+          );
+          await customStatement(
+            'CREATE INDEX idx_payment_txn_business_type '
+            'ON payment_transactions (business_id, type, created_at)',
+          );
+          await customStatement('DROP INDEX IF EXISTS idx_payment_txn_van_trip');
+          for (final stmt in _vanRemittanceIndexStatements) {
+            await customStatement(stmt);
+          }
+          await customStatement(
+            'DROP TRIGGER IF EXISTS bump_payment_transactions_last_updated_at',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_payment_transactions_last_updated_at '
+            'AFTER UPDATE ON payment_transactions '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE payment_transactions SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+          await customStatement(
+            'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+          );
+          await customStatement(
+            'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+          );
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere((l) => l.table == 'payment_transactions'),
+          )) {
+            await customStatement(stmt);
+          }
+        } else {
+          debugPrint(
+            '[AppDatabase] v77: payment_transactions still holds row(s) of the '
+            'retired `purchase` type — leaving the type CHECK wide rather than '
+            'destroying a money row. See #202 / 0169.',
+          );
         }
       }
     },

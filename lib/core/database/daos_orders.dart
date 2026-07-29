@@ -121,32 +121,59 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// rows (offline-first shared till, a re-onboarded staff account) it summed
   /// both businesses into one business's screen.
   ///
-  /// The figure is the order header's `net_amount_kobo`: gross of discounts and
-  /// inclusive of crate deposits. Unchanged here on purpose — issue #195 (one
-  /// Total Sales definition) owns moving it to the item-line basis.
+  /// The money is the ONE Total Sales definition (#195 / PRD #155 US 28):
+  /// **item lines at gross, minus the order-level discounts, deposit-exclusive**
+  /// — the SQL twin of `computeTotalSalesKobo`. It used to read the order
+  /// header's `net_amount_kobo`, which bundles the refundable crate deposit
+  /// (contra US 5), so a cashier in a crate shop showed a "Total sales" bigger
+  /// than the same sales reported anywhere else in the app.
+  ///
+  /// Two queries, not one join: joining the lines to the header repeats each
+  /// order's `discount_kobo` once per line, which would over-subtract it.
   Future<({int totalKobo, int orderCount})> getSalesTotalsForStaff(
     String staffId,
   ) async {
-    final totalCol = orders.netAmountKobo.sum();
-    final countCol = orders.id.count();
-    final row =
-        await (selectOnly(orders)
-              ..addColumns([totalCol, countCol])
-              ..where(
-                whereBusiness(orders) &
-                    orders.staffId.equals(staffId) &
-                    orders.status.isIn(orderRevenueStatuses.toList()),
-              ))
+    Expression<bool> whereThisStaffsRecognizedSale() =>
+        whereBusiness(orders) &
+        orders.staffId.equals(staffId) &
+        orders.status.isIn(orderRevenueStatuses.toList());
+
+    final grossCol = (orderItems.quantity * orderItems.unitPriceKobo).sum();
+    final grossRow =
+        await (selectOnly(orderItems).join([
+              innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+            ])
+              ..addColumns([grossCol])
+              ..where(whereThisStaffsRecognizedSale()))
             .getSingle();
+
+    final discountCol = orders.discountKobo.sum();
+    final countCol = orders.id.count();
+    final headerRow =
+        await (selectOnly(orders)
+              ..addColumns([discountCol, countCol])
+              ..where(whereThisStaffsRecognizedSale()))
+            .getSingle();
+
+    // Drift types an aggregate over an arithmetic expression as `num`; both
+    // operands are integer columns, so SQLite returns an integer.
+    final int grossKobo = (grossRow.read(grossCol) ?? 0).toInt();
+    final int discountKobo = (headerRow.read(discountCol) ?? 0).toInt();
     return (
-      totalKobo: row.read(totalCol) ?? 0,
-      orderCount: row.read(countCol) ?? 0,
+      totalKobo: grossKobo - discountKobo,
+      orderCount: headerRow.read(countCol) ?? 0,
     );
   }
 
   // ── N+1 fix: single joined query + fold ────────────────────────────────────
 
-  Stream<List<OrderWithItems>> watchAllOrdersWithItems({String? storeId}) {
+  /// [staffId] narrows to one member's own orders in SQL — the Profile screen
+  /// shows only the signed-in user's activity, and filtering the whole
+  /// business's join in Dart would stream every order to read one person's.
+  Stream<List<OrderWithItems>> watchAllOrdersWithItems({
+    String? storeId,
+    String? staffId,
+  }) {
     final query = select(orders).join([
       leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
       leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
@@ -155,6 +182,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     query.where(whereBusiness(orders));
     if (storeId != null) {
       query.where(orders.storeId.equals(storeId));
+    }
+    if (staffId != null) {
+      query.where(orders.staffId.equals(staffId));
     }
     query.orderBy([OrderingTerm.desc(orders.createdAt)]);
 
@@ -523,11 +553,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     //
     // Keyed on the refund row's `order_id`, so the tab's store / date / search
     // filters apply to the refund figure for free and the number always
-    // describes the list underneath it. A crate-deposit refund settled at
-    // Confirm links via its wallet txn instead (payment_transactions allows
-    // exactly one parent) and belongs to a COMPLETED order, so it is out of the
-    // Cancelled tab's scope by construction; the reconciliation is the
-    // business-wide view of every refund.
+    // describes the list underneath it. A crate deposit released at Confirm is
+    // not counted here twice over: since #190 it is not a `refund` at all (a
+    // negative `crate_deposit` — releasing held money is an in-family reversal),
+    // and it links via its wallet txn rather than the order (payment_transactions
+    // allows exactly one parent). The reconciliation is the business-wide view of
+    // every refund.
     final refundsIssuedCol = CustomExpression<int>(
       'SUM(COALESCE((SELECT SUM(pt.amount_kobo) FROM payment_transactions pt '
       'WHERE pt.order_id = orders.id '
@@ -1244,6 +1275,52 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  /// The DETERMINISTIC id of ONE crate-deposit settlement leg (#188).
+  ///
+  /// Two devices that Confirm the same order while BOTH offline each read the
+  /// order as `pending` and each settle it locally. Every leg used to be minted
+  /// with a fresh [UuidV7.generate], and the push upserts on the PRIMARY KEY —
+  /// so the two rows were different rows, both survived, and the deposit was
+  /// refunded twice while the empties pool was credited twice
+  /// (`CRATE_TRACKING_AUDIT.md` A3). Deriving the id from the settlement's
+  /// natural key instead — `(order, manufacturer, leg)` — makes the second
+  /// device's push a no-op UPSERT of the row the first device already delivered.
+  /// Same trick, same reason as the deterministic FIFO opening cost-batch id and
+  /// [DailyClosingsDao.snapshotId]; see [UuidV7.deterministic].
+  ///
+  /// [referenceType] identifies WHICH leg, and every leg this settlement can
+  /// post is a distinct one for a given pair — `crate_deposit_forfeited`,
+  /// `crate_deposit_refunded`, `crate_refund`, `adjustment`, plus the
+  /// `cash_refund_payment` `payment_transactions` row. It is a SEED SEGMENT, not
+  /// a column read: the cash-refund payment row's own `type` column is a
+  /// separate concern (#190 retyped it from `refund` to a negative
+  /// `crate_deposit`, leaving this seed alone) and must never be substituted
+  /// here — changing the seed would change the id and re-open this bug.
+  ///
+  /// RESIDUAL, deliberately accepted — and it is the COMMON case, not an edge.
+  /// The ledgers are append-only cloud-side (`enforce_append_only`) and the guard
+  /// raises on any guarded column whose value actually CHANGES. Of the guarded
+  /// columns only two can differ between the two devices: `created_at`, which the
+  /// push boundary already scrubs for these tables, and `performed_by` — the
+  /// CONFIRMER. Two tills usually mean two different people, so the second push
+  /// is typically a guarded UPDATE and fails with P0001. The outcome is bounded
+  /// and visible, not silent: the row is auto-retried a few times, then parked in
+  /// `sync_queue_orphans` for the Sync Issues screen (invariant #12), while the
+  /// cloud holds exactly ONE refund leg. One duplicate-leg orphan to dismiss
+  /// beats a deposit paid out twice.
+  ///
+  /// `performed_by` is deliberately NOT dropped to make the collapse silent: it
+  /// is the ledger's record of who moved the money, and the audit fact "who
+  /// settled this pair" is separately (and LWW-safely) kept on
+  /// `order_crate_lines.settled_by`.
+  static String settlementLegId({
+    required String orderId,
+    required String manufacturerId,
+    required String referenceType,
+  }) => UuidV7.deterministic(
+    'crate_settlement:$orderId:$manufacturerId:$referenceType',
+  );
+
   /// §13.4 Ring 5 — settle a MONEY-TRACK brand's deposit when its crates come
   /// back at Confirm. The brand's held deposit (`paidKobo`, posted as one
   /// `crate_deposit` credit at the sale) is fully resolved here:
@@ -1253,14 +1330,19 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   ///     (forfeit = reports-only, user decision 2026-06-05). No new income row.
   ///   • refund = the rest of the held deposit the forfeit didn't consume →
   ///     a `crate_deposit_refunded` debit (drops held) PLUS either a
-  ///     `crate_refund` spendable credit (refund to the wallet) or a
-  ///     payment_transactions 'refund' cash-out row (refund as cash).
+  ///     `crate_refund` spendable credit (refund to the wallet) or a NEGATIVE
+  ///     `crate_deposit` payment row (refund as cash — #190, see below).
   ///   • shortfall = when the kept crates are worth MORE than a PARTIAL deposit,
   ///     the extra is a normal spendable wallet debt (`adjustment` debit,
   ///     decision 6).
   /// After this the order's deposit-family rows net to 0 (held fully resolved).
   /// Stock (addEmptyCrates) and the no-deposit crate-track path are the caller's
   /// job — this only moves money. Walk-ins never reach here (no wallet).
+  ///
+  /// **Every leg's id is DETERMINISTIC** ([settlementLegId], #188) so two
+  /// devices that both settle this order while offline mint the SAME id for the
+  /// same leg and the cloud's primary-key upsert COLLAPSES the duplicate. See
+  /// that helper for the full contract.
   Future<void> settleCrateDepositReturn({
     required String customerId,
     required String manufacturerId,
@@ -1284,15 +1366,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final extraDebt = forfeitValue > paidKobo ? forfeitValue - paidKobo : 0;
 
     await transaction(() async {
-      // NOTE (#171): this is the low-level money primitive — it settles the
+      // NOTE (#171/#188): this is the low-level money primitive — it settles the
       // deposit unconditionally so it can be exercised directly (Ring 5 tests
-      // settle already-`completed` orders). Confirm idempotency lives one layer
-      // up, at the WHOLE-settlement seam: `OrderCommands._settleCrateReturns`
-      // re-reads the order status and skips the entire settlement (physical +
-      // deposit) on a non-pending order, and `markCompleted` re-reads it again
-      // inside its own transaction — so two devices confirming the same order
-      // settle it exactly once, while a single Confirm still settles every
-      // manufacturer (status stays `pending` across the loop).
+      // settle already-`completed` orders). The DECISION not to settle lives one
+      // layer up, at the WHOLE-settlement seam `OrderCommands._settleCrateReturns`,
+      // which now holds three guards inside ONE transaction with the status flip:
+      // the order-status re-read (converged case), the per-`(order, manufacturer)`
+      // `order_crate_lines.settled_at` claim (partition case), and — because a
+      // claim only converges once the row has synced — the deterministic leg ids
+      // below, which let the cloud's PK upsert collapse a duplicate outright.
       final wallet =
           await (select(customerWallets)
                 ..where(
@@ -1312,7 +1394,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
       Future<void> postWallet(int signed, String refType) async {
         final comp = WalletTransactionsCompanion.insert(
-          id: Value(UuidV7.generate()),
+          // #188 — deterministic per (order, manufacturer, leg).
+          id: Value(
+            settlementLegId(
+              orderId: orderId,
+              manufacturerId: manufacturerId,
+              referenceType: refType,
+            ),
+          ),
           businessId: requireBusinessId(),
           walletId: wallet.id,
           customerId: customerId,
@@ -1337,7 +1426,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // Refund: drop the rest of the held deposit, then return it as wallet
       // credit (spendable) or cash (payment row, no spendable change).
       if (refundAmount > 0) {
-        final refundedTxnId = UuidV7.generate();
+        // #188 — deterministic per (order, manufacturer, leg). The cash refund
+        // payment row below links to this wallet txn, so a deterministic
+        // `refundedTxnId` also makes that link converge across devices.
+        final refundedTxnId = settlementLegId(
+          orderId: orderId,
+          manufacturerId: manufacturerId,
+          referenceType: 'crate_deposit_refunded',
+        );
         final refundedComp = WalletTransactionsCompanion.insert(
           id: Value(refundedTxnId),
           businessId: requireBusinessId(),
@@ -1356,8 +1452,60 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('wallet_transactions', refundedComp);
 
         if (refundAsCash) {
-          // #169: stamp the order's store on this new refund payment row
-          // (nullable; unread by reports yet, so behavior-preserving).
+          // #190 — an IN-FAMILY reversal, not a refund. This row hands back
+          // money the business only ever HELD, so it is a NEGATIVE
+          // `crate_deposit`: the "Crate deposits held (cash)" line nets down on
+          // its own and the release stays out of "Refunds" (which is subtracted
+          // from the period net result, and out of which the collection was
+          // never counted). Same rule, same reason as `markCancelled`'s
+          // deposit reversal — see its comment for the full symmetry argument.
+          //
+          // The TENDER comes from the ORIGINAL held-deposit row (#175's
+          // `crate_deposit` payment row for this order), not a hardcoded 'cash':
+          // a deposit collected by transfer must not be paid back out of the
+          // drawer. The store rides along from the same row so the release sits
+          // on the store line that took the money (today's held-deposit figure
+          // is business-wide and does not filter on it, but every other
+          // store-scoped money read does). Both are what
+          // `PaymentTransactionsDao.postReversalPayment` does for every other
+          // correction; that seam is not reused here because it mints a fresh id
+          // (#188 needs this one DETERMINISTIC) and copies the original's
+          // `order_id` reference (which would put the release inside
+          // `markCancelled`'s reversal set). Falls back to the order's own store
+          // and cash when no collection row is found — see the residual below.
+          //
+          // RESIDUAL, deliberately accepted and NOT fixed here (#190 scope).
+          // Four cases reach this branch with no `crate_deposit` collection row,
+          // and only the first two collected the deposit into the cash books at
+          // all: a LEGACY pre-#175 order (deposit bundled into its `sale` row,
+          // so it landed in Cash sales); the v2 `pos_record_sale_v2` path (the
+          // #175 split sits after that path's early return, so the server's one
+          // bundled `sale` row is all there is — flag held off in Phase 1); a
+          // ROAD sale (#142 writes NO payment row — the driver holds the cash);
+          // and a pure-credit sale (`amountPaidKobo == 0`). For the first two,
+          // `markCancelled`'s legacy carve-out would reverse in the `sale` row's
+          // family instead (a positive `refund`, matching how it was counted);
+          // for the last two neither family is right, because the money never
+          // moved through the drawer. Posting the negative unconditionally is
+          // strictly better than the pre-#190 behaviour in ALL four (the drawer
+          // total still ties and no phantom refund or loss is created) — it only
+          // leaves the held line reading negative for the bundled cases. Picking
+          // per-case behaviour needs a product decision this issue did not make.
+          final depositCollection =
+              await (select(paymentTransactions)
+                    ..where(
+                      (p) =>
+                          whereBusiness(p) &
+                          p.orderId.equals(orderId) &
+                          p.type.equals('crate_deposit') &
+                          p.voidedAt.isNull() &
+                          p.amountKobo.isBiggerThanValue(0),
+                    )
+                    ..orderBy([(p) => OrderingTerm.asc(p.createdAt)])
+                    ..limit(1))
+                  .getSingleOrNull();
+          // #169: stamp a store on this new payment row (nullable — a
+          // store-less original yields a store-less release, as elsewhere).
           final settleStore =
               await (select(orders)
                     ..where((o) => o.id.equals(orderId) & whereBusiness(o)))
@@ -1366,12 +1514,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           // expense/wallet_txn/delivery). Link via the wallet txn — which itself
           // carries the orderId — mirroring WalletService's topup payment row.
           final payComp = PaymentTransactionsCompanion.insert(
-            id: Value(UuidV7.generate()),
+            // #188 — deterministic per (order, manufacturer, leg). The seed
+            // segment is a fixed literal, NOT this row's `type` column: #190
+            // retyped the row and must not move the id.
+            id: Value(
+              settlementLegId(
+                orderId: orderId,
+                manufacturerId: manufacturerId,
+                referenceType: 'cash_refund_payment',
+              ),
+            ),
             businessId: requireBusinessId(),
-            storeId: Value(settleStore?.storeId),
-            amountKobo: refundAmount,
-            method: 'cash',
-            type: 'refund',
+            storeId: Value(depositCollection?.storeId ?? settleStore?.storeId),
+            amountKobo: -refundAmount,
+            method: depositCollection?.method ?? 'cash',
+            type: 'crate_deposit',
             performedBy: Value(performedBy),
             walletTxnId: Value(refundedTxnId),
             lastUpdatedAt: Value(legTime),
@@ -2297,6 +2454,53 @@ class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
     );
     await into(orderCrateLines).insert(row);
     await db.syncDao.enqueueUpsert('order_crate_lines', row);
+  }
+
+  /// **Claim this `(order, manufacturer)` pair's settlement slot** (#188, PRD
+  /// #155 US 14) — the per-pair half of Confirm's idempotency.
+  ///
+  /// Returns `true` when THIS call won the claim (the caller must go on to
+  /// settle), `false` when the pair is already stamped and the caller must skip
+  /// the WHOLE settlement for it — physical empties, crate-track netting, and
+  /// the money-track deposit alike.
+  ///
+  /// A MISSING line returns `true`: there is nothing to claim for a walk-in (no
+  /// registered customer ⇒ `createOrder` writes no crate line) or a legacy
+  /// pre-v37 order, and those cases are still covered by the caller's
+  /// order-status re-read and by the deterministic ids on the rows they do write.
+  ///
+  /// Call it INSIDE the Confirm transaction, so the claim and the settlement it
+  /// authorises commit or roll back together. The stamped row is enqueued, so the
+  /// claim reaches peers as an ordinary `order_crate_lines` upsert on the id both
+  /// devices already share — no new sync surface.
+  Future<bool> claimSettlement({
+    required String orderId,
+    required String manufacturerId,
+    String? settledBy,
+  }) async {
+    final existing =
+        await (select(orderCrateLines)..where(
+              (t) =>
+                  whereBusiness(t) &
+                  t.orderId.equals(orderId) &
+                  t.manufacturerId.equals(manufacturerId),
+            ))
+            .getSingleOrNull();
+    if (existing == null) return true; // nothing to claim
+    if (existing.settledAt != null) return false; // already settled
+
+    final now = DateTime.now();
+    final claimed = existing.copyWith(
+      settledAt: Value(now),
+      settledBy: Value(settledBy),
+      lastUpdatedAt: now,
+    );
+    await update(orderCrateLines).replace(claimed);
+    await db.syncDao.enqueueUpsert(
+      'order_crate_lines',
+      claimed.toCompanion(true),
+    );
+    return true;
   }
 }
 

@@ -44,7 +44,8 @@ class DailyClosingFigures {
   final int shortageUnits;
 }
 
-/// Persists + reads the `daily_closings` snapshots (#174, PRD #155, ADR 0021 §2).
+/// Persists + reads the `daily_closings` snapshots (#174, PRD #155, ADR 0021 §2,
+/// scope fixed by #191 / ADR 0022).
 ///
 /// The FIRST review of a FINISHED calendar day freezes its computed figure set
 /// here (natural-key FIRST-WRITER-WINS on `(business_id, business_date)`);
@@ -52,6 +53,13 @@ class DailyClosingFigures {
 /// row id is DETERMINISTIC from the natural key so two offline devices mint the
 /// same id and converge instead of duplicating. Purely observational: nothing
 /// here changes a money flow or an existing figure.
+///
+/// **The frozen figures are always BUSINESS-WIDE (#191).** The natural key has no
+/// store in it, so a snapshot captured in one store's scope would let whichever
+/// scope opened the day first decide that day's baseline forever — and leave
+/// every other scope with no baseline at all. `store_scope_id` is therefore
+/// always written NULL (= business-wide) and never read back: a legacy non-null
+/// value predates this rule and is read as business-wide too.
 @DriftAccessor(tables: [DailyClosings])
 class DailyClosingsDao extends DatabaseAccessor<AppDatabase>
     with _$DailyClosingsDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -75,7 +83,6 @@ class DailyClosingsDao extends DatabaseAccessor<AppDatabase>
   /// 23502 — see [[project_synced_write_explicit_id]]).
   Future<String> snapshotIfAbsent({
     required String businessDate,
-    required String? storeScopeId,
     required DailyClosingFigures figures,
     String? reviewedBy,
   }) async {
@@ -92,7 +99,9 @@ class DailyClosingsDao extends DatabaseAccessor<AppDatabase>
         id: Value(id),
         businessId: businessId,
         businessDate: businessDate,
-        storeScopeId: Value(storeScopeId),
+        // #191 — business-wide by construction. Explicit rather than Absent so
+        // the pushed payload is complete (see [[project_synced_write_explicit_id]]).
+        storeScopeId: const Value(null),
         totalSalesKobo: Value(figures.totalSalesKobo),
         refundsKobo: Value(figures.refundsKobo),
         discountsKobo: Value(figures.discountsKobo),
@@ -125,7 +134,9 @@ class DailyClosingsDao extends DatabaseAccessor<AppDatabase>
 
   /// The persisted snapshot for [businessDate], or null when the day has not
   /// been reviewed yet. Business-scoped; at most one row exists per day
-  /// (first-writer-wins), so this reads that single row reactively.
+  /// (first-writer-wins), so this reads that single row reactively. The day is
+  /// the whole key — `storeScopeId` is never a filter here (#191), so a legacy
+  /// row frozen inside one store's scope still surfaces at every scope.
   Stream<DailyClosingData?> watchForDay(String businessDate) {
     return (select(dailyClosings)
           ..where(

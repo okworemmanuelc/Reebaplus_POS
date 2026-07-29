@@ -2372,4 +2372,547 @@ void main() {
       );
     });
   });
+  group('onUpgrade v74 → v75 (the crate-settlement claim, #188)', () {
+    // Seeds a business + a crate line on the reverted (pre-v75) table and
+    // returns (businessId, crateLineId).
+    Future<(String, String)> seedLegacyCrateLine(AppDatabase db) async {
+      final biz = UuidV7.generate();
+      final mfrId = UuidV7.generate();
+      final orderId = UuidV7.generate();
+      final lineId = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db.customStatement(
+        "INSERT INTO manufacturers (id, business_id, name) "
+        "VALUES (?, ?, 'Star')",
+        [mfrId, biz],
+      );
+      await db.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-000188-AAAAAA', 750000, 750000, 'cash', 'completed')",
+        [orderId, biz],
+      );
+      await db.customStatement(
+        'INSERT INTO order_crate_lines (id, business_id, order_id, '
+        'manufacturer_id, crates_taken, deposit_rate_kobo, deposit_paid_kobo) '
+        'VALUES (?, ?, ?, ?, 5, 50000, 250000)',
+        [lineId, biz, orderId, mfrId],
+      );
+      return (biz, lineId);
+    }
+
+    test('adds order_crate_lines.settled_at + settled_by; legacy lines survive '
+        'and stay NULL', () async {
+      final db1 = await openAndInit();
+      // Revert the v75 delta. `order_crate_lines` carries no CHECK mentioning
+      // either column, so — like v73's orders.van_trip_id — this is a plain DROP
+      // COLUMN with no table rebuild either way.
+      await db1
+          .customStatement('ALTER TABLE order_crate_lines DROP COLUMN settled_at');
+      await db1
+          .customStatement('ALTER TABLE order_crate_lines DROP COLUMN settled_by');
+      final reverted = await columnsOf(db1, 'order_crate_lines');
+      expect(reverted.contains('settled_at'), isFalse);
+      expect(reverted.contains('settled_by'), isFalse);
+
+      // A crate line settled BEFORE the claim column existed. NULL is the right
+      // answer for it: its order is already `completed`, so Confirm's status
+      // re-read still guards it and no second settlement can reach it.
+      final (biz, legacyLineId) = await seedLegacyCrateLine(db1);
+
+      await db1.customStatement('PRAGMA user_version = 74');
+      await db1.close();
+
+      // Re-open → onUpgrade(74 → 75).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final upgraded = await columnsOf(db2, 'order_crate_lines');
+      expect(upgraded.contains('settled_at'), isTrue);
+      expect(upgraded.contains('settled_by'), isTrue);
+
+      final legacy = await db2
+          .customSelect(
+            'SELECT settled_at, settled_by FROM order_crate_lines WHERE id = ?',
+            variables: [Variable<String>(legacyLineId)],
+          )
+          .getSingle();
+      expect(legacy.data['settled_at'], isNull);
+      expect(legacy.data['settled_by'], isNull);
+
+      // The claim really is writable, and `settled_by` really is an FK to users
+      // — the whole point of the column is that a stamped pair is skippable.
+      final staffId = UuidV7.generate();
+      await db2.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Conf', '0000')",
+        [staffId, biz],
+      );
+      await db2.customStatement(
+        'UPDATE order_crate_lines SET settled_at = ?, settled_by = ? '
+        'WHERE id = ?',
+        [DateTime.now().millisecondsSinceEpoch ~/ 1000, staffId, legacyLineId],
+      );
+      final claimed = await db2
+          .customSelect(
+            'SELECT settled_by FROM order_crate_lines WHERE id = ?',
+            variables: [Variable<String>(legacyLineId)],
+          )
+          .getSingle();
+      expect(claimed.data['settled_by'], staffId);
+      // FKs are ON, so an unknown confirmer must be refused.
+      await expectLater(
+        db2.customStatement(
+          'UPDATE order_crate_lines SET settled_by = ? WHERE id = ?',
+          [UuidV7.generate(), legacyLineId],
+        ),
+        throwsA(anything),
+      );
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT drop the columns — just step user_version back, so the v75 block
+      // runs against a schema that already has both. Each per-column
+      // pragma_table_info guard must skip, losing no rows. This is also the
+      // shape a device upgrading from < 37 hits: v37 `createTable`s the table
+      // from the CURRENT Drift schema, so it arrives at v75 already complete.
+      final db1 = await openAndInit();
+      final (_, lineId) = await seedLegacyCrateLine(db1);
+      await db1.customStatement('PRAGMA user_version = 74');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final cols = await columnsOf(db2, 'order_crate_lines');
+      expect(cols.contains('settled_at'), isTrue);
+      expect(cols.contains('settled_by'), isTrue);
+      final rows =
+          await db2.customSelect('SELECT id FROM order_crate_lines').get();
+      expect(rows.map((r) => r.read<String>('id')), [lineId]);
+    });
+  });
+
+  group('onUpgrade v75 → v76 (a stock request records what the goods cost, '
+      '#197)', () {
+    /// Reverts the v76 delta: drop the one added column.
+    /// `stock_adjustment_requests` has no CHECK mentioning it and nothing
+    /// references it, so a raw DROP COLUMN is enough — no table rebuild.
+    Future<void> dropRequestUnitCost(AppDatabase db) async {
+      await db.customStatement(
+        'ALTER TABLE stock_adjustment_requests DROP COLUMN unit_cost_kobo',
+      );
+    }
+
+    /// A business + store + product + stock-keeper, the FK parents every request
+    /// row needs.
+    Future<Map<String, String>> seedTenant(AppDatabase db) async {
+      final biz = UuidV7.generate();
+      final storeId = UuidV7.generate();
+      final productId = UuidV7.generate();
+      final userId = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Main')",
+        [storeId, biz],
+      );
+      await db.customStatement(
+        "INSERT INTO products (id, business_id, name, buying_price_kobo) "
+        "VALUES (?, ?, 'Star', 15000)",
+        [productId, biz],
+      );
+      await db.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Akin', '0000')",
+        [userId, biz],
+      );
+      return {
+        'biz': biz,
+        'store': storeId,
+        'product': productId,
+        'user': userId,
+      };
+    }
+
+    test('adds stock_adjustment_requests.unit_cost_kobo; requests filed before '
+        'the upgrade keep it NULL and still approve', () async {
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      final legacyRequestId = UuidV7.generate();
+
+      await dropRequestUnitCost(db1);
+      expect(
+        (await columnsOf(db1, 'stock_adjustment_requests'))
+            .contains('unit_cost_kobo'),
+        isFalse,
+      );
+
+      // A request filed on the pre-v76 shape — it captured no cost because there
+      // was nowhere to put one. It must survive the upgrade untouched.
+      await db1.customStatement(
+        'INSERT INTO stock_adjustment_requests (id, business_id, product_id, '
+        'store_id, quantity_diff, reason, summary, requested_by) '
+        "VALUES (?, ?, ?, ?, 10, 'recount found more', 'Akin added 10', ?)",
+        [
+          legacyRequestId,
+          ids['biz']!,
+          ids['product']!,
+          ids['store']!,
+          ids['user']!,
+        ],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 75');
+      await db1.close();
+
+      // Re-open → onUpgrade(75 → 76) adds the nullable column.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(
+        (await columnsOf(db2, 'stock_adjustment_requests'))
+            .contains('unit_cost_kobo'),
+        isTrue,
+      );
+
+      // The legacy request survives, still pending, with a NULL cost — which is
+      // exactly right: it never stated one, so its approval falls back to the
+      // product's recorded price (#189) instead of asserting a made-up figure.
+      final legacy = await db2
+          .customSelect(
+            'SELECT status, quantity_diff, unit_cost_kobo '
+            'FROM stock_adjustment_requests WHERE id = ?',
+            variables: [Variable<String>(legacyRequestId)],
+          )
+          .getSingle();
+      expect(legacy.data['status'], 'pending');
+      expect(legacy.data['quantity_diff'], 10);
+      expect(legacy.data['unit_cost_kobo'], isNull);
+
+      // …and a new request can carry a cost far above the int4 ceiling the cloud
+      // column used to risk (₦21,474,836.47 — see 0130): kobo columns are 64-bit
+      // here and `bigint` in 0168, so a bulk delivery cannot jam the outbox.
+      final bigRequestId = UuidV7.generate();
+      await db2.customStatement(
+        'INSERT INTO stock_adjustment_requests (id, business_id, product_id, '
+        'store_id, quantity_diff, unit_cost_kobo, reason, summary) '
+        "VALUES (?, ?, ?, ?, 5, 3000000000, 'imported pallet', 'Akin added 5')",
+        [bigRequestId, ids['biz']!, ids['product']!, ids['store']!],
+      );
+      final big = await db2
+          .customSelect(
+            'SELECT unit_cost_kobo FROM stock_adjustment_requests WHERE id = ?',
+            variables: [Variable<String>(bigRequestId)],
+          )
+          .getSingle();
+      expect(big.data['unit_cost_kobo'], 3000000000);
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT drop the column — just step user_version back, so the v76 block
+      // runs against a schema that already has it (also the shape a fresh
+      // install lands in: the v34 createTable builds from the CURRENT Dart
+      // definition). The guard must skip the addColumn, losing no rows.
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      final requestId = UuidV7.generate();
+      await db1.customStatement(
+        'INSERT INTO stock_adjustment_requests (id, business_id, product_id, '
+        'store_id, quantity_diff, unit_cost_kobo, reason, summary) '
+        "VALUES (?, ?, ?, ?, 10, 18000, 'delivery', 'Akin added 10')",
+        [requestId, ids['biz']!, ids['product']!, ids['store']!],
+      );
+      await db1.customStatement('PRAGMA user_version = 75');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(
+        (await columnsOf(db2, 'stock_adjustment_requests'))
+            .contains('unit_cost_kobo'),
+        isTrue,
+      );
+      final row = await db2
+          .customSelect(
+            'SELECT unit_cost_kobo FROM stock_adjustment_requests WHERE id = ?',
+            variables: [Variable<String>(requestId)],
+          )
+          .getSingle();
+      expect(row.data['unit_cost_kobo'], 18000);
+    });
+  });
+
+  group('onUpgrade v76 → v77 (drop the never-written `purchase` payment type, '
+      '#202)', () {
+    /// The CHECK-constraint text SQLite stored for a table, as written in
+    /// `sqlite_master`. Reading the definition (rather than probing with an
+    /// insert) is how a test can assert the OLD constraint admitted `purchase`
+    /// without leaving a `purchase` row behind — which would trip the v77
+    /// guard and change what is being tested.
+    Future<String> tableSqlOf(AppDatabase db, String table) async {
+      final row = await db
+          .customSelect(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            variables: [Variable<String>(table)],
+          )
+          .getSingle();
+      return row.read<String>('sql');
+    }
+
+    /// Reverts payment_transactions to its v76 shape: every current column, but
+    /// the SEVEN-value type CHECK that still admits `purchase`. Recreated
+    /// WITHOUT FKs (mirrors the v61/v64/v72 reverts) so the copy is
+    /// unconstrained; the migration rebuilds the real, FK-carrying table from
+    /// the Drift schema.
+    Future<void> revertPaymentTypeCheck(AppDatabase db) async {
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+      );
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+      );
+      await db.customStatement('DROP TABLE IF EXISTS payment_transactions');
+      await db.customStatement(
+        'CREATE TABLE payment_transactions ('
+        'id TEXT NOT NULL PRIMARY KEY, business_id TEXT NOT NULL, '
+        'store_id TEXT, '
+        'amount_kobo INTEGER NOT NULL, method TEXT NOT NULL, type TEXT NOT NULL, '
+        'order_id TEXT, shipment_id TEXT, expense_id TEXT, wallet_txn_id TEXT, '
+        'delivery_id TEXT, van_trip_id TEXT, performed_by TEXT, '
+        'voided_at INTEGER, voided_by TEXT, void_reason TEXT, '
+        'created_at INTEGER NOT NULL DEFAULT 0, '
+        'last_updated_at INTEGER NOT NULL DEFAULT 0, '
+        "CHECK (method IN ('cash','transfer','card','wallet','pos','other')), "
+        "CHECK (type IN ('sale','purchase','expense','refund','wallet_topup',"
+        "'crate_deposit','van_remittance')), "
+        'CHECK ('
+        '(CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN shipment_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN expense_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN wallet_txn_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN delivery_id IS NOT NULL THEN 1 ELSE 0 END) + '
+        '(CASE WHEN van_trip_id IS NOT NULL THEN 1 ELSE 0 END) = 1))',
+      );
+      await db.customStatement('PRAGMA foreign_keys = ON');
+    }
+
+    /// A business + store + order — the FK parents a payment row needs once the
+    /// real, FK-carrying table is rebuilt.
+    Future<Map<String, String>> seedTenant(AppDatabase db) async {
+      final biz = UuidV7.generate();
+      final storeId = UuidV7.generate();
+      final orderId = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Main')",
+        [storeId, biz],
+      );
+      await db.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-000001-AAAAAA', 100000, 100000, 'cash', 'completed')",
+        [orderId, biz],
+      );
+      return {'biz': biz, 'store': storeId, 'order': orderId};
+    }
+
+    test('narrows the type CHECK to the six live types, carries every existing '
+        'payment row through the rebuild, and rejects `purchase`', () async {
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      final saleId = UuidV7.generate();
+      final depositId = UuidV7.generate();
+
+      await revertPaymentTypeCheck(db1);
+      expect(
+        await tableSqlOf(db1, 'payment_transactions'),
+        contains("'purchase'"),
+        reason: 'teeth: the pre-v77 CHECK must still advertise purchase',
+      );
+
+      // Two pre-existing rows of DIFFERENT live types, one store-stamped and one
+      // legacy/store-less — a NARROWING rebuild must carry both through
+      // untouched, exactly as the widening rebuilds did.
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, store_id, amount_kobo, method, type, order_id, '
+        ' created_at, last_updated_at) '
+        "VALUES (?, ?, ?, 100000, 'cash', 'sale', ?, 1700000000, 1700000000)",
+        [saleId, ids['biz']!, ids['store']!, ids['order']!],
+      );
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, amount_kobo, method, type, order_id, '
+        ' created_at, last_updated_at) '
+        "VALUES (?, ?, 5000, 'cash', 'crate_deposit', ?, 1700000001, 1700000001)",
+        [depositId, ids['biz']!, ids['order']!],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 76');
+      await db1.close();
+
+      // Re-open → onUpgrade(76 → 77).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      // (1) EXISTING ROWS SURVIVED — same ids, types, amounts, stores, days.
+      final rows = await db2
+          .customSelect(
+            'SELECT id, type, amount_kobo, store_id, order_id, created_at '
+            'FROM payment_transactions ORDER BY created_at',
+          )
+          .get();
+      expect(rows, hasLength(2), reason: 'the rebuild must lose no rows');
+      expect(rows[0].read<String>('id'), saleId);
+      expect(rows[0].read<String>('type'), 'sale');
+      expect(rows[0].read<int>('amount_kobo'), 100000);
+      expect(rows[0].read<String?>('store_id'), ids['store']!);
+      expect(rows[1].read<String>('id'), depositId);
+      expect(rows[1].read<String>('type'), 'crate_deposit');
+      expect(rows[1].read<String?>('store_id'), isNull,
+          reason: 'a legacy store-less row stays store-less');
+
+      // (2) `purchase` is GONE — the point of the slice.
+      expect(
+        await tableSqlOf(db2, 'payment_transactions'),
+        isNot(contains("'purchase'")),
+      );
+      await expectLater(
+        db2.customStatement(
+          'INSERT INTO payment_transactions '
+          '(id, business_id, amount_kobo, method, type, order_id) '
+          "VALUES (?, ?, 1, 'cash', 'purchase', ?)",
+          [UuidV7.generate(), ids['biz']!, ids['order']!],
+        ),
+        throwsA(anything),
+        reason: 'the narrowed CHECK must reject the retired purchase type',
+      );
+
+      // (3) …and every type a live writer actually produces still inserts. The
+      //     order-parented four are checked here; van_remittance needs a trip
+      //     parent and is already pinned by the v72 group.
+      for (final type in const [
+        'sale',
+        'expense',
+        'refund',
+        'wallet_topup',
+        'crate_deposit',
+      ]) {
+        await db2.customStatement(
+          'INSERT INTO payment_transactions '
+          '(id, business_id, amount_kobo, method, type, order_id) '
+          "VALUES (?, ?, 1, 'cash', ?, ?)",
+          [UuidV7.generate(), ids['biz']!, type, ids['order']!],
+        );
+      }
+
+      // (4) The rebuild re-applied the append-only guards and the two indexes
+      //     (drift re-applies indexes but NOT triggers — v64/v72's lesson).
+      final objects = await db2
+          .customSelect(
+            "SELECT name FROM sqlite_master "
+            "WHERE tbl_name = 'payment_transactions' AND type IN "
+            "('index','trigger')",
+          )
+          .get();
+      final names = objects.map((r) => r.read<String>('name')).toSet();
+      expect(names, containsAll(<String>[
+        'idx_payment_transactions_business_lua',
+        'idx_payment_txn_business_type',
+        'idx_payment_txn_van_trip',
+        'payment_transactions_immutable',
+        'payment_transactions_no_delete',
+        'bump_payment_transactions_last_updated_at',
+      ]));
+    });
+
+    test('leaves the CHECK wide rather than aborting when a legacy `purchase` '
+        'row exists', () async {
+      // The one case a NARROWING rebuild can fail on. A payment row is
+      // append-only money and is never deleted to make a constraint fit, so the
+      // v77 guard must SKIP the rebuild — the upgrade completes, the app opens,
+      // and the row stays visible and pushable.
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      final strayId = UuidV7.generate();
+
+      await revertPaymentTypeCheck(db1);
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, amount_kobo, method, type, order_id, '
+        ' created_at, last_updated_at) '
+        "VALUES (?, ?, 7500, 'cash', 'purchase', ?, 1700000000, 1700000000)",
+        [strayId, ids['biz']!, ids['order']!],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 76');
+      await db1.close();
+
+      // Re-open → onUpgrade(76 → 77) must NOT throw.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final row = await db2
+          .customSelect(
+            'SELECT type, amount_kobo FROM payment_transactions WHERE id = ?',
+            variables: [Variable<String>(strayId)],
+          )
+          .getSingle();
+      expect(row.read<String>('type'), 'purchase',
+          reason: 'the money row survives untouched');
+      expect(row.read<int>('amount_kobo'), 7500);
+      expect(
+        await tableSqlOf(db2, 'payment_transactions'),
+        contains("'purchase'"),
+        reason: 'the CHECK stays wide so the surviving row stays legal',
+      );
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      // Do NOT revert the CHECK — just step user_version back, so the v77 block
+      // rebuilds a table that is ALREADY narrowed. It must lose no rows and
+      // leave the guards in place.
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      final saleId = UuidV7.generate();
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, store_id, amount_kobo, method, type, order_id) '
+        "VALUES (?, ?, ?, 42000, 'transfer', 'sale', ?)",
+        [saleId, ids['biz']!, ids['store']!, ids['order']!],
+      );
+      await db1.customStatement('PRAGMA user_version = 76');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final row = await db2
+          .customSelect(
+            'SELECT type, amount_kobo, store_id FROM payment_transactions '
+            'WHERE id = ?',
+            variables: [Variable<String>(saleId)],
+          )
+          .getSingle();
+      expect(row.read<String>('type'), 'sale');
+      expect(row.read<int>('amount_kobo'), 42000);
+      expect(row.read<String?>('store_id'), ids['store']!);
+      expect(
+        await tableSqlOf(db2, 'payment_transactions'),
+        isNot(contains("'purchase'")),
+      );
+    });
+  });
 }
