@@ -10,6 +10,77 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #203 — crate-deposit OUTFLOW settlement: PRD WRITTEN + published (2026-07-29)
+Grilling session on the #155 carve-out. **No code written.** Output is
+**ADR 0023** (`docs/adr/0023-crate-deposit-outflow-settlement.md`), four new
+`CONTEXT.md` terms (Placed Deposit, Crate Money Arrangement, Crate Shortfall,
+Supplier Crate Debt), and the **full PRD published to #203** (54 user stories,
+labelled `ready-for-agent`; stale "blocks #161" title corrected to #207).
+Next step is cutting the slices.
+
+**Seams (confirmed with the user):** one write seam — **`CratePoolDao`**,
+already ADR 0020's sole crate writer, extended to carry the money legs in the
+same transaction (ADR 0019's both-or-neither rule). One read seam —
+**`computeCrateDepositPosition`**, a pure function mirroring
+`computeVanTripPosition`, so position tests need no database.
+
+**Slices FILED — #210–#217, all `ready-for-agent`** (vertical tracer bullets;
+the PRD's draft "pure function" slice was folded into #212, where it is first
+needed, since a layer with no demoable surface is not a tracer bullet):
+- **#210** Receive Stock records full crates received — **fixes the drift bug**,
+  no money, no blockers
+- **#211** Crate Money Arrangement setting, defaults `none` — no blockers
+- **#212** Placed Deposit on receipt + manager approval — builds
+  `computeCrateDepositPosition`; blocked by #210, #211
+- **#213** Returning empties settles the deposit — blocked by #212
+- **#214** Standing float top-ups and payouts — blocked by #212
+- **#215** Business worth + recon card **(must update ADR 0014)** — blocked by #212
+- **#216** Crate Shortfall + write-off — blocked by #215
+- **#217** Forfeit netting, forward only — blocked by #216
+
+**#210 and #211 are independent** and can run in parallel or either order.
+**#210 is worth pulling forward on its own** — it fixes the live net-worth
+overstatement regardless of whether any brand is ever switched on.
+
+The release gate is a **default-off test**: a business with every manufacturer
+at `none` must produce byte-identical figures to today.
+
+Fourteen decisions locked; the spine is **"a book entry appears only when money
+genuinely moved; everything else is a shortfall figure."** Headlines: a Placed
+Deposit is an asset (cash drops, worth unchanged, never an expense); rate stays
+the manufacturer's, balance is per `(supplier, manufacturer)`; crate money is
+**per-manufacturer opt-in defaulting to off**, so no live tenant's figures move
+until an owner switches a brand on; losses stay unattributed (brand-level Crate
+Shortfall) until settlement; a Shortfall hits profit only on an explicit
+write-off; counts are typed on Receive Stock by a stock keeper but the money
+waits for a manager. History is **never restated** (ADR 0021's rule). Scope is
+**the seam only** — van #207 keeps its memo counts untouched.
+
+Two consequences to carry forward: this **amends ADR 0014** (the reconciliation
+gains a sixth card — owner-chosen, against the 9→5 reduction), and the
+forfeit-income line (#176) changes meaning for opted-in brands only.
+
+Four live defects found while investigating, none fixed by this session:
+1. **Supplier crate debt can only fall.** Receive Stock posts the return leg
+   (`receive_stock_service.dart:154`) but `recordReceiveFromSupplier` has a
+   single call site — a manual form at `supplier_detail_screen.dart:1274`. So
+   `SUM(quantity_delta)` drifts negative, and since `businessNetPositionKobo`
+   *subtracts* `supplierCrateDebtKobo`, negative debt **inflates net worth**.
+2. **Placed deposit money never reaches the books.** `_appendSupplierMovement`
+   writes a crate ledger row and a local cache only — no payment row, no expense,
+   no wallet entry. `deposit_paid_kobo` is hand-typed and read by one screen.
+3. **`crate_size_groups.deposit_amount_kobo` is dead** (`app_database.dart:92`,
+   zero readers) — a plausible second rate column inviting a canonical fork.
+4. **Crate audit B4 still unresolved** — no "empties received now" field exists
+   at checkout. It is a hard prerequisite for van #207, since every van customer
+   is a walk-in.
+
+Also confirmed: **van v1 shipped this hole deliberately**, not accidentally —
+ADR 0019 rejects full crate handling as scope and v1 writes memo counts
+(`shells_out`/`shells_back`, valued nowhere; zero crate-pool writes in the van
+module). The "#203 blocks #161" claim in the issue is stale — #161 closed
+2026-07-25 and shipped 2026-07-27. The real dependency is **#207**.
+
 ### #206 — the golden fixtures pin cancel + the catalogue price — DONE (2026-07-29)
 PRD #155's hard rule is that a money rule changed there **must** be pinned in the
 shared Golden-Scenario fixtures (ADR 0009). Two never were.

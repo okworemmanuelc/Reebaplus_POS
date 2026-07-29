@@ -289,8 +289,9 @@ The refundable money a returnable crate is worth — its per-crate **rate** is
 deposit_rate_kobo` at sale time so a later rate edit never changes a historic
 settlement. A crate sale is either **Money-Track** or **Crate-Track** (below).
 _Avoid_: recomputing a historic deposit at today's rate; conflating the deposit
-*money* flow (largely unmodelled app-wide — a separate PRD) with the crate
-*count*, which #156 makes trustworthy.
+*money* flow with the crate *count*, which #156 makes trustworthy. The inflow leg
+(money customers pay us) is [Held Deposit]; the outflow leg (money we pay a
+supplier) is [Placed Deposit] — see ADR 0023.
 
 **Held Deposit**:
 Deposit money the shop is currently holding for a customer against crates they
@@ -312,6 +313,44 @@ it back toward zero. A walk-in (no registered customer) holds neither.
 _Avoid_: issuing a crate balance for a money-track sale (that double-counts the
 deposit as both money held and crates owed); netting a money-track return against
 the crate ledger.
+
+**Placed Deposit**:
+Refundable money the business has paid a supplier against crates it holds — the
+exact mirror of [Held Deposit], and an **asset**: cash left the drawer but the
+money is still ours, so business worth is unchanged. Held per
+`(supplier, manufacturer)` pair, because only the supplier you paid can pay you
+back; the per-crate rate is always the manufacturer's (ADR 0023).
+_Avoid_: booking it as an expense (it is refundable, so it must never cut
+profit); attributing it to a manufacturer rather than the supplier who holds it;
+reading `crate_size_groups.deposit_amount_kobo` as a rate (dead column, no
+readers).
+
+**Crate Money Arrangement**:
+The per-manufacturer setting deciding whether crate money moves at all and when —
+`none` (swap only, no money ever), `per_delivery` (deposit placed on each
+receipt, returned on each hand-back), or `standing_float` (a lump sum placed
+once, moved only on real top-ups and payouts). Every existing manufacturer
+defaults to `none`, so behaviour is unchanged until a brand is switched on.
+_Avoid_: assuming every beverage brand takes a deposit; inferring the arrangement
+from whether deposits happen to have been recorded before.
+
+**Crate Shortfall**:
+The gap between crates owed to suppliers and empties actually on hand, valued at
+the manufacturer rate — **brand-level and deliberately unattributed** to any one
+supplier, because nothing identifies which supplier's crate went missing. A
+warning, not a booked loss, until someone writes it off (which is when it hits
+profit).
+_Avoid_: allocating a shortfall to a supplier before settlement; writing it off
+on a timer; letting it sit unclearable (a warning nobody can clear is ignored).
+
+**Supplier Crate Debt**:
+The empty crates owed to one supplier for full crates they delivered —
+`SUM(quantity_delta)` over that supplier's [Crate Ledger] rows, per manufacturer.
+A *count*; its money value is a valuation at today's manufacturer rate, not a
+[Placed Deposit].
+_Avoid_: recording only the return leg (a debt that can only fall drifts negative
+and inflates business worth — the #203 drift bug); treating it as part of the
+[Empties Pool].
 
 ### Industry
 
