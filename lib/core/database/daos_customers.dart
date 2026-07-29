@@ -218,40 +218,12 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// Append a wallet ledger entry. Used by legacy topup/refund flows in
-  /// `CustomerService`. Pass an empty [staffId] when no auth context exists
-  /// — it's stored as NULL.
-  Future<void> updateWalletBalance({
-    required String customerId,
-    required int amountKobo,
-    required String type,
-    required String referenceType,
-    String? note,
-    String staffId = '',
-  }) async {
-    final wallet = await attachedDatabase.customerWalletsDao.getByCustomerId(
-      customerId,
-    );
-    if (wallet == null) {
-      throw StateError('Customer $customerId has no wallet');
-    }
-    final txId = UuidV7.generate();
-    final signed = type == 'credit' ? amountKobo.abs() : -amountKobo.abs();
-    final txComp = WalletTransactionsCompanion.insert(
-      id: Value(txId),
-      businessId: requireBusinessId(),
-      walletId: wallet.id,
-      customerId: customerId,
-      type: type,
-      amountKobo: amountKobo.abs(),
-      signedAmountKobo: signed,
-      referenceType: referenceType,
-      performedBy: Value(staffId.isEmpty ? null : staffId),
-      lastUpdatedAt: Value(DateTime.now()),
-    );
-    await into(walletTransactions).insert(txComp);
-    await db.syncDao.enqueueUpsert('wallet_transactions', txComp);
-  }
+  // #202: `updateWalletBalance` lived here — a wallet ledger write with NO
+  // matching `payment_transactions` row and no staff id. Its only callers were
+  // the three unreachable `CustomerService` legacy paths deleted alongside it.
+  // Every live credit movement now goes through `CreditLedgerService`, which
+  // posts the wallet leg and the payment leg atomically (PRD #155). Do not
+  // reintroduce a wallet-only write primitive here.
 }
 
 extension CustomerDataExtension on CustomerData {

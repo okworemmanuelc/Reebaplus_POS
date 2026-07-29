@@ -10,6 +10,59 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #202 — the PRD #155 dead-code sweep (3 promised removals) — CODE-COMPLETE (2026-07-29)
+Process debt from the #155 close-out audit: the PRD's "Further Notes" promised a
+dead-code sweep that never ran. All three items were still present, and all three
+were **dangerous** dead code — code that is wrong, not merely unused. Branch
+`fix/202-dead-code-sweep` off `main` (HEAD `9930137`, includes #194 + #197).
+
+1. **Legacy customer-payment paths — deleted.** `CustomerService.addPayment`,
+   `refundToWallet` and `updateWalletBalance` had zero callers and each appended
+   a `wallet_transactions` row with **no `payment_transactions` row** and
+   `staffId: ''` — the exact discipline #155 established (both legs, atomic, via
+   `CreditLedgerService`). Their shared primitive `CustomersDao
+   .updateWalletBalance` was deleted with them (its doc named those flows as its
+   only users), so the wallet-only write path no longer exists; a comment in
+   `daos_customers.dart` records why. Also removed: the in-memory `PaymentService`
+   + `paymentServiceProvider` (defined, never consumed — supplier payments live
+   in `SupplierLedgerDao`), both orphaned `Payment` models, and `Customer
+   .payments` (hardcoded `const []`, no reader).
+2. **Cart crate-credit block — deleted.** `cart_screen.dart` computed
+   `customerCrateCredit`, **subtracted it from the payable**, and rendered a
+   "Deposit Paid" line — all from `Customer.emptyCratesBalance`, hardcoded
+   `const {}` everywhere, so always ₦0. Completing the TODO as written would have
+   been a money bug: the sign convention is positive = the customer OWES us
+   empties, so crate **debtors** would have been discounted, keyed by manufacturer
+   *name* (`CRATE_TRACKING_AUDIT.md` §D). The model field is gone so the trap
+   cannot be re-armed. Consequence: the cart's goods total is now exactly
+   `subtotal − discounts` — the same two terms `ReceiptTotals.totalKobo` nets — so
+   the checkout print and a reprint agree **by construction**, not by both being 0
+   (stale notes in `receipt_totals.dart` / `checkout_page.dart` updated).
+3. **`purchase` payment type — DROPPED** (not documented-and-kept). Verified no
+   writer exists anywhere: every Dart insert seam passes a literal
+   (`sale`/`crate_deposit`/`wallet_topup`/`expense`/`refund`/`van_remittance`),
+   the one parameterised writer (`PaymentsDao.postReversalPayment`) is called with
+   `refund`/`expense`/`wallet_topup` or copies the original's type, and all 17
+   cloud RPCs that insert a payment row hardcode a server-side literal. The other
+   `'purchase'` strings in the tree are `stock_transactions`' ref-type
+   discriminator for `purchase_id` — a different table. Drift **schemaVersion
+   76 → 77** + cloud **`0169_drop_purchase_payment_type.sql`**.
+
+**New invariant worth carrying forward — narrowing a CHECK is not the mirror of
+widening one.** #169 and #144 widened this CHECK and could not fail on existing
+data. A narrowing rebuild aborts on a single offending row: client-side that
+bricks the app on open, and a payment row is append-only money that must never be
+deleted to make a constraint fit. So both halves **guard and skip** instead of
+failing — the v77 Drift step probes `WHERE type = 'purchase' LIMIT 1` before
+`m.alterTable` (safe to skip: `SchemaAudit` only checks for missing tables and
+columns), and 0169 counts the rows and `RAISE WARNING`s rather than aborting the
+deploy. No `columnTransformer` is needed in v77 (unlike v64): no column changes,
+and a DB reaching v77 has already passed v64/v72, so every current column exists
+on the table being copied. Deploy order is free either way — a v76 client can only
+produce the six live types. Three new cases in
+`test/database/migration_upgrade_test.dart` pin the narrowing, the row-survival,
+the skip-on-legacy-row path, and idempotency. `flutter analyze` clean.
+
 ### #197 — US 22: a stock request records what the goods cost — CODE-COMPLETE (2026-07-29)
 One of the three PRD #155 stories the close-out audit found **never
 implemented**. `stock_adjustment_requests` had no cost column, so

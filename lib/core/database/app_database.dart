@@ -1952,8 +1952,18 @@ class PaymentTransactions extends Table {
     // stay out of "Cash sales" and land on its own "Cash from drivers" line
     // (#147). Existing installs rebuild the table under the widened CHECK via
     // the schemaVersion 72 upgrade step. Mirrors 0163_van_sales_remittance.sql.
+    //
+    // #202 NARROWED it for the first time: `purchase` was inherited from the
+    // 0001 schema and never written by anything — no Dart DAO, no cloud RPC, no
+    // web arm. It survived two widenings (#169, #144) purely by being copied
+    // along, advertising a money type the ledger has no concept of. Existing
+    // installs rebuild under the narrowed CHECK via the schemaVersion 77 upgrade
+    // step, which SKIPS the rebuild if any `purchase` row somehow exists rather
+    // than aborting the upgrade. Mirrors 0169_drop_purchase_payment_type.sql.
+    // A goods purchase is a SUPPLIER invoice + `expense`/supplier-ledger payment
+    // — do not resurrect this value for it.
     "CHECK (type IN "
-        "('sale','purchase','expense','refund','wallet_topup','crate_deposit',"
+        "('sale','expense','refund','wallet_topup','crate_deposit',"
         "'van_remittance'))",
     '''CHECK (
           (CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) +
@@ -2560,7 +2570,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 76;
+  int get schemaVersion => 77;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5353,6 +5363,93 @@ class AppDatabase extends _$AppDatabase {
             stockAdjustmentRequests,
             stockAdjustmentRequests.unitCostKobo,
           );
+        }
+      }
+
+      if (from < 77) {
+        // ── v77 — #202: drop the never-written `purchase` payment type ───────
+        //
+        // `payment_transactions.type` has advertised `purchase` since the 0001
+        // schema and NOTHING has ever written it — not a DAO, not a cloud RPC,
+        // not the web arm. Both prior CHECK edits (#169's `crate_deposit`, #144's
+        // `van_remittance`) were widenings that copied it along. PRD #155
+        // established that every money movement is one of the six real types; a
+        // seventh that no writer produces is a trap for the next reader, who
+        // will reasonably assume goods purchases land here. (They don't: a
+        // purchase is a SUPPLIER INVOICE plus an `expense` / supplier-ledger
+        // payment.)
+        //
+        // NO column changes — this is a CHECK edit only, and SQLite cannot ALTER
+        // a CHECK in place, so it is the v64/v72 table-rebuild recipe once more:
+        //   1. alterTable(TableMigration(...)) rebuilds from the CURRENT Drift
+        //      schema and copies every row 1:1. No `columnTransformer` is needed
+        //      (unlike v64): a DB arriving here has already passed through v64
+        //      and v72, so every column in the current schema exists on the
+        //      table being copied.
+        //   2. drift re-applies the table's EXISTING indexes but NOT its
+        //      triggers, so DROP-then-CREATE each index (idempotent, same fix as
+        //      the v29/v61/v64/v72 rebuilds) and re-emit the two append-only
+        //      ledger triggers from the single `_ledgerTables` source, plus the
+        //      last_updated_at bump trigger.
+        //
+        // Rebuilding an APPEND-ONLY table is only safe because the triggers are
+        // dropped first: `payment_transactions_no_delete` would otherwise abort
+        // drift's copy-and-swap.
+        //
+        // **This is the first NARROWING**, so unlike every rebuild before it the
+        // copy CAN fail on existing data — a single legacy `purchase` row would
+        // abort the whole upgrade and brick the app on open. A money row can't
+        // be deleted (append-only, and it would be destroying a record), so the
+        // guard below SKIPS the narrowing on such a device instead: it keeps the
+        // wider CHECK locally, which is harmless (`SchemaAudit` only checks for
+        // missing tables/columns), and the row stays visible and pushable. The
+        // cloud twin, 0169_drop_purchase_payment_type.sql, makes the same call.
+        final hasPurchasePayments = await customSelect(
+          "SELECT 1 FROM payment_transactions WHERE type = 'purchase' LIMIT 1",
+        ).get();
+        if (hasPurchasePayments.isEmpty) {
+          await m.alterTable(TableMigration(paymentTransactions));
+          await customStatement(
+            'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
+          );
+          await customStatement(
+            'CREATE INDEX idx_payment_transactions_business_lua '
+            'ON payment_transactions (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'DROP INDEX IF EXISTS idx_payment_txn_business_type',
+          );
+          await customStatement(
+            'CREATE INDEX idx_payment_txn_business_type '
+            'ON payment_transactions (business_id, type, created_at)',
+          );
+          await customStatement('DROP INDEX IF EXISTS idx_payment_txn_van_trip');
+          for (final stmt in _vanRemittanceIndexStatements) {
+            await customStatement(stmt);
+          }
+          await customStatement(
+            'DROP TRIGGER IF EXISTS bump_payment_transactions_last_updated_at',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_payment_transactions_last_updated_at '
+            'AFTER UPDATE ON payment_transactions '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE payment_transactions SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+          await customStatement(
+            'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+          );
+          await customStatement(
+            'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+          );
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere((l) => l.table == 'payment_transactions'),
+          )) {
+            await customStatement(stmt);
+          }
         }
       }
     },

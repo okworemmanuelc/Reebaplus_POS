@@ -318,8 +318,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   ///
   /// The printed total stays [_totalKobo] — the payable actually charged — rather
   /// than `ReceiptTotals.totalKobo`, so the receipt can never disagree with the
-  /// till. The two are equal because the only other term in the cart's goods
-  /// total, `customerCrateCredit`, is dead code (see `ReceiptTotals.totalKobo`).
+  /// till. The two are equal because since #202 the cart's goods total is
+  /// exactly subtotal − discounts, with no third term (see
+  /// `ReceiptTotals.totalKobo`).
   int get _discountTotalKobo =>
       widget.cart.fold<int>(0, (s, i) => s + ((i['discountKobo'] as int?) ?? 0));
 
