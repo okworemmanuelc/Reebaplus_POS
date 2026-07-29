@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/changed_since_review_badge.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -234,35 +235,59 @@ class _DailyReconciliationDetailScreenState
     // money deltas only where the same money is already on their card (sales,
     // refunds, expenses) and unit deltas anywhere; the cost-basis stock figures
     // are flagged for them WITHOUT a naira amount rather than not at all.
-    final salesBadges = _deltaChips(context, theme, [
-      _CardFigure('Total sales', comparison?.totalSales),
-      _CardFigure('Refunds', comparison?.refunds),
-      _CardFigure('Items sold', comparison?.itemsSold, isUnits: true),
+    final salesBadges = _deltaChips([
+      _CardFigure(label: 'Total sales', delta: comparison?.totalSales),
+      _CardFigure(label: 'Refunds', delta: comparison?.refunds),
+      _CardFigure(
+        label: 'Items sold',
+        delta: comparison?.itemsSold,
+        isUnits: true,
+      ),
     ]);
     final plBadges = !isCeo
         ? const <Widget>[]
-        : _deltaChips(context, theme, [
-            _CardFigure('Net profit', comparison?.netProfit),
-            _CardFigure('Gross profit', comparison?.grossProfit),
-            _CardFigure('Expenses', comparison?.expenses),
-            _CardFigure('Damages', comparison?.damagesCost),
+        : _deltaChips([
+            _CardFigure(label: 'Net profit', delta: comparison?.netProfit),
+            _CardFigure(label: 'Gross profit', delta: comparison?.grossProfit),
+            _CardFigure(label: 'Discounts', delta: comparison?.discounts),
+            _CardFigure(label: 'Cost of goods sold', delta: comparison?.cogs),
+            _CardFigure(label: 'Expenses', delta: comparison?.expenses),
+            _CardFigure(label: 'Damages', delta: comparison?.damagesCost),
           ]);
     final cashBadges = !isCeo
         ? const <Widget>[]
-        : _deltaChips(context, theme, [
-            _CardFigure('Net cash movement', comparison?.netCashMovement),
-            _CardFigure('Cash sales', comparison?.cashSales),
-            _CardFigure('Cash out', comparison?.cashOut),
+        : _deltaChips([
+            _CardFigure(
+              label: 'Net cash movement',
+              delta: comparison?.netCashMovement,
+            ),
+            _CardFigure(label: 'Cash sales', delta: comparison?.cashSales),
+            _CardFigure(label: 'Cash in', delta: comparison?.cashIn),
+            _CardFigure(label: 'Cash out', delta: comparison?.cashOut),
           ]);
     final stockBadges = isCeo
-        ? _deltaChips(context, theme, [
-            _CardFigure('Expected closing', comparison?.stockExpectedClosing),
-            _CardFigure('Cost of goods sold', comparison?.stockCogs),
-            _CardFigure('Short', comparison?.shortageUnits, isUnits: true),
+        ? _deltaChips([
+            _CardFigure(
+              label: 'Expected closing',
+              delta: comparison?.stockExpectedClosing,
+            ),
+            _CardFigure(
+              label: 'Cost of goods sold',
+              delta: comparison?.stockCogs,
+            ),
+            _CardFigure(
+              label: 'Short',
+              delta: comparison?.shortageUnits,
+              isUnits: true,
+            ),
           ])
         : [
-            ..._deltaChips(context, theme, [
-              _CardFigure('Short', comparison?.shortageUnits, isUnits: true),
+            ..._deltaChips([
+              _CardFigure(
+                label: 'Short',
+                delta: comparison?.shortageUnits,
+                isUnits: true,
+              ),
             ]),
             // Cost wall: the amounts belong to the CEO's card, so a Manager gets
             // the fact that stock value moved without the figure itself.
@@ -270,14 +295,14 @@ class _DailyReconciliationDetailScreenState
                 (comparison.stockExpectedClosing.changed ||
                     comparison.stockCogs.changed ||
                     comparison.damagesCost.changed))
-              _changedChip(context, theme, 'Stock value'),
+              _changedChip('Stock value'),
           ];
     // The Manager's own money card — the one that rendered the frozen
     // `expensesKobo` with no delta at all before #192.
     final debtsBadges = isCeo
         ? const <Widget>[]
-        : _deltaChips(context, theme, [
-            _CardFigure('Expenses', comparison?.expenses),
+        : _deltaChips([
+            _CardFigure(label: 'Expenses', delta: comparison?.expenses),
           ]);
     final hasFlaggedCard = [
       salesBadges,
@@ -331,10 +356,21 @@ class _DailyReconciliationDetailScreenState
               comparison,
               reviewerName,
               hasFlaggedCard: hasFlaggedCard,
+              isCeo: isCeo,
             ),
             SizedBox(height: context.spacingM),
           ],
-          _salesCard(context, theme, d, badges: salesBadges),
+          _salesCard(
+            context,
+            theme,
+            d,
+            badges: salesBadges,
+            // Keep the line whose badge is on this card (#192): a refund VOIDED
+            // after the review takes `refundsKobo` to 0, which would otherwise
+            // badge a line the card no longer renders.
+            showRefunds:
+                d.refundsKobo > 0 || (comparison?.refunds.changed ?? false),
+          ),
           // #147 — the van channel, as one aggregated block. Rendered only when
           // the period actually saw van activity, so a business with no vans
           // reads exactly as it did before.
@@ -384,6 +420,7 @@ class _DailyReconciliationDetailScreenState
     ThemeData theme,
     ReconData d, {
     List<Widget> badges = const [],
+    bool showRefunds = false,
   }) {
     return _card(
       context,
@@ -417,7 +454,7 @@ class _DailyReconciliationDetailScreenState
             formatCurrency(d.salesOnCreditKobo / 100.0),
           ),
         ],
-        if (d.refundsKobo > 0)
+        if (showRefunds)
           _line(
             context,
             theme,
@@ -1232,18 +1269,13 @@ class _DailyReconciliationDetailScreenState
   /// Callers pass only what THIS card renders for THIS role, so the list doubles
   /// as the answer to "did anything visible get flagged?" that the reviewed
   /// banner is worded from.
-  List<Widget> _deltaChips(
-    BuildContext context,
-    ThemeData theme,
-    List<_CardFigure> figures,
-  ) => [
+  List<Widget> _deltaChips(List<_CardFigure> figures) => [
     for (final f in figures)
       if (f.delta != null && f.delta!.changed)
-        _chip(
-          context,
-          theme,
-          '${f.label} ${f.delta!.delta > 0 ? '+' : '−'} '
-          '${f.isUnits ? fmtNumber(f.delta!.delta.abs()) : formatCurrency(f.delta!.delta.abs() / 100.0)}',
+        ChangedSinceReviewBadge(
+          label:
+              '${f.label} ${f.delta!.delta > 0 ? '+' : '−'} '
+              '${f.isUnits ? fmtNumber(f.delta!.delta.abs()) : formatCurrency(f.delta!.delta.abs() / 100.0)}',
         ),
   ];
 
@@ -1251,44 +1283,8 @@ class _DailyReconciliationDetailScreenState
   /// the money behind the change is on the far side of the §25.3 cost wall
   /// (#192). A Manager is told their stock value moved after the review without
   /// being shown the cost it moved by.
-  Widget _changedChip(BuildContext context, ThemeData theme, String label) =>
-      _chip(context, theme, '$label changed');
-
-  /// The badge shell. Neutral WARNING treatment: it flags that history mutated
-  /// after the review, not that the change is good or bad.
-  Widget _chip(BuildContext context, ThemeData theme, String text) {
-    final warn = theme.extension<AppSemanticColors>()!.warning;
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(3),
-      ),
-      decoration: BoxDecoration(
-        color: warn.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: warn.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(FontAwesomeIcons.arrowsRotate.data, size: 10, color: warn),
-          const SizedBox(width: 5),
-          // Flexible so a long label + amount ("Net cash movement − ₦2,400,000")
-          // shrinks inside the Wrap's line instead of overflowing it on a narrow
-          // phone.
-          Flexible(
-            child: Text(
-              text,
-              style: context.bodySmall.copyWith(
-                color: warn,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _changedChip(String label) =>
+      ChangedSinceReviewBadge(label: '$label changed');
 
   /// The screen-level banner shown once, above the cards, when the finished day
   /// has a persisted review snapshot (#174). States when (and by whom) the day
@@ -1307,6 +1303,7 @@ class _DailyReconciliationDetailScreenState
     ReconClosingComparison c,
     String? reviewerName, {
     required bool hasFlaggedCard,
+    required bool isCeo,
   }) {
     final changed = c.anyChanged;
     final accent = changed
@@ -1347,6 +1344,10 @@ class _DailyReconciliationDetailScreenState
                       : hasFlaggedCard
                       ? 'Some figures changed after this day was reviewed — the '
                             'flagged cards show what moved since.'
+                      : isCeo
+                      ? 'Some figures changed after this day was reviewed, but '
+                            'not on any card shown here — the CSV export lists '
+                            'every figure.'
                       : 'Some figures changed after this day was reviewed, but '
                             'not on any card you can see here — ask the owner to '
                             'open this day.',
@@ -1583,7 +1584,11 @@ class _DailyReconciliationDetailScreenState
 /// `shortageUnits` are frozen as counts, and formatting a count as naira would
 /// state a number that never existed.
 class _CardFigure {
-  const _CardFigure(this.label, this.delta, {this.isUnits = false});
+  const _CardFigure({
+    required this.label,
+    required this.delta,
+    this.isUnits = false,
+  });
   final String label;
   final ReconFigureDelta? delta;
   final bool isUnits;

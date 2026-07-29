@@ -87,6 +87,7 @@ BusinessData _business({required bool crates}) => BusinessData(
 /// exactly the figure under test and nothing else can flag a card by accident.
 DailyClosingData _snapshot({
   int totalSalesKobo = 0,
+  int refundsKobo = 0,
   int expensesKobo = 0,
   int cashOutKobo = 0,
   int netCashMovementKobo = 0,
@@ -99,7 +100,7 @@ DailyClosingData _snapshot({
     businessDate: _day,
     storeScopeId: null,
     totalSalesKobo: totalSalesKobo,
-    refundsKobo: 0,
+    refundsKobo: refundsKobo,
     discountsKobo: 0,
     cogsKobo: 0,
     grossProfitKobo: 0,
@@ -493,6 +494,29 @@ void main() {
         find.textContaining('the flagged cards show what moved'),
         findsOneWidget,
         reason: 'now that a card IS flagged, the banner may point at it',
+      );
+    });
+
+    testWidgets('a refund VOIDED after the review keeps its line on the card',
+        (tester) async {
+      // The reviewed day carried a ₦10,000 refund; the refund has since been
+      // voided, so the live figure is 0 and the Sales card's Refunds line — which
+      // renders only when the figure is non-zero — would have disappeared, taking
+      // the explanation for its own badge with it.
+      await pumpDetail(
+        tester,
+        start: _dayStart,
+        endExclusive: _dayEnd,
+        roleSlug: 'manager',
+        snapshot: _snapshot(refundsKobo: 1000000),
+      );
+
+      expect(find.textContaining('Refunds −'), findsOneWidget,
+          reason: 'the badge names the figure that moved');
+      expect(
+        find.text('Refunds'),
+        findsOneWidget,
+        reason: 'a badge must never point at a line the card stopped rendering',
       );
     });
 

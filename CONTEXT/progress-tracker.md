@@ -203,6 +203,20 @@ row set changes. That is the right price on a report screen you are already read
 and the wrong one on Home. The issue's fix bullet says "list and/or attention
 reason" — the list is the surface chosen.
 
+**Two-axis review applied.** Standards: the list marker's hand-rolled pill was
+replaced by a shared `ChangedSinceReviewBadge` (`lib/features/dashboard/widgets/`)
+— one widget for both surfaces, and it retires a raw `BorderRadius.circular(20)`;
+`_CardFigure` moved to named parameters; `dayLocal` is listed out rather than
+identity-filtered from `all` (const canonicalisation could have excluded the wrong
+figure); the list screen watches the sweep only while Day buckets are on screen.
+Spec: `discounts` / `cogs` / `cashIn` were compared but badged nowhere — now
+badged on the cards that already render those lines, so all 16 are both compared
+AND reachable; the "not on any card" banner is role-aware (a CEO is pointed at the
+CSV export, not told to ask the owner); and the Sales card keeps its Refunds line
+whenever its own badge is on it, so a refund VOIDED after review cannot badge a
+line the card stopped rendering. ADR 0022's "known cousin" bullet struck through
+and corrected.
+
 **Tests.** `test/dashboard/recon_day_close_delta_coverage_test.dart` (pure, no
 widget): a no-hole test that perturbs each of the 16 frozen columns and demands
 **exactly one** delta fires; the US 35 backdated-supplier-payment case (which had

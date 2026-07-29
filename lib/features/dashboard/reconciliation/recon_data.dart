@@ -2175,9 +2175,21 @@ class ReconClosingComparison {
   final ReconFigureDelta itemsSold; // Sales summary card
   final ReconFigureDelta shortageUnits; // Stock card, both roles
 
-  /// Every compared figure, so a caller can ask a question about the whole
-  /// frozen set without re-listing it (and drift from it).
-  List<ReconFigureDelta> get all => [
+  /// The figures derivable from the day's OWN rows alone — every frozen figure
+  /// except [stockExpectedClosing].
+  ///
+  /// Expected closing is reconstructed by rewinding every stock movement recorded
+  /// at or after the period end from the CURRENT on-hand figure, so it is the one
+  /// frozen figure that cannot be recomputed from a single day's rows. The
+  /// reconciliation LIST sweep ([changedReviewedDaysProvider]) feeds each day only
+  /// its own rows — that is what keeps the sweep one pass over the data instead of
+  /// one full pass per reviewed day — so it asks [anyDayLocalChanged], and the
+  /// day's own detail screen (which computes the real thing) asks [anyChanged].
+  ///
+  /// Listed out rather than filtered out of [all]: matching a member by identity
+  /// would be at the mercy of `const` canonicalisation collapsing two equal
+  /// deltas into one object, and silently exclude the wrong figure.
+  List<ReconFigureDelta> get dayLocal => [
     totalSales,
     refunds,
     discounts,
@@ -2191,29 +2203,20 @@ class ReconClosingComparison {
     cashOut,
     netCashMovement,
     stockCogs,
-    stockExpectedClosing,
     itemsSold,
     shortageUnits,
   ];
 
+  bool get anyDayLocalChanged => dayLocal.any((d) => d.changed);
+
+  /// Every compared figure — [dayLocal] plus the one figure only a full compute
+  /// can answer for — so a caller can ask a question about the whole frozen set
+  /// without re-listing it (and drifting from it).
+  List<ReconFigureDelta> get all => [...dayLocal, stockExpectedClosing];
+
   /// True when ANY frozen figure has moved since the review — the day changed
   /// after it was banked against.
   bool get anyChanged => all.any((d) => d.changed);
-
-  /// The figures derivable from the day's OWN rows alone — everything except
-  /// [stockExpectedClosing].
-  ///
-  /// Expected closing is reconstructed by rewinding every stock movement recorded
-  /// at or after the period end from the CURRENT on-hand figure, so it is the one
-  /// frozen figure that cannot be recomputed from a single day's rows. The
-  /// reconciliation LIST sweep ([changedReviewedDaysProvider]) feeds each day only
-  /// its own rows — that is what keeps the sweep one pass over the data instead of
-  /// one full pass per reviewed day — so it asks this question, and the day's own
-  /// detail screen (which computes the real thing) asks [anyChanged].
-  List<ReconFigureDelta> get dayLocal =>
-      all.where((d) => !identical(d, stockExpectedClosing)).toList();
-
-  bool get anyDayLocalChanged => dayLocal.any((d) => d.changed);
 }
 
 /// Builds the as-reviewed-vs-current comparison from a persisted [snapshot] and

@@ -5,13 +5,13 @@ import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reports_attention.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_detail_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/changed_since_review_badge.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
@@ -130,8 +130,19 @@ class _DailyReconciliationListScreenState
     // #192 — the reviewed days whose figures have moved since. Before this the
     // only way to learn a reviewed day had changed was to already be inside it,
     // so a day that moved after review stayed silent unless someone happened to
-    // re-open it. Day buckets only: a week/month/year holds no day close.
-    final changedDays = ref.watch(changedReviewedDaysProvider);
+    // re-open it.
+    //
+    // Watched ONLY while day buckets are on screen: a week/month/year bucket
+    // holds no day close, so the sweep (a pass over every report row set) would
+    // be paid for an answer nothing could render. Riverpod re-resolves the
+    // dependency set on every build, so switching the period picker back to Day
+    // simply picks it up — the same conditional-watch shape the detail screen
+    // uses for its day-close basis.
+    final showsDayBuckets =
+        _customRange != null || _grouping == ReconGrouping.day;
+    final changedDays = showsDayBuckets
+        ? ref.watch(changedReviewedDaysProvider)
+        : const <String>{};
 
     return ColoredBox(
       color: theme.scaffoldBackgroundColor,
@@ -353,26 +364,7 @@ class _DailyReconciliationListScreenState
                 ),
               ),
               if (movedSinceReview) ...[
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: context.getRSize(8),
-                    vertical: context.getRSize(4),
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme
-                        .extension<AppSemanticColors>()!
-                        .warning
-                        .withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Changed since review',
-                    style: context.bodySmall.copyWith(
-                      color: theme.extension<AppSemanticColors>()!.warning,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
+                const ChangedSinceReviewBadge(label: 'Changed since review'),
                 SizedBox(width: context.getRSize(8)),
               ],
               if (mismatch)
