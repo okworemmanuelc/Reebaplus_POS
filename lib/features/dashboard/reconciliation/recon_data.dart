@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 
@@ -116,14 +117,26 @@ bool Function(String?) reconStoreFilter(
   final canAll = ref.watch(canViewAllStoresProvider);
   final active = ref.watch(lockedStoreProvider).value;
   final vans = ref.watch(vanStoresProvider);
+  final wide = businessWideStoreFilter(vans);
   return (storeId) {
-    if (vans.isVan(storeId)) return false;
+    if (!wide(storeId)) return false; // vans are out at every scope
     if (businessWide) return true; // the whole business (incl. legacy null-store)
     if (active != null) return storeId == active;
     if (canAll) return true; // All-Stores aggregate (incl. legacy null-store)
     return storeId != null && selectableIds.contains(storeId);
   };
 }
+
+/// The DAY-CLOSE store predicate as a pure function of the van set — everything
+/// in the business except the vans (#191, ADR 0022).
+///
+/// Factored out of [reconStoreFilter] so a caller that has no `WidgetRef` — the
+/// day-review sweep behind [changedReviewedDaysProvider], which runs inside a
+/// plain `Provider` — shares the ONE definition of "business-wide" instead of
+/// re-deriving it. A second copy is exactly how the badge on the list and the
+/// badge inside the day would come to disagree about which stores count.
+bool Function(String?) businessWideStoreFilter(VanStores vans) =>
+    (storeId) => !vans.isVan(storeId);
 
 /// A stock adjustment is a damage/loss when its reason names one. Catches both
 /// recording paths (§17.2): Record Damages stamps `damage:<key>`; a Manager/CEO
@@ -2096,10 +2109,21 @@ class ReconFigureDelta {
   bool get changed => delta != 0;
 }
 
-/// The per-card comparison between a persisted `daily_closings` snapshot and the
-/// live figures recomputed for the same finished day (#174). Each field pairs a
-/// card's headline reviewed figure with its current value; the detail screen
-/// renders a delta badge on a card whose figure [ReconFigureDelta.changed].
+/// The as-reviewed-vs-current comparison between a persisted `daily_closings`
+/// snapshot and the live figures recomputed for the same finished day (#174).
+///
+/// **Covers the WHOLE frozen figure set (#192).** [dailyClosingFiguresFrom]
+/// freezes sixteen figures; until #192 only four of them were ever compared, so a
+/// day whose expenses, refunds or damages moved after review read as unchanged on
+/// every surface that asked. The rule is now mechanical — one delta per frozen
+/// column, in the same order — so adding a figure to the frozen set and forgetting
+/// to compare it is no longer possible without leaving a hole visible in this
+/// class.
+///
+/// Which of them a viewer is actually SHOWN is a separate question the screen
+/// answers per card and per role (the §25.3 cost wall): see [all] and
+/// `daily_reconciliation_detail_screen.dart`. Comparing a figure is cheap and
+/// honest; rendering it to someone who may not see cost is not.
 ///
 /// Built by [reconClosingComparisonOrNull] for any FINISHED Day bucket that has a
 /// snapshot, at EVERY viewing scope. Both sides are BUSINESS-WIDE (#191, ADR
@@ -2111,30 +2135,93 @@ class ReconClosingComparison {
     required this.reviewedAt,
     required this.reviewedBy,
     required this.totalSales,
+    required this.refunds,
+    required this.discounts,
+    required this.cogs,
+    required this.grossProfit,
     required this.netProfit,
+    required this.expenses,
+    required this.damagesCost,
+    required this.cashSales,
+    required this.cashIn,
+    required this.cashOut,
     required this.netCashMovement,
+    required this.stockCogs,
     required this.stockExpectedClosing,
+    required this.itemsSold,
+    required this.shortageUnits,
   });
 
   final DateTime reviewedAt;
   final String? reviewedBy;
-  final ReconFigureDelta totalSales; // Sales summary card
-  final ReconFigureDelta netProfit; // Profit & Loss card (CEO)
-  final ReconFigureDelta netCashMovement; // Cash flow card (CEO)
-  final ReconFigureDelta stockExpectedClosing; // Stock reconciliation card
 
-  /// True when ANY reviewed card figure has moved since the review — the day
-  /// changed after it was banked against.
-  bool get anyChanged =>
-      totalSales.changed ||
-      netProfit.changed ||
-      netCashMovement.changed ||
-      stockExpectedClosing.changed;
+  // ── Money figures, in `DailyClosingFigures` order ────────────────────────
+  final ReconFigureDelta totalSales; // Sales summary card
+  final ReconFigureDelta refunds; // Sales summary card
+  final ReconFigureDelta discounts; // Profit & Loss card (CEO)
+  final ReconFigureDelta cogs; // Profit & Loss card (CEO)
+  final ReconFigureDelta grossProfit; // Profit & Loss card (CEO)
+  final ReconFigureDelta netProfit; // Profit & Loss card (CEO)
+  final ReconFigureDelta expenses; // P&L (CEO) / Debts & expenses (Manager)
+  final ReconFigureDelta damagesCost; // Profit & Loss card (CEO)
+  final ReconFigureDelta cashSales; // Cash flow card (CEO)
+  final ReconFigureDelta cashIn; // Cash flow card (CEO)
+  final ReconFigureDelta cashOut; // Cash flow card (CEO)
+  final ReconFigureDelta netCashMovement; // Cash flow card (CEO)
+  final ReconFigureDelta stockCogs; // Stock reconciliation card (CEO)
+  final ReconFigureDelta stockExpectedClosing; // Stock reconciliation card (CEO)
+
+  // ── Unit counts (never money — safe to show behind the cost wall) ────────
+  final ReconFigureDelta itemsSold; // Sales summary card
+  final ReconFigureDelta shortageUnits; // Stock card, both roles
+
+  /// Every compared figure, so a caller can ask a question about the whole
+  /// frozen set without re-listing it (and drift from it).
+  List<ReconFigureDelta> get all => [
+    totalSales,
+    refunds,
+    discounts,
+    cogs,
+    grossProfit,
+    netProfit,
+    expenses,
+    damagesCost,
+    cashSales,
+    cashIn,
+    cashOut,
+    netCashMovement,
+    stockCogs,
+    stockExpectedClosing,
+    itemsSold,
+    shortageUnits,
+  ];
+
+  /// True when ANY frozen figure has moved since the review — the day changed
+  /// after it was banked against.
+  bool get anyChanged => all.any((d) => d.changed);
+
+  /// The figures derivable from the day's OWN rows alone — everything except
+  /// [stockExpectedClosing].
+  ///
+  /// Expected closing is reconstructed by rewinding every stock movement recorded
+  /// at or after the period end from the CURRENT on-hand figure, so it is the one
+  /// frozen figure that cannot be recomputed from a single day's rows. The
+  /// reconciliation LIST sweep ([changedReviewedDaysProvider]) feeds each day only
+  /// its own rows — that is what keeps the sweep one pass over the data instead of
+  /// one full pass per reviewed day — so it asks this question, and the day's own
+  /// detail screen (which computes the real thing) asks [anyChanged].
+  List<ReconFigureDelta> get dayLocal =>
+      all.where((d) => !identical(d, stockExpectedClosing)).toList();
+
+  bool get anyDayLocalChanged => dayLocal.any((d) => d.changed);
 }
 
-/// Builds the per-card as-reviewed-vs-current comparison from a persisted
-/// [snapshot] and the [live] figures for the same finished day (#174). Pure over
-/// its two inputs so the delta math is unit-testable without a widget.
+/// Builds the as-reviewed-vs-current comparison from a persisted [snapshot] and
+/// the [live] figures for the same finished day (#174). Pure over its two inputs
+/// so the delta math is unit-testable without a widget.
+///
+/// One entry per frozen column (#192) — read it side by side with
+/// [dailyClosingFiguresFrom], which is the write half of the same list.
 ReconClosingComparison reconClosingComparison(
   DailyClosingData snapshot,
   ReconData live,
@@ -2145,17 +2232,62 @@ ReconClosingComparison reconClosingComparison(
     reviewed: snapshot.totalSalesKobo,
     current: live.totalSalesKobo, // #176 — net headline, matches the frozen basis
   ),
+  refunds: ReconFigureDelta(
+    reviewed: snapshot.refundsKobo,
+    current: live.refundsKobo,
+  ),
+  discounts: ReconFigureDelta(
+    reviewed: snapshot.discountsKobo,
+    current: live.discountsKobo,
+  ),
+  cogs: ReconFigureDelta(reviewed: snapshot.cogsKobo, current: live.cogsKobo),
+  grossProfit: ReconFigureDelta(
+    reviewed: snapshot.grossProfitKobo,
+    current: live.grossProfitKobo,
+  ),
   netProfit: ReconFigureDelta(
     reviewed: snapshot.netProfitKobo,
     current: live.netProfitKobo,
+  ),
+  expenses: ReconFigureDelta(
+    reviewed: snapshot.expensesKobo,
+    current: live.expensesKobo,
+  ),
+  damagesCost: ReconFigureDelta(
+    reviewed: snapshot.damagesCostKobo,
+    current: live.damageCostKobo,
+  ),
+  cashSales: ReconFigureDelta(
+    reviewed: snapshot.cashSalesKobo,
+    current: live.cashSalesKobo,
+  ),
+  cashIn: ReconFigureDelta(
+    reviewed: snapshot.cashInKobo,
+    current: live.cashInKobo,
+  ),
+  cashOut: ReconFigureDelta(
+    reviewed: snapshot.cashOutKobo,
+    current: live.cashOutKobo,
   ),
   netCashMovement: ReconFigureDelta(
     reviewed: snapshot.netCashMovementKobo,
     current: live.netCashMovementKobo,
   ),
+  stockCogs: ReconFigureDelta(
+    reviewed: snapshot.stockCogsKobo,
+    current: live.stockCogsKobo,
+  ),
   stockExpectedClosing: ReconFigureDelta(
     reviewed: snapshot.stockExpectedClosingKobo,
     current: live.stockExpectedClosingKobo,
+  ),
+  itemsSold: ReconFigureDelta(
+    reviewed: snapshot.itemsSold,
+    current: live.itemsSold,
+  ),
+  shortageUnits: ReconFigureDelta(
+    reviewed: snapshot.shortageUnits,
+    current: live.shortageUnits,
   ),
 );
 
@@ -2176,3 +2308,165 @@ ReconClosingComparison? reconClosingComparisonOrNull(
 ) => snapshot == null
     ? null
     : reconClosingComparison(snapshot, businessWideLive);
+
+// ── Changed-since-review, outside the day (#192) ─────────────────────────────
+
+/// The `YYYY-MM-DD` natural key for [d]'s calendar day — the same string
+/// `daily_closings.business_date` carries and the detail screen derives from its
+/// bucket start, so a key built here matches a snapshot row exactly.
+String reconDayKey(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';
+
+/// Files [rows] under every calendar day they could possibly report on, keeping
+/// only the days in [wanted].
+///
+/// [datesOf] returns EVERY date a row carries, not the one basis the figure uses:
+/// an expense reports on `expense_date` but its cash leg moves on `created_at`,
+/// and re-encoding that per-figure rule here is exactly how the sweep would come
+/// to disagree with [reconDataFrom]. Filing a row under a day it does not
+/// actually belong to is harmless — [reconDataFrom] applies the real basis
+/// through its own `inSpan` — so this deliberately over-includes and lets the one
+/// implementation of the money math have the last word.
+Map<String, List<T>> _byCandidateDay<T>(
+  Iterable<T> rows,
+  Iterable<DateTime> Function(T) datesOf,
+  Set<String> wanted,
+) {
+  final out = <String, List<T>>{};
+  if (wanted.isEmpty) return out;
+  for (final row in rows) {
+    for (final d in datesOf(row)) {
+      final key = reconDayKey(d);
+      if (!wanted.contains(key)) continue;
+      (out[key] ??= <T>[]).add(row);
+    }
+  }
+  return out;
+}
+
+/// The reviewed days whose figures have MOVED since they were reviewed, as
+/// `YYYY-MM-DD` keys (#192).
+///
+/// Why this exists: until #192 a changed reviewed day announced itself only from
+/// INSIDE that day's own detail screen, so you had to already suspect a day to
+/// learn it moved. This is the same question asked from outside, for every
+/// reviewed day at once, and it drives the reconciliation list's marker.
+///
+/// **One pass over the data, not one per day.** The rows are filed under the
+/// reviewed days they could report on ([_byCandidateDay]) and each day is then
+/// run through the REAL [reconDataFrom] over its own slice, so there is still
+/// exactly one implementation of the money math. The cost is therefore
+/// `O(rows) + O(reviewed days × products)`, not `O(reviewed days × rows)` — the
+/// difference between a sweep and a freeze on a shop with a year of history.
+///
+/// **What it cannot see:** `stockExpectedClosing`, which is rewound from the
+/// CURRENT on-hand figure over every later movement and so is not derivable from
+/// one day's rows — hence [ReconClosingComparison.anyDayLocalChanged] rather than
+/// `anyChanged`. A day whose ONLY movement is expected closing is still caught by
+/// the day's own detail screen, which computes the real figure.
+///
+/// **Deliberately not wired to the Home attention dot.** `reports_attention.dart`
+/// is built on the Home hot path and re-derives on every sale; this sweep re-runs
+/// whenever any report row set changes, which is the right price to pay on the
+/// reconciliation list (a report screen you are already reading) and the wrong
+/// one on Home. The list marker is the surface #192 asked for.
+final changedReviewedDaysProvider = Provider<Set<String>>((ref) {
+  final snapshots =
+      ref.watch(allDailyClosingsProvider).valueOrNull ?? const [];
+  if (snapshots.isEmpty) return const <String>{};
+  final wanted = {for (final s in snapshots) s.businessDate};
+
+  final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
+  // The day close's own basis (#191, ADR 0022): the whole business minus the
+  // vans, ignoring the active lock and the viewer's confinement, and the
+  // UNSCOPED stock totals.
+  final inScope = businessWideStoreFilter(ref.watch(vanStoresProvider));
+  final products =
+      ref.watch(productsWithStockProvider(null)).valueOrNull ?? const [];
+  final manufacturers =
+      ref.watch(allManufacturersProvider).valueOrNull ?? const [];
+
+  final ordersByDay = _byCandidateDay<OrderWithItems>(
+    ref.watch(allOrdersProvider).valueOrNull ?? const [],
+    (o) => [o.order.createdAt],
+    wanted,
+  );
+  final expensesByDay = _byCandidateDay<ExpenseWithCategory>(
+    ref.watch(allExpensesProvider).valueOrNull ?? const [],
+    (e) => [e.expense.expenseDate, e.expense.createdAt],
+    wanted,
+  );
+  final adjustmentsByDay = _byCandidateDay<StockAdjustmentData>(
+    ref.watch(allStockAdjustmentsProvider).valueOrNull ?? const [],
+    (a) => [a.createdAt],
+    wanted,
+  );
+  final ledgerByDay = _byCandidateDay<SupplierLedgerEntryData>(
+    ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ?? const [],
+    (l) => [l.activityDate, l.createdAt],
+    wanted,
+  );
+  final paymentsByDay = _byCandidateDay<PaymentTransactionData>(
+    ref.watch(allPaymentTransactionsProvider).valueOrNull ?? const [],
+    (p) => [p.createdAt],
+    wanted,
+  );
+  final stockTxnsByDay = _byCandidateDay<StockTransactionData>(
+    ref.watch(allStockTransactionsProvider).valueOrNull ?? const [],
+    (t) => [t.createdAt],
+    wanted,
+  );
+  final countsByDay = _byCandidateDay<StockCountData>(
+    ref.watch(allStockCountsProvider).valueOrNull ?? const [],
+    (c) => [DateTime.tryParse(c.businessDate) ?? c.createdAt, c.createdAt],
+    wanted,
+  );
+  final crateDamagesByDay = _byCandidateDay<CrateLedgerData>(
+    ref.watch(allCrateDamagesProvider).valueOrNull ?? const [],
+    (c) => [c.createdAt],
+    wanted,
+  );
+  final forfeitsByDay = _byCandidateDay<WalletTransactionData>(
+    showCrates
+        ? (ref.watch(crateForfeitRowsProvider).valueOrNull ?? const [])
+        : const <WalletTransactionData>[],
+    (w) => [w.createdAt],
+    wanted,
+  );
+
+  final changed = <String>{};
+  for (final snapshot in snapshots) {
+    final day = snapshot.businessDate;
+    final start = DateTime.tryParse(day);
+    if (start == null) continue;
+    final live = reconDataFrom(
+      ReconInputs(
+        orders: ordersByDay[day] ?? const [],
+        expenses: expensesByDay[day] ?? const [],
+        adjustments: adjustmentsByDay[day] ?? const [],
+        supplierLedger: ledgerByDay[day] ?? const [],
+        payments: paymentsByDay[day] ?? const [],
+        stockTxns: stockTxnsByDay[day] ?? const [],
+        stockCounts: countsByDay[day] ?? const [],
+        productsWithStock: products,
+        manufacturers: manufacturers,
+        crateDamages: crateDamagesByDay[day] ?? const [],
+        crateForfeitRows: forfeitsByDay[day] ?? const [],
+        showCrates: showCrates,
+        // The frozen record is opener-independent (#192): compute the supplier
+        // flows here exactly as the capture does, so the sweep and the day's own
+        // screen can never answer from two different bases.
+        isCeo: true,
+        inScope: inScope,
+        start: start,
+        endExclusive: start.add(const Duration(days: 1)),
+      ),
+    );
+    if (reconClosingComparison(snapshot, live).anyDayLocalChanged) {
+      changed.add(day);
+    }
+  }
+  return changed;
+});

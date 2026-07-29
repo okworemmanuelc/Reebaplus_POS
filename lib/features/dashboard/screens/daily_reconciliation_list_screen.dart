@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -125,6 +126,12 @@ class _DailyReconciliationListScreenState
     } else {
       buckets = buildReconBuckets(ref, grouping: _grouping);
     }
+
+    // #192 — the reviewed days whose figures have moved since. Before this the
+    // only way to learn a reviewed day had changed was to already be inside it,
+    // so a day that moved after review stayed silent unless someone happened to
+    // re-open it. Day buckets only: a week/month/year holds no day close.
+    final changedDays = ref.watch(changedReviewedDaysProvider);
 
     return ColoredBox(
       color: theme.scaffoldBackgroundColor,
@@ -256,7 +263,11 @@ class _DailyReconciliationListScreenState
                           ),
                           itemCount: buckets.length,
                           separatorBuilder: (_, __) => SizedBox(height: context.getRSize(12)),
-                          itemBuilder: (_, i) => _bucketCard(theme, buckets[i]),
+                          itemBuilder: (_, i) => _bucketCard(
+                            theme,
+                            buckets[i],
+                            changedDays: changedDays,
+                          ),
                         ),
                 ),
               ],
@@ -287,8 +298,17 @@ class _DailyReconciliationListScreenState
     );
   }
 
-  Widget _bucketCard(ThemeData theme, ReconBucket b) {
+  Widget _bucketCard(
+    ThemeData theme,
+    ReconBucket b, {
+    required Set<String> changedDays,
+  }) {
     final mismatch = b.hasShortage;
+    // #192 — this day was reviewed and has moved since. Neutral WARNING
+    // treatment (not the error red a stock mismatch gets): history mutating
+    // after a review is a "look again", not a fault.
+    final movedSinceReview = b.grouping == ReconGrouping.day &&
+        changedDays.contains(reconDayKey(b.start));
     return GlassyCard(
       radius: context.radiusL,
       padding: EdgeInsets.zero,
@@ -332,6 +352,29 @@ class _DailyReconciliationListScreenState
                   ],
                 ),
               ),
+              if (movedSinceReview) ...[
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: context.getRSize(8),
+                    vertical: context.getRSize(4),
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme
+                        .extension<AppSemanticColors>()!
+                        .warning
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Changed since review',
+                    style: context.bodySmall.copyWith(
+                      color: theme.extension<AppSemanticColors>()!.warning,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                SizedBox(width: context.getRSize(8)),
+              ],
               if (mismatch)
                 Container(
                   padding: EdgeInsets.symmetric(
