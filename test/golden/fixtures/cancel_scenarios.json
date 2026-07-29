@@ -1,0 +1,226 @@
+{
+  "_doc": [
+    "Golden-Scenario Suite fixtures for CANCEL / REFUND (ADR 0009, issue #206).",
+    "PRD #155 makes it a hard rule that a changed money rule must be pinned here.",
+    "#172's compensating cash-out — the single most consequential money change in",
+    "that PRD — had NO cross-implementation contract at all until this file, which",
+    "is exactly what #206 was filed to fix. Each scenario is a checkout (asserted",
+    "by the usual `expected` block) FOLLOWED BY a cancel (asserted by the `cancel`",
+    "block), so every reversal is measured against a sale whose own rows are",
+    "already pinned.",
+    "",
+    "THE RULE, as migration 0170's header states it: a cancel APPENDS one",
+    "compensating row per reversible original, dated on the cancel day, and",
+    "mutates nothing. Row count after a cancel = originals + one per reversible",
+    "original. Concretely:",
+    "  * every ORIGINAL payment row survives, UNVOIDED, at its original amount —",
+    "    a sale day the owner already reviewed and banked against never shrinks",
+    "    behind them (#172). This is the OPPOSITE of the pre-#155 rule, which",
+    "    voided each original in place AND posted a full-amount refund for it.",
+    "  * `sale`          -> a POSITIVE `refund` for the same amount;",
+    "  * `crate_deposit` -> a NEGATIVE `crate_deposit` (#190/#201): in-family,",
+    "    NEVER a `refund`. The collection was never in Cash sales, so its release",
+    "    must not land in Cash refunds;",
+    "  * `wallet_topup`  -> a NEGATIVE `wallet_topup`, so Debts collected nets to",
+    "    zero;",
+    "  * every wallet leg the sale posted is reversed by an APPENDED opposite leg",
+    "    (goods debit -> `refund` credit, payment credit -> `void` debit, a held",
+    "    `crate_deposit` credit -> a deposit-family `crate_deposit_refunded`",
+    "    debit, #162), so the customer returns to their exact pre-sale balance;",
+    "  * the shelf and the FIFO queue come back together: inventory is restored",
+    "    and ONE FRESH cost layer is appended per line at the per-unit COGS the",
+    "    sale snapshotted (#170 #7c). The seeded batch stays drawn down — topping",
+    "    it back up as well would double-restore (#187 / migration 0167).",
+    "",
+    "ARM COVERAGE — every scenario here is `dart_arm_only: true` TODAY, and that",
+    "is a statement about the cloud, not about the rule. The SQL twin",
+    "(`pos_cancel_order`) implements exactly these expectations as of #201 /",
+    "supabase/migrations/0170_flag_gated_rpc_money_parity.sql, but 0170 is NOT",
+    "DEPLOYED: the RPC arm runs against live Supabase, where the shipped function",
+    "still voids originals in place, so it would fail every scenario in this file.",
+    "Drop the flag once 0170 is deployed — and note that the RPC runner must FIRST",
+    "grow a cancel step (call `pos_cancel_order`, collect the post-cancel rows,",
+    "call `expectGoldenCancel`). It has none today, so un-flagging alone would",
+    "assert only the checkout half; `checkout_order_golden_test` fails loudly on a",
+    "cancel scenario for that reason rather than passing silently.",
+    "",
+    "The CRATE-track leg is deliberately NOT modelled here. A cancel of a",
+    "crate-track (non-money) sale reverses the customer's issued crate debt via",
+    "the Crate Pool seam (#162), but 0170's `pos_cancel_order` writes no crate",
+    "rows at all (ADR 0020 makes the seam the sole crate-table writer, and the",
+    "server has no crate arm) — a fixture no second implementation can ever",
+    "satisfy is not a contract. That rule stays pinned on the Dart arm in",
+    "test/crates/crate_cancel_completes_ledger_test.dart."
+  ],
+  "scenarios": [
+    {
+      "name": "cancel (#172): the paid sale row survives untouched and a dated refund is appended",
+      "_note": "Dart-arm only until migration 0170 is deployed — see ARM COVERAGE above. A walk-in ₦2,000 cash sale, then cancelled: 2 payment rows (the original + its reversal), never 1 mutated one.",
+      "dart_arm_only": true,
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 200000,
+        "items": [{ "product": "P1", "quantity": 2 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 200000, "discount_kobo": 0,
+          "net_amount_kobo": 200000, "amount_paid_kobo": 200000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 2, "unit_price_kobo": 100000, "total_kobo": 200000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 18 }],
+        "inventory_after": [{ "product": "P1", "quantity": 98 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 200000 }
+      },
+      "cancel": {
+        "reason": "customer changed mind",
+        "expected": {
+          "order": { "status": "cancelled", "cancelled_at_null": false },
+          "payments": [
+            { "type": "sale", "method": "cash", "amount_kobo": 200000, "voided": false },
+            { "type": "refund", "method": "cash", "amount_kobo": 200000, "voided": false }
+          ],
+          "wallet_legs": [],
+          "inventory_after": [{ "product": "P1", "quantity": 100 }],
+          "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 18 }],
+          "restored_cost_layers": [{ "product": "P1", "qty": 2, "cost_kobo": 50000 }]
+        }
+      }
+    },
+    {
+      "name": "cancel (#190/#201): a held crate deposit is released in-family, as a NEGATIVE crate_deposit",
+      "_note": "Dart-arm only until migration 0170 is deployed — see ARM COVERAGE above. A money-track deposit sale (₦3,000 goods + ₦1,500 deposit = ₦4,500 tendered), then cancelled. The goods `sale` row refunds AS-IS (the #175 split already excluded the deposit, so subtracting it again would double-count), and the deposit is released as a NEGATIVE `crate_deposit` — not a second cash-out — so the held-deposit line nets to zero while Cash refunds moves only by the goods.",
+      "dart_arm_only": true,
+      "business_type": "Bar",
+      "tracks_empty_crates": true,
+      "manufacturers": [{ "key": "M1", "name": "Star Co", "deposit_rate_kobo": 50000 }],
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 0 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000, "manufacturer": "M1" }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 450000,
+        "deposit_paid_by_manufacturer": { "M1": 150000 },
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 450000, "discount_kobo": 0,
+          "net_amount_kobo": 450000, "amount_paid_kobo": 450000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 300000 },
+        "extra_payments": [{ "type": "crate_deposit", "method": "cash", "amount_kobo": 150000 }],
+        "wallet_legs": [
+          { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+          { "reference_type": "topup_cash", "signed_amount_kobo": 300000 },
+          { "reference_type": "crate_deposit", "signed_amount_kobo": 150000 }
+        ],
+        "customer_balance_after_kobo": 0,
+        "crate_lines": [{ "manufacturer": "M1", "crates_taken": 3, "deposit_rate_kobo": 50000, "deposit_paid_kobo": 150000 }],
+        "crate_ledger": [],
+        "crate_balances": []
+      },
+      "cancel": {
+        "reason": "refund",
+        "expected": {
+          "order": { "status": "cancelled", "cancelled_at_null": false },
+          "payments": [
+            { "type": "sale", "method": "cash", "amount_kobo": 300000, "voided": false },
+            { "type": "crate_deposit", "method": "cash", "amount_kobo": 150000, "voided": false },
+            { "type": "refund", "method": "cash", "amount_kobo": 300000, "voided": false },
+            { "type": "crate_deposit", "method": "cash", "amount_kobo": -150000, "voided": false }
+          ],
+          "wallet_legs": [
+            { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+            { "reference_type": "topup_cash", "signed_amount_kobo": 300000 },
+            { "reference_type": "crate_deposit", "signed_amount_kobo": 150000 },
+            { "reference_type": "refund", "signed_amount_kobo": 300000 },
+            { "reference_type": "void", "signed_amount_kobo": -300000 },
+            { "reference_type": "crate_deposit_refunded", "signed_amount_kobo": -150000 }
+          ],
+          "customer_balance_after_kobo": 0,
+          "inventory_after": [{ "product": "P1", "quantity": 100 }],
+          "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+          "restored_cost_layers": [{ "product": "P1", "qty": 3, "cost_kobo": 50000 }]
+        }
+      }
+    },
+    {
+      "name": "cancel (#201): an overpayment's wallet_topup is reversed in-family, as a NEGATIVE wallet_topup",
+      "_note": "Dart-arm only until migration 0170 is deployed — see ARM COVERAGE above. A ₦3,000 sale tendered ₦3,500: the ₦500 excess is the customer's credit, booked as a `wallet_topup` (#175), never as a sale. Cancelling reverses it inside its own family so Debts collected nets to zero, and the customer's balance returns to its pre-sale ₦0 rather than keeping a windfall.",
+      "dart_arm_only": true,
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 0 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 350000,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 350000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 300000 },
+        "extra_payments": [{ "type": "wallet_topup", "method": "cash", "amount_kobo": 50000 }],
+        "wallet_legs": [
+          { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+          { "reference_type": "topup_cash", "signed_amount_kobo": 350000 }
+        ],
+        "customer_balance_after_kobo": 50000
+      },
+      "cancel": {
+        "reason": "wrong customer",
+        "expected": {
+          "order": { "status": "cancelled", "cancelled_at_null": false },
+          "payments": [
+            { "type": "sale", "method": "cash", "amount_kobo": 300000, "voided": false },
+            { "type": "wallet_topup", "method": "cash", "amount_kobo": 50000, "voided": false },
+            { "type": "refund", "method": "cash", "amount_kobo": 300000, "voided": false },
+            { "type": "wallet_topup", "method": "cash", "amount_kobo": -50000, "voided": false }
+          ],
+          "wallet_legs": [
+            { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+            { "reference_type": "topup_cash", "signed_amount_kobo": 350000 },
+            { "reference_type": "refund", "signed_amount_kobo": 300000 },
+            { "reference_type": "void", "signed_amount_kobo": -350000 }
+          ],
+          "customer_balance_after_kobo": 0,
+          "inventory_after": [{ "product": "P1", "quantity": 100 }],
+          "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+          "restored_cost_layers": [{ "product": "P1", "qty": 3, "cost_kobo": 50000 }]
+        }
+      }
+    }
+  ]
+}

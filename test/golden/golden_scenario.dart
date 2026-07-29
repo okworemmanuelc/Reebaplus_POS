@@ -14,6 +14,12 @@
 /// comparator asserts each runner's own [orderNumberScheme] regex, never
 /// equality. Everything else — totals, per-line FIFO COGS, batch remainders,
 /// stock levels, the scalar cost cache, revenue status — must match exactly.
+///
+/// #206 adds a SECOND step to the contract: a scenario may carry a [FxCancel]
+/// block, in which case the runner cancels the order it just created and calls
+/// [expectGoldenCancel] on the resulting rows. That pins #172's compensating
+/// cash-out rule — the most consequential money change in PRD #155 — which had
+/// no cross-implementation contract at all before.
 library;
 
 import 'dart:convert';
@@ -72,7 +78,15 @@ class FxBatch {
 class FxCheckoutLine {
   final String productKey;
   final int quantity;
-  FxCheckoutLine(this.productKey, this.quantity);
+
+  /// #206 (#176/#183): the price actually CHARGED for this line when the
+  /// cashier overrode the tier list price — a custom-price concession. The
+  /// product's own [FxProduct.unitPriceKobo] stays the CATALOGUE (tier list)
+  /// price, and the line records the difference on
+  /// `order_items.catalogue_price_kobo`. Null ⇒ a full-price line: charged ==
+  /// catalogue, so the concession column stays NULL (no phantom concession).
+  final int? chargedUnitPriceKobo;
+  FxCheckoutLine(this.productKey, this.quantity, {this.chargedUnitPriceKobo});
 }
 
 class FxCheckout {
@@ -128,15 +142,23 @@ class ExpectedItem {
   final int unitPriceKobo;
   final int totalKobo;
   final int buyingPriceKobo;
+
+  /// #206 (#176/#183): the expected `order_items.catalogue_price_kobo` — the
+  /// tier list price the CHARGED price deviated from. Absent in the fixture ⇒
+  /// null ⇒ the line must record NO concession, which is what every full-price
+  /// scenario asserts.
+  final int? cataloguePriceKobo;
   ExpectedItem(Map<String, dynamic> j)
       : productKey = j['product'] as String,
         quantity = j['quantity'] as int,
         unitPriceKobo = j['unit_price_kobo'] as int,
         totalKobo = j['total_kobo'] as int,
-        buyingPriceKobo = j['buying_price_kobo'] as int;
+        buyingPriceKobo = j['buying_price_kobo'] as int,
+        cataloguePriceKobo = j['catalogue_price_kobo'] as int?;
 
   String get signature =>
-      '$productKey|$quantity|$unitPriceKobo|$totalKobo|$buyingPriceKobo';
+      '$productKey|$quantity|$unitPriceKobo|$totalKobo|$buyingPriceKobo'
+      '|catalogue=${cataloguePriceKobo ?? 'none'}';
 }
 
 class ExpectedPayment {
@@ -189,6 +211,116 @@ class ExpectedCrateLine {
         depositPaidKobo = j['deposit_paid_kobo'] as int;
 
   String get signature => '$cratesTaken|$depositRateKobo|$depositPaidKobo';
+}
+
+/// #206 — one `payment_transactions` row on the order AFTER the cancel, in
+/// fixture terms. The MULTISET of these is the whole #172/#190/#201 contract in
+/// one assertion: the originals must still be there, unvoided and at their
+/// original amount (never voided in place — the sale day cannot shrink behind
+/// the owner), and exactly one compensating row must have been APPENDED per
+/// reversible original. A missing row, an extra row, a mutated original, or a
+/// reversal of the wrong type/sign all fail it.
+class ExpectedCancelPayment {
+  final String type;
+  final String method;
+
+  /// SIGNED: a `sale` reverses as a POSITIVE `refund`, while `crate_deposit` and
+  /// `wallet_topup` reverse as a NEGATIVE row of their OWN type so their card
+  /// line nets to zero (#190/#201 — in-family, never a `refund`).
+  final int amountKobo;
+
+  /// Must be false on every row: the append-only discipline never voids.
+  final bool voided;
+  ExpectedCancelPayment(Map<String, dynamic> j)
+      : type = j['type'] as String,
+        method = j['method'] as String,
+        amountKobo = j['amount_kobo'] as int,
+        voided = j['voided'] as bool? ?? false;
+
+  String get signature => '$type|$method|$amountKobo|voided=$voided';
+}
+
+/// #206 — a FIFO layer the cancel APPENDED (#170 #7c): the returned units come
+/// back costed at the per-unit COGS the sale snapshotted, never as phantom
+/// 0-cost stock. Matched as a multiset against every cost batch that was not
+/// seeded by the fixture.
+class ExpectedRestoredLayer {
+  final String productKey;
+  final int qty;
+  final int costKobo;
+  ExpectedRestoredLayer(Map<String, dynamic> j)
+      : productKey = j['product'] as String,
+        qty = j['qty'] as int,
+        costKobo = j['cost_kobo'] as int;
+
+  String get signature => '$productKey|$qty|$costKobo';
+}
+
+/// #206 — the CANCEL step of a scenario: cancel the order the checkout just
+/// created, then assert the compensated state. Present ⇒ the runner performs the
+/// cancel after [expectGolden] has passed on the checkout, so every reversal is
+/// asserted against a sale whose own rows are already pinned.
+class FxCancel {
+  final String reason;
+  final String expectedStatus;
+  final bool expectedCancelledAtNull;
+  final List<ExpectedCancelPayment> payments;
+  final List<ExpectedWalletLeg> walletLegs;
+  final int? customerBalanceAfterKobo;
+
+  /// productKey → on-hand after the cancel (the sale's units are back).
+  final Map<String, int> inventoryAfter;
+
+  /// key "productKey|receivedAt" → the SEEDED batch's qty_remaining after the
+  /// cancel. The restore APPENDS a layer, so a drawn-down seeded batch stays
+  /// drawn down — topping it back up would double-restore (#187).
+  final Map<String, int> batchRemaining;
+  final List<ExpectedRestoredLayer> restoredCostLayers;
+
+  FxCancel._({
+    required this.reason,
+    required this.expectedStatus,
+    required this.expectedCancelledAtNull,
+    required this.payments,
+    required this.walletLegs,
+    required this.customerBalanceAfterKobo,
+    required this.inventoryAfter,
+    required this.batchRemaining,
+    required this.restoredCostLayers,
+  });
+
+  factory FxCancel._fromJson(Map<String, dynamic> j) {
+    final exp = j['expected'] as Map<String, dynamic>;
+    final order = exp['order'] as Map<String, dynamic>;
+    final batchRemaining = <String, int>{};
+    for (final b in ((exp['batches_remaining'] as List?) ?? const [])) {
+      final m = b as Map<String, dynamic>;
+      batchRemaining['${m['product']}|${m['received_at']}'] =
+          m['qty_remaining'] as int;
+    }
+    final inv = <String, int>{};
+    for (final r in ((exp['inventory_after'] as List?) ?? const [])) {
+      final m = r as Map<String, dynamic>;
+      inv[m['product'] as String] = m['quantity'] as int;
+    }
+    return FxCancel._(
+      reason: j['reason'] as String,
+      expectedStatus: order['status'] as String,
+      expectedCancelledAtNull: order['cancelled_at_null'] as bool,
+      payments: ((exp['payments'] as List?) ?? const [])
+          .map((p) => ExpectedCancelPayment(p as Map<String, dynamic>))
+          .toList(),
+      walletLegs: ((exp['wallet_legs'] as List?) ?? const [])
+          .map((l) => ExpectedWalletLeg(l as Map<String, dynamic>))
+          .toList(),
+      customerBalanceAfterKobo: exp['customer_balance_after_kobo'] as int?,
+      inventoryAfter: inv,
+      batchRemaining: batchRemaining,
+      restoredCostLayers: ((exp['restored_cost_layers'] as List?) ?? const [])
+          .map((l) => ExpectedRestoredLayer(l as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 }
 
 class GoldenScenario {
@@ -275,6 +407,11 @@ class GoldenScenario {
   /// manufacturerKey → expected customer_crate_balances.balance after the sale.
   final Map<String, int> expectedCrateBalances;
 
+  /// #206: when set, the runner CANCELS the order after the checkout assertions
+  /// pass and asserts this second block via [expectGoldenCancel]. Null ⇒ a
+  /// checkout-only scenario (every fixture that predates #206).
+  final FxCancel? cancel;
+
   GoldenScenario._({
     required this.name,
     required this.customer,
@@ -300,6 +437,7 @@ class GoldenScenario {
     required this.expectedCrateLines,
     required this.expectedCrateLedgerIssued,
     required this.expectedCrateBalances,
+    required this.cancel,
   });
 
   FxProduct product(String key) => products.firstWhere((p) => p.key == key);
@@ -376,8 +514,11 @@ class GoldenScenario {
         j['checkout']['discount_kobo'] as int,
         j['checkout']['amount_paid_kobo'] as int,
         (j['checkout']['items'] as List)
-            .map((i) =>
-                FxCheckoutLine(i['product'] as String, i['quantity'] as int))
+            .map((i) => FxCheckoutLine(
+                  i['product'] as String,
+                  i['quantity'] as int,
+                  chargedUnitPriceKobo: i['charged_unit_price_kobo'] as int?,
+                ))
             .toList(),
         depositPaidByManufacturer: {
           for (final e in ((j['checkout']['deposit_paid_by_manufacturer']
@@ -411,6 +552,9 @@ class GoldenScenario {
       expectedCrateLines: crateLines,
       expectedCrateLedgerIssued: crateLedger,
       expectedCrateBalances: crateBalances,
+      cancel: j['cancel'] == null
+          ? null
+          : FxCancel._fromJson(j['cancel'] as Map<String, dynamic>),
     );
   }
 }
@@ -434,6 +578,12 @@ List<GoldenScenario> loadCashSaleScenarios() =>
 /// at a crate-eligible business and asserts the crate ledger movements.
 List<GoldenScenario> loadCrateSaleScenarios() =>
     _loadScenarios('crate_sale_scenarios.json');
+
+/// The cancel/refund scenarios (#206). Each is a checkout followed by a CANCEL,
+/// pinning #172's compensating cash-out rule and #190/#201's in-family reversal
+/// of a released deposit / a reversed overpayment.
+List<GoldenScenario> loadCancelScenarios() =>
+    _loadScenarios('cancel_scenarios.json');
 
 // ─── Actual (a runner's result, in fixture terms) ────────────────────────────
 
@@ -462,15 +612,21 @@ class ActualItem {
   final int unitPriceKobo;
   final int totalKobo;
   final int buyingPriceKobo;
+
+  /// The recorded `order_items.catalogue_price_kobo` (#176/#183): the tier list
+  /// price a custom-priced line deviated from, or null on a full-price line.
+  final int? cataloguePriceKobo;
   ActualItem({
     required this.productKey,
     required this.quantity,
     required this.unitPriceKobo,
     required this.totalKobo,
     required this.buyingPriceKobo,
+    this.cataloguePriceKobo,
   });
   String get signature =>
-      '$productKey|$quantity|$unitPriceKobo|$totalKobo|$buyingPriceKobo';
+      '$productKey|$quantity|$unitPriceKobo|$totalKobo|$buyingPriceKobo'
+      '|catalogue=${cataloguePriceKobo ?? 'none'}';
 }
 
 class ActualPayment {
@@ -510,6 +666,69 @@ class ActualCrateLine {
     required this.depositPaidKobo,
   });
   String get signature => '$cratesTaken|$depositRateKobo|$depositPaidKobo';
+}
+
+/// One `payment_transactions` row surviving on a cancelled order, in fixture
+/// terms (#206). Compared by [signature].
+class ActualCancelPayment {
+  final String type;
+  final String method;
+  final int amountKobo;
+  final bool voided;
+  ActualCancelPayment({
+    required this.type,
+    required this.method,
+    required this.amountKobo,
+    required this.voided,
+  });
+  String get signature => '$type|$method|$amountKobo|voided=$voided';
+}
+
+/// One cost batch the cancel APPENDED, in fixture terms (#206). Compared by
+/// [signature].
+class ActualRestoredLayer {
+  final String productKey;
+  final int qty;
+  final int costKobo;
+  ActualRestoredLayer({
+    required this.productKey,
+    required this.qty,
+    required this.costKobo,
+  });
+  String get signature => '$productKey|$qty|$costKobo';
+}
+
+/// One cancel's resulting rows, translated back into fixture terms (#206).
+class CancelOutcome {
+  final String orderStatus;
+  final bool cancelledAtNull;
+
+  /// EVERY payment row on the order after the cancel — originals included, so
+  /// the multiset proves the originals survived untouched.
+  final List<ActualCancelPayment> payments;
+
+  /// EVERY wallet leg on the order after the cancel — originals included.
+  final List<ActualWalletLeg> walletLegs;
+  final int? customerBalanceAfter;
+  final Map<String, int> inventoryAfter;
+
+  /// key "productKey|receivedAt" → the SEEDED batch's qty_remaining.
+  final Map<String, int> batchRemaining;
+
+  /// The cost batches that were NOT seeded by the fixture — i.e. the layers the
+  /// cancel restored.
+  final List<ActualRestoredLayer> restoredCostLayers;
+
+  CancelOutcome({
+    required this.orderStatus,
+    required this.cancelledAtNull,
+    required this.payments,
+    required this.walletLegs,
+    required this.customerBalanceAfter,
+    required this.inventoryAfter,
+    required this.batchRemaining,
+    required this.restoredCostLayers,
+  });
 }
 
 /// One checkout's resulting rows, translated back into fixture terms (product
@@ -583,6 +802,17 @@ int clampDiscountKobo(int requestedKobo, int? maxPct, int grossKobo) {
   final cap = (grossKobo * maxPct) ~/ 100;
   return nonNeg > cap ? cap : nonNeg;
 }
+
+/// The "record only a REAL concession" rule (#176/#183): the catalogue (tier
+/// list) price is snapshotted onto the line only when it is known AND differs
+/// from the price actually charged; NULL otherwise, so a full-price line records
+/// no phantom concession. Shared so both golden arms apply it identically — the
+/// Dart twin of `OrderCommands._buildOrderItems` and of the SQL
+/// `public._catalogue_price_snapshot` (migration 0160).
+int? catalogueSnapshotKobo(int? catalogueKobo, int chargedKobo) =>
+    (catalogueKobo != null && catalogueKobo != chargedKobo)
+        ? catalogueKobo
+        : null;
 
 void expectGolden(
   GoldenScenario s,
@@ -668,6 +898,69 @@ void expectGolden(
       reason: '${s.name}: crate_ledger issued movements (mfr → +qty)');
   expect(actual.crateBalances, equals(s.expectedCrateBalances),
       reason: '${s.name}: customer_crate_balances after the sale (mfr → balance)');
+}
+
+/// The shared CANCEL assertion (#206). Compares a runner's [CancelOutcome] to
+/// the scenario's [GoldenScenario.cancel] block.
+///
+/// The rule being pinned, as migration 0170's header states it: *a cancel
+/// APPENDS one compensating row per reversible original, dated on the cancel
+/// day, and mutates nothing.* Concretely (#172 / #190 / #201):
+///   • every ORIGINAL payment row survives, unvoided, at its original amount —
+///     a reviewed and banked sale day never shrinks behind the owner;
+///   • `sale`          → a POSITIVE `refund` for the same amount;
+///   • `crate_deposit` → a NEGATIVE `crate_deposit` (in-family, NOT a `refund`:
+///     the collection was never in Cash sales, so its release must not land in
+///     Cash refunds);
+///   • `wallet_topup`  → a NEGATIVE `wallet_topup`, so "Debts collected" nets
+///     to zero;
+///   • every wallet leg the sale posted is reversed by an APPENDED opposite leg
+///     (goods debit → `refund` credit, payment credit → `void` debit, held
+///     `crate_deposit` credit → a deposit-family `crate_deposit_refunded`
+///     debit), returning the customer to their exact pre-sale balance;
+///   • the shelf and the FIFO queue come back together: inventory is restored
+///     and one fresh cost layer is APPENDED per line at the COGS the sale
+///     snapshotted (#170 #7c) — the seeded batch stays drawn down, because
+///     topping it back up would double-restore (#187).
+void expectGoldenCancel(GoldenScenario s, CancelOutcome actual) {
+  final c = s.cancel!;
+  expect(actual.orderStatus, c.expectedStatus,
+      reason: '${s.name}: order status after the cancel');
+  expect(actual.cancelledAtNull, c.expectedCancelledAtNull,
+      reason: '${s.name}: cancelled_at stamped');
+
+  // The whole payment contract in one multiset: originals untouched + exactly
+  // one appended compensating row per reversible original.
+  final expectedPaySigs = c.payments.map((p) => p.signature).toList()..sort();
+  final actualPaySigs = actual.payments.map((p) => p.signature).toList()..sort();
+  expect(actualPaySigs, equals(expectedPaySigs),
+      reason: '${s.name}: payment rows after the cancel '
+          '(type|method|signed amount|voided) — originals must survive '
+          'untouched and one compensating row must be appended per reversible '
+          'original');
+
+  final expectedLegSigs = c.walletLegs.map((l) => l.signature).toList()..sort();
+  final actualLegSigs = actual.walletLegs.map((l) => l.signature).toList()
+    ..sort();
+  expect(actualLegSigs, equals(expectedLegSigs),
+      reason: '${s.name}: wallet legs after the cancel '
+          '(reference_type|signed_amount)');
+  expect(actual.customerBalanceAfter, c.customerBalanceAfterKobo,
+      reason: '${s.name}: derived customer balance after the cancel');
+
+  expect(actual.inventoryAfter, equals(c.inventoryAfter),
+      reason: '${s.name}: inventory restored by the cancel');
+  expect(actual.batchRemaining, equals(c.batchRemaining),
+      reason: '${s.name}: the SEEDED FIFO batches stay drawn down '
+          '(the restore appends a layer, it never tops the old one back up)');
+
+  final expectedLayerSigs =
+      c.restoredCostLayers.map((l) => l.signature).toList()..sort();
+  final actualLayerSigs =
+      actual.restoredCostLayers.map((l) => l.signature).toList()..sort();
+  expect(actualLayerSigs, equals(expectedLayerSigs),
+      reason: '${s.name}: FIFO layers the cancel restored '
+          '(product|qty|cost) — the units come back COSTED, not free');
 }
 
 /// The mobile order-number scheme: `ORD-NNNNNN-XXXXXX` (Crockford base32 tag).

@@ -140,10 +140,28 @@ void main() {
     await clients.dispose();
   });
 
-  final scenarios = [...loadCashSaleScenarios(), ...loadCrateSaleScenarios()];
+  final scenarios = [
+    ...loadCashSaleScenarios(),
+    ...loadCrateSaleScenarios(),
+    ...loadCancelScenarios(),
+  ];
   for (final scenario in scenarios) {
     test('golden (checkout_order rpc): ${scenario.name}', () async {
       final admin = clients.adminClient;
+
+      // #206: the cancel fixtures are registered on BOTH arms so the contract is
+      // visible here, but this runner has no cancel step — it would assert only
+      // the checkout half and silently claim coverage it does not have, which is
+      // the exact defect #206 was filed to fix. They are `dart_arm_only` (see the
+      // skip reason below) so this never runs today; if someone drops that flag
+      // once migration 0170 is deployed, fail loudly until the arm is built:
+      // call `pos_cancel_order`, collect the post-cancel rows, and call
+      // `expectGoldenCancel`.
+      if (scenario.cancel != null) {
+        fail('${scenario.name}: this arm has no pos_cancel_order step yet — '
+            'build it before dropping dart_arm_only on the cancel fixtures '
+            '(#206)');
+      }
 
       // ── Seed the input state ────────────────────────────────────────────────
       final store = UuidV7.generate();
@@ -262,10 +280,14 @@ void main() {
       // ── Perform the checkout via the server-authoritative RPC ──────────────
       final orderId = UuidV7.generate();
       orderIds.add(orderId);
-      final gross = scenario.checkout.items.fold<int>(
-          0,
-          (s, l) =>
-              s + scenario.product(l.productKey).unitPriceKobo * l.quantity);
+      // #206 (#176/#183): a line may be CHARGED less than its product's
+      // catalogue (tier list) price — a custom-price concession. Gross is
+      // computed from the charged price; the catalogue price rides along on the
+      // item so the server can snapshot the deviation.
+      int chargedOf(FxCheckoutLine l) =>
+          l.chargedUnitPriceKobo ?? scenario.product(l.productKey).unitPriceKobo;
+      final gross = scenario.checkout.items
+          .fold<int>(0, (s, l) => s + chargedOf(l) * l.quantity);
       final net = gross - scenario.checkout.discountKobo;
       // Walk-in cash/transfer pays the net; a credit/wallet sale passes exactly
       // what the fixture tendered (the RPC clamps + routes it).
@@ -281,7 +303,15 @@ void main() {
             {
               'product_id': productIdByKey[l.productKey],
               'quantity': l.quantity,
-              'unit_price_kobo': scenario.product(l.productKey).unitPriceKobo,
+              'unit_price_kobo': chargedOf(l),
+              // Sent only on a concession line, so a full-price scenario's
+              // payload is byte-identical to what it has always sent. The
+              // server's `_catalogue_price_snapshot` (0160) applies the same
+              // "only a REAL concession" rule the Dart arm applies locally, so
+              // the recorded column must match on both arms.
+              if (l.chargedUnitPriceKobo != null)
+                'catalogue_price_kobo':
+                    scenario.product(l.productKey).unitPriceKobo,
             }
         ],
         'p_payment_method': scenario.checkout.paymentMethod,
@@ -326,7 +356,8 @@ void main() {
 
       final itemRows = await admin
           .from('order_items')
-          .select('product_id, quantity, unit_price_kobo, total_kobo, buying_price_kobo')
+          .select('product_id, quantity, unit_price_kobo, total_kobo, '
+              'buying_price_kobo, catalogue_price_kobo')
           .eq('order_id', orderId);
 
       final paymentRow = await admin
@@ -456,6 +487,8 @@ void main() {
               unitPriceKobo: (i['unit_price_kobo'] as num).toInt(),
               totalKobo: (i['total_kobo'] as num).toInt(),
               buyingPriceKobo: (i['buying_price_kobo'] as num).toInt(),
+              cataloguePriceKobo:
+                  (i['catalogue_price_kobo'] as num?)?.toInt(),
             ),
         ],
         batchRemaining: batchRemaining,
@@ -482,11 +515,19 @@ void main() {
         // rather than assert an un-clampable caller. #175's tender/deposit/
         // overpayment row split (dart_arm_only) is likewise pinned on the Dart
         // arm until the web `checkout_order` RPC implements the matching split.
+        // #206's cancel fixtures are dart_arm_only for a DIFFERENT reason: the
+        // SQL twin exists (migration 0170) but is NOT DEPLOYED, so this arm
+        // still meets the pre-#155 `pos_cancel_order` that voids originals in
+        // place and would fail every one of them.
         skip: _skipReason ??
             (scenario.maxDiscountPercent != null
                 ? 'discount clamp needs a non-CEO caller; pinned on the Dart arm'
                 : scenario.dartArmOnly
-                    ? '#175 money-row split pinned on the Dart arm; web RPC TODO'
+                    ? scenario.cancel != null
+                        ? 'cancel parity ships in migration 0170 (#201) — '
+                            'un-flag once it is DEPLOYED and this arm has a '
+                            'pos_cancel_order step (#206)'
+                        : '#175 money-row split pinned on the Dart arm; web RPC TODO'
                     : null));
   }
 }

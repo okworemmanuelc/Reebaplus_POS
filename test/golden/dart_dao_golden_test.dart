@@ -15,8 +15,16 @@ import 'golden_scenario.dart';
 /// CI build. Its Tier-2 twin (test/integration/rpcs/checkout_order_golden_test)
 /// runs the SAME fixtures against the SQL `checkout_order` RPC; any drift between
 /// the two fails the build.
+///
+/// #206: a fixture carrying a `cancel` block runs a SECOND step here — the order
+/// is cancelled through `OrdersDao.markCancelled` and the compensated rows are
+/// asserted by [expectGoldenCancel].
 void main() {
-  final scenarios = [...loadCashSaleScenarios(), ...loadCrateSaleScenarios()];
+  final scenarios = [
+    ...loadCashSaleScenarios(),
+    ...loadCrateSaleScenarios(),
+    ...loadCancelScenarios(),
+  ];
   for (final scenario in scenarios) {
     test('golden (dart dao): ${scenario.name}', () async {
       final boot = await bootstrapTestDb();
@@ -27,6 +35,9 @@ void main() {
       // v1 record-sale path so createOrder writes order_items locally (the v2
       // path defers the line write to the cloud RPC response).
       await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: false);
+      // v1 cancel path likewise: the v2 envelope defers every compensating row
+      // to the cloud RPC's response, so nothing would land locally to assert.
+      await setFlag(db, 'feature.domain_rpcs_v2.cancel_order', on: false);
 
       // ── Seed the input state ────────────────────────────────────────────────
       final storeId = UuidV7.generate();
@@ -167,7 +178,12 @@ void main() {
       final items = <OrderItemsCompanion>[];
       for (final line in scenario.checkout.items) {
         final p = scenario.product(line.productKey);
-        final total = p.unitPriceKobo * line.quantity;
+        // #206 (#176/#183): the product's price is the CATALOGUE (tier list)
+        // price; a line may be charged less (a custom-price concession). The
+        // line records the catalogue price only when the two differ — the same
+        // rule OrderCommands._buildOrderItems applies on the real checkout.
+        final charged = line.chargedUnitPriceKobo ?? p.unitPriceKobo;
+        final total = charged * line.quantity;
         gross += total;
         items.add(OrderItemsCompanion.insert(
           businessId: businessId,
@@ -175,8 +191,10 @@ void main() {
           productId: Value(productIdByKey[line.productKey]!),
           storeId: storeId,
           quantity: line.quantity,
-          unitPriceKobo: p.unitPriceKobo,
+          unitPriceKobo: charged,
           totalKobo: total,
+          cataloguePriceKobo:
+              Value(catalogueSnapshotKobo(p.unitPriceKobo, charged)),
         ));
       }
       // The role discount cap (§12.6/§13.2): clamp the requested discount to the
@@ -392,6 +410,7 @@ void main() {
               unitPriceKobo: i.unitPriceKobo,
               totalKobo: i.totalKobo,
               buyingPriceKobo: i.buyingPriceKobo,
+              cataloguePriceKobo: i.cataloguePriceKobo,
             ),
         ],
         batchRemaining: batchRemaining,
@@ -410,6 +429,99 @@ void main() {
       );
 
       expectGolden(scenario, outcome, orderNumberScheme: mobileOrderNumberScheme);
+
+      // ── Step 2 (#206): cancel the order and assert the compensated state ───
+      // Only for a fixture carrying a `cancel` block. The checkout assertions
+      // above have already passed, so every reversal below is measured against a
+      // sale whose own rows are pinned.
+      if (scenario.cancel == null) return;
+      final cancel = scenario.cancel!;
+      await db.ordersDao.markCancelled(orderId, cancel.reason, staffId);
+
+      final cancelledOrder =
+          await (db.select(db.orders)..where((o) => o.id.equals(orderId)))
+              .getSingle();
+
+      // EVERY payment row on the order — the originals must still be here,
+      // unvoided and unedited, alongside the appended compensating rows.
+      final paymentRowsAfter = await (db.select(db.paymentTransactions)
+            ..where((p) => p.orderId.equals(orderId)))
+          .get();
+      final paymentsAfter = [
+        for (final p in paymentRowsAfter)
+          ActualCancelPayment(
+            type: p.type,
+            method: p.method,
+            amountKobo: p.amountKobo,
+            voided: p.voidedAt != null,
+          ),
+      ];
+
+      // EVERY wallet leg on the order — sale legs plus their appended reversals.
+      final walletLegsAfter = <ActualWalletLeg>[];
+      int? balanceAfterCancel;
+      if (customerId != null) {
+        final legRows = await (db.select(db.walletTransactions)
+              ..where((w) => w.orderId.equals(orderId)))
+            .get();
+        for (final l in legRows) {
+          walletLegsAfter.add(ActualWalletLeg(
+            referenceType: l.referenceType,
+            signedAmountKobo: l.signedAmountKobo,
+          ));
+        }
+        final allLegs = await (db.select(db.walletTransactions)
+              ..where((w) => w.customerId.equals(customerId!)))
+            .get();
+        balanceAfterCancel = allLegs
+            .where((l) => !crateDepositRefs.contains(l.referenceType))
+            .fold<int>(0, (s, l) => s + l.signedAmountKobo);
+      }
+
+      final inventoryAfterCancel = <String, int>{};
+      for (final entry in productIdByKey.entries) {
+        final invRow = await (db.select(db.inventory)
+              ..where((i) =>
+                  i.productId.equals(entry.value) & i.storeId.equals(storeId)))
+            .getSingleOrNull();
+        if (invRow != null) inventoryAfterCancel[entry.key] = invRow.quantity;
+      }
+
+      // The SEEDED batches keep their post-sale remainders (the restore appends
+      // a layer, it never tops the drawn one back up — #187); every OTHER batch
+      // is a layer the cancel restored.
+      final batchRemainingAfter = <String, int>{};
+      for (final (id, productKey, receivedAt) in seededBatches) {
+        final row = await (db.select(db.costBatches)
+              ..where((b) => b.id.equals(id)))
+            .getSingle();
+        batchRemainingAfter['$productKey|$receivedAt'] = row.qtyRemaining;
+      }
+      final seededBatchIds = {for (final (id, _, _) in seededBatches) id};
+      final allBatches = await db.select(db.costBatches).get();
+      final restoredLayers = [
+        for (final b in allBatches)
+          if (!seededBatchIds.contains(b.id))
+            ActualRestoredLayer(
+              productKey: keyByProductId[b.productId]!,
+              qty: b.qtyRemaining,
+              costKobo: b.costKobo,
+            ),
+      ];
+
+      expectGoldenCancel(
+        scenario,
+        CancelOutcome(
+          orderStatus: cancelledOrder.status,
+          cancelledAtNull: cancelledOrder.cancelledAt == null,
+          payments: paymentsAfter,
+          walletLegs: walletLegsAfter,
+          customerBalanceAfter: balanceAfterCancel,
+          inventoryAfter: inventoryAfterCancel,
+          batchRemaining: batchRemainingAfter,
+          restoredCostLayers: restoredLayers,
+        ),
+      );
     });
   }
 }

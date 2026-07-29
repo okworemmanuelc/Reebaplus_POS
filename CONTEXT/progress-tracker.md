@@ -10,6 +10,79 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #206 — the golden fixtures pin cancel + the catalogue price — DONE (2026-07-29)
+PRD #155's hard rule is that a money rule changed there **must** be pinned in the
+shared Golden-Scenario fixtures (ADR 0009). Two never were.
+
+- **No cancel scenario existed at all**, so #172's compensating cash-out — the
+  most consequential money change in the PRD — had no cross-implementation
+  contract. New **`test/golden/fixtures/cancel_scenarios.json`** (3 scenarios)
+  extends a scenario with an optional `cancel` block: the runner performs the
+  checkout, asserts it with the usual `expectGolden`, then cancels the order and
+  asserts the compensated state with the new **`expectGoldenCancel`**. So every
+  reversal is measured against a sale whose own rows are already pinned.
+  - The load-bearing assertion is the **full multiset of payment rows on the
+    order after the cancel, originals included** (`type|method|signed
+    amount|voided`). That one comparison carries both halves of the rule at once:
+    the originals must still be there, UNVOIDED and unedited, and exactly one
+    compensating row must have been APPENDED per reversible original — migration
+    0170's own phrasing, *"row count after a cancel = originals + one per
+    reversible original"*. It encodes #190/#201's **in-family** reversal, not the
+    old void-in-place rule: `sale` → a positive `refund`, `crate_deposit` → a
+    **negative `crate_deposit`**, `wallet_topup` → a **negative `wallet_topup`**.
+    Mutation-verified — rewriting the deposit leg as the pre-#155 positive
+    `refund` turns it red.
+  - Also asserted per scenario: every wallet leg on the order after the cancel
+    (originals + the appended opposites — goods debit → `refund` credit, payment
+    credit → `void` debit, held `crate_deposit` credit → the deposit-family
+    `crate_deposit_refunded` debit, #162) and the derived customer balance back
+    at its pre-sale value; inventory restored; and the **restored FIFO layers**
+    (#170 #7c) — the units come back COSTED at the COGS the sale snapshotted,
+    while the seeded batch stays drawn down, because topping it back up as well
+    would double-restore (#187 / 0167).
+  - **All three are `dart_arm_only`, and that is a statement about the cloud, not
+    the rule.** `pos_cancel_order` implements exactly these expectations as of
+    #201 / `0170`, but 0170 is **NOT DEPLOYED** — the RPC arm runs against live
+    Supabase, which still voids originals in place, so it would fail every one.
+    Same precedent #201 set for its own cost scenarios.
+  - The fixtures are registered on **both** runners so the contract is visible on
+    the RPC arm, and `checkout_order_golden_test` **`fail()`s loudly** on a cancel
+    scenario: that arm has no `pos_cancel_order` step, so dropping the flag
+    without building one would assert only the checkout half and silently claim
+    coverage it does not have — the exact defect this issue was filed about.
+  - The crate-track leg is deliberately **not** modelled: 0170's cancel writes no
+    crate rows at all (ADR 0020 makes the Crate Pool seam the sole crate-table
+    writer), and a fixture no second implementation can ever satisfy is not a
+    contract. That rule stays pinned on the Dart arm in
+    `test/crates/crate_cancel_completes_ledger_test.dart`.
+- **`catalogue_price_kobo` was asserted nowhere** (`rg -c catalogue_price
+  test/golden/fixtures/` → 0), because every scenario used a full-price cart, so
+  the column was NULL on both arms and nothing was compared. A checkout line may
+  now carry **`charged_unit_price_kobo`** — the price actually charged when the
+  cashier overrode the tier list price — while the product's `unit_price_kobo`
+  stays the CATALOGUE price. New `cash_sale` scenario *custom-price concession
+  (#176/#183)* charges ₦800 against a ₦1,000 tier price **alongside a full-price
+  line in the same cart**, so both halves are pinned: a real concession is
+  recorded, and a full-price line records none (no phantom concession).
+  `catalogue_price_kobo` joins the per-line signature the comparator diffs, so
+  every existing scenario now asserts NULL as well rather than ignoring it.
+  - The rule itself is shared as **`catalogueSnapshotKobo`** next to
+    `clampDiscountKobo` — the Dart twin of `OrderCommands._buildOrderItems` and
+    of SQL `_catalogue_price_snapshot` (0160). The RPC arm forwards
+    `catalogue_price_kobo` **only on a concession line**, so a full-price
+    scenario's payload is byte-identical to what it has always sent, and reads
+    the column back for the comparison.
+  - **This scenario is NOT `dart_arm_only`** — 0160 is deployed, so the RPC arm
+    should satisfy it. But the Tier-2 arm **was not run this session** (it needs a
+    live DB + a fresh `TEST_USER_REFRESH_TOKEN`), so the parity is pinned in the
+    shared fixture and PROVEN on one arm only. The BUILD_LOG's 2026-07-25
+    correction under the #183 entry is updated to say exactly that rather than
+    being duplicated.
+
+`flutter analyze` clean. Golden suite 40 pass (25 in the Dart checkout/cancel
+runner). Both new assertions were mutation-verified. Tier-2 (`test/integration/`)
+not run — no live DB.
+
 ### #201 — the flag-gated RPCs reach #155 parity — CODE-COMPLETE (2026-07-29)
 Three server-side money writers still implemented the **pre-#155** rules. All
 three were unreachable — two behind `feature.domain_rpcs_v2.*` flags held off by
@@ -298,7 +371,8 @@ fixed. Cloud `0170` brings all three to parity (not yet deployed).
 Process debt filed: **#202** dead-code sweep never ran (all three promised removals
 linger) · **#206** golden fixtures have no cancel scenario and assert
 `catalogue_price_kobo` nowhere (so `BUILD_LOG` 2026-07-25's "pins the parity" claim
-was wrong — corrected) · **#203** the promised manufacturer deposit-**outflow** PRD ·
+was wrong — corrected) — **DONE, see the #206 section above** · **#203** the
+promised manufacturer deposit-**outflow** PRD ·
 **#204** cloud `checkout_order` deposit-0 parity gap · **#205** (unrelated, found in
 passing) `staff_detail_screen` raw `customSelect` on `orders` with no `business_id`.
 
