@@ -10,6 +10,59 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #197 — US 22: a stock request records what the goods cost — CODE-COMPLETE (2026-07-29)
+One of the three PRD #155 stories the close-out audit found **never
+implemented**. `stock_adjustment_requests` had no cost column, so
+`StockAdjustmentRequestsDao.approveRequest` called `InventoryDao.adjustStock`
+with no `inflowUnitCostKobo` and every approved increase minted a batch at
+whatever could be inferred — 0 before #189, the product's recorded scalar price
+after it. The person filing the request is the one holding the invoice, so that
+is where the cost is now captured.
+
+- **Schema.** ONE nullable column, `stock_adjustment_requests.unit_cost_kobo` —
+  Drift **schemaVersion 76** (`onUpgrade` `from < 76`, plain `ADD COLUMN`, the
+  table's only CHECK is on `status`) mirrored by cloud
+  **`0168_stock_request_unit_cost.sql`** (`bigint` — an int4 `_kobo` column caps
+  at ₦21.4M and jams the outbox on push, the 0130 lesson). Additive both ways:
+  `pos_pull_snapshot` serialises with `to_jsonb(t)` and the table has no
+  `pushColumns` whitelist entry (pass-through), so **no sync-registry or RPC
+  change** was needed.
+- **Cost ladder.** (1) the cost the REQUEST captured always wins; (2) else the
+  product's recorded price (#189); (3) Uncosted 0 only when neither is on file.
+  NULL is load-bearing — a recount that found more units has no invoice behind
+  it, and NULL is what keeps #189's fallback running instead of asserting a
+  made-up 0. Every pre-existing row is correctly NULL; no repair needed.
+- **Increase only.** `requestStockAdjustment` stores the cost only when
+  `quantityDiff > 0`; a decrease is valued by drawing this store's FIFO queue at
+  approval time and snapshotting what it drew (#7a) — the requester is not the
+  authority on what a loss cost. Not enforced by a cloud CHECK on purpose (it
+  would reject a legacy row on re-push over a value that is simply ignored).
+- **UI.** An optional "Cost per unit" field on the Update Stock sheet (add mode
+  only; hints the recorded price and names what leaving it blank will do),
+  threaded into BOTH arms — the stock keeper's `requestStockAdjustment` and the
+  Manager/CEO's direct `adjustStock`. The approvals card shows cost-per-unit +
+  total cost, or "Not stated — will use the recorded price". A typed `0` reads as
+  "not stated": the field cannot express "genuinely free", so honouring it as the
+  deliberate Uncosted 0 would turn a slip of the finger into units that sell at 0
+  COGS forever.
+- **Tests.** `test/costing/adjust_stock_cost_coverage_test.dart` gains the four
+  approval-path cases (captured cost beats the recorded price; wins with no
+  recorded price at all; no cost still falls back to #189; a removal never
+  records one and is valued off the queue); golden fixture
+  `stock_adjustment_scenarios.json` gains two `dart_arm_only` scenarios and the
+  scenario model gains `request_unit_cost_kobo`;
+  `test/database/migration_upgrade_test.dart` gains the v75 → v76 group
+  (legacy rows stay NULL; a > ₦21.4M cost round-trips; the step is idempotent).
+- **Out of scope.** The web RPCs (`request_stock_adjustment` /
+  `approve_stock_adjustment`, 0141) have no cost parameter and are flagged to the
+  reebaplus-web repo, same precedent as the #175 money-track scenarios.
+- **DEPLOY ORDER:** push cloud `0168` BEFORE a v76 app reaches a device, or the
+  `stock_adjustment_requests` upserts carrying `unit_cost_kobo` are rejected
+  cloud-side (PGRST204). Branch
+  `feat/197-capture-inflow-cost-on-stock-request` (rebased onto main at
+  `4c79d20`; Drift renumbered 79 → 76 and cloud 0171 → 0168, since 0169 is
+  reserved for #201 and 0170 for #202).
+
 ### Money integrity PRD #155 — DEPLOYED to production (2026-07-25)
 All 8 slices (#169/#171/#172/#173/#175 payment-chain + #170 cost-batch + #174
 day-close + #176 report-truth) are on `main` AND live on the prod DB. Cloud
