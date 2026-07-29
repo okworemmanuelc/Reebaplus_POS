@@ -123,12 +123,20 @@ _Avoid_: reversal-in-place, void-and-rewrite, "adjusting" the original.
 Releasing held money by posting a **negative row of the same type**, not a
 `refund` — so a crate deposit coming back nets the held-deposit line down instead
 of appearing as a sales refund (which would be subtracted from profit for money
-that was never revenue). `markCancelled` is the reference implementation.
+that was never revenue). `markCancelled` is the reference implementation; since
+#190 all three release paths follow it — Cancel, Confirm
+(`settleCrateDepositReturn`) and §18.3 Refund Cash (`CreditLedgerService`). A
+refund of spendable CREDIT is not in this category: that money was the
+customer's to spend, so it is a genuine `refund`.
 _Avoid_: typing any deposit or top-up release as `refund`.
 
 **Tender**:
 *How* the customer paid — the `method` on a payment row (`cash`, `transfer`, …),
-picked at checkout. Distinct from **payment type** (*what the money is for*).
+picked at checkout. Distinct from **payment type** (*what the money is for*). A
+reversal or release copies the ORIGINAL row's tender whenever there is one to
+copy — a deposit taken by transfer must not go back out of the drawer (#190).
+Where no single originating row exists (§18.3 releases a customer's whole held
+balance, which can span many orders and tenders) the user picks it instead.
 "Cash sales" means physical cash only, so the drawer can be counted against it.
 _Avoid_: conflating tender with payment type; assuming cash.
 

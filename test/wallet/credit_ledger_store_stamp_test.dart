@@ -134,10 +134,12 @@ void main() {
 
       expect(refunded, 250000);
       final row = await db.select(db.paymentTransactions).getSingle();
-      expect(row.type, 'refund');
+      // #190 retyped this leg: a deposit release is a NEGATIVE `crate_deposit`,
+      // not a `refund`. The store stamp (#194) is unchanged by that.
+      expect(row.type, 'crate_deposit');
       expect(row.storeId, storeId,
-          reason: 'a store-less refund vanishes from the Sales card under a '
-              'locked store (#194)');
+          reason: 'a store-less cash-out vanishes from the store-scoped money '
+              'reports under a locked store (#194)');
 
       final pushed = await pushedPayments();
       expect(pushed, hasLength(1));
@@ -163,12 +165,15 @@ void main() {
         storeId: storeId,
       );
 
-      final refunds = await (db.select(db.paymentTransactions)
-            ..where((p) => p.type.equals('refund')))
+      // #190 — the deposit leg is a negative `crate_deposit`, the credit leg a
+      // `refund`. Both are cash-out rows and both must carry the store.
+      final cashOut = await (db.select(db.paymentTransactions)
+            ..where((p) =>
+                p.type.equals('refund') | p.type.equals('crate_deposit')))
           .get();
-      expect(refunds, hasLength(2),
+      expect(cashOut, hasLength(2),
           reason: 'deposit portion + credit portion');
-      expect(refunds.every((p) => p.storeId == storeId), isTrue,
+      expect(cashOut.every((p) => p.storeId == storeId), isTrue,
           reason: 'every leg is stamped, not just the first');
     });
   });

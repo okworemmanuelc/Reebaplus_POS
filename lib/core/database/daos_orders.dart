@@ -553,11 +553,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     //
     // Keyed on the refund row's `order_id`, so the tab's store / date / search
     // filters apply to the refund figure for free and the number always
-    // describes the list underneath it. A crate-deposit refund settled at
-    // Confirm links via its wallet txn instead (payment_transactions allows
-    // exactly one parent) and belongs to a COMPLETED order, so it is out of the
-    // Cancelled tab's scope by construction; the reconciliation is the
-    // business-wide view of every refund.
+    // describes the list underneath it. A crate deposit released at Confirm is
+    // not counted here twice over: since #190 it is not a `refund` at all (a
+    // negative `crate_deposit` — releasing held money is an in-family reversal),
+    // and it links via its wallet txn rather than the order (payment_transactions
+    // allows exactly one parent). The reconciliation is the business-wide view of
+    // every refund.
     final refundsIssuedCol = CustomExpression<int>(
       'SUM(COALESCE((SELECT SUM(pt.amount_kobo) FROM payment_transactions pt '
       'WHERE pt.order_id = orders.id '
@@ -1278,8 +1279,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// `crate_deposit_refunded`, `crate_refund`, `adjustment`, plus the
   /// `cash_refund_payment` `payment_transactions` row. It is a SEED SEGMENT, not
   /// a column read: the cash-refund payment row's own `type` column is a
-  /// separate concern (issue #190 retypes it) and must never be substituted here
-  /// — changing the seed would change the id and re-open this bug.
+  /// separate concern (#190 retyped it from `refund` to a negative
+  /// `crate_deposit`, leaving this seed alone) and must never be substituted
+  /// here — changing the seed would change the id and re-open this bug.
   ///
   /// RESIDUAL, deliberately accepted — and it is the COMMON case, not an edge.
   /// The ledgers are append-only cloud-side (`enforce_append_only`) and the guard
@@ -1314,8 +1316,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   ///     (forfeit = reports-only, user decision 2026-06-05). No new income row.
   ///   • refund = the rest of the held deposit the forfeit didn't consume →
   ///     a `crate_deposit_refunded` debit (drops held) PLUS either a
-  ///     `crate_refund` spendable credit (refund to the wallet) or a
-  ///     payment_transactions 'refund' cash-out row (refund as cash).
+  ///     `crate_refund` spendable credit (refund to the wallet) or a NEGATIVE
+  ///     `crate_deposit` payment row (refund as cash — #190, see below).
   ///   • shortfall = when the kept crates are worth MORE than a PARTIAL deposit,
   ///     the extra is a normal spendable wallet debt (`adjustment` debit,
   ///     decision 6).
@@ -1436,8 +1438,60 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('wallet_transactions', refundedComp);
 
         if (refundAsCash) {
-          // #169: stamp the order's store on this new refund payment row
-          // (nullable; unread by reports yet, so behavior-preserving).
+          // #190 — an IN-FAMILY reversal, not a refund. This row hands back
+          // money the business only ever HELD, so it is a NEGATIVE
+          // `crate_deposit`: the "Crate deposits held (cash)" line nets down on
+          // its own and the release stays out of "Refunds" (which is subtracted
+          // from the period net result, and out of which the collection was
+          // never counted). Same rule, same reason as `markCancelled`'s
+          // deposit reversal — see its comment for the full symmetry argument.
+          //
+          // The TENDER comes from the ORIGINAL held-deposit row (#175's
+          // `crate_deposit` payment row for this order), not a hardcoded 'cash':
+          // a deposit collected by transfer must not be paid back out of the
+          // drawer. The store rides along from the same row so the release sits
+          // on the store line that took the money (today's held-deposit figure
+          // is business-wide and does not filter on it, but every other
+          // store-scoped money read does). Both are what
+          // `PaymentTransactionsDao.postReversalPayment` does for every other
+          // correction; that seam is not reused here because it mints a fresh id
+          // (#188 needs this one DETERMINISTIC) and copies the original's
+          // `order_id` reference (which would put the release inside
+          // `markCancelled`'s reversal set). Falls back to the order's own store
+          // and cash when no collection row is found — see the residual below.
+          //
+          // RESIDUAL, deliberately accepted and NOT fixed here (#190 scope).
+          // Four cases reach this branch with no `crate_deposit` collection row,
+          // and only the first two collected the deposit into the cash books at
+          // all: a LEGACY pre-#175 order (deposit bundled into its `sale` row,
+          // so it landed in Cash sales); the v2 `pos_record_sale_v2` path (the
+          // #175 split sits after that path's early return, so the server's one
+          // bundled `sale` row is all there is — flag held off in Phase 1); a
+          // ROAD sale (#142 writes NO payment row — the driver holds the cash);
+          // and a pure-credit sale (`amountPaidKobo == 0`). For the first two,
+          // `markCancelled`'s legacy carve-out would reverse in the `sale` row's
+          // family instead (a positive `refund`, matching how it was counted);
+          // for the last two neither family is right, because the money never
+          // moved through the drawer. Posting the negative unconditionally is
+          // strictly better than the pre-#190 behaviour in ALL four (the drawer
+          // total still ties and no phantom refund or loss is created) — it only
+          // leaves the held line reading negative for the bundled cases. Picking
+          // per-case behaviour needs a product decision this issue did not make.
+          final depositCollection =
+              await (select(paymentTransactions)
+                    ..where(
+                      (p) =>
+                          whereBusiness(p) &
+                          p.orderId.equals(orderId) &
+                          p.type.equals('crate_deposit') &
+                          p.voidedAt.isNull() &
+                          p.amountKobo.isBiggerThanValue(0),
+                    )
+                    ..orderBy([(p) => OrderingTerm.asc(p.createdAt)])
+                    ..limit(1))
+                  .getSingleOrNull();
+          // #169: stamp a store on this new payment row (nullable — a
+          // store-less original yields a store-less release, as elsewhere).
           final settleStore =
               await (select(orders)
                     ..where((o) => o.id.equals(orderId) & whereBusiness(o)))
@@ -1448,7 +1502,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           final payComp = PaymentTransactionsCompanion.insert(
             // #188 — deterministic per (order, manufacturer, leg). The seed
             // segment is a fixed literal, NOT this row's `type` column: #190
-            // retypes the row and must not move the id.
+            // retyped the row and must not move the id.
             id: Value(
               settlementLegId(
                 orderId: orderId,
@@ -1457,10 +1511,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
               ),
             ),
             businessId: requireBusinessId(),
-            storeId: Value(settleStore?.storeId),
-            amountKobo: refundAmount,
-            method: 'cash',
-            type: 'refund',
+            storeId: Value(depositCollection?.storeId ?? settleStore?.storeId),
+            amountKobo: -refundAmount,
+            method: depositCollection?.method ?? 'cash',
+            type: 'crate_deposit',
             performedBy: Value(performedBy),
             walletTxnId: Value(refundedTxnId),
             lastUpdatedAt: Value(legTime),

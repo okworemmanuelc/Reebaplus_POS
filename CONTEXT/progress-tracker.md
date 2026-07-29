@@ -141,6 +141,52 @@ alternative now points at #174, plus a loss-valuation-basis addendum; `CONTEXT.m
 gained the **Money & Payments** section it never had; this file gained the missing
 #172 section. **Umbrella #155 closed** with the audit summary.
 
+### #190 — deposit releases are an in-family reversal, not a refund — CODE-COMPLETE (2026-07-29)
+Fourth of the close-out audit's live money defects. `markCancelled` has stated the
+rule since #175: releasing a held `crate_deposit` posts a **negative
+`crate_deposit`** row, **not** a `refund` — a refund lands in Cash refunds while
+the collection was never in Cash sales. Two other release paths broke it:
+**Confirm** (`OrdersDao.settleCrateDepositReturn`, cash branch) and **§18.3
+Refund Cash** (`CreditLedgerService.refundCash`, deposit portion) both wrote a
+positive `type: 'refund'`. `refundsKobo` is subtracted from
+`periodNetResultKobo` and shown as "Refunds" on the Sales card, so returning a
+₦2,500 deposit read as a flat ₦2,500 loss plus a ₦2,500 sales refund that never
+happened, while "Crate deposits held (cash)" never netted down. (A same-period
+collect-then-return still tied at the drawer total — the two errors cancel —
+which is why it survived to production.)
+Both paths now post the negative `crate_deposit`. Took the issue's **preferred**
+option deliberately: the held line already sums `crate_deposit` rows, so
+**`recon_data.dart` was not touched** (#195 is restructuring it concurrently).
+Secondary fix: Confirm hardcoded `method: 'cash'`, refunding a transfer-collected
+deposit out of the drawer; the tender **and** store now come from the order's
+original `crate_deposit` collection row, falling back to the order's store + cash
+for a legacy pre-#175 order that bundled its deposit into the `sale` row.
+`PaymentTransactionsDao.postReversalPayment` is the precedent for that rule but is
+**not** reused at this call site — it mints a fresh `UuidV7` (#188 needs a
+deterministic `settlementLegId`, else two offline tills refund twice) and copies
+the original's `order_id` (which would pull the release into `markCancelled`'s
+reversal set). §18.3's credit portion stays a real `refund` — spendable credit,
+not held money. New `test/dashboard/recon_deposit_release_test.dart` pins the
+report consequence (only the held line may move) plus a counter-example
+reproducing the old shape. `flutter analyze` clean; full suite 1500 pass /
+119 skipped. Branch `fix/190-deposit-release-not-a-refund`.
+
+**OPEN QUESTION (found in review, not fixed — needs a product call):** four
+cases reach the Confirm cash branch with **no `crate_deposit` collection row**,
+and the right family for the release differs per case. (1) A LEGACY pre-#175
+order bundled the deposit into its `sale` row, so it WAS counted in Cash sales —
+`markCancelled`'s own carve-out reverses that in the `sale` family (a positive
+`refund`). (2) The v2 `pos_record_sale_v2` path is the same shape: the #175
+payment split sits after that path's early return, so with
+`feature.domain_rpcs_v2.record_sale` ON (held off in Phase 1) EVERY release hits
+this branch. (3) A ROAD sale writes no payment row at all (#142 — the driver
+holds the cash) and (4) a pure-credit sale (`amountPaidKobo == 0`) moved no cash;
+for those two neither family is right. The shipped behaviour posts the negative
+`crate_deposit` unconditionally, which is strictly better than pre-#190 in all
+four (the drawer total still ties, no phantom refund or loss) but leaves the
+held-deposit line reading negative for (1) and (2). Deciding per case is beyond
+what #190 specified — worth its own issue before the v2 record-sale flag is
+flipped.
 ### #195 — Profit report store-scoped; the single Total Sales definition actually shared — CODE-COMPLETE (2026-07-29)
 Follow-up from the #155 close-out audit. #176 created `computeTotalSalesKobo`
 (`lib/features/dashboard/reconciliation/report_revenue.dart`) but only Home and
