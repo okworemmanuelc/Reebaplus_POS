@@ -2157,9 +2157,15 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
   }
 
   /// The product's recorded buying price, shown as the cost field's placeholder
-  /// so the number a blank field will use is visible before it is used.
-  String get _recordedCostHint =>
-      (widget.product.buyingPriceKobo / 100).toStringAsFixed(2);
+  /// so the number a blank field will use is visible before it is used. Empty
+  /// when nothing is on file — a `0.00` placeholder there would read as a price
+  /// rather than as the absence of one, contradicting [_blankCostNote] directly
+  /// beneath it.
+  String get _recordedCostHint {
+    final recordedKobo = widget.product.buyingPriceKobo;
+    if (recordedKobo <= 0) return '';
+    return (recordedKobo / 100).toStringAsFixed(2);
+  }
 
   /// Says out loud what leaving the cost blank will do — the recorded price
   /// (#189), or nothing at all when the product has no price on file. Naming the

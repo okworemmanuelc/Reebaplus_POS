@@ -41,10 +41,12 @@ is where the cost is now captured.
   only; hints the recorded price and names what leaving it blank will do),
   threaded into BOTH arms — the stock keeper's `requestStockAdjustment` and the
   Manager/CEO's direct `adjustStock`. The approvals card shows cost-per-unit +
-  total cost, or "Not stated — will use the recorded price". A typed `0` reads as
-  "not stated": the field cannot express "genuinely free", so honouring it as the
-  deliberate Uncosted 0 would turn a slip of the finger into units that sell at 0
-  COGS forever.
+  total cost; when nothing was stated it names the actual fallback — the
+  product's recorded figure, or "no price is on file — these units will carry no
+  cost", which is the 0-COGS failure US 22 exists to stop and must not be
+  reported as if a price existed. A typed `0` reads as "not stated": the field
+  cannot express "genuinely free", so honouring it as the deliberate Uncosted 0
+  would turn a slip of the finger into units that sell at 0 COGS forever.
 - **Tests.** `test/costing/adjust_stock_cost_coverage_test.dart` gains the four
   approval-path cases (captured cost beats the recorded price; wins with no
   recorded price at all; no cost still falls back to #189; a removal never
