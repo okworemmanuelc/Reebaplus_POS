@@ -241,11 +241,14 @@ class CreditLedgerService {
         return id;
       }
 
-      /// One cash-out payment row. [amountKobo] is SIGNED — a deposit release
-      /// posts a negative row of its own type (see the deposit leg below).
-      Future<void> postCashRow(
-        int amountKobo,
-        String walletTxnId, {
+      /// One cash-out payment row. [amountKobo] is SIGNED and [type] names the
+      /// money family it belongs to — a deposit RELEASE posts a negative row of
+      /// its own type, not a positive `refund` (#190; see the deposit leg
+      /// below). Both are named: the sign is the load-bearing argument here and
+      /// an unlabelled `-depositPortion` at the call site reads like a typo.
+      Future<void> postCashRow({
+        required int amountKobo,
+        required String walletTxnId,
         required String type,
       }) async {
         final payComp = PaymentTransactionsCompanion.insert(
@@ -280,7 +283,18 @@ class CreditLedgerService {
           // result. A NEGATIVE `crate_deposit` row nets the held-deposit line
           // down instead — the rule `markCancelled` documents and
           // `OrdersDao.settleCrateDepositReturn` follows.
-          await postCashRow(-depositPortion, refundedId, type: 'crate_deposit');
+          //
+          // The TENDER stays the caller's [method] here, unlike the Confirm
+          // path which copies it off the order's collection row. There is no
+          // single originating row to copy from: this releases the customer's
+          // whole held balance, which is a wallet-derived aggregate that can
+          // span many orders and many tenders. §18.3 asks the user how to pay
+          // it back for exactly that reason.
+          await postCashRow(
+            amountKobo: -depositPortion,
+            walletTxnId: refundedId,
+            type: 'crate_deposit',
+          );
         }
       }
 
@@ -289,7 +303,11 @@ class CreditLedgerService {
       // held deposit.
       if (creditPortion > 0) {
         final refundId = await postWalletLeg(-creditPortion, 'refund');
-        await postCashRow(creditPortion, refundId, type: 'refund');
+        await postCashRow(
+          amountKobo: creditPortion,
+          walletTxnId: refundId,
+          type: 'refund',
+        );
       }
 
       // §24 money movement / §26.4 refund issued — audit + notify CEO/Manager.

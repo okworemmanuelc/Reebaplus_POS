@@ -133,9 +133,11 @@ _Avoid_: typing any deposit or top-up release as `refund`.
 **Tender**:
 *How* the customer paid — the `method` on a payment row (`cash`, `transfer`, …),
 picked at checkout. Distinct from **payment type** (*what the money is for*). A
-reversal or release copies the ORIGINAL row's tender — a deposit taken by
-transfer must not go back out of the drawer (#190). "Cash sales" means physical
-cash only, so the drawer can be counted against it.
+reversal or release copies the ORIGINAL row's tender whenever there is one to
+copy — a deposit taken by transfer must not go back out of the drawer (#190).
+Where no single originating row exists (§18.3 releases a customer's whole held
+balance, which can span many orders and tenders) the user picks it instead.
+"Cash sales" means physical cash only, so the drawer can be counted against it.
 _Avoid_: conflating tender with payment type; assuming cash.
 
 **Crate deposit (money side)**:

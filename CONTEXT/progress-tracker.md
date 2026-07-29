@@ -116,6 +116,23 @@ report consequence (only the held line may move) plus a counter-example
 reproducing the old shape. `flutter analyze` clean; full suite 1500 pass /
 119 skipped. Branch `fix/190-deposit-release-not-a-refund`.
 
+**OPEN QUESTION (found in review, not fixed — needs a product call):** four
+cases reach the Confirm cash branch with **no `crate_deposit` collection row**,
+and the right family for the release differs per case. (1) A LEGACY pre-#175
+order bundled the deposit into its `sale` row, so it WAS counted in Cash sales —
+`markCancelled`'s own carve-out reverses that in the `sale` family (a positive
+`refund`). (2) The v2 `pos_record_sale_v2` path is the same shape: the #175
+payment split sits after that path's early return, so with
+`feature.domain_rpcs_v2.record_sale` ON (held off in Phase 1) EVERY release hits
+this branch. (3) A ROAD sale writes no payment row at all (#142 — the driver
+holds the cash) and (4) a pure-credit sale (`amountPaidKobo == 0`) moved no cash;
+for those two neither family is right. The shipped behaviour posts the negative
+`crate_deposit` unconditionally, which is strictly better than pre-#190 in all
+four (the drawer total still ties, no phantom refund or loss) but leaves the
+held-deposit line reading negative for (1) and (2). Deciding per case is beyond
+what #190 specified — worth its own issue before the v2 record-sale flag is
+flipped.
+
 ### #182 — count-shortage loss valued at the #170 write-time snapshot (audit #30) — CODE-COMPLETE (2026-07-25)
 The last loss surface still recomputed at *current* cost. #170 gave damages a
 write-time value (`stock_adjustments.value_kobo`) and the Damages recon figure

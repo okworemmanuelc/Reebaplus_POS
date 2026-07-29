@@ -1416,18 +1416,37 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           // never counted). Same rule, same reason as `markCancelled`'s
           // deposit reversal — see its comment for the full symmetry argument.
           //
-          // The TENDER and the store come from the ORIGINAL held-deposit row
-          // (#175's `crate_deposit` payment row for this order), not a hardcoded
-          // 'cash': a deposit collected by transfer must not be paid back out of
-          // the drawer, and the negative has to land on the same store line as
-          // the positive for the held line to net. This is what
+          // The TENDER comes from the ORIGINAL held-deposit row (#175's
+          // `crate_deposit` payment row for this order), not a hardcoded 'cash':
+          // a deposit collected by transfer must not be paid back out of the
+          // drawer. The store rides along from the same row so the release sits
+          // on the store line that took the money (today's held-deposit figure
+          // is business-wide and does not filter on it, but every other
+          // store-scoped money read does). Both are what
           // `PaymentTransactionsDao.postReversalPayment` does for every other
           // correction; that seam is not reused here because it mints a fresh id
           // (#188 needs this one DETERMINISTIC) and copies the original's
           // `order_id` reference (which would put the release inside
-          // `markCancelled`'s reversal set). A legacy pre-#175 order bundled its
-          // deposit into the `sale` row and has no `crate_deposit` row at all —
-          // fall back to the order's own store and cash.
+          // `markCancelled`'s reversal set). Falls back to the order's own store
+          // and cash when no collection row is found — see the residual below.
+          //
+          // RESIDUAL, deliberately accepted and NOT fixed here (#190 scope).
+          // Four cases reach this branch with no `crate_deposit` collection row,
+          // and only the first two collected the deposit into the cash books at
+          // all: a LEGACY pre-#175 order (deposit bundled into its `sale` row,
+          // so it landed in Cash sales); the v2 `pos_record_sale_v2` path (the
+          // #175 split sits after that path's early return, so the server's one
+          // bundled `sale` row is all there is — flag held off in Phase 1); a
+          // ROAD sale (#142 writes NO payment row — the driver holds the cash);
+          // and a pure-credit sale (`amountPaidKobo == 0`). For the first two,
+          // `markCancelled`'s legacy carve-out would reverse in the `sale` row's
+          // family instead (a positive `refund`, matching how it was counted);
+          // for the last two neither family is right, because the money never
+          // moved through the drawer. Posting the negative unconditionally is
+          // strictly better than the pre-#190 behaviour in ALL four (the drawer
+          // total still ties and no phantom refund or loss is created) — it only
+          // leaves the held line reading negative for the bundled cases. Picking
+          // per-case behaviour needs a product decision this issue did not make.
           final depositCollection =
               await (select(paymentTransactions)
                     ..where(
