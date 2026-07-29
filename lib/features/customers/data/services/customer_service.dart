@@ -5,7 +5,6 @@ import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
 import 'package:reebaplus_pos/shared/services/credit_ledger_service.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
-import 'package:reebaplus_pos/features/customers/data/models/payment.dart';
 
 class CustomerService extends ValueNotifier<List<Customer>> {
   final AppDatabase _db;
@@ -86,28 +85,6 @@ class CustomerService extends ValueNotifier<List<Customer>> {
       'Customer Deleted',
       'Soft-deleted customer: ${customer?.name ?? customerId}',
       customerId: customerId,
-    );
-  }
-
-  Future<void> addPayment(String customerId, Payment payment) async {
-    final customer = getById(customerId);
-    if (customer == null) return;
-
-    final amountKobo = (payment.amount * 100).round();
-    // TODO(PR 4d): pass real staff id from auth context once wallet writes restore.
-    await _db.customersDao.updateWalletBalance(
-      customerId: customerId,
-      amountKobo: amountKobo,
-      type: 'credit',
-      referenceType: 'topup_cash',
-      note: payment.note,
-      staffId: '',
-    );
-
-    await _log.logAction(
-      'Payment Added',
-      'Added payment of ${formatCurrency(payment.amount)} for ${customer.name}',
-      customerId: customer.id,
     );
   }
 
@@ -231,53 +208,4 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     );
   }
 
-  Future<void> refundToWallet(
-    String customerId,
-    double amount,
-    String note,
-  ) async {
-    final customer = getById(customerId);
-    if (customer == null) return;
-
-    final amountKobo = (amount * 100).round();
-    await _db.customersDao.updateWalletBalance(
-      customerId: customerId,
-      amountKobo: amountKobo,
-      type: 'credit',
-      referenceType: 'refund',
-      note: note,
-      staffId: '',
-    );
-
-    await _log.logAction(
-      'Credit Balance Refunded',
-      'Refunded ${formatCurrency(amount)} to ${customer.name}\'s credit balance. Note: $note',
-      customerId: customer.id,
-    );
-  }
-
-  Future<void> updateWalletBalance(
-    String customerId,
-    double amount,
-    String note,
-  ) async {
-    final customer = getById(customerId);
-    if (customer == null) return;
-
-    final amountKobo = (amount * 100).round();
-    await _db.customersDao.updateWalletBalance(
-      customerId: customerId,
-      amountKobo: amountKobo,
-      type: 'credit',
-      referenceType: 'topup_cash',
-      note: note,
-      staffId: '',
-    );
-
-    await _log.logAction(
-      'Credit Balance Updated',
-      'Added ${formatCurrency(amount)} to ${customer.name}\'s credit balance. Note: $note',
-      customerId: customer.id,
-    );
-  }
 }

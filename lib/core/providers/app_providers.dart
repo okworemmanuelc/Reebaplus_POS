@@ -24,7 +24,6 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart';
 import 'package:reebaplus_pos/features/inventory/data/services/supplier_service.dart';
-import 'package:reebaplus_pos/features/payments/data/services/payment_service.dart';
 import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
@@ -307,10 +306,9 @@ final deliveryReceiptServiceProvider =
 // Expenses are persisted/synced via ExpensesDao (§20); the old in-memory
 // ExpenseService stub was removed in Session 59.
 
-// ── Payment ─────────────────────────────────────────────────────────────────
-final paymentServiceProvider = ChangeNotifierProvider<PaymentService>((ref) {
-  return PaymentService();
-});
+// Supplier payments are persisted/synced via SupplierLedgerDao; the old
+// in-memory PaymentService stub and its `paymentServiceProvider` had no
+// consumers and were removed in #202.
 
 // ── Stateless services ─────────────────────────────────────────────────────
 final printerServiceProvider = Provider<PrinterService>((ref) {
