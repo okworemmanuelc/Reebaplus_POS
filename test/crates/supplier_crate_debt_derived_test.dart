@@ -252,6 +252,7 @@ void main() {
         dateReceived: DateTime(2026, 6, 1),
         staffId: userId,
         lines: lines,
+        fullCratesReceivedByManufacturer: const {},
         emptiesReturnedByManufacturer: const {manufacturerX: 3},
         note: 'Inv #7',
       );
@@ -294,11 +295,265 @@ void main() {
         dateReceived: DateTime(2026, 6, 1),
         staffId: userId,
         lines: lines,
+        fullCratesReceivedByManufacturer: const {},
         emptiesReturnedByManufacturer: const {},
       );
 
       expect(await db.select(db.supplierCrateLedger).get(), isEmpty);
       expect(await supplierDebt(supplierA, manufacturerX), 0);
+    });
+  });
+
+  // #210 / ADR 0023 — Receive Stock records the FULL CRATES RECEIVED.
+  //
+  // Before this slice only the return leg was automated, so `SUM(quantity_delta)`
+  // over `supplier_crate_ledger` could only ever FALL. Normal operation drove
+  // supplier crate debt negative, and because `businessNetPositionKobo`
+  // SUBTRACTS that debt, a negative debt INFLATED business worth — the longer a
+  // shop ran, the more overstated it got. These tests pin the debt moving in
+  // BOTH directions off one action.
+  group('#210 — Receive Stock records the full crates received', () {
+    late AppDatabase db;
+    late ReceiveStockService service;
+
+    const petProductId = 'prod-pet';
+
+    setUp(() async {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      await seed(db);
+      // A NON-crate line for the same delivery: PET packaging, no empties
+      // tracked. It must never reach a crate table.
+      await db.into(db.products).insert(
+            ProductsCompanion.insert(
+              id: const Value(petProductId),
+              businessId: businessId,
+              name: 'Gulder 50cl PET',
+              unit: const Value('PET'),
+              buyingPriceKobo: const Value(8000),
+              manufacturerId: const Value(manufacturerY),
+              trackEmpties: const Value(false),
+            ),
+          );
+      service = ReceiveStockService(db, SupplierAccountService(db));
+    });
+
+    tearDown(() => db.close());
+
+    Future<int> supplierDebt(String supplierId, String manufacturerId) async {
+      final rows =
+          await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
+      final match =
+          rows.where((r) => r.manufacturerId == manufacturerId).toList();
+      return match.isEmpty ? 0 : match.single.balance;
+    }
+
+    const bottleLine = ReceiveCartLine(
+      productId: bottleProductId,
+      productName: 'Star 60cl',
+      unit: 'Bottle',
+      qty: 240,
+      buyingPriceKobo: 10000,
+      retailKobo: 12000,
+      wholesaleKobo: 11000,
+      manufacturerId: manufacturerX,
+      trackEmpties: true,
+    );
+
+    const petLine = ReceiveCartLine(
+      productId: petProductId,
+      productName: 'Gulder 50cl PET',
+      unit: 'PET',
+      qty: 60,
+      buyingPriceKobo: 8000,
+      retailKobo: 9500,
+      wholesaleKobo: 9000,
+      manufacturerId: manufacturerY,
+      trackEmpties: false,
+    );
+
+    Future<void> receive({
+      Map<String, int> fullCratesIn = const {},
+      Map<String, int> emptiesBack = const {},
+      List<ReceiveCartLine> lines = const [bottleLine],
+    }) =>
+        service.confirmReceipt(
+          supplierId: supplierA,
+          supplierName: 'Supplier A',
+          storeId: storeId,
+          dateReceived: DateTime(2026, 6, 1),
+          staffId: userId,
+          lines: lines,
+          fullCratesReceivedByManufacturer: fullCratesIn,
+          emptiesReturnedByManufacturer: emptiesBack,
+        );
+
+    test('a receipt-only cycle NEVER produces a negative balance — it rises',
+        () async {
+      // Three deliveries, no empties handed back at all. This is the exact shape
+      // that used to drive the balance negative (each delivery posted nothing,
+      // and any return posted a bare debit).
+      await receive(fullCratesIn: const {manufacturerX: 20});
+      await receive(fullCratesIn: const {manufacturerX: 20});
+      await receive(fullCratesIn: const {manufacturerX: 8});
+
+      final debt = await supplierDebt(supplierA, manufacturerX);
+      expect(debt, 48, reason: 'debt is the sum of the crates that arrived');
+      expect(debt, greaterThan(0),
+          reason: 'a receipt-only history can never be a crate CREDIT');
+
+      final ledger = await db.select(db.supplierCrateLedger).get();
+      expect(ledger, hasLength(3));
+      expect(ledger.every((r) => r.movementType == 'received'), isTrue);
+      expect(ledger.every((r) => r.quantityDelta > 0), isTrue);
+    });
+
+    test('a receive-then-return cycle leaves debt at the correct POSITIVE value',
+        () async {
+      // 30 full crates arrive; 18 empties go back on a later delivery.
+      await receive(fullCratesIn: const {manufacturerX: 30});
+      await receive(
+        fullCratesIn: const {manufacturerX: 0},
+        emptiesBack: const {manufacturerX: 18},
+      );
+
+      expect(await supplierDebt(supplierA, manufacturerX), 12,
+          reason: '30 received − 18 returned = 12 still owed');
+    });
+
+    test('one delivery that both drops crates off and takes empties away nets '
+        'correctly in a single action', () async {
+      await receive(
+        fullCratesIn: const {manufacturerX: 25},
+        emptiesBack: const {manufacturerX: 10},
+      );
+
+      expect(await supplierDebt(supplierA, manufacturerX), 15);
+
+      // Both legs, appended (never edited) on the one receipt.
+      final ledger = await db.select(db.supplierCrateLedger).get();
+      expect(ledger, hasLength(2));
+      expect(
+        ledger.map((r) => (r.movementType, r.quantityDelta)).toSet(),
+        {('received', 25), ('returned', -10)},
+      );
+    });
+
+    test('the debt moves in BOTH directions — it is no longer one-way down',
+        () async {
+      await receive(fullCratesIn: const {manufacturerX: 10});
+      expect(await supplierDebt(supplierA, manufacturerX), 10);
+
+      await receive(emptiesBack: const {manufacturerX: 4});
+      expect(await supplierDebt(supplierA, manufacturerX), 6);
+
+      await receive(fullCratesIn: const {manufacturerX: 9});
+      expect(await supplierDebt(supplierA, manufacturerX), 15);
+    });
+
+    test('a receipt recording no crate movement behaves exactly as before',
+        () async {
+      await receive();
+
+      expect(await db.select(db.supplierCrateLedger).get(), isEmpty);
+      expect(await supplierDebt(supplierA, manufacturerX), 0);
+      // The stock still landed — a crate-less receipt is a normal receipt.
+      final inv = await db.select(db.inventory).get();
+      expect(inv.single.quantity, 240);
+    });
+
+    test('only bottle lines that track empties are eligible — a PET line never '
+        'reaches the supplier crate ledger', () async {
+      // Both manufacturers are on the delivery, and a figure is typed against
+      // BOTH. Only manufacturerX (the bottle + trackEmpties line) may post.
+      await receive(
+        lines: const [bottleLine, petLine],
+        fullCratesIn: const {manufacturerX: 12, manufacturerY: 7},
+        emptiesBack: const {manufacturerX: 3, manufacturerY: 5},
+      );
+
+      final ledger = await db.select(db.supplierCrateLedger).get();
+      expect(ledger.every((r) => r.manufacturerId == manufacturerX), isTrue,
+          reason: 'PET packaging has no crates to owe');
+      expect(await supplierDebt(supplierA, manufacturerX), 9);
+      expect(await supplierDebt(supplierA, manufacturerY), 0);
+    });
+
+    test('the receipt leg carries no money — this slice is counting only',
+        () async {
+      await receive(
+        fullCratesIn: const {manufacturerX: 30},
+        emptiesBack: const {manufacturerX: 10},
+      );
+
+      final ledger = await db.select(db.supplierCrateLedger).get();
+      expect(ledger.every((r) => r.depositPaidKobo == 0), isTrue,
+          reason: 'deposit money is #212\'s job, not this slice\'s');
+      // No supplier money moved either: no invoice was paid and no crate
+      // payment was invented.
+      expect(await db.select(db.paymentTransactions).get(), isEmpty);
+    });
+
+    test('the receipt leg is all-or-nothing with the rest of the receipt',
+        () async {
+      // A trackEmpties line whose manufacturer does not exist forces an FK
+      // violation on the RECEIPT write, after the invoice + stock writes.
+      const orphanLine = ReceiveCartLine(
+        productId: bottleProductId,
+        productName: 'Star 60cl',
+        unit: 'Bottle',
+        qty: 5,
+        buyingPriceKobo: 10000,
+        retailKobo: 12000,
+        wholesaleKobo: 11000,
+        manufacturerId: 'mfr-does-not-exist',
+        trackEmpties: true,
+      );
+
+      await expectLater(
+        receive(
+          lines: const [orphanLine],
+          fullCratesIn: const {'mfr-does-not-exist': 4},
+        ),
+        throwsA(anything),
+      );
+
+      expect(await db.select(db.supplierCrateLedger).get(), isEmpty);
+      expect(await db.select(db.inventory).get(), isEmpty);
+      expect(await db.supplierLedgerDao.getBalanceKobo(supplierA), 0);
+    });
+
+    test('the receipt Activity Log row names the crate movement', () async {
+      await receive(
+        fullCratesIn: const {manufacturerX: 25},
+        emptiesBack: const {manufacturerX: 10},
+      );
+
+      final rows = await db.select(db.activityLogs).get();
+      final receipt =
+          rows.where((r) => r.action == 'stock.received').single;
+      expect(receipt.description, contains('25 full crates in'));
+      expect(receipt.description, contains('10 empty crates back'));
+    });
+
+    test('a crate-less receipt logs no crate clause', () async {
+      await receive();
+
+      final rows = await db.select(db.activityLogs).get();
+      final receipt =
+          rows.where((r) => r.action == 'stock.received').single;
+      expect(receipt.description, isNot(contains('crates:')));
+    });
+
+    test('the crate figure is typed, never derived from the drinks delivered',
+        () async {
+      // 240 bottles arrive but only 10 crates are typed. Nothing in the commit
+      // may substitute the bottle count for the crate count — crate size is a
+      // category (Big/Medium/Small), so the two are unrelated numbers.
+      await receive(fullCratesIn: const {manufacturerX: 10});
+
+      expect(await supplierDebt(supplierA, manufacturerX), 10);
+      final inv = await db.select(db.inventory).get();
+      expect(inv.single.quantity, 240);
     });
   });
 

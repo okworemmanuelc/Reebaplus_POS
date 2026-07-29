@@ -13,13 +13,16 @@ import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
 ///    supplier ledger).
 /// 2. Each line increments on-hand stock for the active store (which also appends
 ///    the `stock_transactions` row that IS the Inventory → History entry).
-/// 3. For each bottle line that tracks empties, any empty crates handed back to
-///    the supplier on this receipt post BOTH crate legs through the Crate Pool
-///    seam, in this transaction (#160 / B3): the physical-pool movement (our
-///    yard count drops) AND the supplier crate movement (what we owe THIS
-///    supplier drops). One physical event → one operation; the stock keeper no
-///    longer opens the supplier screen to enter the return a second time.
-/// 4. A single summary "stock received" Activity Log row is written.
+/// 3. For each bottle line that tracks empties, BOTH directions of the crate
+///    movement on this receipt post through the Crate Pool seam, in this
+///    transaction: the full crates that arrived (#210 — what we owe THIS
+///    supplier RISES) and the empty crates handed back (#160 / B3 — the
+///    physical-pool movement, our yard count drops, AND the supplier crate
+///    movement, what we owe THIS supplier drops). One physical event → one
+///    operation; the stock keeper no longer opens the supplier screen to enter
+///    either side a second time.
+/// 4. A single summary "stock received" Activity Log row is written, naming the
+///    crate movement alongside the goods.
 ///
 /// Every write above goes through a DAO/service that enqueues to the sync outbox,
 /// so the whole receipt queues locally when offline and converges on reconnect.
@@ -27,23 +30,42 @@ import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
 /// Crate movements are tracked per-manufacturer on this build (the canonical
 /// crate-debt owner is the manufacturer; the deposit rate is
 /// `Manufacturers.depositAmountKobo`). The supplier on the receipt owns the
-/// invoice; empties returned are attributed to each line's manufacturer AND to
-/// the supplier's `supplier_crate_ledger` (§3.13), whose balance is DERIVED from
-/// the ledger (ADR 0020). A supplier-side "full crates received increases what
-/// we owe" entry is still made separately on the supplier screen (not captured
-/// on the receive cart).
+/// invoice; crates moved are attributed to each line's manufacturer AND to the
+/// supplier's `supplier_crate_ledger` (§3.13), whose balance is DERIVED from the
+/// ledger (ADR 0020).
+///
+/// #210 / ADR 0023: before this slice only the RETURN leg was automated, so
+/// `SUM(quantity_delta)` over `supplier_crate_ledger` could only fall — normal
+/// operation drove supplier crate debt negative, and because
+/// `businessNetPositionKobo` SUBTRACTS that debt, a negative debt inflated
+/// business worth. Recording both legs in the one action is what stops the
+/// drift: neither leg can be forgotten without the other.
+///
+/// This slice is **counting only** — no deposit money moves here (#212 owns the
+/// money leg), so both crate calls are made at the seam's default 0 kobo.
 class ReceiveStockService {
   final AppDatabase _db;
   final SupplierAccountService _supplierAccounts;
 
   ReceiveStockService(this._db, this._supplierAccounts);
 
-  /// Commit a receipt. [lines] are the cart lines; [emptiesReturnedByManufacturer]
-  /// maps a manufacturerId → empty crates handed back on this receipt. Empties
-  /// are a per-manufacturer quantity (the canonical crate-debt owner is the
-  /// manufacturer, not the product), so a manufacturer that ships several SKUs
-  /// on one receipt has a single empties figure — not one per SKU. Only
-  /// manufacturers represented by a bottle + trackEmpties line are consulted.
+  /// Commit a receipt. [lines] are the cart lines;
+  /// [fullCratesReceivedByManufacturer] maps a manufacturerId → full crates that
+  /// arrived on this receipt, and [emptiesReturnedByManufacturer] maps a
+  /// manufacturerId → empty crates handed back. Both are per-manufacturer
+  /// quantities (the canonical crate-debt owner is the manufacturer, not the
+  /// product), so a manufacturer that ships several SKUs on one receipt has a
+  /// single figure per direction — not one per SKU. Only manufacturers
+  /// represented by a bottle + trackEmpties line are consulted.
+  ///
+  /// Both maps are **required** rather than defaulted: the defect #210 fixes was
+  /// a leg nobody remembered to post, so omitting one is a compile error, not a
+  /// silent zero. Pass `const {}` for a receipt that moves no crates — that
+  /// receipt then behaves exactly as it always has.
+  ///
+  /// Crate size is a CATEGORY in this app (Big/Medium/Small), never a bottle
+  /// count, so a crate figure can never be derived from `line.qty` — it is
+  /// always typed by whoever took the delivery (ADR 0023).
   Future<void> confirmReceipt({
     required String supplierId,
     required String supplierName,
@@ -51,6 +73,7 @@ class ReceiveStockService {
     required DateTime dateReceived,
     required String staffId,
     required List<ReceiveCartLine> lines,
+    required Map<String, int> fullCratesReceivedByManufacturer,
     required Map<String, int> emptiesReturnedByManufacturer,
     String? note,
     int? amountPaidKobo,
@@ -127,52 +150,98 @@ class ReceiveStockService {
         );
       }
 
-      // 3. Empty crates handed back to the supplier on this receipt, recorded
-      //    once per manufacturer (not per product). Only manufacturers carried
-      //    by a bottle + trackEmpties line on this receipt are consulted.
-      //    #160 (B3): one physical event → BOTH legs, in this transaction,
-      //    through the Crate Pool seam — the physical-pool movement (yard count
-      //    drops) AND the supplier crate movement (what we owe the supplier
-      //    drops). The stock keeper no longer opens the supplier screen to enter
-      //    the return a second time; the supplier balance is then DERIVED from
-      //    `supplier_crate_ledger` like every other crate balance.
+      // 3. Crates moved on this receipt, recorded once per manufacturer (not per
+      //    product), through the Crate Pool seam in THIS transaction so the
+      //    crate record is as all-or-nothing as the stock and the invoice.
+      //
+      //    The eligibility gate is the existing one and is deliberately shared
+      //    by both directions: only a manufacturer carried by a bottle +
+      //    trackEmpties line on this receipt is consulted, so PET / Can / any
+      //    non-crate packaging can never reach a crate table.
       final eligibleManufacturerIds = <String>{
         for (final line in lines)
           if (line.trackEmpties && line.manufacturerId != null)
             line.manufacturerId!,
       };
-      for (final entry in emptiesReturnedByManufacturer.entries) {
-        if (entry.value > 0 && eligibleManufacturerIds.contains(entry.key)) {
-          // Leg 1 — physical empties pool (manufacturer-owned, store-stamped).
-          await _db.cratePoolDao.recordCrateReturnByManufacturer(
-            manufacturerId: entry.key,
-            quantity: entry.value,
+      var totalCratesReceived = 0;
+      var totalEmptiesReturned = 0;
+      for (final manufacturerId in eligibleManufacturerIds) {
+        // Leg 1 — #210: the full crates that ARRIVED. What we owe this supplier
+        // RISES. Without this leg `SUM(quantity_delta)` could only ever fall,
+        // which drove supplier crate debt negative and inflated business worth.
+        // No physical-pool counterpart: a full crate is not an empty, and it
+        // only joins the empties pool once the drink leaves it.
+        final cratesReceived = fullCratesReceivedByManufacturer[manufacturerId] ?? 0;
+        if (cratesReceived > 0) {
+          await _db.cratePoolDao.recordReceiveFromSupplier(
+            supplierId: supplierId,
+            manufacturerId: manufacturerId,
+            quantity: cratesReceived,
             performedBy: staffId,
             storeId: storeId,
           );
-          // Leg 2 — supplier crate debt (what we owe THIS supplier drops).
+          totalCratesReceived += cratesReceived;
+        }
+
+        // Legs 2 & 3 — #160 (B3): the empties handed back. One physical event →
+        // BOTH legs — the physical-pool movement (yard count drops) AND the
+        // supplier crate movement (what we owe the supplier drops). The stock
+        // keeper no longer opens the supplier screen to enter the return a
+        // second time; the supplier balance is then DERIVED from
+        // `supplier_crate_ledger` like every other crate balance.
+        final emptiesReturned = emptiesReturnedByManufacturer[manufacturerId] ?? 0;
+        if (emptiesReturned > 0) {
+          await _db.cratePoolDao.recordCrateReturnByManufacturer(
+            manufacturerId: manufacturerId,
+            quantity: emptiesReturned,
+            performedBy: staffId,
+            storeId: storeId,
+          );
           await _db.cratePoolDao.recordReturnToSupplier(
             supplierId: supplierId,
-            manufacturerId: entry.key,
-            quantity: entry.value,
+            manufacturerId: manufacturerId,
+            quantity: emptiesReturned,
             performedBy: staffId,
             storeId: storeId,
           );
+          totalEmptiesReturned += emptiesReturned;
         }
       }
 
-      // 4. Summary activity log for the whole receipt.
+      // 4. Summary activity log for the whole receipt, naming the crate movement
+      //    beside the goods so the audit trail shows both halves of one event.
+      final crateSummary = _crateSummary(
+        cratesReceived: totalCratesReceived,
+        emptiesReturned: totalEmptiesReturned,
+      );
       await _db.activityLogDao.logActivity(
         action: 'stock.received',
         description:
             'Received ${lines.length} product(s), $totalUnits unit(s) from '
             '$supplierName — invoice ${formatCurrency(invoiceTotalKobo / 100)}'
-            '${amountPaidKobo != null && amountPaidKobo > 0 ? ' (Paid: ${formatCurrency(amountPaidKobo / 100)})' : ''}',
+            '${amountPaidKobo != null && amountPaidKobo > 0 ? ' (Paid: ${formatCurrency(amountPaidKobo / 100)})' : ''}'
+            '$crateSummary',
         staffId: staffId,
         storeId: storeId,
         entityType: 'supplier',
         entityId: supplierId,
       );
     });
+  }
+
+  /// The crate clause appended to the receipt's Activity Log line. Empty when
+  /// the receipt moved no crates, so a receipt without crate activity reads
+  /// exactly as it always did.
+  String _crateSummary({
+    required int cratesReceived,
+    required int emptiesReturned,
+  }) {
+    final parts = <String>[
+      if (cratesReceived > 0)
+        '$cratesReceived full crate${cratesReceived == 1 ? '' : 's'} in',
+      if (emptiesReturned > 0)
+        '$emptiesReturned empty crate${emptiesReturned == 1 ? '' : 's'} back',
+    ];
+    return parts.isEmpty ? '' : ' — crates: ${parts.join(', ')}';
   }
 }
