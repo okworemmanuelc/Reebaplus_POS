@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/get_started_card.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
@@ -240,12 +241,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     }
 
-    // Filter by selected period and store. #140 — van orders are excluded from
-    // every dashboard tile (Total Sales, Net Profit, the sales breakdown): road
-    // revenue is real but carries no cost against it until the trip closes, so
-    // an All-Stores figure that counted it would read as 100%-margin sales.
-    // Van P&L lands via the closed-trip artifact (van-sales spec §5.4 / §8.1).
-    final vans = ref.watch(vanStoresProvider);
+    // Filter by selected period and store. #195 — the store predicate is
+    // `reconStoreFilter`, the SAME one the Daily Reconciliation and the Profit
+    // report apply, and it is applied PER LINE in the money loops below (the
+    // reconciliation's basis) rather than per ORDER. It also carries the #140
+    // van exclusion: road revenue is real but carries no cost against it until
+    // the trip closes, so an All-Stores figure that counted it would read as
+    // 100%-margin sales. Van P&L lands via the closed-trip artifact (van-sales
+    // spec §5.4 / §8.1).
+    //
+    // The list itself keeps a coarse ORDER-level filter — an order survives if
+    // any of its lines, or its own store (which carries the discount), is in
+    // scope — so the drill-down shows only orders this view can see; the money
+    // is then summed per line.
+    final inScope = reconStoreFilter(ref);
     final filteredOrdersWithItems = _allOrdersWithItems
         .where(
           (o) =>
@@ -253,8 +262,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // Revenue is recognized at checkout ('pending'), not at the
               // ceremonial Confirm ('completed'). Count any non-reversed sale.
               orderCountsAsSale(o.order.status) &&
-              !vans.isVan(o.order.storeId) &&
-              (_selectedStoreId == null || o.order.storeId == _selectedStoreId),
+              (inScope(o.order.storeId) ||
+                  o.items.any((i) => inScope(i.item.storeId))),
         )
         .toList();
 
@@ -285,35 +294,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         : filteredOrdersWithItems;
     // #176 — the single "Total Sales" definition, shared with the Daily
     // Reconciliation and the Profit report (deposit-exclusive item lines minus
-    // discounts). `salesOrders` is already store/period/cashier-filtered, so the
-    // helper's default (always-true) predicates apply; it still excludes any
-    // cancelled order via `orderCountsAsSale`. Replaces the old
-    // Σ`totalAmountKobo` (deposit-IN, so a crate shop's headline was overstated
-    // by every deposit taken and disagreed with the other two surfaces).
-    final totalSales = computeTotalSalesKobo(salesOrders) / 100.0;
+    // discounts). `salesOrders` is already period/cashier-filtered, so only the
+    // store predicate is passed; it still excludes any cancelled order via
+    // `orderCountsAsSale`. Replaces the old Σ`totalAmountKobo` (deposit-IN, so a
+    // crate shop's headline was overstated by every deposit taken and disagreed
+    // with the other two surfaces).
+    final totalSales =
+        computeTotalSalesKobo(salesOrders, inScope: inScope) / 100.0;
     final totalExpenses = filteredExpenses.fold<double>(
       0,
       (sum, e) => sum + e.expense.amountKobo / 100.0,
     );
 
     // Profit — only for items that had a buying price at the time of sale.
-    // Uses the snapshotted buyingPriceKobo on the order item, not the current product price.
+    // Uses the snapshotted buyingPriceKobo on the order item, not the current
+    // product price. #195 — the same per-LINE store scope as Total Sales, and
+    // discounts are netted out of the costed revenue exactly as the
+    // reconciliation's `netRevenueKobo` does. Before that, a discount given was
+    // reported as profit the business never made.
+    //
+    // This is the goods margin less expenses, so it is deliberately NOT the
+    // reconciliation's `netProfitKobo` (which also nets damages, shortages,
+    // write-offs and forfeit income). The Profit & Loss card is the full P&L;
+    // this tile is the at-a-glance version, and its subtitle says so.
     final hasBuyingPrices = filteredOrdersWithItems.any(
-      (o) => o.items.any((i) => i.item.buyingPriceKobo > 0),
+      (o) => o.items.any(
+        (i) => inScope(i.item.storeId) && i.item.buyingPriceKobo > 0,
+      ),
     );
     double? netProfit;
     if (hasBuyingPrices) {
       double pricedRevenue = 0;
       double cogs = 0;
+      double discounts = 0;
       for (final o in filteredOrdersWithItems) {
         for (final i in o.items) {
+          if (!inScope(i.item.storeId)) continue;
           if (i.item.buyingPriceKobo > 0) {
             pricedRevenue += i.item.quantity * i.item.unitPriceKobo / 100.0;
             cogs += i.item.quantity * i.item.buyingPriceKobo / 100.0;
           }
         }
+        if (inScope(o.order.storeId)) {
+          discounts += o.order.discountKobo / 100.0;
+        }
       }
-      netProfit = pricedRevenue - cogs - totalExpenses;
+      netProfit = pricedRevenue - discounts - cogs - totalExpenses;
     }
 
     final pendingOrdersCount = _allOrdersWithItems
@@ -335,13 +361,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return sum + (b < 0 ? b.abs() / 100.0 : 0);
     });
 
-    // Per-staff sales breakdown (from already-filtered orders)
+    // Per-staff sales breakdown (from already-filtered orders). #195 — each
+    // order contributes its Total-Sales share ([orderGoodsNetKobo]: in-scope
+    // item lines minus the order discount, deposit-EXCLUSIVE), so the league
+    // table sums to the Total Sales tile above it. It used to add
+    // `totalAmountKobo`, which bundles the refundable crate deposit (contra US
+    // 5) — a cashier who took big deposits outranked one who sold more goods.
     final staffSalesMap = <String, double>{};
     for (final o in filteredOrdersWithItems) {
       final sid = o.order.staffId;
       if (sid != null) {
         staffSalesMap[sid] =
-            (staffSalesMap[sid] ?? 0) + o.order.totalAmountKobo / 100.0;
+            (staffSalesMap[sid] ?? 0) +
+            orderGoodsNetKobo(o, inScope: inScope) / 100.0;
       }
     }
     final staffSalesList = staffSalesMap.entries.toList()
@@ -400,6 +432,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               debt: totalDebt,
               expenses: totalExpenses,
               filteredOrders: salesOrders,
+              inScope: inScope,
               staffSalesList: staffSalesList,
               showTotalSales: showTotalSales,
               showNetProfit: showNetProfit,
@@ -591,13 +624,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _openSalesDetail(List<OrderWithItems> orders, String mode) {
+  void _openSalesDetail(
+    List<OrderWithItems> orders,
+    String mode,
+    bool Function(String? storeId) inScope,
+  ) {
     Navigator.of(context).push(
       slideDownRoute(
         SalesDetailScreen(
           orders: orders,
           mode: mode,
           period: formatPeriodLabel(_selectedPeriod),
+          // #195 — the drill-down must sum the SAME lines the tile did, or it
+          // contradicts the number the user tapped.
+          inScope: inScope,
         ),
       ),
     );
@@ -611,6 +651,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required double debt,
     required double expenses,
     required List<OrderWithItems> filteredOrders,
+    required bool Function(String? storeId) inScope,
     required List<MapEntry<String, double>> staffSalesList,
     required bool showTotalSales,
     required bool showNetProfit,
@@ -639,7 +680,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           color: Theme.of(context).colorScheme.primary,
           trend: sales > 0 ? 'Active' : 'No sales',
           isNeutral: true,
-          onTap: () => _openSalesDetail(filteredOrders, 'sales'),
+          onTap: () => _openSalesDetail(filteredOrders, 'sales', inScope),
         ),
       );
     }
@@ -662,7 +703,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               : 'N/A',
           isPositive: profit == null || profit >= 0,
           onTap: profit != null
-              ? () => _openSalesDetail(filteredOrders, 'profit')
+              ? () => _openSalesDetail(filteredOrders, 'profit', inScope)
               : null,
         ),
       );

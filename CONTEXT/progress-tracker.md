@@ -86,6 +86,67 @@ alternative now points at #174, plus a loss-valuation-basis addendum; `CONTEXT.m
 gained the **Money & Payments** section it never had; this file gained the missing
 #172 section. **Umbrella #155 closed** with the audit summary.
 
+### #195 — Profit report store-scoped; the single Total Sales definition actually shared — CODE-COMPLETE (2026-07-29)
+Follow-up from the #155 close-out audit. #176 created `computeTotalSalesKobo`
+(`lib/features/dashboard/reconciliation/report_revenue.dart`) but only Home and
+the Profit report called it, so US 28's "three screens, one answer" was never
+enforced. Branch `fix/195-profit-report-store-scoping` off `main` (4c79d20).
+
+**The four divergences, fixed:**
+1. **Profit report was not store-scoped at all** — `allOrdersProvider` +
+   `inSpan` only, so under a store lock Home/Recon showed the store and Profit
+   showed the business. It now takes `reconStoreFilter(ref)` (the reconciliation's
+   own predicate — active store, non-CEO confinement, #140 van exclusion) and
+   applies it **per LINE** in the costed loop and to `computeTotalSalesKobo`.
+   The order-level `vans.isVan` skip is deleted: a van fails `reconStoreFilter`
+   by construction.
+2. **Recon consumes the helper.** `ReconData.totalSalesKobo` is now a stored
+   field fed by `computeTotalSalesKobo(orders, inSpan:, inScope:)`, not the
+   getter's own `totalRevenueKobo − discountsKobo`. The gross + discount pair
+   stays for the P&L card. A ReconData fabricated WITHOUT the field falls back
+   to the old identity, so the getter-only harnesses (`recon_data_test.dart`)
+   still work.
+3. **Home scopes per LINE**, like Recon. The order list keeps a coarse
+   order-level pre-filter (any in-scope line, or the order's own store — which
+   carries the discount) so the drill-down list matches what the tiles counted.
+4. **The drill-down matches its tile.** `SalesDetailScreen` takes the tile's
+   `inScope` and subtracts the orders' discounts from the header in BOTH modes,
+   with a "Less discounts" chip and a TOTAL row in the CSV so the per-item rows
+   visibly reconcile to the headline.
+
+**Four deposit-inclusive stragglers converted** to the one basis through a new
+per-order helper `orderGoodsNetKobo` (in-scope lines − scoped discount,
+deposit-exclusive) that `computeTotalSalesKobo` now delegates to: Home's staff
+league table (was Σ`totalAmountKobo` — deposits outranked goods), Home's Net
+Profit tile (nets discounts, scopes per line), `OrdersDao.getSalesTotalsForStaff`
+(was `net_amount_kobo`; now two queries — joining lines to the header repeats
+`discount_kobo` per line and over-subtracts it), and the Profile "Sales Volume"
+stat (which also stopped raw-selecting `orders` with no `business_id`,
+architecture invariant #5).
+
+**Structural: `computeReconData` is now gather + pure compute.** New
+`ReconInputs` (every row set, the settings, the span and `inScope`, all
+optional-defaulted) and `ReconData reconDataFrom(ReconInputs)`;
+`computeReconData(ref, …)` holds every `ref.watch` and delegates. Crate reads
+stay behind the `showCrates` gate so a non-crate business opens no crate stream.
+**Keep the split** — a provider read that migrates back into the math is a
+figure that stops being testable. #192 (changed-since-review delta) builds here
+next.
+
+The AC test was the point: `test/dashboard/report_revenue_test.dart` used to
+fabricate a `ReconData` from figures it computed itself and never ran the
+roll-up, so it could not fail. It now runs `reconDataFrom` for real across
+All-Stores and a locked store, and pins `totalSalesKobo` against both the helper
+and the P&L identity. Verified by mutation: dropping the discount's store scope
+in recon's loop, and making the helper deposit-inclusive, each turn it red.
+`flutter analyze` clean; full suite **1494 pass / 119 skipped**, sole failure the
+pre-existing `test/auth/who_is_working_screen_test.dart` (fails on `main` too).
+
+**Left open (out of scope, worth filing if it matters):** Home's Net Profit tile
+is goods margin less expenses — it still does not include forfeit income, nor
+recon's damages / shortages / write-offs, so it is deliberately NOT equal to
+`ReconData.netProfitKobo`. Only the Total Sales definition is unified.
+
 ### #182 — count-shortage loss valued at the #170 write-time snapshot (audit #30) — CODE-COMPLETE (2026-07-25)
 The last loss surface still recomputed at *current* cost. #170 gave damages a
 write-time value (`stock_adjustments.value_kobo`) and the Damages recon figure

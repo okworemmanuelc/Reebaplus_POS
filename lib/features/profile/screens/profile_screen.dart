@@ -8,7 +8,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
-import 'package:reebaplus_pos/shared/models/order_status.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
@@ -34,9 +34,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
 
-  List<OrderData> _staffOrders = [];
+  /// The signed-in user's own orders WITH their item lines (#195) — the lines
+  /// are what "Sales Volume" is summed from, so the figure is the same
+  /// deposit-exclusive Total Sales every other surface reports.
+  List<OrderWithItems> _staffOrders = [];
   List<StoreData> _stores = [];
-  StreamSubscription<List<OrderData>>? _ordersSub;
+  StreamSubscription<List<OrderWithItems>>? _ordersSub;
   bool _contentReady = false;
 
   @override
@@ -54,13 +57,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         if (mounted) setState(() => _stores = list);
       });
 
-      // Watch orders for current user
-      _ordersSub =
-          (db.select(
-            db.orders,
-          )..where((t) => t.staffId.equals(user.id))).watch().listen((data) {
-            if (mounted) setState(() => _staffOrders = data);
-          });
+      // Watch this user's own orders. Business-scoped through the DAO — a
+      // device can hold more than one business's rows, and a raw select of a
+      // business-owned table keyed only on the staff id would report both
+      // (architecture.md invariant #5). The joined read also carries the item
+      // lines "Sales Volume" is summed from (#195).
+      _ordersSub = db.ordersDao.watchAllOrdersWithItems().listen((data) {
+        if (!mounted) return;
+        setState(() {
+          _staffOrders = data
+              .where((o) => o.order.staffId == user.id)
+              .toList();
+        });
+      });
 
       setState(() => _contentReady = true);
     });
@@ -227,13 +236,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   List<ProfileStat> _buildStats() {
     final orders = _staffOrders;
-    final completed = orders.where((o) => o.status == 'completed').toList();
+    final completed = orders
+        .where((o) => o.order.status == 'completed')
+        .toList();
     // Sales volume is recognized at checkout ('pending'), not at the ceremonial
-    // Confirm ('completed'). Count any non-reversed sale; the "Completed" stat
-    // below stays a true lifecycle count.
-    final totalSales = orders
-        .where((o) => orderCountsAsSale(o.status))
-        .fold<double>(0.0, (sum, o) => sum + (o.netAmountKobo / 100.0));
+    // Confirm ('completed') — `computeTotalSalesKobo` applies that rule, and the
+    // "Completed" stat below stays a true lifecycle count.
+    //
+    // #195 — the ONE Total Sales definition (item lines minus discounts,
+    // deposit-exclusive). It used to sum the order header's `netAmountKobo`,
+    // which bundles the refundable crate deposit (contra US 5), so this stat
+    // disagreed with every other "sales" figure in the app.
+    final totalSales = computeTotalSalesKobo(orders) / 100.0;
     return [
       ProfileStat(
         label: 'Total Orders',

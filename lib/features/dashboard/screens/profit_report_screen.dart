@@ -4,12 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -65,10 +65,19 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   /// would overstate gross profit as 100% for those items. Their quantity is
   /// reported separately as [_ProfitData.uncostedItems] so the exclusion is
   /// transparent and Revenue − COGS always equals Gross Profit.
+  ///
+  /// [inScope] is the store predicate (#195) — `reconStoreFilter`, the SAME one
+  /// the Daily Reconciliation uses, so it honours the §12.1 active store, a
+  /// non-CEO's store confinement, and the van exclusion (#140/#142). It is
+  /// applied PER LINE (and to the order's own store for the discount), matching
+  /// the reconciliation exactly. Before #195 this screen read every store's
+  /// orders whatever the lock said, so a locked-store Home and Recon showed the
+  /// store while Profit showed the whole business — three screens, three
+  /// answers, which is what US 28 forbids.
   _ProfitData _compute(
     List<OrderWithItems> orders,
     String period,
-    VanStores vans,
+    bool Function(String? storeId) inScope,
   ) {
     final byProduct = <String, _ProductAccum>{};
     var revenueKobo = 0;
@@ -80,13 +89,15 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       // Recognized at checkout ('pending'), not at the ceremonial Confirm
       // ('completed'). Count any non-reversed sale.
       if (!orderCountsAsSale(o.order.status)) continue;
-      // #140 — a van sale is not a store sale. Its COGS is not per-line (it is
-      // the trip's lot snapshot, booked at close), so including it here would
-      // report road revenue at 100% margin. Van P&L comes from the closed-trip
-      // artifact instead (van-sales spec §5.4 / §8.1).
-      if (vans.isVan(o.order.storeId)) continue;
       if (!isDateInPeriod(o.order.createdAt, period)) continue;
       for (final i in o.items) {
+        // #195 — per-LINE store scope, like the reconciliation. This also
+        // carries the #140 van exclusion (a van fails `reconStoreFilter` by
+        // construction): a van sale is not a store sale, its COGS is not
+        // per-line (it is the trip's lot snapshot, booked at close), so
+        // including it would report road revenue at 100% margin. Van P&L comes
+        // from the closed-trip artifact instead (van-sales spec §5.4 / §8.1).
+        if (!inScope(i.item.storeId)) continue;
         final product = i.product;
         // #200 / US 32 — the catalogue-price concession is a SELLING-price fact,
         // so it is counted before the uncosted skip below: a price cut on a line
@@ -148,13 +159,12 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       totalSalesKobo: computeTotalSalesKobo(
         orders,
         inSpan: (createdAt) => isDateInPeriod(createdAt, period),
-        // #142 (van-sales spec §8.1) — the SAME van exclusion the Revenue /
-        // COGS / Gross Profit figures above apply. Without it this tile counted
-        // road sales while everything under it did not, and the one screen
-        // contradicted itself. `computeTotalSalesKobo` scopes per LINE store
-        // (and the order's store for the discount), which is what `isNotVan`
-        // takes.
-        inScope: vans.isNotVan,
+        // #195 — the SAME store predicate the Revenue / COGS / Gross Profit
+        // figures above apply, and the same one the reconciliation applies.
+        // Without it this tile counted stores (and, per #142 / van-sales spec
+        // §8.1, road sales) that everything under it did not, and the one
+        // screen contradicted itself.
+        inScope: inScope,
       ),
     );
   }
@@ -230,7 +240,9 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     // cost. Revenue / Gross Profit / Margin stay (they're `reports.see_profit`).
     final canSeeCost = Gates.seeReportCostPrices.allows(ref);
     final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
-    final data = _compute(orders, _period, ref.watch(vanStoresProvider));
+    // #195 — the §12.1 active store, the viewer's confinement and the van
+    // exclusion, in the one predicate the Daily Reconciliation uses.
+    final data = _compute(orders, _period, reconStoreFilter(ref));
     final hasCostedData = data.products.isNotEmpty;
     final hasAnySales = hasCostedData || data.uncostedItems > 0;
 
