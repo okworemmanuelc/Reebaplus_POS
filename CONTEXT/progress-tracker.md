@@ -10,6 +10,36 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #203 — crate-deposit OUTFLOW: IMPLEMENTATION IN PROGRESS (2026-07-29)
+Slices are being built in dependency order, each verified on the **merged**
+state before the next one branches from it. Verified baseline on main before
+the run: **1550 passed / 126 skipped / 0 failed**.
+
+| Slice | Status | Main |
+|---|---|---|
+| #210 receipt leg (no money) | **MERGED** | `a7a28e0` — 1561 pass / 126 skip / 0 fail |
+| #211 arrangement setting (Drift v78, cloud 0171) | in progress | — |
+| #212 Placed Deposit + approval + position seam | pending | — |
+| #213 settle on return | pending | — |
+| #214 standing float | pending | — |
+| #215 worth + recon card (amends ADR 0014) | pending | — |
+| #216 shortfall + write-off | pending | — |
+| #217 forfeit netting | pending | — |
+
+**#210 notes.** `confirmReceipt` now takes `fullCratesReceivedByManufacturer`
+as a **required** parameter — the defect was a leg nobody remembered to post,
+so omitting it is a compile error rather than a silent zero. The receipt leg
+writes ONE ledger row (no physical-pool counterpart: a full crate is not an
+empty until the drink leaves it), where the return writes two. The screen's old
+subtitle read `Full crates received: N` with N = summed **bottle** quantity —
+the exact bottle-count-as-crate-count derivation ADR 0023 rejects — and was
+relabelled "N drinks on this delivery". Historically-negative balances on live
+tenants are **not** retroactively repaired; the drift stays visible in the
+counts, per ADR 0023's consequences.
+
+**Cloud migrations are NOT deployed yet** — branches commit them, deployment is
+sequenced separately after the app code lands.
+
 ### #203 — crate-deposit OUTFLOW settlement: PRD WRITTEN + published (2026-07-29)
 Grilling session on the #155 carve-out. **No code written.** Output is
 **ADR 0023** (`docs/adr/0023-crate-deposit-outflow-settlement.md`), four new
