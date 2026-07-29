@@ -230,11 +230,15 @@ void main() {
           reason: 'crate_deposit_refunded debit clears held');
       expect(await db.walletTransactionsDao.getBalanceKobo(customerId), 0,
           reason: 'deposit refund never touches spendable');
-      expect(await paymentRowCount(), 1, reason: 'one cash refund payment row');
+      expect(await paymentRowCount(), 1, reason: 'one cash-out payment row');
       final pay = await db.select(db.paymentTransactions).getSingle();
-      expect(pay.type, 'refund');
+      // #190 — an in-family reversal, not a `refund`: releasing held money must
+      // not land in Cash refunds (the collection was never in Cash sales) nor be
+      // subtracted from the period net result (it was never revenue).
+      expect(pay.type, 'crate_deposit');
+      expect(pay.amountKobo, -250000,
+          reason: 'negative, so the held-deposit line nets down on release');
       expect(pay.method, 'cash');
-      expect(pay.amountKobo, 250000);
     });
 
     test('refunds spendable CREDIT → spendable drops, held unchanged', () async {
@@ -283,7 +287,21 @@ void main() {
       expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId), 0);
       expect(await db.walletTransactionsDao.getBalanceKobo(customerId), 0);
       expect(await paymentRowCount(), 3,
-          reason: '1 topup + 2 refund payment rows (deposit + credit)');
+          reason: '1 topup + 2 cash-out rows (deposit + credit)');
+
+      // #190 — the two cash-out legs are typed differently on purpose: the
+      // credit portion IS a refund (spendable money paid back), the deposit
+      // portion is an in-family release.
+      final refunds = await (db.select(db.paymentTransactions)
+            ..where((p) => p.type.equals('refund')))
+          .get();
+      expect(refunds.single.amountKobo, 5000,
+          reason: 'only the spendable-credit portion is a refund');
+      final deposits = await (db.select(db.paymentTransactions)
+            ..where((p) => p.type.equals('crate_deposit')))
+          .get();
+      expect(deposits.single.amountKobo, -250000,
+          reason: 'the deposit portion is released in its own family');
     });
 
     test('White Pages case: in debt → held deposit refunded TO CREDIT BALANCE (reduces '

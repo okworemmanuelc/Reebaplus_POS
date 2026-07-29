@@ -162,12 +162,20 @@ class CreditLedgerService {
   ///     CREDITS BALANCE (a `crate_refund` spendable credit) so it REDUCES the debt — no
   ///     cash leaves. (Spendable credit is 0 when in debt, so the deposit is the
   ///     only thing refunded.) [method] is ignored on this path.
-  ///   • Credit balance NOT in debt → paid out as CASH: a `payment_transactions` refund
-  ///     row per portion via [method].
+  ///   • Credit balance NOT in debt → paid out as CASH: one
+  ///     `payment_transactions` cash-out row per portion via [method].
   /// Both paths post a `crate_deposit_refunded` debit for the deposit portion,
   /// which clears "held". The credit portion (only > 0 when not in debt) is a
   /// `refund` debit + cash row. Payment rows link via wallet_txn_id (the
   /// PaymentTransactions exactly-one-reference rule).
+  ///
+  /// **The two cash-out rows are typed differently on purpose (#190).** The
+  /// credit portion pays back spendable credit, so it is a real `refund`. The
+  /// deposit portion releases money the business only HELD — never revenue,
+  /// never counted in Cash sales — so it is an IN-FAMILY reversal: a NEGATIVE
+  /// `crate_deposit` row that nets the held-deposit line down. Typing it
+  /// `refund` put it in Cash refunds and subtracted it from the period net
+  /// result, showing a flat loss for money that was only ever a liability.
   ///
   /// [storeId] is the store the money leaves from, stamped on every cash-out
   /// payment row (PRD #155 US 36). This is load-bearing, not cosmetic: the
@@ -233,14 +241,20 @@ class CreditLedgerService {
         return id;
       }
 
-      Future<void> postCashRow(int portion, String walletTxnId) async {
+      /// One cash-out payment row. [amountKobo] is SIGNED — a deposit release
+      /// posts a negative row of its own type (see the deposit leg below).
+      Future<void> postCashRow(
+        int amountKobo,
+        String walletTxnId, {
+        required String type,
+      }) async {
         final payComp = PaymentTransactionsCompanion.insert(
           id: Value(UuidV7.generate()),
           businessId: businessId,
           storeId: Value(storeId),
-          amountKobo: portion,
+          amountKobo: amountKobo,
           method: method,
-          type: 'refund',
+          type: type,
           walletTxnId: Value(walletTxnId),
           performedBy: Value(staffId),
           lastUpdatedAt: Value(now),
@@ -259,15 +273,23 @@ class CreditLedgerService {
           // To credit balance: a spendable crate_refund credit reduces the debt. No cash.
           await postWalletLeg(depositPortion, 'crate_refund');
         } else {
-          // Cash out.
-          await postCashRow(depositPortion, refundedId);
+          // Cash out — as an IN-FAMILY reversal, not a refund (#190). Handing
+          // back a deposit releases money the business only HELD: it was never
+          // counted in Cash sales, so it must not land in Cash refunds, and it
+          // was never revenue, so it must not be subtracted from the period net
+          // result. A NEGATIVE `crate_deposit` row nets the held-deposit line
+          // down instead — the rule `markCancelled` documents and
+          // `OrdersDao.settleCrateDepositReturn` follows.
+          await postCashRow(-depositPortion, refundedId, type: 'crate_deposit');
         }
       }
 
-      // Credit portion (only > 0 when NOT in debt) → cash out via a refund debit.
+      // Credit portion (only > 0 when NOT in debt) → cash out via a refund
+      // debit. This one IS a real refund: it pays back spendable credit, not
+      // held deposit.
       if (creditPortion > 0) {
         final refundId = await postWalletLeg(-creditPortion, 'refund');
-        await postCashRow(creditPortion, refundId);
+        await postCashRow(creditPortion, refundId, type: 'refund');
       }
 
       // §24 money movement / §26.4 refund issued — audit + notify CEO/Manager.

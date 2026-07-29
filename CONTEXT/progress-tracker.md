@@ -86,6 +86,36 @@ alternative now points at #174, plus a loss-valuation-basis addendum; `CONTEXT.m
 gained the **Money & Payments** section it never had; this file gained the missing
 #172 section. **Umbrella #155 closed** with the audit summary.
 
+### #190 — deposit releases are an in-family reversal, not a refund — CODE-COMPLETE (2026-07-29)
+Fourth of the close-out audit's live money defects. `markCancelled` has stated the
+rule since #175: releasing a held `crate_deposit` posts a **negative
+`crate_deposit`** row, **not** a `refund` — a refund lands in Cash refunds while
+the collection was never in Cash sales. Two other release paths broke it:
+**Confirm** (`OrdersDao.settleCrateDepositReturn`, cash branch) and **§18.3
+Refund Cash** (`CreditLedgerService.refundCash`, deposit portion) both wrote a
+positive `type: 'refund'`. `refundsKobo` is subtracted from
+`periodNetResultKobo` and shown as "Refunds" on the Sales card, so returning a
+₦2,500 deposit read as a flat ₦2,500 loss plus a ₦2,500 sales refund that never
+happened, while "Crate deposits held (cash)" never netted down. (A same-period
+collect-then-return still tied at the drawer total — the two errors cancel —
+which is why it survived to production.)
+Both paths now post the negative `crate_deposit`. Took the issue's **preferred**
+option deliberately: the held line already sums `crate_deposit` rows, so
+**`recon_data.dart` was not touched** (#195 is restructuring it concurrently).
+Secondary fix: Confirm hardcoded `method: 'cash'`, refunding a transfer-collected
+deposit out of the drawer; the tender **and** store now come from the order's
+original `crate_deposit` collection row, falling back to the order's store + cash
+for a legacy pre-#175 order that bundled its deposit into the `sale` row.
+`PaymentTransactionsDao.postReversalPayment` is the precedent for that rule but is
+**not** reused at this call site — it mints a fresh `UuidV7` (#188 needs a
+deterministic `settlementLegId`, else two offline tills refund twice) and copies
+the original's `order_id` (which would pull the release into `markCancelled`'s
+reversal set). §18.3's credit portion stays a real `refund` — spendable credit,
+not held money. New `test/dashboard/recon_deposit_release_test.dart` pins the
+report consequence (only the held line may move) plus a counter-example
+reproducing the old shape. `flutter analyze` clean; full suite 1500 pass /
+119 skipped. Branch `fix/190-deposit-release-not-a-refund`.
+
 ### #182 — count-shortage loss valued at the #170 write-time snapshot (audit #30) — CODE-COMPLETE (2026-07-25)
 The last loss surface still recomputed at *current* cost. #170 gave damages a
 write-time value (`stock_adjustments.value_kobo`) and the Damages recon figure

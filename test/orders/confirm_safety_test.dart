@@ -785,22 +785,32 @@ void main() {
             refundAsCash: true);
       }
 
-      Future<List<PaymentTransactionData>> refundPayments(AppDatabase on) =>
+      // #190 — the release is a NEGATIVE `crate_deposit`, not a `refund`: it
+      // hands back money the till only held, so it must net the held-deposit
+      // line down rather than post a sales refund that never happened.
+      Future<List<PaymentTransactionData>> releasePayments(AppDatabase on) =>
           (on.select(on.paymentTransactions)
-                ..where((t) => t.type.equals('refund')))
+                ..where((t) => t.type.equals('crate_deposit')))
               .get();
 
-      expect((await refundPayments(tillA)).single.id,
-          (await refundPayments(tillB)).single.id,
-          reason: 'the cash refund row id is deterministic too (#188)');
+      expect(await releasePayments(tillA), hasLength(1));
+      expect((await releasePayments(tillA)).single.id,
+          (await releasePayments(tillB)).single.id,
+          reason: 'the cash release row id is deterministic too (#188)');
 
       expect(await replayOutboxInto(cloud, tillA), isEmpty);
       expect(await replayOutboxInto(cloud, tillB), isEmpty);
 
-      final payments = await refundPayments(cloud);
+      final payments = await releasePayments(cloud);
       expect(payments, hasLength(1),
           reason: 'cash leaves the till ONCE, not twice');
-      expect(payments.single.amountKobo, depositKobo);
+      expect(payments.single.amountKobo, -depositKobo);
+      expect(
+          await (cloud.select(cloud.paymentTransactions)
+                ..where((t) => t.type.equals('refund')))
+              .get(),
+          isEmpty,
+          reason: 'a deposit release is never a sales refund (#190)');
       // No wallet credit on the cash path — the money left as cash.
       expect(await settlementLegs(cloud, 'crate_refund'), isEmpty);
     });
