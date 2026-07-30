@@ -2,7 +2,9 @@
 
 **Status:** accepted (2026-07-05); **amended 2026-07-30 (PRD #203 slice #215)** —
 see "Amendment: the sixth card" at the foot of this file before changing the
-card count.
+card count; **amended 2026-07-30 (#186)** — see "Amendment: which basis each
+figure stands on" for the loss-valuation and count-session rules that supersede
+the "current cost" wording below.
 
 The Daily Reconciliation (§25.9, `recon_data.dart` + `daily_reconciliation_detail_screen.dart`)
 already ships a store-scoped, Day/Week/Month/Year report with Sales, a CEO
@@ -69,6 +71,14 @@ Decisions locked:
   everywhere (a gain draws no batch). The residual "Other movements" is now
   broken out by cause (transfers / count corrections / product deletions) per
   #155 US 30.
+
+  **Addendum 2026-07-30 (#186).** Valuation was only half the basis. Which
+  ROWS a figure is built from is the other half, and the count-shortage money
+  now shares the units' answer — the latest count session per business date and
+  store, bucketed on `business_date`, not every adjustment in the period on its
+  `created_at`. See "Amendment: which basis each figure stands on" at the foot
+  of this file; it supersedes any reading of the paragraph above that assumes
+  one basis covers the whole report.
 
 - **P&L books gross revenue and subtracts an explicit Discounts line.**
   `order_items.unitPriceKobo` is the **gross** list price; the order's real
@@ -151,3 +161,58 @@ ADR specified — which is also the release gate PRD #203 ships on.
 the reasoning is here so you can weigh it rather than discover it. If crate
 money can be made legible without a card of its own, replacing it is a decision
 to record, not a tidy-up to perform.
+
+## Amendment: which basis each figure stands on (2026-07-30, #186)
+
+This ADR was written when one sentence — "every term is valued at the product's
+*current* per-product buying price" — covered the whole report. It no longer
+does, and reading it as though it still did is what produced #186. Two
+independent axes now decide a figure, and **every figure has to name both**:
+
+| Axis | The two answers | Who is on which |
+|---|---|---|
+| **Valuation** | *current cost* (today's `products.buying_price_kobo`) vs *write-time snapshot* (`stock_adjustments.value_kobo`, #170) | Flow-equation terms are current cost. Every **loss** — Damages (#170), count shortages (#182), product-delete write-offs (#193) — is the snapshot. |
+| **Selection** | *all rows in the period* (bucketed on `created_at`) vs *the winning count session* (latest per `business_date` + store, bucketed on `business_date`) | The stock card's "Count corrections" line is all-rows. Everything on the **variance card** — units, retail, lines, products counted **and the money** — is the winning session (#186). |
+
+The 2026-07-25 addendum above settled the valuation axis. #186 settles the
+selection axis, which had never been stated at all: the money summed every
+count-reconciliation adjustment in the period while the units beside it reported
+only the latest count of each day. A same-day recount therefore charged a day
+twice in money and once in units, and a count saved after midnight put its units
+in one period and its money in another. **Decision: the money follows the units
+— the winning session, bucketed on `business_date`.** Three reasons, in
+ascending weight:
+
+1. It is the only reading under which a matching latest count shows **zero**
+   variance and raises no integrity flag — the behaviour the report promises in
+   words on the card ("the physical count matches recorded sales…").
+2. **Count surplus cannot move to the adjustment rows.** A gain draws no FIFO
+   batch, so no snapshot exists to sum, and `surplus` is therefore session-
+   sourced by nature. Since `variance = surplus − shortage`, only a
+   session-based shortage puts both halves of that subtraction on one basis.
+   `productsCounted` and `shortageCount` are session-only facts as well: no
+   adjustment row knows how many products someone counted.
+3. The card would otherwise carry two bases without saying so — exactly the
+   failure `stockCountAdjustmentsKobo`'s own dartdoc already named when it
+   deferred a real basis change to "#186".
+
+**Cumulative shrinkage is not lost, and that is why the stock card was left
+alone.** "Count corrections" still sums *every* count of *every* day at current
+cost, so the day-total view survives — it is now the only place it lives, and
+the card and the export label it as such. The flow-equation terms keep current
+cost for the reason this ADR always gave: `stockDerivedClosingKobo` ties to the
+rewound perpetual figure only while every term shares one basis, and breaking
+that tie-out would be a worse failure than the one #186 fixed.
+
+**Implementation note, because it constrains future changes.**
+`stock_adjustments` has no `count_id`, and #186 deliberately added none — that
+would be a Drift + cloud migration for a reporting question. A row is attributed
+to a session by a `created_at` window instead: the save loop writes each changed
+line's adjustment immediately *before* `recordCount`, so a row belongs to the
+earliest session of its own store whose `created_at` is not before the row's.
+Its known imperfections (a save whose session never landed, two saves inside one
+second, a null-store session) are documented at
+`countShortageRowsBySession`, and a session with no attributable rows falls back
+to valuing its own count lines at current cost — **counted and labelled** through
+the existing `legacyValuedShortageRows` footnote (#200 / PRD #155 US 20), so
+money and units can never disagree about whether a shortage happened at all.
