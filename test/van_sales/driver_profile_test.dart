@@ -16,7 +16,9 @@
 //   · the crate tab's numbers are the trip's own shell memo columns, for an
 //     open trip and a closed one alike, and they agree with the position the
 //     reconcile screen computes (spec §11);
-//   · the period selector scopes the HISTORY and leaves the balance alone.
+//   · the period selector scopes the HISTORY and leaves the balance alone;
+//   · the header names a van from the TRIPS, and falls back to the driver's
+//     current van assignment only when the trips name nothing (#208 item 3).
 //
 // In-memory Drift via bootstrapTestDb(); same style as van_close_test.dart.
 
@@ -24,7 +26,9 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/van_sales/driver_vans.dart';
 
 import '../helpers/dispatch_test_utils.dart';
 
@@ -652,6 +656,82 @@ void main() {
       // states the loss and deliberately does not value it (spec §11).
       expect(await db.driverLedgerDao.getBalanceKobo(driverId), 0);
       expect(await db.select(db.crateLedger).get(), isEmpty);
+    });
+  });
+
+  // ── The profile header's van line (#208 item 3) ───────────────────────────
+
+  group('which van the header names', () {
+    Future<void> assign(String storeId) async {
+      await db
+          .into(db.userStores)
+          .insert(
+            UserStoresCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: businessId,
+              userId: driverId,
+              storeId: storeId,
+            ),
+          );
+    }
+
+    /// storeId → name over the business's VANS only — the shape the profile
+    /// builds from `vansProvider`, and what keeps a non-van assignment out of
+    /// the header without the caller filtering `user_stores` itself.
+    Future<Map<String, String>> vanNames() async {
+      final stores = await db.select(db.stores).get();
+      return {
+        for (final s in stores)
+          if (isVanStore(s)) s.id: s.name,
+      };
+    }
+
+    /// The header line, resolved exactly the way the screen resolves it.
+    Future<String> headerVanLine() async {
+      final names = await vanNames();
+      final assignments = await db.userStoresDao.watchForUser(driverId).first;
+      return driverVanSummary(
+        resolveDriverVanNames(
+          trips: await db.vanTripsDao.watchTripsForDriver(driverId).first,
+          vanNameById: names,
+          assignedVanStoreIds: [
+            for (final a in assignments)
+              if (names.containsKey(a.storeId)) a.storeId,
+          ],
+        ),
+      );
+    }
+
+    test('a dormant driver — every trip out of the local pull window — is '
+        'named by the van they are assigned to, not "No van yet"', () async {
+      // The device holds no trip for this driver: they last drove long before
+      // the pull window opens. The assignment is all that is left locally.
+      expect(
+        await db.vanTripsDao.watchTripsForDriver(driverId).first,
+        isEmpty,
+      );
+      await assign(vanA);
+
+      expect(await headerVanLine(), 'Van 1');
+    });
+
+    test('trips stay primary — a driver who ran one van while assigned to '
+        'another is named by the van they DROVE', () async {
+      await stockWithBatch(warehouseId, 200);
+      await loadVan(van: vanB);
+      await assign(vanA);
+
+      expect(await headerVanLine(), 'Van 2');
+    });
+
+    test('a non-van assignment is never read as a van', () async {
+      await assign(warehouseId);
+
+      expect(await headerVanLine(), 'No van yet');
+    });
+
+    test('no trips and no assignment is still "No van yet"', () async {
+      expect(await headerVanLine(), 'No van yet');
     });
   });
 

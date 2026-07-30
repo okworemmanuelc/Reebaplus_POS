@@ -85,6 +85,45 @@ class VanPositionReturn {
   bool get isGood => condition == kVanReturnConditionGood;
 }
 
+/// One manufacturer's empty-crate shells on the trip, with the deposit rate
+/// they are valued at (#207, spec §11, ADR 0019's deferred crate pass).
+///
+/// **Why the grain is the manufacturer and not the lot or the product.** The
+/// deposit rate is `Manufacturers.deposit_amount_kobo` — canonical per brand,
+/// with `Products.empty_crate_value_kobo` only mirroring it — so a rate keyed
+/// any finer would be the same number written down several times, free to
+/// drift. More importantly the *floor* has to be applied at this grain:
+/// **shells of one brand are fungible**. A driver who carries out 40 Star
+/// shells on a morning lot and 20 more on an afternoon restock, and brings 55
+/// back, has lost 5 Star shells — not "0 on one lot and 5 on the other", and
+/// certainly not a loss on one Star product cancelled by a surplus on another.
+/// This is the same reasoning `CrateShortfall` states for the supplier side:
+/// crates are fungible, and a number that guesses which crate went missing is a
+/// number someone will dispute.
+///
+/// [shellsOut] and [shellsBack] are the memo counts v1 already writes
+/// (`van_trip_lots.shells_out`, `van_return_events.shells_back`), grouped by
+/// the product's manufacturer. Lines that repeat a [manufacturerId] are folded
+/// together **before** the floor is applied, so a caller may pass one line per
+/// lot or one line per brand and get the same answer.
+///
+/// [depositRateKobo] is what one shell of this brand is worth. 0 is legitimate
+/// — a manufacturer with no deposit configured, or a business that does not run
+/// deposits at all — and simply means the loss is counted but not valued.
+class VanPositionShellLine {
+  final String manufacturerId;
+  final int shellsOut;
+  final int shellsBack;
+  final int depositRateKobo;
+
+  const VanPositionShellLine({
+    required this.manufacturerId,
+    this.shellsOut = 0,
+    this.shellsBack = 0,
+    this.depositRateKobo = 0,
+  });
+}
+
 /// One driver-ledger row (`driver_ledger_entries`), reduced to the two fields
 /// the position needs: what kind of money movement it was, and which way.
 class VanPositionLedgerEntry {
@@ -125,6 +164,34 @@ class VanShortageLine {
     required this.valueKobo,
     required this.costKobo,
     required this.loadPricesKobo,
+  });
+}
+
+/// One manufacturer's shells that went out and did not come back, valued at
+/// that brand's deposit rate (#207).
+///
+/// **Disclosure only.** See [VanTripPosition.shellsLostValueKobo] — this line
+/// is a statement about crates, not a debt. Nothing here reaches the driver's
+/// balance.
+class VanShellLossLine {
+  final String manufacturerId;
+
+  /// `shellsOut − shellsBack` for this brand, **floored at 0**: bringing back
+  /// more shells than went out is a surplus, not a negative loss, and a
+  /// surplus on one brand never nets off a loss on another.
+  final int units;
+
+  /// `Manufacturers.deposit_amount_kobo` for this brand, as supplied.
+  final int depositRateKobo;
+
+  /// `units × depositRateKobo`.
+  final int valueKobo;
+
+  const VanShellLossLine({
+    required this.manufacturerId,
+    required this.units,
+    required this.depositRateKobo,
+    required this.valueKobo,
   });
 }
 
@@ -224,6 +291,37 @@ class VanTripPosition {
   final int shellsOut;
   final int shellsBack;
 
+  // ── Shell loss, valued (#207) ────────────────────────────────────────────
+  /// Shells that went out and did not come back, summed over the brands in
+  /// [shellLosses] — so the floor is applied **per manufacturer** before the
+  /// sum (a surplus of one brand's shells does not pay for another's loss).
+  ///
+  /// This is not the same quantity as [shellsDifference], and deliberately so:
+  /// that one is the trip's raw memo arithmetic, unfloored and unattributed,
+  /// and it goes negative when more shells come back than went out. Where a
+  /// trip carries one brand and the memo totals agree with the lines, the two
+  /// agree. 0 when the caller supplies no shell lines, which is every caller
+  /// until the crate-cargo slice of #207 wires them.
+  final int shellsLostUnits;
+
+  /// **Disclosure only.** [shellsLostUnits] at the manufacturer deposit rate —
+  /// the ~₦63,000 of shells the spec §6.3 worked trip loses while closing at
+  /// "balance 0 = settled" (spec §11, ADR 0019).
+  ///
+  /// It is deliberately **outside every money identity in this class**. It is
+  /// not in [balanceKobo], not in [outstandingKobo], not in [shortageOwedKobo],
+  /// not in [cogsKobo] and not in [profitKobo]. Whether a driver actually OWES
+  /// for a lost shell is a money-model decision — it would need a driver-ledger
+  /// entry type, a write-off path and an amendment to ADR 0019 — and until that
+  /// decision is taken and booked, this figure states the exposure without
+  /// asserting a debt. A screen adds it to a total at its peril: the tie-out
+  /// `outstanding == −balance` is what would break.
+  final int shellsLostValueKobo;
+
+  /// Per-manufacturer detail behind [shellsLostValueKobo], largest value first.
+  /// Brands that lost nothing are absent.
+  final List<VanShellLossLine> shellLosses;
+
   final List<VanShortageLine> shortages;
 
   const VanTripPosition({
@@ -257,13 +355,22 @@ class VanTripPosition {
     required this.profitKobo,
     required this.shellsOut,
     required this.shellsBack,
+    this.shellsLostUnits = 0,
+    this.shellsLostValueKobo = 0,
+    this.shellLosses = const [],
     required this.shortages,
   });
 
-  /// Shells that went out and did not come back (spec §11). Surfaced, never
-  /// valued in v1 — the point of the memo is that a trip cannot close at
-  /// "balance 0 = settled" having silently lost every crate.
+  /// Shells that went out and did not come back (spec §11) — the trip's raw
+  /// memo arithmetic, which goes negative when more came back than went out.
+  /// The point of the memo is that a trip cannot close at "balance 0 = settled"
+  /// having silently lost every crate. For the floored, per-brand, valued
+  /// answer see [shellsLostUnits] / [shellsLostValueKobo].
   int get shellsDifference => shellsOut - shellsBack;
+
+  /// True when any brand's shells went out and did not come back — the
+  /// reconcile screen's condition for showing the shell-loss line at all.
+  bool get hasShellLoss => shellsLostUnits > 0;
 
   /// True when the driver owes nothing and is owed nothing.
   bool get isSettled => balanceKobo == 0;
@@ -301,6 +408,13 @@ class VanTripPosition {
 /// `loaded = good returns + damage + sold + shortage` true by construction at
 /// both the total and the per-product level, and makes the tie-out exact even
 /// when a restock repriced a product mid-run.
+///
+/// [shells] is the crate-shell memo grouped by manufacturer, carrying the
+/// deposit rate each brand's shells are valued at (#207, spec §11). It is
+/// **read and reported, and it enters nothing else in this function** — no
+/// balance, no outstanding, no COGS, no profit. See
+/// [VanTripPosition.shellsLostValueKobo] for why that is a decision and not an
+/// omission.
 VanTripPosition computeVanTripPosition({
   required List<VanPositionLot> lots,
   required List<VanPositionSaleLine> sales,
@@ -308,6 +422,7 @@ VanTripPosition computeVanTripPosition({
   required List<VanPositionLedgerEntry> ledger,
   int shellsOut = 0,
   int shellsBack = 0,
+  List<VanPositionShellLine> shells = const [],
 }) {
   // ── Group by product; the FIFO order is the dispatch order. ──────────────
   final lotsByProduct = <String, List<VanPositionLot>>{};
@@ -489,6 +604,56 @@ VanTripPosition computeVanTripPosition({
   final cogsKobo = loadedCostKobo - goodReturnCostKobo;
   final recoveredKobo = remittedKobo + goodReturnValueKobo;
 
+  // ── Shell loss at the manufacturer deposit rate (#207). ──────────────────
+  // Read the money constraint on [VanTripPosition.shellsLostValueKobo] before
+  // touching this block: nothing computed here may reach `balance`,
+  // `outstanding`, the three-way split, `cogs` or `profit`. It is a statement
+  // about crates that left and did not return, sitting BESIDE the settlement
+  // rather than inside it — exactly as `shortageLossKobo` and `damageLossKobo`
+  // sit beside COGS.
+  //
+  // Fold by manufacturer first, THEN floor: shells of one brand are fungible
+  // across lots, so a shortfall on the morning lot and a surplus on the
+  // afternoon restock are one net figure, while a surplus of one BRAND never
+  // pays for the loss of another.
+  final shellsOutBy = <String, int>{};
+  final shellsBackBy = <String, int>{};
+  final shellRateBy = <String, int>{};
+  for (final s in shells) {
+    shellsOutBy[s.manufacturerId] =
+        (shellsOutBy[s.manufacturerId] ?? 0) + s.shellsOut;
+    shellsBackBy[s.manufacturerId] =
+        (shellsBackBy[s.manufacturerId] ?? 0) + s.shellsBack;
+    // The rate belongs to the brand, so repeated lines carry the same number;
+    // the first non-zero one wins rather than the last, so a line that omits
+    // the rate cannot blank out one that supplied it.
+    if ((shellRateBy[s.manufacturerId] ?? 0) == 0) {
+      shellRateBy[s.manufacturerId] = s.depositRateKobo;
+    }
+  }
+  var shellsLostUnits = 0;
+  var shellsLostValueKobo = 0;
+  final shellLosses = <VanShellLossLine>[];
+  for (final entry in shellsOutBy.entries) {
+    final lost = _max0(entry.value - (shellsBackBy[entry.key] ?? 0));
+    if (lost == 0) continue;
+    final rateKobo = shellRateBy[entry.key] ?? 0;
+    shellsLostUnits += lost;
+    shellsLostValueKobo += lost * rateKobo;
+    shellLosses.add(
+      VanShellLossLine(
+        manufacturerId: entry.key,
+        units: lost,
+        depositRateKobo: rateKobo,
+        valueKobo: lost * rateKobo,
+      ),
+    );
+  }
+  shellLosses.sort((a, b) {
+    final byValue = b.valueKobo.compareTo(a.valueKobo);
+    return byValue != 0 ? byValue : a.manufacturerId.compareTo(b.manufacturerId);
+  });
+
   return VanTripPosition(
     loadedUnits: loadedUnits,
     soldUnits: soldUnits,
@@ -523,6 +688,11 @@ VanTripPosition computeVanTripPosition({
     profitKobo: recoveredKobo - cogsKobo,
     shellsOut: shellsOut,
     shellsBack: shellsBack,
+    // Disclosure. Deliberately absent from `outstanding`, `balance`, the
+    // three-way split and `profit` above — see the field's own doc.
+    shellsLostUnits: shellsLostUnits,
+    shellsLostValueKobo: shellsLostValueKobo,
+    shellLosses: List.unmodifiable(shellLosses),
     shortages: List.unmodifiable(shortages),
   );
 }

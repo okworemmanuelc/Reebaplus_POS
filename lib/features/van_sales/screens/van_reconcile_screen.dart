@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/record_driver_payment_sheet.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_close_barrier.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_write_off_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
@@ -37,9 +38,10 @@ import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 ///     to a crate business; empties are a Bar/Beverage concept.
 ///  5. **The four things a manager can still do**: log the final return, record
 ///     a final payment, write off a shortage or a damage.
-///  6. **Confirm & close**, which warns first if this device still has road
-///     sales in its outbox — you do not assign blame from an incomplete
-///     picture.
+///  6. **Confirm & close**, which is *disabled* while this device still has
+///     road sales in its outbox — you do not assign blame from an incomplete
+///     picture. [VanCloseBarrier] owns that rule and the explicit "Close
+///     anyway" override behind it (#208 item 5, spec §7.4).
 ///
 /// Gated `Gates.vanManage` at the drawer, the hub, this body, and every write's
 /// fire time. A Driver holds `van.sell` and never this (spec §9.5 #21).
@@ -134,29 +136,15 @@ class VanReconcileScreen extends ConsumerWidget {
           if (isOpen) ...[
             _actions(context, ref, trip, position),
             SizedBox(height: context.getRSize(20)),
-            if (pendingSales > 0)
-              _PendingSalesWarning(count: pendingSales, lex: lex),
-            if (pendingSales > 0) SizedBox(height: context.getRSize(12)),
-            Guarded(
-              gate: Gates.vanManage,
-              builder: (context, allow) => SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: allow(
-                    () => _confirmAndClose(
-                      context,
-                      ref,
-                      trip: trip,
-                      position: position,
-                      pendingSales: pendingSales,
-                    ),
-                  ),
-                  icon: Icon(
-                    FontAwesomeIcons.flagCheckered.data,
-                    size: context.getRSize(14),
-                  ),
-                  label: const Text('Confirm & close trip'),
-                ),
+            VanCloseBarrier(
+              pendingSales: pendingSales,
+              lex: lex,
+              onClose: () => _confirmAndClose(
+                context,
+                ref,
+                trip: trip,
+                position: position,
+                pendingSales: pendingSales,
               ),
             ),
           ] else
@@ -267,6 +255,13 @@ class VanReconcileScreen extends ConsumerWidget {
   /// trade has empties to lose), the residual that will follow the driver
   /// rather than the trip (§9.4 #14), and — when this device still holds
   /// un-pushed road sales — that the picture may be incomplete (§7.4).
+  ///
+  /// When the outbox is dirty this dialog **is** the override confirmation
+  /// [VanCloseBarrier] hands off to (#208 item 5): the title asks the real
+  /// question, the outbox paragraph leads instead of trailing, and the
+  /// affirmative action is labelled "Close anyway" so the manager is agreeing
+  /// to the risk rather than dismissing a notice. A second dialog stacked on
+  /// this one would be noise — it is the same decision, asked twice.
   Future<void> _confirmAndClose(
     BuildContext context,
     WidgetRef ref, {
@@ -280,14 +275,38 @@ class VanReconcileScreen extends ConsumerWidget {
     // Same gate as the body's shell memo card — a trade that deals in no
     // empties is not asked to confirm a shell count before closing.
     final tracksCrates = businessTracksCrates(ref.read(currentBusinessProvider));
+    final overriding = pendingSales > 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Close this trip?'),
+        title: Text(
+          overriding ? 'Close on an incomplete picture?' : 'Close this trip?',
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Leads when it applies: the manager is being asked to accept this,
+            // not to notice it on the way past.
+            if (overriding) ...[
+              Text(
+                '$pendingSales road '
+                '${pendingSales == 1 ? 'sale has' : 'sales have'} not synced '
+                'from this device yet. Until they go up those '
+                '${lex.itemPluralLower} count as missing and $driverName looks '
+                'liable for them — so this settles on an incomplete picture.',
+                style: t.textTheme.bodyMedium?.copyWith(color: semantic.warning),
+              ),
+              SizedBox(height: context.getRSize(10)),
+              Text(
+                'Waiting for the sync to clear is the safer answer. Closing now '
+                'is allowed because sync can stay down for days: a sale that '
+                'arrives later posts its own correction to $driverName\'s '
+                'balance rather than reopening the trip.',
+                style: t.textTheme.bodySmall?.copyWith(color: t.hintColor),
+              ),
+              SizedBox(height: context.getRSize(10)),
+            ],
             if (tracksCrates) ...[
               Text(
                 'Loaded with ${position.shellsOut} '
@@ -309,18 +328,6 @@ class VanReconcileScreen extends ConsumerWidget {
                         'That credit follows them to their next trip.',
               style: t.textTheme.bodyMedium,
             ),
-            if (pendingSales > 0) ...[
-              SizedBox(height: context.getRSize(10)),
-              Text(
-                'This device still has $pendingSales road '
-                '${pendingSales == 1 ? 'sale' : 'sales'} waiting to sync. Until '
-                'they go up, those ${lex.itemPluralLower} count as missing and '
-                'the driver looks liable for them.',
-                style: t.textTheme.bodyMedium?.copyWith(
-                  color: semantic.warning,
-                ),
-              ),
-            ],
             SizedBox(height: context.getRSize(10)),
             Text(
               'Once closed the trip cannot be edited — any correction after '
@@ -334,11 +341,14 @@ class VanReconcileScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Not yet'),
+            child: Text(overriding ? 'Wait for sync' : 'Not yet'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Close trip'),
+            style: overriding
+                ? FilledButton.styleFrom(backgroundColor: semantic.warning)
+                : null,
+            child: Text(overriding ? 'Close anyway' : 'Close trip'),
           ),
         ],
       ),
@@ -663,50 +673,6 @@ class _UncostedCard extends StatelessWidget {
             'Record what those ${lex.itemPluralLower} cost you, then this trip '
             'can be reconciled again on a true profit.',
             style: t.textTheme.bodySmall?.copyWith(color: semantic.warning),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The close-vs-outbox barrier, shown before the button rather than only in the
-/// dialog — a manager should see the caveat while they are still reading the
-/// figures it affects.
-class _PendingSalesWarning extends StatelessWidget {
-  final int count;
-  final Lexicon lex;
-
-  const _PendingSalesWarning({required this.count, required this.lex});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final semantic = t.extension<AppSemanticColors>()!;
-    return Container(
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: semantic.warning.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(context.getRSize(12)),
-        border: Border.all(color: semantic.warning.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            FontAwesomeIcons.cloudArrowUp.data,
-            size: context.getRSize(16),
-            color: semantic.warning,
-          ),
-          SizedBox(width: context.getRSize(12)),
-          Expanded(
-            child: Text(
-              '$count road ${count == 1 ? 'sale is' : 'sales are'} still '
-              'waiting to sync from this device. Until they go up those '
-              '${lex.itemPluralLower} count as missing.',
-              style: t.textTheme.bodySmall?.copyWith(
-                color: t.colorScheme.onSurface,
-              ),
-            ),
           ),
         ],
       ),

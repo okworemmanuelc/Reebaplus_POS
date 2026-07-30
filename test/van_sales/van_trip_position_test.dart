@@ -84,6 +84,26 @@ VanPositionReturn _damaged({
   costKobo: costKobo ?? quantity * _unitCost,
 );
 
+// #207 — the deposit rate is per MANUFACTURER (`Manufacturers`
+// `.depositAmountKobo` is canonical; `Products.emptyCrateValueKobo` mirrors it),
+// so the shell inputs are keyed by brand, not by product or by lot.
+const _starBrand = 'mfr-star';
+const _gulderBrand = 'mfr-gulder';
+const _starShellRate = 180000; // ₦1,800 deposit per crate
+const _gulderShellRate = 250000; // ₦2,500 — a second brand, a different rate
+
+VanPositionShellLine _shells({
+  String manufacturerId = _starBrand,
+  int out = 0,
+  int back = 0,
+  int depositRateKobo = _starShellRate,
+}) => VanPositionShellLine(
+  manufacturerId: manufacturerId,
+  shellsOut: out,
+  shellsBack: back,
+  depositRateKobo: depositRateKobo,
+);
+
 VanPositionLedgerEntry _debit(String type, int amountKobo) =>
     VanPositionLedgerEntry(type: type, signedAmountKobo: -amountKobo);
 
@@ -618,4 +638,286 @@ void main() {
       _assertInvariants(p, label: 'uncosted, all returned');
     });
   });
+
+  group('#207 — shell loss valued at the manufacturer deposit rate', () {
+    // A trip that settles EXACTLY: 10 loaded, 10 sold, every naira handed in.
+    // Every money figure on it is 0 or fully covered, which is what makes it
+    // the right fixture for the valuation — a shell value that leaked into the
+    // settlement would be impossible to miss, and it is the literal §11 case:
+    // "balance 0 = settled" while the shells never came back.
+    VanTripPosition settledWithShells(
+      List<VanPositionShellLine> shells, {
+      int shellsOut = 0,
+      int shellsBack = 0,
+    }) => computeVanTripPosition(
+      lots: [_lot(lotId: 'l1', quantity: 10)],
+      sales: [_sale(quantity: 10)],
+      returns: const [],
+      ledger: [
+        _debit(kDriverLedgerTypeLoad, 10 * _loadPrice),
+        _credit(kDriverLedgerTypePaymentCash, 10 * _loadPrice),
+      ],
+      shellsOut: shellsOut,
+      shellsBack: shellsBack,
+      shells: shells,
+    );
+
+    // The same trip, but the driver is short: 10 out, 8 sold, 1 good back, 1
+    // damaged, ₦57,500 remitted against ₦92,000 of takings. Balance −₦46,000.
+    VanTripPosition owingWithShells(List<VanPositionShellLine> shells) =>
+        computeVanTripPosition(
+          lots: [_lot(lotId: 'l1', quantity: 10)],
+          sales: [_sale(quantity: 8)],
+          returns: [_good(quantity: 1), _damaged(quantity: 1)],
+          ledger: [
+            _debit(kDriverLedgerTypeLoad, 10 * _loadPrice),
+            _credit(kDriverLedgerTypeReturnGood, 1 * _loadPrice),
+            _credit(kDriverLedgerTypePaymentCash, 5 * _loadPrice),
+          ],
+          shells: shells,
+        );
+
+    test('35 shells never came back — ₦63,000, on a trip that says settled', () {
+      // Spec §11 / ADR 0019, made into money: the §6.3 worked trip's shell
+      // memo, now at ₦1,800 a crate.
+      final p = settledWithShells([
+        _shells(out: 100, back: 65),
+      ], shellsOut: 100, shellsBack: 65);
+
+      expect(p.shellsLostUnits, 35);
+      expect(p.shellsLostValueKobo, 6300000); // ₦63,000
+      expect(p.hasShellLoss, isTrue);
+      expect(p.shellLosses, hasLength(1));
+      final line = p.shellLosses.single;
+      expect(line.manufacturerId, _starBrand);
+      expect(line.units, 35);
+      expect(line.depositRateKobo, _starShellRate);
+      expect(line.valueKobo, 6300000);
+      expect(
+        p.isSettled,
+        isTrue,
+        reason:
+            'the whole point of §11: the ledger says settled while ₦63,000 of '
+            'deposit value drove off and did not come back',
+      );
+      _assertInvariants(p, label: 'shell loss on a settled trip');
+    });
+
+    test('every shell back is nothing to disclose', () {
+      final p = settledWithShells([
+        _shells(out: 40, back: 40),
+      ], shellsOut: 40, shellsBack: 40);
+
+      expect(p.shellsLostUnits, 0);
+      expect(p.shellsLostValueKobo, 0);
+      expect(p.hasShellLoss, isFalse);
+      expect(
+        p.shellLosses,
+        isEmpty,
+        reason: 'a brand that lost nothing gets no line',
+      );
+      _assertInvariants(p, label: 'no shell loss');
+    });
+
+    test('more shells back than out is a surplus, never a negative loss', () {
+      // A driver who collects strays off the route brings back more than they
+      // took. That is not a −₦27,000 credit against the business.
+      final p = settledWithShells([
+        _shells(out: 40, back: 55),
+      ], shellsOut: 40, shellsBack: 55);
+
+      expect(p.shellsLostUnits, 0);
+      expect(p.shellsLostValueKobo, 0);
+      expect(p.shellLosses, isEmpty);
+      expect(
+        p.shellsDifference,
+        -15,
+        reason:
+            'the raw memo still reports the surplus — it is the VALUED figure '
+            'that floors, so no screen can read a negative loss as money owed '
+            'to the driver',
+      );
+      _assertInvariants(p, label: 'shell surplus');
+    });
+
+    test('a mixed-brand load values each brand at its own rate', () {
+      // Star ₦1,800, Gulder ₦2,500 — one weighted average across the load
+      // would be wrong in kobo for both.
+      final p = settledWithShells([
+        _shells(out: 60, back: 40), // 20 lost × ₦1,800 = ₦36,000
+        _shells(
+          manufacturerId: _gulderBrand,
+          out: 30,
+          back: 25,
+          depositRateKobo: _gulderShellRate,
+        ), // 5 lost × ₦2,500 = ₦12,500
+      ], shellsOut: 90, shellsBack: 65);
+
+      expect(p.shellsLostUnits, 25);
+      expect(p.shellsLostValueKobo, 4850000); // ₦48,500
+      expect(p.shellLosses, hasLength(2));
+      expect(
+        p.shellLosses.map((l) => l.manufacturerId),
+        [_starBrand, _gulderBrand],
+        reason: 'largest value first, like the shortage lines',
+      );
+      expect(p.shellLosses.first.valueKobo, 3600000); // ₦36,000
+      expect(p.shellLosses.last.valueKobo, 1250000); // ₦12,500
+      expect(p.shellLosses.last.depositRateKobo, _gulderShellRate);
+      _assertInvariants(p, label: 'mixed-brand shell loss');
+    });
+
+    test('one brand’s surplus never pays for another brand’s loss', () {
+      // Shells are fungible WITHIN a brand and not across it — a Gulder crate
+      // does not replace a Star crate. The trip memo nets to zero here and
+      // would report a clean trip; the valued figure does not.
+      final p = settledWithShells([
+        _shells(out: 40, back: 10), // 30 Star lost
+        _shells(
+          manufacturerId: _gulderBrand,
+          out: 10,
+          back: 40, // 30 Gulder surplus
+          depositRateKobo: _gulderShellRate,
+        ),
+      ], shellsOut: 50, shellsBack: 50);
+
+      expect(
+        p.shellsDifference,
+        0,
+        reason: 'the unattributed memo cancels the two brands out',
+      );
+      expect(p.shellsLostUnits, 30);
+      expect(p.shellsLostValueKobo, 5400000); // 30 × ₦1,800 = ₦54,000
+      expect(p.shellLosses, hasLength(1));
+      expect(p.shellLosses.single.manufacturerId, _starBrand);
+      _assertInvariants(p, label: 'cross-brand surplus');
+    });
+
+    test('lines repeating a brand fold together before the floor', () {
+      // The caller may pass one line per lot and one per return event — the
+      // grain `van_trip_lots` and `van_return_events` actually store — and get
+      // the same answer as one pre-grouped line per brand. Shells of one brand
+      // are fungible across the lots they rode out on.
+      final p = settledWithShells([
+        _shells(out: 40), // morning lot
+        _shells(out: 20), // afternoon restock
+        _shells(back: 55), // one return event
+      ], shellsOut: 60, shellsBack: 55);
+
+      expect(p.shellsLostUnits, 5);
+      expect(p.shellsLostValueKobo, 900000); // ₦9,000
+      expect(
+        p.shellLosses,
+        hasLength(1),
+        reason: 'one brand is one line however many lots it rode out on',
+      );
+      _assertInvariants(p, label: 'folded shell lines');
+    });
+
+    test('a brand with no deposit configured is counted, never valued', () {
+      final p = settledWithShells([
+        _shells(out: 10, depositRateKobo: 0),
+      ], shellsOut: 10);
+
+      expect(p.shellsLostUnits, 10);
+      expect(p.shellsLostValueKobo, 0);
+      expect(p.hasShellLoss, isTrue);
+      expect(
+        p.shellLosses.single.valueKobo,
+        0,
+        reason:
+            'a business that runs no deposits still gets the count — silence '
+            'would be the §11 failure all over again',
+      );
+      _assertInvariants(p, label: 'unpriced shells');
+    });
+
+    test('the valuation is DISCLOSURE ONLY — it moves no money figure', () {
+      // The constraint the whole slice hangs on. Whether a driver OWES for a
+      // lost shell is a money-model decision that amends ADR 0019 and has not
+      // been taken. Until it is, this figure states the exposure beside the
+      // settlement, exactly as `shortageLossKobo` / `damageLossKobo` state
+      // theirs beside COGS.
+      const figures = <String, int Function(VanTripPosition)>{
+        'balanceKobo': _balance,
+        'outstandingKobo': _outstanding,
+        'unremittedCashKobo': _unremitted,
+        'shortageOwedKobo': _shortageOwed,
+        'damageOwedKobo': _damageOwed,
+        'residualCreditKobo': _residualCredit,
+        'shortageValueKobo': _shortageValue,
+        'damageValueKobo': _damageValue,
+        'soldValueKobo': _soldValue,
+        'loadedValueKobo': _loadedValue,
+        'goodReturnValueKobo': _goodReturnValue,
+        'recoveredKobo': _recovered,
+        'cogsKobo': _cogs,
+        'profitKobo': _profit,
+        'shortageLossKobo': _shortageLoss,
+        'damageLossKobo': _damageLoss,
+      };
+
+      final cases = <String, (VanTripPosition, VanTripPosition)>{
+        // A trip that owes: the shell value must not join the debt…
+        'owing': (
+          owingWithShells(const []),
+          owingWithShells([_shells(out: 100, back: 65)]),
+        ),
+        // …and a trip that owes nothing must not be dragged into owing.
+        'settled': (
+          settledWithShells(const []),
+          settledWithShells([_shells(out: 100, back: 65)]),
+        ),
+      };
+
+      for (final c in cases.entries) {
+        final (without, withShells) = c.value;
+        expect(
+          withShells.shellsLostValueKobo,
+          6300000,
+          reason: '${c.key}: the fixture must actually value something',
+        );
+        expect(without.shellsLostValueKobo, 0);
+        for (final f in figures.entries) {
+          expect(
+            f.value(withShells),
+            f.value(without),
+            reason:
+                '${c.key}: ${f.key} moved when shell lines were added. The '
+                'shell valuation is disclosure only (#207) — folding it into '
+                'the settlement breaks outstanding == −balance and charges a '
+                'driver for a debt nobody has decided they owe.',
+          );
+        }
+        _assertInvariants(withShells, label: '${c.key} with shells');
+        _assertInvariants(without, label: '${c.key} without shells');
+      }
+
+      // Named once, so the guard is not only a loop: the driver owes ₦46,000
+      // for goods, and not one kobo more for the ₦63,000 of missing shells.
+      final owing = cases['owing']!.$2;
+      expect(owing.balanceKobo, -4 * _loadPrice); // −₦46,000
+      expect(owing.outstandingKobo, 4 * _loadPrice);
+      expect(owing.shellsLostValueKobo, 6300000);
+    });
+  });
 }
+
+// Field readers for the disclosure guard above. Top-level so the map can be
+// `const` — closures cannot be.
+int _balance(VanTripPosition p) => p.balanceKobo;
+int _outstanding(VanTripPosition p) => p.outstandingKobo;
+int _unremitted(VanTripPosition p) => p.unremittedCashKobo;
+int _shortageOwed(VanTripPosition p) => p.shortageOwedKobo;
+int _damageOwed(VanTripPosition p) => p.damageOwedKobo;
+int _residualCredit(VanTripPosition p) => p.residualCreditKobo;
+int _shortageValue(VanTripPosition p) => p.shortageValueKobo;
+int _damageValue(VanTripPosition p) => p.damageValueKobo;
+int _soldValue(VanTripPosition p) => p.soldValueKobo;
+int _loadedValue(VanTripPosition p) => p.loadedValueKobo;
+int _goodReturnValue(VanTripPosition p) => p.goodReturnValueKobo;
+int _recovered(VanTripPosition p) => p.recoveredKobo;
+int _cogs(VanTripPosition p) => p.cogsKobo;
+int _profit(VanTripPosition p) => p.profitKobo;
+int _shortageLoss(VanTripPosition p) => p.shortageLossKobo;
+int _damageLoss(VanTripPosition p) => p.damageLossKobo;

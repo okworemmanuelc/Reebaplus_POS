@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/driver_directory.dart';
+import 'package:reebaplus_pos/core/van_sales/driver_vans.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/driver_ledger_entry_tile.dart';
@@ -151,6 +152,18 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       for (final v in ref.watch(vansProvider)) v.id: v.name,
     };
 
+    // The header's fallback source (#208 item 3). Filtered through
+    // [vanNameById] — which holds vans and nothing else — so a warehouse
+    // assignment can never be read as a van. It is only consulted when the
+    // trips name nothing, which is the long-dormant-driver case: every trip
+    // they ever ran fell out of the local pull window.
+    final assignedVanStoreIds = [
+      for (final s
+          in ref.watch(myUserStoresProvider(widget.driverUserId)).valueOrNull ??
+              const <UserStoreData>[])
+        if (vanNameById.containsKey(s.storeId)) s.storeId,
+    ];
+
     // Everything below the balance card is period-scoped; the balance is not.
     // See the class doc comment.
     final periodTrips = [
@@ -184,6 +197,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                 standing: standing,
                 trips: trips,
                 vanNameById: vanNameById,
+                assignedVanStoreIds: assignedVanStoreIds,
                 joinedAt: _driverSince(trips),
               ),
             ),
@@ -425,6 +439,11 @@ class _Header extends StatelessWidget {
   final DriverStanding? standing;
   final List<VanTripData> trips;
   final Map<String, String> vanNameById;
+
+  /// The driver's current van assignments — the fallback the header falls back
+  /// to when the trips name nothing. See [resolveDriverVanNames].
+  final List<String> assignedVanStoreIds;
+
   final DateTime? joinedAt;
 
   const _Header({
@@ -432,6 +451,7 @@ class _Header extends StatelessWidget {
     required this.standing,
     required this.trips,
     required this.vanNameById,
+    required this.assignedVanStoreIds,
     required this.joinedAt,
   });
 
@@ -442,23 +462,16 @@ class _Header extends StatelessWidget {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
-  /// The vans this driver has actually run, most recent first — not the
-  /// `user_stores` assignment.
-  ///
-  /// A removed driver's store assignments are gone with their membership, and
-  /// an assignment says only where they *may* go. The trips say where they
-  /// *went*, which is what a manager reading a money screen needs.
-  String get _vans {
-    final seen = <String>[];
-    for (final t in trips) {
-      final name = vanNameById[t.vanStoreId];
-      if (name == null || name.isEmpty || seen.contains(name)) continue;
-      seen.add(name);
-    }
-    if (seen.isEmpty) return 'No van yet';
-    if (seen.length <= 2) return seen.join(' • ');
-    return '${seen.take(2).join(' • ')} +${seen.length - 2} more';
-  }
+  /// The vans this driver has actually run, most recent first, falling back to
+  /// their current assignment only when the trips name nothing (#208 item 3).
+  /// The rule and its ordering live in [resolveDriverVanNames].
+  String get _vans => driverVanSummary(
+    resolveDriverVanNames(
+      trips: trips,
+      vanNameById: vanNameById,
+      assignedVanStoreIds: assignedVanStoreIds,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {

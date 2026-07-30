@@ -1,12 +1,6 @@
-import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:screenshot/screenshot.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -20,10 +14,8 @@ import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_run_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
-import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_receipt_view.dart';
 
 /// The **driver terminal** (#142, PRD #139 / ADR 0019, van-sales spec §9.2).
 ///
@@ -70,13 +62,10 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
   /// which could be re-enabled by accident if the terminal shared it.
   final Map<String, int> _units = {};
 
-  final ScreenshotController _shot = ScreenshotController();
-
   /// Set once a sale is rung — flips this screen to its receipt.
   _RoadSale? _lastSale;
 
   bool _ringing = false;
-  bool _printing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -92,11 +81,11 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
 
     if (_lastSale != null) {
       return _ReceiptView(
+        // Keyed on the sale so a second run gets a FRESH receipt state — the
+        // auto-print fires from `initState`, and a reused state would print
+        // the first sale's paper and nothing after it.
+        key: ValueKey(_lastSale!.orderNumber),
         sale: _lastSale!,
-        shot: _shot,
-        printing: _printing,
-        onPrint: () => _print(_lastSale!),
-        onShare: () => _share(_lastSale!),
         onDone: () => setState(() => _lastSale = null),
       );
     }
@@ -270,10 +259,10 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
       );
       setState(() {
         _units.clear();
+        // The receipt auto-prints itself the moment it appears, exactly as the
+        // shop till does at Confirm Payment — see [VanReceiptView.autoPrint].
         _lastSale = sale;
       });
-      // Auto-print, exactly as the shop till does at Confirm Payment.
-      unawaited(_print(sale));
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'van.terminal.ring');
       if (mounted) {
@@ -281,103 +270,6 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
       }
     } finally {
       if (mounted) setState(() => _ringing = false);
-    }
-  }
-
-  Future<void> _print(_RoadSale sale) async {
-    if (!mounted) return;
-    setState(() => _printing = true);
-    try {
-      final printer = ref.read(printerServiceProvider);
-      final granted = await printer.requestPermissions();
-      if (!mounted) return;
-      if (!granted) {
-        AppNotification.showError(context, 'Bluetooth permissions denied');
-        return;
-      }
-      final paperSize = await printer.getPaperSize();
-      final bytes = await ThermalReceiptService.buildReceipt(
-        orderId: sale.orderNumber,
-        cart: sale.cart,
-        subtotal: sale.totalKobo / 100.0,
-        // No deposit on the road — swap-only (spec §11).
-        crateDeposit: 0,
-        total: sale.totalKobo / 100.0,
-        paymentMethod: 'Cash',
-        cashReceived: sale.totalKobo / 100.0,
-        showWalletInfo: false,
-        riderName: 'Van Sale',
-        businessName: ref.read(currentBusinessNameProvider),
-        paperSize: paperSize,
-      );
-      if (!mounted) return;
-      final printed = await printer.printBytes(bytes);
-      if (!mounted) return;
-      if (printed) {
-        AppNotification.showSuccess(context, 'Print successful');
-        return;
-      }
-      _showPrinterPicker(printer, bytes);
-    } catch (e) {
-      if (mounted) AppNotification.showError(context, 'Print error: $e');
-    } finally {
-      if (mounted) setState(() => _printing = false);
-    }
-  }
-
-  /// The manual fallback when auto-connect could not find the printer — the
-  /// same sheet the shop till falls back to.
-  void _showPrinterPicker(dynamic printer, List<int> receiptBytes) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.5,
-      ),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppSpacing.borderRadiusL),
-        ),
-      ),
-      builder: (_) => PrinterPicker(
-        onSelected: (device) async {
-          if (!mounted) return;
-          Navigator.pop(context);
-          if (!mounted) return;
-          setState(() => _printing = true);
-          try {
-            final connected = await printer.connect(device.macAdress);
-            if (!mounted) return;
-            if (connected) {
-              await printer.saveLastConnectedMac(device.macAdress);
-              await printer.printBytesDirectly(receiptBytes);
-              if (!mounted) return;
-              AppNotification.showSuccess(context, 'Print successful');
-            } else {
-              AppNotification.showError(context, 'Could not connect');
-            }
-          } catch (e) {
-            if (mounted) AppNotification.showError(context, 'Print error: $e');
-          } finally {
-            if (mounted) setState(() => _printing = false);
-          }
-        },
-      ),
-    );
-  }
-
-  Future<void> _share(_RoadSale sale) async {
-    try {
-      final image = await _shot.capture(pixelRatio: 3.0);
-      if (image == null) return;
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/receipt_${sale.orderNumber}.png');
-      await file.writeAsBytes(image);
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'Reebaplus POS Receipt');
-    } catch (e) {
-      if (mounted) AppNotification.showError(context, 'Share failed: $e');
     }
   }
 }
@@ -596,27 +488,18 @@ class _TakePaymentBar extends StatelessWidget {
   }
 }
 
-/// The receipt, and the three things a driver can do with it.
+/// The receipt, and the two things a driver can do with it — both of which
+/// live in [VanReceiptView], the one place the van surface talks to the printer
+/// and the share sheet (#208). This screen only says where the receipt sits and
+/// what "done" means.
 class _ReceiptView extends StatelessWidget {
   final _RoadSale sale;
-  final ScreenshotController shot;
-  final bool printing;
-  final VoidCallback onPrint;
-  final VoidCallback onShare;
   final VoidCallback onDone;
 
-  const _ReceiptView({
-    required this.sale,
-    required this.shot,
-    required this.printing,
-    required this.onPrint,
-    required this.onShare,
-    required this.onDone,
-  });
+  const _ReceiptView({super.key, required this.sale, required this.onDone});
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
     return Container(
       decoration: AppDecorations.glassyBackground(context),
       child: Scaffold(
@@ -639,55 +522,15 @@ class _ReceiptView extends StatelessWidget {
             context.getRSize(16) + context.deviceBottomPadding,
           ),
           children: [
-            if (printing)
-              Padding(
-                padding: EdgeInsets.only(bottom: context.getRSize(12)),
-                child: Text(
-                  'Printing receipt…',
-                  style: t.textTheme.bodySmall?.copyWith(
-                    color: t.colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            Screenshot(
-              controller: shot,
-              child: ReceiptWidget(
-                orderId: sale.orderNumber,
-                cart: sale.cart,
-                subtotal: sale.totalKobo / 100.0,
-                crateDeposit: 0,
-                total: sale.totalKobo / 100.0,
-                paymentMethod: 'Cash',
-                cashReceived: sale.totalKobo / 100.0,
-                riderName: 'Van Sale',
-              ),
-            ),
-            SizedBox(height: context.getRSize(16)),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onPrint,
-                    icon: Icon(
-                      FontAwesomeIcons.print.data,
-                      size: context.getRSize(14),
-                    ),
-                    label: const Text('Print'),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(12)),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onShare,
-                    icon: Icon(
-                      FontAwesomeIcons.shareNodes.data,
-                      size: context.getRSize(14),
-                    ),
-                    label: const Text('Share'),
-                  ),
-                ),
-              ],
+            VanReceiptView(
+              orderNumber: sale.orderNumber,
+              cart: sale.cart,
+              totalKobo: sale.totalKobo,
+              // Cash in full, always — the road has no other tender.
+              cashReceivedKobo: sale.totalKobo,
+              // The till copy IS the original, so it carries no REPRINTED
+              // stamp, and it prints itself the moment it appears.
+              autoPrint: true,
             ),
             SizedBox(height: context.getRSize(12)),
             SizedBox(
