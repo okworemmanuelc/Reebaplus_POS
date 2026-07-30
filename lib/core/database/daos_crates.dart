@@ -2225,6 +2225,173 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// **The business-wide crate-money roll-up** (#215) — what every supplier is
+  /// holding of the owner's money, in total and by supplier.
+  ///
+  /// Feeds two surfaces that must agree to the kobo: the Placed Deposit ASSET
+  /// inside `businessNetPositionKobo`, and the reconciliation's sixth card. Both
+  /// read this one stream, and this stream computes nothing itself — every pair
+  /// goes through [computeCrateDepositPosition] and the totals are
+  /// [rollUpCrateDepositPositions] adding those positions up. No report
+  /// re-derives the arithmetic; that is the whole point of the seam, and ADR
+  /// 0023 finding #3 ("two numbers that never meet") is what happens when one
+  /// does.
+  ///
+  /// **Business-wide, and it stays that way under a locked store.** Supplier
+  /// crate money is a company obligation — the depot invoices the business, not
+  /// the branch — so there is no `storeId` parameter here and callers must not
+  /// invent one. Splitting it per store would repeat `CRATE_TRACKING_AUDIT` C4
+  /// and let two branches each believe the same money is theirs.
+  ///
+  /// Rows are read whole and grouped in Dart rather than summed in SQL on
+  /// purpose: the seam takes MOVEMENTS, and pre-summing them here would be a
+  /// second implementation of the balance sitting one file away from the first.
+  /// Deposit movements are per-delivery events, so the volume is small.
+  ///
+  /// A brand on the default `none` arrangement short-circuits to
+  /// [CrateDepositPosition.zero] inside the seam and is dropped by the roll-up,
+  /// so a business that has never switched a brand on emits
+  /// [CrateDepositRollup.empty] — the release gate for the whole of PRD #203.
+  Stream<CrateDepositRollup> watchBusinessCrateDepositRollup() {
+    final depositRows =
+        (select(supplierCrateDeposits).join([
+              innerJoin(
+                manufacturers,
+                manufacturers.id.equalsExp(
+                  supplierCrateDeposits.manufacturerId,
+                ),
+              ),
+              innerJoin(
+                suppliers,
+                suppliers.id.equalsExp(supplierCrateDeposits.supplierId),
+              ),
+            ])
+            ..where(whereBusiness(supplierCrateDeposits)))
+            .watch();
+
+    // Live alongside the ledger for the same reason the per-supplier stream is
+    // (ADR 0023 rule 6): a brand whose FIRST delivery is still awaiting a
+    // decision has no ledger row at all, and "₦42,000 awaiting your
+    // confirmation" is exactly the figure the card exists to surface.
+    final pendingRows =
+        (select(supplierCrateDepositRequests).join([
+              innerJoin(
+                manufacturers,
+                manufacturers.id.equalsExp(
+                  supplierCrateDepositRequests.manufacturerId,
+                ),
+              ),
+              innerJoin(
+                suppliers,
+                suppliers.id.equalsExp(supplierCrateDepositRequests.supplierId),
+              ),
+            ])
+            ..where(
+              whereBusiness(supplierCrateDepositRequests) &
+                  supplierCrateDepositRequests.status.equals(
+                    kCrateDepositRequestPending,
+                  ),
+            ))
+            .watch();
+
+    // `SUM(quantity_delta)` per (supplier, manufacturer) — the crates each pair
+    // still owes. Grouped in SQL because it is an input to the seam, not an
+    // output of it.
+    final owedSum = supplierCrateLedger.quantityDelta.sum();
+    final owedRows =
+        (selectOnly(supplierCrateLedger)
+              ..addColumns([
+                supplierCrateLedger.supplierId,
+                supplierCrateLedger.manufacturerId,
+                owedSum,
+              ])
+              ..where(whereBusiness(supplierCrateLedger))
+              ..groupBy([
+                supplierCrateLedger.supplierId,
+                supplierCrateLedger.manufacturerId,
+              ]))
+            .watch();
+
+    return Rx.combineLatest3<
+      List<TypedResult>,
+      List<TypedResult>,
+      List<TypedResult>,
+      CrateDepositRollup
+    >(depositRows, pendingRows, owedRows, (deposits, pending, owed) {
+      // key = "supplierId|manufacturerId" — the pair ADR 0023 rule 2 keys the
+      // money by, because only the supplier you actually paid can pay you back.
+      final movementsBy = <String, List<CrateDepositMovement>>{};
+      final pendingBy = <String, List<PendingCrateDeposit>>{};
+      final pairs = <String, ({SupplierData supplier, ManufacturerData brand})>{};
+
+      String keyOf(String supplierId, String manufacturerId) =>
+          '$supplierId|$manufacturerId';
+
+      for (final r in deposits) {
+        final deposit = r.readTable(supplierCrateDeposits);
+        final key = keyOf(deposit.supplierId, deposit.manufacturerId);
+        pairs[key] = (
+          supplier: r.readTable(suppliers),
+          brand: r.readTable(manufacturers),
+        );
+        (movementsBy[key] ??= <CrateDepositMovement>[]).add(
+          CrateDepositMovement(
+            movementType: deposit.movementType,
+            signedAmountKobo: deposit.signedAmountKobo,
+            crateCount: deposit.crateCount,
+          ),
+        );
+      }
+
+      for (final r in pending) {
+        final request = r.readTable(supplierCrateDepositRequests);
+        final key = keyOf(request.supplierId, request.manufacturerId);
+        pairs[key] ??= (
+          supplier: r.readTable(suppliers),
+          brand: r.readTable(manufacturers),
+        );
+        (pendingBy[key] ??= <PendingCrateDeposit>[]).add(
+          PendingCrateDeposit(
+            kind: request.kind,
+            requestedAmountKobo: request.requestedAmountKobo,
+            crateCount: request.crateCount,
+          ),
+        );
+      }
+
+      final owedBy = <String, int>{};
+      for (final r in owed) {
+        final supplierId = r.read(supplierCrateLedger.supplierId);
+        final manufacturerId = r.read(supplierCrateLedger.manufacturerId);
+        if (supplierId == null || manufacturerId == null) continue;
+        owedBy[keyOf(supplierId, manufacturerId)] = r.read(owedSum) ?? 0;
+      }
+
+      return rollUpCrateDepositPositions([
+        for (final entry in pairs.entries)
+          CrateDepositHolding(
+            supplierId: entry.value.supplier.id,
+            supplierName: entry.value.supplier.name,
+            manufacturerId: entry.value.brand.id,
+            manufacturerName: entry.value.brand.name,
+            position: computeCrateDepositPosition(
+              arrangement: crateMoneyArrangementOf(
+                entry.value.brand.crateMoneyArrangement,
+              ),
+              ratePerCrateKobo: entry.value.brand.depositAmountKobo,
+              movements: movementsBy[entry.key] ?? const [],
+              pending: pendingBy[entry.key] ?? const [],
+              cratesOwed: owedBy[entry.key] ?? 0,
+              // No `emptiesOnHand`: the pool is brand-level and business-wide
+              // while this is a PAIR, so asking a shortfall question here would
+              // double-subtract across two suppliers of one brand (ADR 0023
+              // rule 4). The shortfall stays where #216 will write it off.
+            ),
+          ),
+      ]);
+    });
+  }
+
   /// The Placed Deposit position of ONE `(supplier, manufacturer)` pair,
   /// computed by [computeCrateDepositPosition] like every other figure in this
   /// file. Used by the write path (#213's refund cap) rather than only by the

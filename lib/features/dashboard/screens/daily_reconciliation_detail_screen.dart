@@ -404,6 +404,18 @@ class _DailyReconciliationDetailScreenState
             SizedBox(height: context.spacingM),
             _cratesCard(context, theme, d),
           ],
+          // #215 / ADR 0023 — THE SIXTH CARD, and it amends ADR 0014's
+          // deliberate nine-to-five cut. See `_crateMoneyCard` for why the
+          // exception was taken, and ADR 0014's "Amended 2026-07-30" note
+          // before you re-tighten the count.
+          //
+          // Rendered only when a brand actually moves crate money, so every
+          // business on the default `none` arrangement — which is every live
+          // tenant until an owner switches one on — still reads exactly five.
+          if (d.showCrates && d.crateDeposits.hasMoney) ...[
+            SizedBox(height: context.spacingM),
+            _crateMoneyCard(context, theme, d),
+          ],
           if (children.isNotEmpty) ...[
             SizedBox(height: context.spacingM),
             _breakdown(context, theme, children),
@@ -763,11 +775,22 @@ class _DailyReconciliationDetailScreenState
           _line(context, theme, 'Crate deposits held (cash)',
               formatCurrency(d.cashCrateDepositsKobo / 100.0)),
         ],
+        // #215 — the SUPPLIER leg, on its own line beside the customer leg and
+        // outside the net for the identical reason: refundable money passing
+        // through the drawer, never operating cash. Paying it is not an
+        // expense, so it must not sit above with "Expenses paid (cash)", and it
+        // never reduces profit.
+        if (d.cashCrateDepositsPlacedKobo != 0) ...[
+          const SizedBox(height: 6),
+          _line(context, theme, 'Crate deposits placed with suppliers (cash)',
+              formatCurrency(d.cashCrateDepositsPlacedKobo / 100.0)),
+        ],
         const SizedBox(height: 6),
         Text(
           'Expected cash movement from recorded cash tenders — business-wide, '
-          'not a counted drawer. Crate deposits are refundable customer money '
-          'held in the drawer, kept out of the net.',
+          'not a counted drawer. Crate deposits are refundable money — held for '
+          'customers, or placed with suppliers — and both are kept out of the '
+          'net.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
         if (hasExpenseFigures) ...[
@@ -1008,6 +1031,11 @@ class _DailyReconciliationDetailScreenState
           _line(context, theme, 'In-transit stock (dispatched, not received)', '+ ${formatCurrency(d.inTransitValueKobo / 100.0)}'),
         if (d.showCrates)
           _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
+        // #215 / ADR 0023 rule 1 — deposits we PAID suppliers are still our
+        // money, merely held elsewhere. An asset, never an expense; before this
+        // slice it left the drawer and vanished from worth altogether.
+        if (d.showCrates && d.placedCrateDepositsKobo != 0)
+          _line(context, theme, 'Crate deposits held by suppliers (now)', '+ ${formatCurrency(d.placedCrateDepositsKobo / 100.0)}'),
         _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
         // #163 — crate liabilities netted against the empties asset above: the
         // deposits we still hold for customers (owed back on return) and the
@@ -1098,6 +1126,96 @@ class _DailyReconciliationDetailScreenState
             strong: true,
           ),
         ],
+      ],
+    );
+  }
+
+  /// **Crate money with suppliers (business-wide)** — the sixth reconciliation
+  /// card (#215, PRD #203, ADR 0023).
+  ///
+  /// ADR 0014 cut this report from nine cards to five on purpose, and this is a
+  /// deliberate, owner-chosen exception to that count, recorded in ADR 0023's
+  /// Consequences and in an amendment note on ADR 0014 itself. The reason it
+  /// earns a card of its own rather than a line on another: before PRD #203 a
+  /// business could hand a depot ₦180,000 and every money figure in the app
+  /// read exactly the same afterwards. A line inside Business worth would show
+  /// the total; only a card can name WHICH supplier is holding it, which is the
+  /// question an owner actually rings someone about.
+  ///
+  /// **"(business-wide)" is on the title for a reason, and it stays there under
+  /// a locked store.** Supplier crate money is a company obligation — the depot
+  /// invoices the business, not the branch. Splitting it per store would repeat
+  /// the defect `CRATE_TRACKING_AUDIT` C4 already names (point-in-time
+  /// business-wide crate figures presented inside a store-scoped report) and
+  /// would let two branches each believe the same money is theirs. The figures
+  /// come from a business-scoped provider that never reads the active store, so
+  /// the label is a description of the data, not a promise the screen keeps.
+  ///
+  /// Not behind the §25.3 cost wall: this is a receivable, not cost, margin or
+  /// profit — the same category as the customer debt a Manager already sees.
+  Widget _crateMoneyCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final rollup = d.crateDeposits;
+    return _card(
+      context,
+      theme,
+      'Crate money with suppliers (business-wide)',
+      FontAwesomeIcons.handHoldingDollar.data,
+      successColor,
+      [
+        if (rollup.bySupplier.isEmpty)
+          _line(context, theme, 'Held by suppliers', formatCurrency(0))
+        else ...[
+          for (final s in rollup.bySupplier)
+            _line(
+              context,
+              theme,
+              s.supplierName,
+              formatCurrency(s.placedDepositKobo / 100.0),
+            ),
+          _divider(theme),
+        ],
+        _line(
+          context,
+          theme,
+          'Total held by suppliers (now)',
+          formatCurrency(rollup.placedDepositKobo / 100.0),
+          strong: true,
+          color: successColor,
+        ),
+        // Raised but not yet decided (ADR 0023 rule 6). Deliberately BELOW the
+        // total and outside it: nothing has moved, and a book entry appears
+        // only when money genuinely moved.
+        if (rollup.hasPending) ...[
+          const SizedBox(height: 6),
+          _line(
+            context,
+            theme,
+            'Awaiting your confirmation',
+            formatCurrency(rollup.pendingDepositKobo / 100.0),
+          ),
+        ],
+        // ADR 0023 finding #3 — "two numbers that never meet", shown side by
+        // side instead of one being quietly reported as the other. Large and
+        // CORRECT on a brand switched on today: every crate received before the
+        // switch was received under `none`, and ADR 0021 forbids restating it.
+        if (rollup.unbackedValueKobo != 0) ...[
+          const SizedBox(height: 6),
+          _line(
+            context,
+            theme,
+            'Crates owed with no deposit behind them',
+            formatCurrency(rollup.unbackedValueKobo / 100.0),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'Your money, held by your suppliers — refundable when you settle, so '
+          'it counts in Business worth and never as a cost. Business-wide: a '
+          'depot invoices the business, not a branch, so this is the same '
+          'figure in every store.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
       ],
     );
   }
@@ -1509,7 +1627,21 @@ class _DailyReconciliationDetailScreenState
         if (d.showCrates)
           ['Crate debt owed to suppliers (now)',
             money(d.supplierCrateDebtKobo)],
+        // #215 — the Placed Deposit ASSET added into the position below, and
+        // its per-supplier breakdown. Business-wide even when a store is
+        // locked; the label says so, like it does on the card.
+        if (d.showCrates && d.placedCrateDepositsKobo != 0)
+          ['Crate deposits held by suppliers (now, business-wide)',
+            money(d.placedCrateDepositsKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
+        // Crate money with suppliers (business-wide) — mirrors _crateMoneyCard.
+        if (d.showCrates)
+          for (final s in d.crateDeposits.bySupplier)
+            ['Crate money held by ${s.supplierName} (now)',
+              money(s.placedDepositKobo)],
+        if (d.showCrates && d.crateDeposits.hasPending)
+          ['Crate money awaiting confirmation (now)',
+            money(d.crateDeposits.pendingDepositKobo)],
         // Cash flow (business-wide) — mirrors _cashFlowCard.
         ['Cash sales', money(d.cashSalesKobo)],
         ['Debts collected (cash)', money(d.cashDebtsCollectedKobo)],
@@ -1520,6 +1652,11 @@ class _DailyReconciliationDetailScreenState
         ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
         ['Net cash movement', money(d.netCashMovementKobo)],
         ['Crate deposits held (cash)', money(d.cashCrateDepositsKobo)],
+        // #215 — outside Net cash movement above, exactly like the line before
+        // it. Refundable money through the drawer, not operating cash.
+        if (d.cashCrateDepositsPlacedKobo != 0)
+          ['Crate deposits placed with suppliers (cash)',
+            money(d.cashCrateDepositsPlacedKobo)],
         // Stock reconciliation (at cost) — mirrors _stockFlowCard.
         ['Opening stock (at cost)', money(d.stockOpeningKobo)],
         ['Goods received (at cost)', money(d.stockReceivedKobo)],

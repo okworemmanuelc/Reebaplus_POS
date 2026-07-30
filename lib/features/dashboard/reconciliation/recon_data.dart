@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
+import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -627,6 +629,11 @@ class ReconData {
     required this.cashExpensesKobo,
     required this.cashSupplierPaidKobo,
     required this.cashCrateDepositsKobo,
+    // #215 — the supplier leg of the crate-deposit story. Both are
+    // optional-defaulted like every other additive field, so the pure-getter
+    // test harness and every existing construction site stay valid.
+    this.cashCrateDepositsPlacedKobo = 0,
+    this.crateDeposits = CrateDepositRollup.empty,
     required this.bestStaff,
     required this.bestStaffKobo,
     required this.expensesKobo,
@@ -741,6 +748,43 @@ class ReconData {
   /// sale). A cancelled deposit sale posts a negative `crate_deposit` row, so a
   /// same-period collect-then-cancel nets to zero here.
   final int cashCrateDepositsKobo;
+
+  /// PLACED (not operating cash) — cash `crate_deposit_out` rows this period,
+  /// net of releases (#215, ADR 0023 rule 1). The SUPPLIER-side mirror of
+  /// [cashCrateDepositsKobo], and it gets the same treatment for the same
+  /// reason: refundable money passing through the drawer that the business
+  /// never spends, so it is shown on its own line and is deliberately OUTSIDE
+  /// cashIn / cashOut / net cash movement.
+  ///
+  /// **Keeping it out of `cashOutKobo` is the decision, not an oversight.** The
+  /// argument for putting it in ("the money really left the drawer") applies
+  /// word for word to the customer leg above, which this codebase deliberately
+  /// excludes anyway — treating the two legs differently would make the cash
+  /// card incoherent, and #212 tried it and reverted. A Placed Deposit is an
+  /// asset that changed shape (cash → money with the depot), never a cost, so
+  /// it must never look like an expense and must never reduce profit.
+  ///
+  /// Signed like the ledger it comes from: POSITIVE when money went out to
+  /// suppliers, NEGATIVE when more came back than went out this period. A
+  /// same-period place-then-settle therefore nets to zero here, exactly as a
+  /// collect-then-cancel does on the customer line.
+  final int cashCrateDepositsPlacedKobo;
+
+  /// #215 — what every supplier is holding of the owner's money right now, in
+  /// total and by supplier, rolled up from [computeCrateDepositPosition].
+  ///
+  /// Point-in-time and **business-wide even under a locked store**: supplier
+  /// crate money is a company obligation (the depot invoices the business, not
+  /// the branch), and splitting it per store would repeat the defect
+  /// `CRATE_TRACKING_AUDIT` C4 names. [CrateDepositRollup.empty] for a
+  /// non-crate business and for every business whose brands are all on the
+  /// default `none` arrangement.
+  final CrateDepositRollup crateDeposits;
+
+  /// **The asset.** [CrateDepositRollup.placedDepositKobo], hoisted so
+  /// [businessNetPositionKobo] and the CSV read one name.
+  int get placedCrateDepositsKobo => crateDeposits.placedDepositKobo;
+
   final String? bestStaff;
   final int bestStaffKobo;
   final int expensesKobo;
@@ -1080,11 +1124,28 @@ class ReconData {
   /// suppliers ([supplierCrateDebtKobo]). Booking the crate asset while ignoring
   /// the matching deposit/supplier liabilities overstated worth; both legs are
   /// now subtracted.
+  ///
+  /// **#215 adds the Placed Deposit as an ASSET** ([placedCrateDepositsKobo]):
+  /// money paid to a supplier for their crates is still the owner's — it is
+  /// refundable, merely held elsewhere (ADR 0023 rule 1). Before this slice it
+  /// left the drawer and vanished from worth entirely, while
+  /// [supplierCrateDebtKobo] drifted NEGATIVE for want of a receipt leg and
+  /// *inflated* worth from the other side (ADR 0023 finding #2). #210 fixed the
+  /// drift at source by posting the receipt leg on Receive Stock; this line
+  /// books the money that answers it. For a brand backed since its first
+  /// delivery the two now roughly cancel, which is what "worth is unchanged
+  /// when you place a deposit" means arithmetically.
+  ///
+  /// The historically-negative balances live tenants already carry are NOT
+  /// clamped here. ADR 0023's Consequences say so explicitly — clamping would
+  /// restate a figure every `none` business reads today, breaking PRD #203's
+  /// release gate to paper over a drift #210 has already stopped.
   int get businessNetPositionKobo =>
       inventoryOnHandKobo +
       inTransitValueKobo +
       totalOwedKobo +
-      crateDepositKobo -
+      crateDepositKobo +
+      placedCrateDepositsKobo -
       supplierPayableKobo -
       heldCrateDepositsKobo -
       supplierCrateDebtKobo;
@@ -1155,6 +1216,7 @@ class ReconInputs {
     this.showCrates = false,
     this.heldCrateDepositsKobo = 0,
     this.supplierCrateDebtKobo = 0,
+    this.crateDeposits = CrateDepositRollup.empty,
     this.isCeo = false,
     this.inScope = _everyStore,
     this.start,
@@ -1199,6 +1261,12 @@ class ReconInputs {
   /// providers (business-wide, so there is nothing left to scope or sum here).
   final int heldCrateDepositsKobo;
   final int supplierCrateDebtKobo;
+
+  /// #215 — the business-wide Placed Deposit roll-up, already computed through
+  /// [computeCrateDepositPosition] by its own provider. Business-wide by
+  /// decision, not by convenience: supplier crate money is a company
+  /// obligation, so it is not scoped by [inScope] here or anywhere else.
+  final CrateDepositRollup crateDeposits;
 
   /// Gates the supplier-ledger flows only; every other figure is computed
   /// either way and the screen decides what to show per the cost wall.
@@ -1290,6 +1358,14 @@ ReconData computeReconData(
       supplierCrateDebtKobo: showCrates
           ? (ref.watch(supplierCrateDebtValueKoboProvider).valueOrNull ?? 0)
           : 0,
+      // #215 — business-wide by design. Note the absence of a store read here:
+      // unlike the stock totals above, this is NOT scoped by `storeScope`, and
+      // `businessWide` makes no difference to it either. The depot invoices the
+      // business, not the branch.
+      crateDeposits: showCrates
+          ? (ref.watch(businessCrateDepositRollupProvider).valueOrNull ??
+                CrateDepositRollup.empty)
+          : CrateDepositRollup.empty,
       isCeo: isCeo,
       inScope: reconStoreFilter(ref, businessWide: businessWide),
       start: start,
@@ -1783,6 +1859,14 @@ ReconData reconDataFrom(ReconInputs input) {
   var cashRefundsKobo = 0;
   var cashExpensesKobo = 0;
   var cashCrateDepositsKobo = 0;
+  // #215 — the supplier leg, and it lands on its OWN line for the same reason
+  // the customer leg above does: refundable money passing through the drawer,
+  // never operating cash. Note where it does NOT go — not `cashExpensesKobo`,
+  // not `cashOutKobo`, not the net. #212 put it in cash-out once and reverted:
+  // the "it really left the drawer" argument applies identically to
+  // `crate_deposit`, which this card has excluded since #175, and two legs of
+  // one story treated asymmetrically make the card incoherent.
+  var cashCrateDepositsPlacedKobo = 0;
   for (final p in payments) {
     if (p.voidedAt != null) continue;
     if (p.method.toLowerCase() != 'cash') continue;
@@ -1797,6 +1881,10 @@ ReconData reconDataFrom(ReconInputs input) {
       cashExpensesKobo += p.amountKobo;
     } else if (p.type == 'crate_deposit') {
       cashCrateDepositsKobo += p.amountKobo;
+    } else if (p.type == kPaymentTypeCrateDepositOut) {
+      // Signed at the source: + when money went out to the supplier, − when a
+      // settlement or float payout brought it back.
+      cashCrateDepositsPlacedKobo += p.amountKobo;
     }
   }
   // Supplier payments made in cash — the one cash-out NOT in payment_transactions
@@ -1854,9 +1942,14 @@ ReconData reconDataFrom(ReconInputs input) {
   // anyway — no deposit-family rows, no supplier crate ledger).
   var heldCrateDepositsKobo = 0;
   var supplierCrateDebtKobo = 0;
+  // #215 — the Placed Deposit ASSET, the third crate leg. Same gate, same
+  // business-wide basis, and computed entirely upstream by
+  // [computeCrateDepositPosition]: nothing here re-derives it.
+  var crateDeposits = CrateDepositRollup.empty;
   if (showCrates) {
     heldCrateDepositsKobo = input.heldCrateDepositsKobo;
     supplierCrateDebtKobo = input.supplierCrateDebtKobo;
+    crateDeposits = input.crateDeposits;
   }
 
   // ── Forfeit income (#176 / PRD #155 story 7) ─────────────────────────────
@@ -1982,6 +2075,8 @@ ReconData reconDataFrom(ReconInputs input) {
     cashExpensesKobo: cashExpensesKobo,
     cashSupplierPaidKobo: cashSupplierPaidKobo,
     cashCrateDepositsKobo: cashCrateDepositsKobo,
+    cashCrateDepositsPlacedKobo: cashCrateDepositsPlacedKobo,
+    crateDeposits: crateDeposits,
     bestStaff: bestStaff,
     bestStaffKobo: bestStaffKobo,
     expensesKobo: expensesKobo,

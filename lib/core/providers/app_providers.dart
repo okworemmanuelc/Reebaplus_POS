@@ -11,6 +11,7 @@ import 'package:drift/drift.dart' show innerJoin;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -301,6 +302,26 @@ final supplierCrateDepositPositionsProvider =
   (ref, db, businessId, id) =>
       db.cratePoolDao.watchSupplierCrateDepositPositions(id),
   whenAbsent: const [],
+);
+
+/// #215 — the **business-wide** crate-money roll-up: what every supplier is
+/// holding of the owner's money, in total and by supplier.
+///
+/// Read by exactly two places, and they must never disagree: the Placed Deposit
+/// asset inside `businessNetPositionKobo`, and the reconciliation's sixth card.
+/// Both get their figures from `computeCrateDepositPosition` via
+/// `rollUpCrateDepositPositions`, so neither re-derives anything.
+///
+/// **Business-scoped on purpose, and it ignores the locked store.** Supplier
+/// crate money is a company obligation — the depot invoices the business, not
+/// the branch — so unlike [supplierBalancesKoboProvider] and friends this one
+/// takes no `lockedStoreProvider` read. Scoping it per store would repeat the
+/// defect `CRATE_TRACKING_AUDIT` C4 names and let two branches each claim the
+/// same money. The card that renders it says "business-wide" on its face.
+final businessCrateDepositRollupProvider =
+    businessScopedStreamAutoDispose<CrateDepositRollup>(
+  (ref, db, businessId) => db.cratePoolDao.watchBusinessCrateDepositRollup(),
+  whenAbsent: CrateDepositRollup.empty,
 );
 
 /// One supplier's empty-crate movement history (receipts + returns), newest

@@ -29,6 +29,8 @@ import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
+import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
@@ -160,25 +162,92 @@ void main() {
     const gulderEmpties = 7;
     const heldForCustomers = 1400000; // ₦14,000 of customer deposits held
     const owedToSuppliers = 900000; // ₦9,000 of crate debt owed out
+    // #215 — the money the arrangement now genuinely moves: a depot sitting on
+    // ₦180,000 of ours for 60 crates of Star, and the cash that left the drawer
+    // to place it there.
+    const placedWithDepot = 18000000;
+    const placedCrates = 60;
 
-    ReconInputs inputsWith(String arrangement) => ReconInputs(
-      manufacturers: [
-        mfr(star, 'Star Lager', starDeposit, arrangement: arrangement),
-        mfr(gulder, 'Gulder', gulderDeposit, arrangement: arrangement),
-      ],
-      emptyCrateCounts: const {star: starEmpties, gulder: gulderEmpties},
-      showCrates: true,
-      heldCrateDepositsKobo: heldForCustomers,
-      supplierCrateDebtKobo: owedToSuppliers,
-      isCeo: true,
+    /// A cash `crate_deposit_out` row — the payment leg #212 writes beside the
+    /// deposit ledger row. Positive = money went OUT to the supplier.
+    PaymentTransactionData placementPayment() => PaymentTransactionData(
+      id: 'pay-placement',
+      businessId: businessId,
+      storeId: 'store-1',
+      amountKobo: placedWithDepot,
+      method: 'cash',
+      type: kPaymentTypeCrateDepositOut,
+      orderId: null,
+      shipmentId: null,
+      expenseId: null,
+      walletTxnId: null,
+      deliveryId: null,
+      vanTripId: null,
+      crateDepositId: 'dep-1',
+      performedBy: null,
+      voidedAt: null,
+      voidedBy: null,
+      voidReason: null,
+      createdAt: DateTime.utc(2026, 7, 30),
+      lastUpdatedAt: DateTime.utc(2026, 7, 30),
     );
 
-    /// Every figure a crate-money change could conceivably disturb.
+    /// The business as the app would actually hold it for [arrangement].
+    ///
+    /// The deposit ledger row is fed to EVERY arrangement, `none` included: the
+    /// seam short-circuits before it reads a single movement, so residue from a
+    /// brand that was switched on, used, and switched off again cannot move a
+    /// figure. The PAYMENT row is gated on `movesMoney` instead, because that
+    /// is where the write boundary gates it — a `none` brand admits no leg
+    /// (`crateDepositKindAllowedFor`), so no `crate_deposit_out` row is ever
+    /// written for one, and the cash line's allowlist dispatch is deliberately
+    /// arrangement-blind.
+    ReconInputs inputsWith(String arrangement) {
+      final a = crateMoneyArrangementOf(arrangement);
+      return ReconInputs(
+        manufacturers: [
+          mfr(star, 'Star Lager', starDeposit, arrangement: arrangement),
+          mfr(gulder, 'Gulder', gulderDeposit, arrangement: arrangement),
+        ],
+        emptyCrateCounts: const {star: starEmpties, gulder: gulderEmpties},
+        showCrates: true,
+        heldCrateDepositsKobo: heldForCustomers,
+        supplierCrateDebtKobo: owedToSuppliers,
+        // Everything reads through the ONE pure seam and its roll-up — no
+        // report re-derives the arithmetic (#212/#215).
+        crateDeposits: rollUpCrateDepositPositions([
+          CrateDepositHolding(
+            supplierId: 'sup-ade',
+            supplierName: 'Ade Depot',
+            manufacturerId: star,
+            manufacturerName: 'Star Lager',
+            position: computeCrateDepositPosition(
+              arrangement: a,
+              ratePerCrateKobo: starDeposit,
+              movements: const [
+                CrateDepositMovement(
+                  movementType: kCrateDepositMovementPlacement,
+                  signedAmountKobo: placedWithDepot,
+                  crateCount: placedCrates,
+                ),
+              ],
+            ),
+          ),
+        ]),
+        payments: a.movesMoney ? [placementPayment()] : const [],
+        isCeo: true,
+      );
+    }
+
+    /// Every figure a crate-money change could conceivably disturb — now
+    /// including the two #215 added, so a leak into either is caught here too.
     Map<String, int> figures(ReconData d) => {
       'crateUnits': d.crateUnits,
       'crateDepositKobo': d.crateDepositKobo,
       'heldCrateDepositsKobo': d.heldCrateDepositsKobo,
       'supplierCrateDebtKobo': d.supplierCrateDebtKobo,
+      'placedCrateDepositsKobo': d.placedCrateDepositsKobo,
+      'cashCrateDepositsPlacedKobo': d.cashCrateDepositsPlacedKobo,
       'businessNetPositionKobo': d.businessNetPositionKobo,
       'periodNetResultKobo': d.periodNetResultKobo,
       'totalSalesKobo': d.totalSalesKobo,
@@ -192,6 +261,15 @@ void main() {
       'goodsReceivedKobo': d.goodsReceivedKobo,
       'supplierPaidKobo': d.supplierPaidKobo,
       'crateDamageDepositKobo': d.crateDamageDepositKobo,
+    };
+
+    /// The keys #215 is ALLOWED to move once a brand is switched on. Every
+    /// other key in [figures] must stay byte-identical to the `none` reading —
+    /// that is what "narrowed", rather than "deleted", means below.
+    const movedByThisSlice = {
+      'placedCrateDepositsKobo',
+      'cashCrateDepositsPlacedKobo',
+      'businessNetPositionKobo',
     };
 
     test('the figures a crate business reads are exactly what they were before '
@@ -230,33 +308,76 @@ void main() {
       expect(d.expensesKobo, 0);
       expect(d.netCashMovementKobo, 0);
       expect(d.crateDamageDepositKobo, 0);
+
+      // #215 — and the two figures this slice added read zero at `none` even
+      // though the fixture feeds it a ₦180,000 placement row. The seam
+      // short-circuits before it looks at a movement, so the owner's stated
+      // arrangement beats the residue.
+      expect(d.placedCrateDepositsKobo, 0);
+      expect(d.cashCrateDepositsPlacedKobo, 0);
+      expect(d.crateDeposits.bySupplier, isEmpty);
+      expect(d.crateDeposits.hasMoney, isFalse);
     });
 
-    test('the setting is inert: the same business reads the same figures '
-        'whatever the arrangement says — TODAY', () {
-      // This slice ships the SETTING only; no money behaviour hangs off it yet.
-      // Proving inertness here is what makes "a business at `none` is identical
-      // to before this slice" airtight: before the column existed there was one
-      // possible state, and every state produces that same state's figures.
+    test('the setting is inert at `none`: a switched-on brand moves ONLY the '
+        'figures #215 owns, and `none` still reads exactly as before', () {
+      // NARROWED BY #215, NOT DELETED — this test used to assert that no
+      // ReconData figure depended on the arrangement at all, and left the next
+      // slice this instruction:
       //
-      // TO THE NEXT SLICE (#212+): when you make an arrangement actually move
-      // money, this test is SUPPOSED to fail for the money-moving values. That
-      // failure is your prompt to narrow it to `none` rather than delete it —
-      // the `none` row must keep matching the pre-slice figures forever, which
-      // is the promise the whole PRD ships on.
+      //   "when you make an arrangement actually move money, this test is
+      //    SUPPOSED to fail for the money-moving values. That failure is your
+      //    prompt to narrow it to `none` rather than delete it — the `none` row
+      //    must keep matching the pre-slice figures forever, which is the
+      //    promise the whole PRD ships on."
+      //
+      // #215 is that slice: a Placed Deposit is now an asset in business worth
+      // and a cash line of its own. So the claim is narrowed in the two ways
+      // the instruction asks for, and both halves are release gates:
+      //
+      //   1. `none` is still inert — it is the row the whole PRD ships on, and
+      //      the test above pins its figures to hand-computed pre-slice values.
+      //   2. a money-moving arrangement may move ONLY `movedByThisSlice`.
+      //      Everything else — profit, sales, expenses, refunds, cash in, cash
+      //      out, net cash movement — must be byte-identical to `none`. That is
+      //      what "an asset, never an expense; it must never reduce profit"
+      //      means as an assertion rather than as a promise.
+      //
+      // TO THE NEXT SLICE (#216+): when a write-off finally hits profit, this
+      // is again SUPPOSED to fail — for `netProfitKobo` and `periodNetResultKobo`
+      // on a WRITTEN-OFF shortfall only. Narrow `movedByThisSlice` again rather
+      // than deleting the test; the `none` row must keep matching forever.
       final atNone = figures(reconDataFrom(inputsWith(
         kCrateMoneyArrangementNone,
       )));
+
       for (final other in [
         kCrateMoneyArrangementPerDelivery,
         kCrateMoneyArrangementStandingFloat,
       ]) {
+        final moved = figures(reconDataFrom(inputsWith(other)));
+
+        // Every figure OUTSIDE this slice's remit is untouched.
         expect(
-          figures(reconDataFrom(inputsWith(other))),
-          equals(atNone),
+          Map.of(moved)..removeWhere((k, _) => movedByThisSlice.contains(k)),
+          equals(Map.of(atNone)..removeWhere(
+            (k, _) => movedByThisSlice.contains(k),
+          )),
           reason:
-              'no figure may depend on the arrangement while it is a setting '
-              'and nothing more ($other)',
+              'switching a brand to $other may move business worth and the '
+              'crate-money cash line, and NOTHING else. A figure that moved '
+              'here is crate money leaking into a total it must never reach — '
+              'above all profit, which a refundable deposit can never reduce.',
+        );
+
+        // …and the three it IS allowed to move, moved exactly as ADR 0023
+        // rule 1 says: the asset is the money placed, the cash line carries the
+        // same amount OUTSIDE the net, and worth rises by the asset.
+        expect(moved['placedCrateDepositsKobo'], placedWithDepot);
+        expect(moved['cashCrateDepositsPlacedKobo'], placedWithDepot);
+        expect(
+          moved['businessNetPositionKobo'],
+          atNone['businessNetPositionKobo']! + placedWithDepot,
         );
       }
     });
