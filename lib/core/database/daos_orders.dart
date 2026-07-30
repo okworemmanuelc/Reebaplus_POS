@@ -1425,6 +1425,41 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await postWallet(-forfeitRecorded, 'crate_deposit_forfeited');
       }
 
+      // #217 / ADR 0023 finding #4 — AND, on a brand where a deposit was
+      // genuinely placed with a depot, the other half of the same event.
+      //
+      // The income above is real money kept. But the crates it was kept for
+      // belonged to a manufacturer, and the app charged this customer the SAME
+      // `manufacturers.deposit_amount_kobo` it owes that manufacturer's depot.
+      // So the business is not better off by a naira: it gained the customer's
+      // deposit and lost a crate worth exactly that. Raising the matching Crate
+      // Shortfall here is what makes the pair net to zero instead of reporting
+      // a gain that never happened.
+      //
+      // Gated on the brand's Crate Money Arrangement INSIDE the seam. On a
+      // `none` brand nobody was ever paid a deposit for these crates — they were
+      // the business's own to lose — so the forfeit stays PURE INCOME, exactly
+      // as it read before PRD #203 existed, and nothing is written at all.
+      //
+      // **This call site is the no-restatement guarantee.** The netting is
+      // decided once, here, from the arrangement as it stands at this instant,
+      // and then it is a persisted fact no report re-asks. Switching a brand on
+      // next Tuesday cannot reach back and net a forfeit settled last March,
+      // because nothing ever writes March a row (ADR 0021).
+      //
+      // The count is the crates KEPT, not the money recorded: `forfeitRecorded`
+      // is capped at what the customer actually paid, but the crate that is not
+      // coming back costs the depot rate whatever the customer put down.
+      if (kept > 0) {
+        await db.cratePoolDao.recordCustomerForfeitShortfall(
+          manufacturerId: manufacturerId,
+          orderId: orderId,
+          keptCrates: kept,
+          performedBy: performedBy,
+          at: legTime,
+        );
+      }
+
       // Refund: drop the rest of the held deposit, then return it as wallet
       // credit (spendable) or cash (payment row, no spendable change).
       if (refundAmount > 0) {

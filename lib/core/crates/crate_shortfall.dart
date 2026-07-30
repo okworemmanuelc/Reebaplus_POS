@@ -40,6 +40,62 @@ library;
 import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 
+// ── Where a write-off came from (#217) ───────────────────────────────────────
+
+/// Somebody stood in front of the Crate Shortfall card and accepted the loss.
+/// The #216 shape, and still the only one an owner takes by hand.
+const String kCrateWriteOffSourceManual = 'manual';
+
+/// The shortfall a **customer forfeit** raises automatically (#217).
+///
+/// When a customer never brings the crates back, the business keeps their
+/// deposit — booked as income since #176. But on a brand where a deposit was
+/// genuinely placed with a depot, that crate is one the business now cannot
+/// hand back, and the app charged the customer the *same*
+/// `manufacturers.deposit_amount_kobo` it owes the supplier. So the gain and
+/// the loss are the same size and the forfeit nets to **zero**.
+///
+/// This is not a "decision nobody made" of the kind rule 5 forbids. Nothing
+/// fires on a timer and nothing sweeps old shortfalls: the row is written in the
+/// same transaction as the forfeit itself, by the person who settled it, about
+/// crates that demonstrably left with a customer who paid for them. It is the
+/// second half of one event, not a later opinion about it.
+const String kCrateWriteOffSourceCustomerForfeit = 'customer_forfeit';
+
+/// The closed set `crate_shortfall_writeoffs.source` may hold. Mirrors the cloud
+/// CHECK in `supabase/migrations/0174_crate_forfeit_netting.sql`.
+const List<String> kCrateWriteOffSources = [
+  kCrateWriteOffSourceManual,
+  kCrateWriteOffSourceCustomerForfeit,
+];
+
+/// How a booked crate loss came to be booked.
+enum CrateWriteOffSource {
+  /// An owner accepted it on the Crate Shortfall card.
+  manual(kCrateWriteOffSourceManual),
+
+  /// A customer kept the crates and their deposit with them (#217).
+  customerForfeit(kCrateWriteOffSourceCustomerForfeit);
+
+  const CrateWriteOffSource(this.wire);
+
+  /// The stored string.
+  final String wire;
+}
+
+/// Read a stored `source`, **failing closed to [CrateWriteOffSource.manual]**.
+///
+/// The opposite direction of travel from [crateMoneyArrangementOf], and for the
+/// same reason read backwards: every value here books the same money, so an
+/// unreadable one must not vanish from the P&L. It lands in the bucket an owner
+/// is asked to explain by hand, which is the loud outcome, not the quiet one.
+CrateWriteOffSource crateWriteOffSourceOf(String? wire) {
+  for (final s in CrateWriteOffSource.values) {
+    if (s.wire == wire) return s;
+  }
+  return CrateWriteOffSource.manual;
+}
+
 // ── The persisted decision ───────────────────────────────────────────────────
 
 /// One row of `crate_shortfall_writeoffs`, reduced to the four fields the
@@ -67,11 +123,21 @@ class CrateShortfallWriteOff {
   /// The day the decision was taken — the day the loss hits profit.
   final DateTime writtenOffAt;
 
+  /// Where the decision came from (#217). Display and disclosure only: BOTH
+  /// sources book the same loss on the same line, because a crate that is not
+  /// coming back costs the same whether an owner accepted it on a card or a
+  /// customer drove off with it. What the split buys is the owner-facing
+  /// sentence — "this much of it is deposits customers kept" — which is the
+  /// difference between a figure that reads as a bug and one that reads as an
+  /// explanation.
+  final CrateWriteOffSource source;
+
   const CrateShortfallWriteOff({
     required this.manufacturerId,
     required this.crateCount,
     required this.ratePerCrateKobo,
     required this.writtenOffAt,
+    this.source = CrateWriteOffSource.manual,
   });
 
   /// The money this decision books, at the snapshotted rate.
@@ -312,11 +378,17 @@ CrateShortfallRollup rollUpCrateShortfalls(List<CrateShortfall> shortfalls) {
 /// contributes nothing — the same release gate as everywhere else. A brand
 /// missing from the map is treated as `none` (fail closed): an unreadable
 /// arrangement must never book a loss.
+///
+/// [onlySource] narrows the total to one origin (#217) — for DISCLOSURE ONLY.
+/// The P&L reads the unfiltered total; the reconciliation card uses the
+/// `customerForfeit` slice to tell the owner, in words, why a kept deposit
+/// stopped showing up as profit.
 int crateShortfallWriteOffKobo({
   required Iterable<CrateShortfallWriteOff> writeOffs,
   required Map<String, CrateMoneyArrangement> arrangementByManufacturerId,
   DateTime? start,
   DateTime? endExclusive,
+  CrateWriteOffSource? onlySource,
 }) {
   var total = 0;
   for (final w in writeOffs) {
@@ -324,11 +396,48 @@ int crateShortfallWriteOffKobo({
         arrangementByManufacturerId[w.manufacturerId] ??
         CrateMoneyArrangement.none;
     if (!arrangement.movesMoney) continue;
+    if (onlySource != null && w.source != onlySource) continue;
     if (start != null && w.writtenOffAt.isBefore(start)) continue;
     if (endExclusive != null && !w.writtenOffAt.isBefore(endExclusive)) continue;
     total += w.valueKobo;
   }
   return total;
+}
+
+// ── The forfeit netting (#217, ADR 0023 finding #4 and rule 5) ───────────────
+
+/// **How many crates a customer forfeit takes out of the yard for good** — and
+/// therefore the size of the Shortfall that forfeit raises.
+///
+/// The whole of slice #217 is this one decision, and it is a pure function of
+/// two facts so that the moment of truth is testable without a database and
+/// impossible to re-derive differently somewhere else:
+///
+///   * **[arrangement] moves money** — a deposit was genuinely placed with a
+///     depot for these crates, so a crate that never comes back is money the
+///     business will not get back either. The forfeit nets to zero.
+///   * **[arrangement] is `none`** — nobody was ever paid a deposit for these
+///     crates. They were the business's own to lose, so keeping the customer's
+///     money is a REAL gain and it stays pure income, exactly as it read before
+///     PRD #203 existed. This is the release gate, expressed as arithmetic.
+///
+/// The count is the crates KEPT, never the money. The money follows at the
+/// manufacturer's rate snapshotted on the day (`CrateShortfallWriteOff`), which
+/// is what makes a rate edited next month unable to restate a closed day.
+///
+/// **Nothing here consults a date.** Whether a past forfeit was netted is not a
+/// question this function — or any report — ever asks: it is settled once, in
+/// the same transaction as the forfeit, by whether a row was written at all.
+/// That is the whole of the no-restatement guarantee, and it lives in the write
+/// path rather than here on purpose. A reader that re-decided from today's
+/// arrangement would rewrite last March's profit the moment a brand was
+/// switched on, which ADR 0021 forbids outright.
+int crateForfeitShortfallCrates({
+  required CrateMoneyArrangement arrangement,
+  required int keptCrates,
+}) {
+  if (!arrangement.movesMoney) return 0;
+  return keptCrates > 0 ? keptCrates : 0;
 }
 
 int _max0(int v) => v > 0 ? v : 0;

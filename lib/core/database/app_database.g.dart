@@ -9665,6 +9665,16 @@ class $CrateShortfallWriteoffsTable extends CrateShortfallWriteoffs
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kCrateWriteOffSourceManual),
+  );
   static const VerificationMeta _performedByMeta = const VerificationMeta(
     'performedBy',
   );
@@ -9713,6 +9723,7 @@ class $CrateShortfallWriteoffsTable extends CrateShortfallWriteoffs
     crateCount,
     ratePerCrateKobo,
     note,
+    source,
     performedBy,
     createdAt,
     lastUpdatedAt,
@@ -9780,6 +9791,12 @@ class $CrateShortfallWriteoffsTable extends CrateShortfallWriteoffs
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
       );
     }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
     if (data.containsKey('performed_by')) {
       context.handle(
         _performedByMeta,
@@ -9844,6 +9861,10 @@ class $CrateShortfallWriteoffsTable extends CrateShortfallWriteoffs
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      )!,
       performedBy: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}performed_by'],
@@ -9893,6 +9914,30 @@ class CrateShortfallWriteoffData extends DataClass
   final int ratePerCrateKobo;
   final String? note;
 
+  /// **Where this booked loss came from** (#217): `manual` — an owner accepted
+  /// it on the Crate Shortfall card — or `customer_forfeit` — a customer kept
+  /// the crates, and their deposit with them.
+  ///
+  /// Both book the same money on the same P&L line. The column exists so the
+  /// reconciliation can SAY WHICH, because "your profit fell and nobody
+  /// decided anything" is how a correct figure gets reported as a bug, and so
+  /// "who accepted this loss and when" keeps naming the person who actually
+  /// stood in front of the card rather than whichever cashier last confirmed an
+  /// order.
+  ///
+  /// NOT NULL defaulting to `manual`, so every row #216 already wrote — and any
+  /// row a v80 device pushes before it upgrades — lands in the bucket it was
+  /// always in. Nothing is backfilled and no figure moves at upgrade.
+  ///
+  /// The value set is enforced by a cloud CHECK (0174) rather than a Drift
+  /// table-level CHECK, exactly as `manufacturers.crate_money_arrangement` and
+  /// `stores.kind` are: SQLite cannot add a table constraint without rebuilding
+  /// the table, and rebuilding an append-only money ledger to gain a constraint
+  /// the client can already only satisfy is a bad trade. The client writes only
+  /// the [kCrateWriteOffSources] constants, from the one seam
+  /// (`CratePoolDao`).
+  final String source;
+
   /// Who accepted the loss. Half of "who wrote off a shortage and when".
   final String? performedBy;
 
@@ -9909,6 +9954,7 @@ class CrateShortfallWriteoffData extends DataClass
     required this.crateCount,
     required this.ratePerCrateKobo,
     this.note,
+    required this.source,
     this.performedBy,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -9927,6 +9973,7 @@ class CrateShortfallWriteoffData extends DataClass
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
+    map['source'] = Variable<String>(source);
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
     }
@@ -9946,6 +9993,7 @@ class CrateShortfallWriteoffData extends DataClass
       crateCount: Value(crateCount),
       ratePerCrateKobo: Value(ratePerCrateKobo),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      source: Value(source),
       performedBy: performedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(performedBy),
@@ -9967,6 +10015,7 @@ class CrateShortfallWriteoffData extends DataClass
       crateCount: serializer.fromJson<int>(json['crateCount']),
       ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
       note: serializer.fromJson<String?>(json['note']),
+      source: serializer.fromJson<String>(json['source']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -9983,6 +10032,7 @@ class CrateShortfallWriteoffData extends DataClass
       'crateCount': serializer.toJson<int>(crateCount),
       'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
       'note': serializer.toJson<String?>(note),
+      'source': serializer.toJson<String>(source),
       'performedBy': serializer.toJson<String?>(performedBy),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -9997,6 +10047,7 @@ class CrateShortfallWriteoffData extends DataClass
     int? crateCount,
     int? ratePerCrateKobo,
     Value<String?> note = const Value.absent(),
+    String? source,
     Value<String?> performedBy = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -10008,6 +10059,7 @@ class CrateShortfallWriteoffData extends DataClass
     crateCount: crateCount ?? this.crateCount,
     ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
     note: note.present ? note.value : this.note,
+    source: source ?? this.source,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -10031,6 +10083,7 @@ class CrateShortfallWriteoffData extends DataClass
           ? data.ratePerCrateKobo.value
           : this.ratePerCrateKobo,
       note: data.note.present ? data.note.value : this.note,
+      source: data.source.present ? data.source.value : this.source,
       performedBy: data.performedBy.present
           ? data.performedBy.value
           : this.performedBy,
@@ -10051,6 +10104,7 @@ class CrateShortfallWriteoffData extends DataClass
           ..write('crateCount: $crateCount, ')
           ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
           ..write('note: $note, ')
+          ..write('source: $source, ')
           ..write('performedBy: $performedBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -10067,6 +10121,7 @@ class CrateShortfallWriteoffData extends DataClass
     crateCount,
     ratePerCrateKobo,
     note,
+    source,
     performedBy,
     createdAt,
     lastUpdatedAt,
@@ -10082,6 +10137,7 @@ class CrateShortfallWriteoffData extends DataClass
           other.crateCount == this.crateCount &&
           other.ratePerCrateKobo == this.ratePerCrateKobo &&
           other.note == this.note &&
+          other.source == this.source &&
           other.performedBy == this.performedBy &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -10096,6 +10152,7 @@ class CrateShortfallWriteoffsCompanion
   final Value<int> crateCount;
   final Value<int> ratePerCrateKobo;
   final Value<String?> note;
+  final Value<String> source;
   final Value<String?> performedBy;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -10108,6 +10165,7 @@ class CrateShortfallWriteoffsCompanion
     this.crateCount = const Value.absent(),
     this.ratePerCrateKobo = const Value.absent(),
     this.note = const Value.absent(),
+    this.source = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -10121,6 +10179,7 @@ class CrateShortfallWriteoffsCompanion
     required int crateCount,
     this.ratePerCrateKobo = const Value.absent(),
     this.note = const Value.absent(),
+    this.source = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -10136,6 +10195,7 @@ class CrateShortfallWriteoffsCompanion
     Expression<int>? crateCount,
     Expression<int>? ratePerCrateKobo,
     Expression<String>? note,
+    Expression<String>? source,
     Expression<String>? performedBy,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -10149,6 +10209,7 @@ class CrateShortfallWriteoffsCompanion
       if (crateCount != null) 'crate_count': crateCount,
       if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
       if (note != null) 'note': note,
+      if (source != null) 'source': source,
       if (performedBy != null) 'performed_by': performedBy,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -10164,6 +10225,7 @@ class CrateShortfallWriteoffsCompanion
     Value<int>? crateCount,
     Value<int>? ratePerCrateKobo,
     Value<String?>? note,
+    Value<String>? source,
     Value<String?>? performedBy,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -10177,6 +10239,7 @@ class CrateShortfallWriteoffsCompanion
       crateCount: crateCount ?? this.crateCount,
       ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
       note: note ?? this.note,
+      source: source ?? this.source,
       performedBy: performedBy ?? this.performedBy,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -10208,6 +10271,9 @@ class CrateShortfallWriteoffsCompanion
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
     if (performedBy.present) {
       map['performed_by'] = Variable<String>(performedBy.value);
     }
@@ -10233,6 +10299,7 @@ class CrateShortfallWriteoffsCompanion
           ..write('crateCount: $crateCount, ')
           ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
           ..write('note: $note, ')
+          ..write('source: $source, ')
           ..write('performedBy: $performedBy, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -69407,6 +69474,7 @@ typedef $$CrateShortfallWriteoffsTableCreateCompanionBuilder =
       required int crateCount,
       Value<int> ratePerCrateKobo,
       Value<String?> note,
+      Value<String> source,
       Value<String?> performedBy,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -69421,6 +69489,7 @@ typedef $$CrateShortfallWriteoffsTableUpdateCompanionBuilder =
       Value<int> crateCount,
       Value<int> ratePerCrateKobo,
       Value<String?> note,
+      Value<String> source,
       Value<String?> performedBy,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -69551,6 +69620,11 @@ class $$CrateShortfallWriteoffsTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -69686,6 +69760,11 @@ class $$CrateShortfallWriteoffsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -69813,6 +69892,9 @@ class $$CrateShortfallWriteoffsTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -69969,6 +70051,7 @@ class $$CrateShortfallWriteoffsTableTableManager
                 Value<int> crateCount = const Value.absent(),
                 Value<int> ratePerCrateKobo = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String> source = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -69981,6 +70064,7 @@ class $$CrateShortfallWriteoffsTableTableManager
                 crateCount: crateCount,
                 ratePerCrateKobo: ratePerCrateKobo,
                 note: note,
+                source: source,
                 performedBy: performedBy,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -69995,6 +70079,7 @@ class $$CrateShortfallWriteoffsTableTableManager
                 required int crateCount,
                 Value<int> ratePerCrateKobo = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String> source = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -70007,6 +70092,7 @@ class $$CrateShortfallWriteoffsTableTableManager
                 crateCount: crateCount,
                 ratePerCrateKobo: ratePerCrateKobo,
                 note: note,
+                source: source,
                 performedBy: performedBy,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
