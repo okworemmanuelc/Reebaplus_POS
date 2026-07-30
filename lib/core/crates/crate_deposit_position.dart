@@ -212,6 +212,191 @@ class CrateDepositPosition {
   int get notionalDeltaKobo => placedDepositKobo - cratesOwed * ratePerCrateKobo;
 }
 
+// ── The business-wide roll-up (#215) ─────────────────────────────────────────
+//
+// The reconciliation's sixth card and the Business worth asset both need ONE
+// business-wide answer to "how much of my money are my suppliers sitting on?".
+// That answer is a SUM OF POSITIONS, never a second derivation: every figure
+// below is added up from [CrateDepositPosition] values that
+// [computeCrateDepositPosition] produced, so the card, the supplier screen and
+// the refund cap cannot fork into three disagreeing numbers (ADR 0023
+// finding #3). Aggregation lives here rather than in the DAO for the same
+// reason the position itself does — it is arithmetic an owner acts on, and it
+// must be exercisable with no database.
+
+/// One `(supplier, brand)` slice of the business-wide roll-up: the pair's
+/// [CrateDepositPosition] plus the two names a card needs to render it.
+class CrateDepositHolding {
+  final String supplierId;
+  final String supplierName;
+  final String manufacturerId;
+  final String manufacturerName;
+  final CrateDepositPosition position;
+
+  const CrateDepositHolding({
+    required this.supplierId,
+    required this.supplierName,
+    required this.manufacturerId,
+    required this.manufacturerName,
+    required this.position,
+  });
+}
+
+/// What ONE supplier is holding, across every brand of theirs that moves crate
+/// money. The unit the card's "by supplier" half is rendered from — a depot
+/// invoices the business for all their brands at once, so this is the level an
+/// owner argues at.
+class CrateDepositSupplierTotal {
+  final String supplierId;
+  final String supplierName;
+
+  /// Money of ours this supplier is currently sitting on.
+  final int placedDepositKobo;
+
+  /// Money legs raised against this supplier and still awaiting a
+  /// money-permitted role. NOT part of [placedDepositKobo] — nothing has moved.
+  final int pendingDepositKobo;
+
+  /// Crates owed to this supplier that no placed money stands behind, valued at
+  /// the brand rate. Disclosure only (see [CrateDepositPosition.unbackedCrates]).
+  final int unbackedValueKobo;
+
+  /// The brands behind the figures, sorted by name.
+  final List<CrateDepositHolding> brands;
+
+  const CrateDepositSupplierTotal({
+    required this.supplierId,
+    required this.supplierName,
+    required this.placedDepositKobo,
+    required this.pendingDepositKobo,
+    required this.unbackedValueKobo,
+    required this.brands,
+  });
+}
+
+/// Every supplier's crate-money position at once — the business-wide,
+/// point-in-time answer the reconciliation card and Business worth read.
+///
+/// **Business-wide is not an implementation detail, it is the decision.**
+/// Supplier crate money is a company obligation: the depot invoices the
+/// business, not the branch. Splitting it per store would repeat the defect
+/// `CRATE_TRACKING_AUDIT` C4 already names — point-in-time business-wide crate
+/// figures presented inside a store-scoped report — and would let two branches
+/// each believe the same money is theirs. So there is no store axis in this
+/// type at all, and the card that renders it says "business-wide" on its face
+/// even when a store is locked.
+class CrateDepositRollup {
+  /// One entry per `(supplier, brand)` pair that moves crate money, sorted by
+  /// supplier then brand. Brands on the default `none` arrangement contribute
+  /// [CrateDepositPosition.zero] and are dropped, so a business that has never
+  /// switched a brand on rolls up to [empty].
+  final List<CrateDepositSupplierTotal> bySupplier;
+
+  /// **The asset.** Every supplier's placed money, summed. This is what enters
+  /// `businessNetPositionKobo` — the money is still the owner's, merely held
+  /// elsewhere (ADR 0023 rule 1).
+  final int placedDepositKobo;
+
+  /// Money legs raised and awaiting confirmation, summed. Deliberately outside
+  /// [placedDepositKobo] and outside business worth: a book entry appears only
+  /// when money genuinely moved.
+  final int pendingDepositKobo;
+
+  /// Crates owed that no placed money stands behind, valued at the brand rates.
+  /// The gap ADR 0023 finding #3 says never gets shown — reported beside the
+  /// money rather than instead of it.
+  final int unbackedValueKobo;
+
+  const CrateDepositRollup({
+    required this.bySupplier,
+    required this.placedDepositKobo,
+    required this.pendingDepositKobo,
+    required this.unbackedValueKobo,
+  });
+
+  /// What a business with every brand at `none` reads — and what every existing
+  /// tenant reads until an owner deliberately switches a brand on.
+  static const CrateDepositRollup empty = CrateDepositRollup(
+    bySupplier: [],
+    placedDepositKobo: 0,
+    pendingDepositKobo: 0,
+    unbackedValueKobo: 0,
+  );
+
+  /// True when there is any crate money to show at all — the gate the card is
+  /// rendered behind, so a swap-only business never grows a sixth card.
+  bool get hasMoney =>
+      placedDepositKobo != 0 ||
+      pendingDepositKobo != 0 ||
+      unbackedValueKobo != 0;
+
+  /// True when a money leg is waiting on a money-permitted role somewhere.
+  bool get hasPending => pendingDepositKobo != 0;
+}
+
+/// Roll [holdings] up into the business-wide answer.
+///
+/// Pairs whose position moves no money are dropped rather than rendered at
+/// zero: a `none` brand is not "settled", it is *not in this story at all*, and
+/// a card listing it would invite an owner to reconcile a figure that will
+/// never move. Suppliers left with no money-moving brand disappear with them.
+CrateDepositRollup rollUpCrateDepositPositions(
+  List<CrateDepositHolding> holdings,
+) {
+  final live = holdings.where((h) => h.position.movesMoney).toList();
+  if (live.isEmpty) return CrateDepositRollup.empty;
+
+  final bySupplierId = <String, List<CrateDepositHolding>>{};
+  for (final h in live) {
+    (bySupplierId[h.supplierId] ??= <CrateDepositHolding>[]).add(h);
+  }
+
+  var placedDepositKobo = 0;
+  var pendingDepositKobo = 0;
+  var unbackedValueKobo = 0;
+  final bySupplier = <CrateDepositSupplierTotal>[];
+
+  for (final entry in bySupplierId.entries) {
+    final brands = entry.value
+      ..sort((a, b) => a.manufacturerName.compareTo(b.manufacturerName));
+    var placed = 0;
+    var pending = 0;
+    var unbacked = 0;
+    for (final h in brands) {
+      placed += h.position.placedDepositKobo;
+      pending += h.position.pendingDepositKobo;
+      unbacked += h.position.unbackedValueKobo;
+    }
+    placedDepositKobo += placed;
+    pendingDepositKobo += pending;
+    unbackedValueKobo += unbacked;
+    bySupplier.add(
+      CrateDepositSupplierTotal(
+        supplierId: entry.key,
+        supplierName: brands.first.supplierName,
+        placedDepositKobo: placed,
+        pendingDepositKobo: pending,
+        unbackedValueKobo: unbacked,
+        brands: brands,
+      ),
+    );
+  }
+
+  // Biggest holder first — the supplier sitting on the most of the owner's
+  // money is the one they will ring.
+  bySupplier.sort((a, b) {
+    final byMoney = b.placedDepositKobo.compareTo(a.placedDepositKobo);
+    return byMoney != 0 ? byMoney : a.supplierName.compareTo(b.supplierName);
+  });
+
+  return CrateDepositRollup(
+    bySupplier: bySupplier,
+    placedDepositKobo: placedDepositKobo,
+    pendingDepositKobo: pendingDepositKobo,
+    unbackedValueKobo: unbackedValueKobo,
+  );
+}
+
 // ── The computation ──────────────────────────────────────────────────────────
 
 /// Compute a crate-deposit position from plain data.

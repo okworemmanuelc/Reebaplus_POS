@@ -884,4 +884,103 @@ void main() {
       expect(b.single.position.placedDepositKobo, 4 * rate);
     });
   });
+
+  // ── 8. The business-wide roll-up (#215) ───────────────────────────────────
+
+  group('the business-wide roll-up the sixth card reads', () {
+    Future<void> confirmAll() async {
+      for (final r in await db.select(db.supplierCrateDepositRequests).get()) {
+        await db.cratePoolDao.confirmCrateDepositRequest(
+          requestId: r.id,
+          decidedBy: managerId,
+        );
+      }
+    }
+
+    test('a business that never switched a brand on rolls up to EMPTY',
+        () async {
+      // THE RELEASE GATE at the roll-up. Receiving 30 crates of a `none` brand
+      // moves crates and nothing else, so the card never appears.
+      await receive(manufacturerId: swapBrand, crates: 30);
+      await confirmAll();
+
+      final rollup = await db.cratePoolDao
+          .watchBusinessCrateDepositRollup()
+          .first;
+      expect(rollup.placedDepositKobo, 0);
+      expect(rollup.bySupplier, isEmpty);
+      expect(rollup.hasMoney, isFalse);
+    });
+
+    test('it totals every supplier and names each one', () async {
+      await receive(manufacturerId: moneyBrand, crates: 8); // Ade Depot
+      await receive(
+        manufacturerId: moneyBrand,
+        crates: 4,
+        supplierId: supplierB, // Bola Depot
+      );
+      // A `none` brand in the same business contributes nothing at all.
+      await receive(manufacturerId: swapBrand, crates: 30);
+      await confirmAll();
+
+      final rollup = await db.cratePoolDao
+          .watchBusinessCrateDepositRollup()
+          .first;
+
+      expect(rollup.placedDepositKobo, 12 * rate);
+      expect(rollup.bySupplier, hasLength(2));
+      // Biggest holder first — the supplier an owner rings.
+      expect(rollup.bySupplier.first.supplierName, 'Ade Depot');
+      expect(rollup.bySupplier.first.placedDepositKobo, 8 * rate);
+      expect(rollup.bySupplier.last.supplierName, 'Bola Depot');
+      expect(rollup.bySupplier.last.placedDepositKobo, 4 * rate);
+      // Only the money-moving brand is listed under each supplier.
+      expect(
+        rollup.bySupplier.first.brands.map((b) => b.manufacturerName),
+        ['Star Lager'],
+      );
+      expect(
+        rollup.bySupplier.fold<int>(0, (s, x) => s + x.placedDepositKobo),
+        rollup.placedDepositKobo,
+      );
+    });
+
+    test('a leg still awaiting a manager is reported, and is NOT in the total',
+        () async {
+      // ADR 0023 rule 6 — a book entry appears only when money genuinely moved.
+      await receive(manufacturerId: moneyBrand, crates: 8);
+
+      final rollup = await db.cratePoolDao
+          .watchBusinessCrateDepositRollup()
+          .first;
+      expect(rollup.placedDepositKobo, 0);
+      expect(rollup.pendingDepositKobo, 8 * rate);
+      expect(rollup.hasPending, isTrue);
+      expect(rollup.hasMoney, isTrue, reason: 'the card must show it');
+      expect(rollup.bySupplier.single.supplierName, 'Ade Depot');
+    });
+
+    test('the crates a deposit does NOT stand behind are disclosed beside it',
+        () async {
+      // Both legs of one delivery: the receipt leg (#210) raises the crate
+      // debt, the money leg the deposit. Confirm only the SECOND delivery's
+      // money and the first delivery's crates stand unbacked.
+      await receive(manufacturerId: moneyBrand, crates: 10);
+      final first = (await db.select(db.supplierCrateDepositRequests).get())
+          .single;
+      await db.cratePoolDao.rejectCrateDepositRequest(
+        requestId: first.id,
+        decidedBy: managerId,
+      );
+      await receive(manufacturerId: moneyBrand, crates: 6);
+      await confirmAll();
+
+      final rollup = await db.cratePoolDao
+          .watchBusinessCrateDepositRollup()
+          .first;
+      // 16 crates owed, 6 of them backed by money.
+      expect(rollup.placedDepositKobo, 6 * rate);
+      expect(rollup.unbackedValueKobo, 10 * rate);
+    });
+  });
 }

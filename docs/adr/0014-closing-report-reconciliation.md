@@ -1,6 +1,8 @@
 # The closing report reconciles from recorded flows, not a cash balance
 
-**Status:** accepted (2026-07-05)
+**Status:** accepted (2026-07-05); **amended 2026-07-30 (PRD #203 slice #215)** —
+see "Amendment: the sixth card" at the foot of this file before changing the
+card count.
 
 The Daily Reconciliation (§25.9, `recon_data.dart` + `daily_reconciliation_detail_screen.dart`)
 already ships a store-scoped, Day/Week/Month/Year report with Sales, a CEO
@@ -111,3 +113,41 @@ Decisions locked:
 - **Keep the perpetual count only / implement the literal equation** — rejected:
   the first omits the opening→closing story asked for; the second double-counts
   shortages so expected-vs-actual never ties out.
+
+## Amendment: the sixth card (2026-07-30, PRD #203 slice #215)
+
+This ADR cut the reconciliation from nine cards to five, and the cut is still
+the rule: every figure that can live on an existing card must. **One exception
+is now granted, deliberately and by the owner: a sixth card, "Crate money with
+suppliers (business-wide)".** Design record: ADR 0023, whose Consequences name
+this amendment as a required part of the slice.
+
+**Why it earns a card rather than a line.** Before PRD #203 a distributor could
+hand a depot ₦180,000 for their crates and *every money figure in the app read
+exactly the same afterwards* (ADR 0023 finding #1). Slice #215 fixes the total —
+a Placed Deposit is now an asset inside `businessNetPositionKobo`, and it gets
+its own cash line outside `cashInKobo`/`cashOutKobo`/net, the same treatment
+`cashCrateDepositsKobo` has had for the customer leg since #175. But a total
+answers "how much?", and the question an owner acts on is "**who** is holding
+it?" — that is who they ring, and who they settle with. Only a card can carry
+the per-supplier breakdown. Folding it into Business worth would have kept the
+figure invisible in the way that mattered.
+
+**Why it is business-wide, even under a locked store.** Supplier crate money is
+a company obligation: the depot invoices the business, not the branch. The card
+says "(business-wide)" on its face and its provider never reads the active
+store. Splitting it per store would repeat the defect `CRATE_TRACKING_AUDIT` C4
+already names — point-in-time business-wide crate figures presented inside a
+store-scoped report — and would let two branches each believe the same money was
+theirs.
+
+**Why the count is not really six for anyone yet.** The Crate Money Arrangement
+defaults to `none` on every manufacturer (ADR 0023 rule 3, slice #211), and the
+card renders only when a brand actually moves crate money. Every business that
+has not deliberately switched a brand on still reads exactly the five cards this
+ADR specified — which is also the release gate PRD #203 ships on.
+
+**To anyone re-tightening the card count:** this exception is deliberate, and
+the reasoning is here so you can weigh it rather than discover it. If crate
+money can be made legible without a card of its own, replacing it is a decision
+to record, not a tidy-up to perform.
