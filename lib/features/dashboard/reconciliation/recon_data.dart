@@ -640,6 +640,7 @@ class ReconData {
     // like every other additive field.
     this.crateShortfalls = CrateShortfallRollup.empty,
     this.crateShortfallWrittenOffKobo = 0,
+    this.crateForfeitNettedKobo = 0,
     required this.bestStaff,
     required this.bestStaffKobo,
     required this.expensesKobo,
@@ -822,6 +823,33 @@ class ReconData {
   /// deliberately switched one on.
   final int crateShortfallWrittenOffKobo;
 
+  /// #217 — **the part of [crateShortfallWrittenOffKobo] a customer forfeit
+  /// raised**, in this period (ADR 0023 finding #4).
+  ///
+  /// A kept crate deposit is income (#176). But on a brand where a deposit was
+  /// genuinely placed with a depot, the crate the customer kept is one the
+  /// business can never hand back, and it was charged at the SAME rate the
+  /// depot holds — so the gain and the loss are the same size and the pair nets
+  /// to **zero**. This is that loss, and [forfeitIncomeKobo] is the gain it
+  /// cancels.
+  ///
+  /// **A DISCLOSURE FIGURE, NOT A DEDUCTION.** It is already counted inside
+  /// [crateShortfallWrittenOffKobo] and must never be subtracted a second time.
+  /// It exists so the reconciliation can tell an owner, in plain words, why a
+  /// deposit they kept stopped showing up as profit — because a correct figure
+  /// nobody can account for is exactly how a correct figure gets reported as a
+  /// bug.
+  ///
+  /// **Forward only.** A forfeit settled before a brand was switched on has no
+  /// netting row and never grows one, so this figure reads 0 for every closed
+  /// day that predates the switch-on. A report spanning that date shows both
+  /// treatments — pure income before, netted after — and that is by design
+  /// (ADR 0021: a setting flipped today never rewrites a day already closed).
+  ///
+  /// 0 for every `none` brand: no deposit was ever placed for those crates, so
+  /// keeping the customer's money is a real gain and stays pure income.
+  final int crateForfeitNettedKobo;
+
   final String? bestStaff;
   final int bestStaffKobo;
   final int expensesKobo;
@@ -913,6 +941,14 @@ class ReconData {
   /// their own `created_at` day, business-wide (wallet rows have no store),
   /// gated on [showCrates]. Added to [netProfitKobo] — previously invisible in
   /// the P&L while crate LOSSES were subtracted.
+  ///
+  /// **#217 does not touch this figure, deliberately.** A kept deposit really
+  /// was kept, on every brand, and hiding it would lose the fact that the money
+  /// came in. What #217 adds is the OTHER half on an opted-in brand — the crate
+  /// that will never go back to the depot, booked as
+  /// [crateForfeitNettedKobo] — so the pair nets to zero rather than the income
+  /// disappearing. On a `none` brand there is no other half and this stays pure
+  /// gain, which is the release gate.
   final int forfeitIncomeKobo;
 
   /// Quick-sale (Uncosted) takings included in the profit picture (#176 / PRD
@@ -1038,6 +1074,13 @@ class ReconData {
   /// [deletionCostKobo] joins Damages as a loss line (#193): stock written off
   /// because its product was deleted is value the business paid for and no longer
   /// has, so it belongs in the result and not merely in a stock-card note.
+  /// **#217 — and this is where a forfeit stops being reported as a gain it
+  /// isn't.** [forfeitIncomeKobo] still adds the deposit the business kept, but
+  /// on an opted-in brand [crateShortfallWrittenOffKobo] now also carries the
+  /// crate that will never go back to the depot, at the same rate. The two are
+  /// the same size, so the pair contributes ZERO. On a `none` brand no netting
+  /// row exists and the income stands alone, exactly as before.
+  ///
   /// [crateShortfallWrittenOffKobo] joins them (#216): crates the owner has
   /// deliberately accepted as lost are deposit value the business will not get
   /// back, and the day they said so is the day it costs them. It is the only
@@ -2022,33 +2065,53 @@ ReconData reconDataFrom(ReconInputs input) {
   // seam rather than by a sum written out in this file.
   var crateShortfalls = CrateShortfallRollup.empty;
   var crateShortfallWrittenOffKobo = 0;
+  // #217 — the slice of the line above that a CUSTOMER FORFEIT raised. Not a
+  // second deduction: it is already inside `crateShortfallWrittenOffKobo` and
+  // must never be subtracted again. It exists so the report can say, in words,
+  // why a kept deposit stopped reading as profit.
+  var crateForfeitNettedKobo = 0;
   if (showCrates) {
     heldCrateDepositsKobo = input.heldCrateDepositsKobo;
     supplierCrateDebtKobo = input.supplierCrateDebtKobo;
     crateDeposits = input.crateDeposits;
     crateShortfalls = input.crateShortfalls;
+    final writeOffs = [
+      for (final w in input.crateShortfallWriteOffs)
+        CrateShortfallWriteOff(
+          manufacturerId: w.manufacturerId,
+          crateCount: w.crateCount,
+          // The rate SNAPSHOTTED when the decision was taken, never today's.
+          // A brand whose deposit rate rises next month must not restate the
+          // profit of a day already closed (ADR 0021).
+          ratePerCrateKobo: w.ratePerCrateKobo,
+          writtenOffAt: w.createdAt,
+          // #217 — where the loss came from. The SAME rows on the SAME line;
+          // only the disclosure split below reads it.
+          source: crateWriteOffSourceOf(w.source),
+        ),
+    ];
+    // Fail closed: a brand missing from this map reads `none` and books
+    // nothing. `manufacturers` is the same unfiltered business-wide list the
+    // empties valuation above uses.
+    final arrangementByManufacturerId = {
+      for (final m in manufacturers)
+        m.id: crateMoneyArrangementOf(m.crateMoneyArrangement),
+    };
     crateShortfallWrittenOffKobo = crateShortfallWriteOffKobo(
-      writeOffs: [
-        for (final w in input.crateShortfallWriteOffs)
-          CrateShortfallWriteOff(
-            manufacturerId: w.manufacturerId,
-            crateCount: w.crateCount,
-            // The rate SNAPSHOTTED when the decision was taken, never today's.
-            // A brand whose deposit rate rises next month must not restate the
-            // profit of a day already closed (ADR 0021).
-            ratePerCrateKobo: w.ratePerCrateKobo,
-            writtenOffAt: w.createdAt,
-          ),
-      ],
-      // Fail closed: a brand missing from this map reads `none` and books
-      // nothing. `manufacturers` is the same unfiltered business-wide list the
-      // empties valuation above uses.
-      arrangementByManufacturerId: {
-        for (final m in manufacturers)
-          m.id: crateMoneyArrangementOf(m.crateMoneyArrangement),
-      },
+      writeOffs: writeOffs,
+      arrangementByManufacturerId: arrangementByManufacturerId,
       start: input.start,
       endExclusive: endExclusive,
+    );
+    // The SAME window and the SAME gate, narrowed to one origin — so the split
+    // can never exceed the whole, and a period with no forfeits reads 0 without
+    // a special case.
+    crateForfeitNettedKobo = crateShortfallWriteOffKobo(
+      writeOffs: writeOffs,
+      arrangementByManufacturerId: arrangementByManufacturerId,
+      start: input.start,
+      endExclusive: endExclusive,
+      onlySource: CrateWriteOffSource.customerForfeit,
     );
   }
 
@@ -2179,6 +2242,7 @@ ReconData reconDataFrom(ReconInputs input) {
     crateDeposits: crateDeposits,
     crateShortfalls: crateShortfalls,
     crateShortfallWrittenOffKobo: crateShortfallWrittenOffKobo,
+    crateForfeitNettedKobo: crateForfeitNettedKobo,
     bestStaff: bestStaff,
     bestStaffKobo: bestStaffKobo,
     expensesKobo: expensesKobo,

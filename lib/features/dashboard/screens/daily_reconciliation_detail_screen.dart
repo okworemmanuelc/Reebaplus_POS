@@ -583,6 +583,19 @@ class _DailyReconciliationDetailScreenState
             'Forfeit income (kept crate deposits)',
             '+ ${formatCurrency(d.forfeitIncomeKobo / 100.0)}',
           ),
+        // #217 — and, right underneath it, the crate that money paid for.
+        //
+        // This line exists so the owner is never shown a gain with an invisible
+        // offset. Without it the deposit reads as +₦3,500 of pure profit while
+        // net profit quietly fails to rise, which is how a correct figure gets
+        // reported as a bug.
+        if (d.crateForfeitNettedKobo != 0)
+          _line(
+            context,
+            theme,
+            'Crates those customers kept (you owe the depot)',
+            '− ${formatCurrency(d.crateForfeitNettedKobo / 100.0)}',
+          ),
         _line(
           context,
           theme,
@@ -621,6 +634,24 @@ class _DailyReconciliationDetailScreenState
           strong: true,
           color: netColor,
         ),
+        // #217 — the sentence that stops this reading as a bug. Shop-owner
+        // words, no accounting terms: you kept their money, but the crate they
+        // kept is one you still owe the depot, and it costs the same.
+        if (d.crateForfeitNettedKobo != 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            'You kept ${formatCurrency(d.forfeitIncomeKobo / 100.0)} of crate '
+            'deposits from customers who never brought the crates back. Those '
+            'crates are not yours — you paid your depot a deposit for them, at '
+            'the same price you charged the customer — so they cost you '
+            '${formatCurrency(d.crateForfeitNettedKobo / 100.0)} and the two '
+            'cancel out. You are not worse off, and you did not really gain: '
+            'this is why kept deposits no longer add to your profit on brands '
+            'where you pay your depot a crate deposit. On brands where you do '
+            'not, they still do.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
         if (d.uncostedItems > 0) ...[
           const SizedBox(height: 6),
           Text(
@@ -1261,6 +1292,9 @@ class _DailyReconciliationDetailScreenState
   ) {
     final shortfalls = d.crateShortfalls;
     final writtenOff = d.crateShortfallWrittenOffKobo;
+    // #217 — the slice of [writtenOff] that a customer forfeit raised. Already
+    // inside it; shown as a breakdown, never added again.
+    final netted = d.crateForfeitNettedKobo;
     if (!shortfalls.hasShortfall && writtenOff == 0) return const [];
 
     final warnColor = theme.extension<AppSemanticColors>()!.warning;
@@ -1315,6 +1349,17 @@ class _DailyReconciliationDetailScreenState
           '− ${formatCurrency(writtenOff / 100.0)}',
           color: dangerColor,
         ),
+        // #217 — split out the half nobody chose. The total above is what came
+        // out of profit; this says how much of it was customers keeping crates,
+        // so an owner who took no decisions this period is not left wondering
+        // who wrote off their money.
+        if (netted != 0)
+          _line(
+            context,
+            theme,
+            '…of which crates customers kept',
+            '− ${formatCurrency(netted / 100.0)}',
+          ),
         for (final s in shortfalls.brands)
           if (s.lastWrittenOffAt != null)
             Text(
@@ -1324,8 +1369,14 @@ class _DailyReconciliationDetailScreenState
             ),
         const SizedBox(height: 6),
         Text(
-          'Crates you accepted as lost. This one DOES come out of your profit, '
-          'on the day you accepted it.',
+          netted == writtenOff
+              ? 'Crates customers never brought back. Their deposit stays with '
+                    'you, but the crate is one you owe your depot at the same '
+                    'price — so it comes out of your profit on the day the '
+                    'order was settled, and the deposit you kept covers it '
+                    'exactly.'
+              : 'Crates you accepted as lost. This one DOES come out of your '
+                    'profit, on the day you accepted it.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
       ],
@@ -1942,6 +1993,12 @@ class _DailyReconciliationDetailScreenState
         if (d.showCrates && d.crateShortfallWrittenOffKobo != 0)
           ['Crate losses written off (accepted this period)',
             money(-d.crateShortfallWrittenOffKobo)],
+        // #217 — a BREAKDOWN of the line above, not a further deduction: how
+        // much of it was crates customers kept, cancelling the deposit income
+        // two lines up.
+        if (d.showCrates && d.crateForfeitNettedKobo != 0)
+          ['…of which crates customers kept (cancels the forfeit income)',
+            money(-d.crateForfeitNettedKobo)],
         ['Net profit', money(d.netProfitKobo)],
         // Business worth right now (point-in-time) — mirrors _businessWorthCard.
         // Supplier account position: negative = a debt we owe for unpaid goods,
