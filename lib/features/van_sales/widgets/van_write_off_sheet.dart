@@ -291,7 +291,7 @@ class _VanWriteOffSheetState extends ConsumerState<VanWriteOffSheet> {
                           AppInput(
                             labelText: 'Why (recorded on the driver\'s history)',
                             controller: _reasonCtrl,
-                            hintText: 'e.g. Crates fell off on the Aba road',
+                            hintText: 'e.g. Fell off on the Aba road',
                           ),
                           SizedBox(height: context.getRSize(20)),
                         ],
