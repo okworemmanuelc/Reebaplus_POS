@@ -32,6 +32,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
+import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 
@@ -252,6 +253,7 @@ void main() {
             manufacturerId: star,
             storeId: 'store-1',
             crateCount: writtenOffCrates,
+            source: kCrateWriteOffSourceManual,
             ratePerCrateKobo: starDeposit,
             note: null,
             performedBy: null,
