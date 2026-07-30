@@ -1770,10 +1770,13 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         productId: productId,
         requested: quantity,
         stillOut: stillOut,
+        // Deliberately trade-neutral. The Lexicon is a UI seam (ADR 0015) and
+        // a DAO cannot read it, so this message names no item noun at all
+        // rather than picking one that reads wrong outside a drinks business.
         message: stillOut == 0
-            ? 'None of that drink is still out on this trip, so it cannot be '
+            ? 'None of that is still out on this trip, so it cannot be '
                   'returned. Check the count.'
-            : 'Only $stillOut of that drink is still out on this trip — you '
+            : 'Only $stillOut of that is still out on this trip — you '
                   'cannot return $quantity. Check the count.',
       );
     }

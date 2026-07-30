@@ -189,18 +189,34 @@ the app writes one — a write-off taken in error has no in-app undo); the
 write-off button always dates the decision `now` even when viewing a past
 period; `lastWrittenOffBy` costs an extra query per brand in the rollup stream.
 
-**MIGRATION NUMBER COLLISION — caught at integration, fixed.** #209 landed on
-main in parallel and took **0173** (`0173_v2_envelope_crate_credit.sql`), which
-this run had already allocated to #216. Two files sharing a version prefix
-would collide on `supabase db push`. Neither was deployed, so the slices'
-migrations were renumbered **0173→0175** (#216) and **0174→0176** (#217),
-preserving their relative order (the CREATE still precedes the ALTER), and
-every in-repo reference was updated. #209's 0173 was left untouched — it
-reached main first.
+**MIGRATION NUMBER COLLISION — caught at integration, and it had already bitten.**
+#209 landed on main in parallel and took **0173**
+(`0173_v2_envelope_crate_credit.sql`), a number this run had already allocated
+to #216. `supabase_migrations.schema_migrations` keys on the **version prefix**,
+so once `0173` was recorded, `0173_crate_shortfall_writeoff.sql` became
+permanently invisible to the CLI — not "would collide", but *did*: the deploy
+run's `--dry-run` listed only `0171`, `0172` and `0173_v2_envelope_crate_credit`,
+and #216's migration was silently absent. It would never have deployed, with
+nothing failing loudly.
 
-**Cloud migrations are NOT deployed yet** — branches commit them, deployment is
-sequenced separately after the app code lands. Pending for this PRD: **0171,
-0172, 0175, 0176** (plus #209's 0173, which is that issue's to sequence).
+Fixed by renumbering **0173→0175** (#216) and **0174→0176** (#217), preserving
+relative order so the CREATE still precedes the ALTER that adds its `source`
+column; every in-repo reference updated. #209's 0173 was left alone — it
+reached main first, and it is deployed.
+
+**DEPLOY STATE (verified on prod, not assumed):**
+- **0171, 0172 DEPLOYED** — PRD #203 slices #211/#212. The release gate holds on
+  live data: **24/24 manufacturers on `'none'`**, nothing backfilled, **0**
+  `supplier_crate_deposits` rows. No tenant's figures moved, which is exactly
+  what the default-off design promised.
+- **0173** (#209's) deployed; `pos_record_sale_v2` verified at 19 args, one
+  `pg_proc` row (no PGRST203 overload), credit term present, grants restored.
+- **0175 and 0176 NOT deployed.** #216/#217 app code IS on main expecting them.
+  Safe only because every brand is `none`, so no `crate_shortfall_writeoffs` row
+  is ever written; a device that wrote one today would hit PGRST205 and jam its
+  outbox. **These must be deployed before any brand is switched on.**
+- Security advisors after the deploy: **0 ERROR**, 111 WARN, unchanged in count
+  and class from the 2026-07-29 baseline.
 
 ### #203 — crate-deposit OUTFLOW settlement: PRD WRITTEN + published (2026-07-29)
 Grilling session on the #155 carve-out. **No code written.** Output is
@@ -328,10 +344,17 @@ marked `-- #209 delta`.
   the byte-identical guarantee (`p_crate_credit_kobo` absent on an ordinary
   sale). 2 Tier-2 RPC tests pin the server half (header + split move together;
   omitting the param reproduces pre-0173 arithmetic exactly).
-  **1702 pass / 128 skip / 0 fail** (main baseline 1698 / 126).
-- **NOT deployed.** `supabase migration list` shows 0171 and 0172 (PRD #203
-  slices #211/#212) still un-applied on prod, so a `db push` would carry them
-  too. 0173 is inert until the v2 flag flips, so it waits for the #203 deploy.
+  **1753 pass / 128 skip / 0 fail** on main after the merge (1749 / 126 before).
+- **DEPLOYED 2026-07-30**, together with 0171 + 0172 — those two had been merged
+  to main since 07-29 but never pushed, and a `db push` is repo-wide, never
+  per-issue. Verified against prod, not assumed: `pos_record_sale_v2` is **one**
+  `pg_proc` row with **19 args** including `p_crate_credit_kobo` (the 18-arg
+  DROP bit — no PGRST203 overload), `prosrc` carries the `COALESCE` term, and
+  EXECUTE is back for `authenticated` + `service_role`. 0171's release gate
+  holds on live data: **24/24** manufacturers on `'none'`, nothing backfilled,
+  0 `supplier_crate_deposits` rows. Advisors **0 ERROR** / 111 WARN, identical
+  to the 07-29 baseline. Runtime behaviour is still unexercised — the flag is
+  OFF and the Tier-2 cases need `TEST_USER_REFRESH_TOKEN`.
 - **Adjacent divergence found, NOT fixed here — FILED as #219.** The RPC
   writes `orders.total_amount_kobo := v_total_amount`, the **gross**, while the
   v1 path pushes the **payable** (`sub − discount + deposit`) and

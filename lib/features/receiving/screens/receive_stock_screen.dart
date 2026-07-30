@@ -40,7 +40,12 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
   void initState() {
     super.initState();
     uiHintService.shouldShow(UiHintService.hintReceiveLongpress).then((show) {
-      if (show && mounted) setState(() => _showReceiveHint = true);
+      if (show && mounted) {
+        setState(() => _showReceiveHint = true);
+        // Count this display as a passive view so an ignored hint still retires
+        // after `_retireAfter` visits (never shown forever).
+        uiHintService.markShown(UiHintService.hintReceiveLongpress);
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _initStreams();
@@ -242,7 +247,9 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
             ),
             onPressed: () {
               setState(() => _showReceiveHint = false);
-              uiHintService.markShown(UiHintService.hintReceiveLongpress);
+              // Deliberate close retires the hint immediately so it never
+              // reappears (was markShown, which let it surface a second time).
+              uiHintService.markDismissed(UiHintService.hintReceiveLongpress);
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),

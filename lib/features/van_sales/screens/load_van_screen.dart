@@ -28,6 +28,8 @@ class _DraftLine {
 
   /// Empty-crate shells going out with this line (spec §11 — counting only).
   /// Typed straight into the field below, so it has no constructor default.
+  /// Stays 0 for a business that does not track crates: the field is not shown
+  /// (see [_LineCard]), because empties are a Bar/Beverage concept only.
   int shellsOut = 0;
 
   _DraftLine({
@@ -42,7 +44,7 @@ class _DraftLine {
 /// Load Van (#141, PRD #139 / ADR 0019, van-sales spec §4.2–§4.4, §9.1) — and,
 /// with [trip] supplied, **Restock** the same van mid-run (#143).
 ///
-/// Pick a driver, a source warehouse, and the drinks going on board — each at a
+/// Pick a driver, a source warehouse, and the goods going on board — each at a
 /// **load price defaulting to the retail tier and editable per line**, because
 /// the load price is the driver's accountability figure for the whole
 /// reconciliation, agreed at the tailgate, not whatever the catalogue says
@@ -204,7 +206,11 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
       return;
     }
     if (_lines.isEmpty) {
-      AppNotification.showError(context, 'Add at least one drink to the load.');
+      final lex = ref.read(industryLexiconProvider);
+      AppNotification.showError(
+        context,
+        'Add at least one ${lex.itemLower} to the load.',
+      );
       return;
     }
     for (final line in _lines) {
@@ -295,10 +301,12 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
       // silent, those units would look like free goods at close.
       if (result.uncostedProductIds.isNotEmpty) {
         final n = result.uncostedProductIds.length;
+        final lex = ref.read(industryLexiconProvider);
         AppNotification.showError(
           context,
-          '$n ${n == 1 ? 'drink has' : 'drinks have'} no recorded cost yet, '
-          'so this trip\'s profit will be understated until you record one.',
+          '$n ${n == 1 ? '${lex.itemLower} has' : '${lex.itemPluralLower} have'} '
+          'no recorded cost yet, so this trip\'s profit will be understated '
+          'until you record one.',
         );
       }
       AppNotification.showSuccess(
@@ -340,6 +348,13 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    // The trade's own word for a sellable item (ADR 0015). Van sales sells the
+    // same catalogue the shop does, so it must speak the same language: a
+    // pharmacy loads medicines onto the van, not drinks.
+    final lex = ref.watch(industryLexiconProvider);
+    // Empties are a Bar/Beverage concept. Every other trade must not be asked
+    // to count crates it does not deal in.
+    final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
     final vanName = ref
             .watch(storeByIdProvider(widget.vanStoreId))
             .valueOrNull
@@ -399,7 +414,8 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
 
               AppDropdown<StoreData>(
                 labelText: 'Load from',
-                hintText: 'Which store are the drinks coming out of?',
+                hintText: 'Which store are the ${lex.itemPluralLower} coming '
+                    'out of?',
                 value: _sourceStore,
                 prefixIcon: Icon(
                   FontAwesomeIcons.warehouse.data,
@@ -443,7 +459,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                 return AppInput(
                   controller: controller,
                   focusNode: focusNode,
-                  labelText: 'Add a drink',
+                  labelText: 'Add a ${lex.itemLower}',
                   onFieldSubmitted: (_) => onEditingComplete(),
                   prefixIcon: Icon(
                     FontAwesomeIcons.boxesStacked.data,
@@ -452,7 +468,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                   ),
                   hintText: _sourceStore == null
                       ? 'Pick a store to load from first'
-                      : 'Start typing a drink name…',
+                      : 'Start typing a ${lex.itemLower} name…',
                   enabled: _sourceStore != null,
                 );
               },
@@ -471,6 +487,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
               ..._lines.map(
                 (line) => _LineCard(
                   line: line,
+                  showCrates: tracksCrates,
                   isBelowCost: _belowCost.contains(line.product.product.id),
                   onChanged: () {
                     setState(() {});
@@ -572,16 +589,21 @@ class _FixedTripCard extends StatelessWidget {
   }
 }
 
-/// One drink on the load: quantity, the editable load price, and the shell memo
-/// count.
+/// One line on the load: quantity, the editable load price, and — for a crate
+/// business only — the shell memo count.
 class _LineCard extends StatelessWidget {
   final _DraftLine line;
+
+  /// Whether to offer the empty-crate memo field. Passed down rather than read
+  /// here so the whole screen decides the crate question once.
+  final bool showCrates;
   final bool isBelowCost;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
   const _LineCard({
     required this.line,
+    required this.showCrates,
     required this.isBelowCost,
     required this.onChanged,
     required this.onRemove,
@@ -663,20 +685,22 @@ class _LineCard extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: context.getRSize(10)),
-          AppInput(
-            // §11 — counting only. No deposit money moves in v1; the count
-            // exists so a trip can't close "settled" having lost every shell.
-            labelText: 'Empty crates going out (optional)',
-            initialValue: line.shellsOut == 0 ? '' : line.shellsOut.toString(),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            hintText: '0',
-            onChanged: (v) {
-              line.shellsOut = int.tryParse(v.trim()) ?? 0;
-              onChanged();
-            },
-          ),
+          if (showCrates) ...[
+            SizedBox(height: context.getRSize(10)),
+            AppInput(
+              // §11 — counting only. No deposit money moves in v1; the count
+              // exists so a trip can't close "settled" having lost every shell.
+              labelText: 'Empty crates going out (optional)',
+              initialValue: line.shellsOut == 0 ? '' : line.shellsOut.toString(),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              hintText: '0',
+              onChanged: (v) {
+                line.shellsOut = int.tryParse(v.trim()) ?? 0;
+                onChanged();
+              },
+            ),
+          ],
           if (isBelowCost) ...[
             SizedBox(height: context.getRSize(10)),
             Row(

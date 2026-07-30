@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -30,9 +31,10 @@ import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 ///     damage. "The driver owes ₦192,500" is the question; this is the answer
 ///     to *why*.
 ///  2. **What went out and what came back**, so the split is checkable.
-///  3. **Which drinks are missing**, per product, at the prices they left on.
+///  3. **Which goods are missing**, per product, at the prices they left on.
 ///  4. **The shells** — loaded with N, M came back (spec §11). Without this a
-///     trip closes at "balance 0 = settled" having lost every crate.
+///     trip closes at "balance 0 = settled" having lost every crate. Shown only
+///     to a crate business; empties are a Bar/Beverage concept.
 ///  5. **The four things a manager can still do**: log the final return, record
 ///     a final payment, write off a shortage or a damage.
 ///  6. **Confirm & close**, which warns first if this device still has road
@@ -72,8 +74,15 @@ class VanReconcileScreen extends ConsumerWidget {
     final position = ref.watch(vanTripPositionProvider(tripId)).valueOrNull;
     final pendingSales =
         ref.watch(vanTripPendingSalesProvider(tripId)).valueOrNull ?? 0;
+    // The trade's own word for a sellable item (ADR 0015) — this screen names
+    // what is missing and what was damaged, so it must not call a pharmacy's
+    // stock "drinks". Threaded into the cards rather than read in each one, so
+    // every figure on the screen is captioned from the same source.
+    final lex = ref.watch(industryLexiconProvider);
+    // The shell memo is a Bar/Beverage surface only.
+    final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
     // Names for the shortage lines. Same feed the return screen uses, so one
-    // drink reads the same on both surfaces.
+    // product reads the same on both surfaces.
     final productName = <String, String>{
       for (final p
           in ref.watch(productsWithStockProvider(null)).valueOrNull ??
@@ -102,24 +111,31 @@ class VanReconcileScreen extends ConsumerWidget {
           context.getRSize(20) + context.deviceBottomPadding,
         ),
         children: [
-          _OutstandingCard(position: position),
+          _OutstandingCard(position: position, lex: lex),
           SizedBox(height: context.getRSize(16)),
-          _MovementCard(position: position),
+          _MovementCard(position: position, lex: lex),
           if (position.shortages.isNotEmpty) ...[
             SizedBox(height: context.getRSize(16)),
-            _ShortageCard(position: position, productName: productName),
+            _ShortageCard(
+              position: position,
+              productName: productName,
+              lex: lex,
+            ),
           ],
-          SizedBox(height: context.getRSize(16)),
-          _ShellMemoCard(position: position),
+          if (tracksCrates) ...[
+            SizedBox(height: context.getRSize(16)),
+            _ShellMemoCard(position: position),
+          ],
           if (position.hasUncostedUnits) ...[
             SizedBox(height: context.getRSize(16)),
-            _UncostedCard(position: position),
+            _UncostedCard(position: position, lex: lex),
           ],
           SizedBox(height: context.getRSize(20)),
           if (isOpen) ...[
             _actions(context, ref, trip, position),
             SizedBox(height: context.getRSize(20)),
-            if (pendingSales > 0) _PendingSalesWarning(count: pendingSales),
+            if (pendingSales > 0)
+              _PendingSalesWarning(count: pendingSales, lex: lex),
             if (pendingSales > 0) SizedBox(height: context.getRSize(12)),
             Guarded(
               gate: Gates.vanManage,
@@ -144,7 +160,7 @@ class VanReconcileScreen extends ConsumerWidget {
               ),
             ),
           ] else
-            _ClosedCard(trip: trip, driverName: driverName),
+            _ClosedCard(trip: trip, driverName: driverName, lex: lex),
         ],
       ),
     );
@@ -246,9 +262,10 @@ class VanReconcileScreen extends ConsumerWidget {
 
   /// The last gate before the artifact is frozen.
   ///
-  /// The dialog restates the three facts a manager must not close without
-  /// having seen: the shell memo (spec §11), the residual that will follow the
-  /// driver rather than the trip (§9.4 #14), and — when this device still holds
+  /// The dialog restates the facts a manager must not close without having
+  /// seen: the shell memo (spec §11 — crate businesses only, since no other
+  /// trade has empties to lose), the residual that will follow the driver
+  /// rather than the trip (§9.4 #14), and — when this device still holds
   /// un-pushed road sales — that the picture may be incomplete (§7.4).
   Future<void> _confirmAndClose(
     BuildContext context,
@@ -259,6 +276,10 @@ class VanReconcileScreen extends ConsumerWidget {
   }) async {
     final t = Theme.of(context);
     final semantic = t.extension<AppSemanticColors>()!;
+    final lex = ref.read(industryLexiconProvider);
+    // Same gate as the body's shell memo card — a trade that deals in no
+    // empties is not asked to confirm a shell count before closing.
+    final tracksCrates = businessTracksCrates(ref.read(currentBusinessProvider));
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -267,13 +288,15 @@ class VanReconcileScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Loaded with ${position.shellsOut} '
-              '${position.shellsOut == 1 ? 'shell' : 'shells'}, '
-              '${position.shellsBack} came back.',
-              style: t.textTheme.bodyMedium,
-            ),
-            SizedBox(height: context.getRSize(10)),
+            if (tracksCrates) ...[
+              Text(
+                'Loaded with ${position.shellsOut} '
+                '${position.shellsOut == 1 ? 'shell' : 'shells'}, '
+                '${position.shellsBack} came back.',
+                style: t.textTheme.bodyMedium,
+              ),
+              SizedBox(height: context.getRSize(10)),
+            ],
             Text(
               position.isSettled
                   ? 'The trip is settled — it will close at zero.'
@@ -291,8 +314,8 @@ class VanReconcileScreen extends ConsumerWidget {
               Text(
                 'This device still has $pendingSales road '
                 '${pendingSales == 1 ? 'sale' : 'sales'} waiting to sync. Until '
-                'they go up, those drinks count as missing and the driver looks '
-                'liable for them.',
+                'they go up, those ${lex.itemPluralLower} count as missing and '
+                'the driver looks liable for them.',
                 style: t.textTheme.bodyMedium?.copyWith(
                   color: semantic.warning,
                 ),
@@ -364,8 +387,9 @@ class VanReconcileScreen extends ConsumerWidget {
 /// The headline: what is still owed, and why.
 class _OutstandingCard extends StatelessWidget {
   final VanTripPosition position;
+  final Lexicon lex;
 
-  const _OutstandingCard({required this.position});
+  const _OutstandingCard({required this.position, required this.lex});
 
   @override
   Widget build(BuildContext context) {
@@ -407,11 +431,11 @@ class _OutstandingCard extends StatelessWidget {
             value: formatCurrency(position.unremittedCashKobo / 100),
           ),
           _Row(
-            label: 'Drinks unaccounted for',
+            label: '${lex.itemPlural} unaccounted for',
             value: formatCurrency(position.shortageOwedKobo / 100),
           ),
           _Row(
-            label: 'Damaged drinks',
+            label: 'Damaged ${lex.itemPluralLower}',
             value: formatCurrency(position.damageOwedKobo / 100),
           ),
           if (position.residualCreditKobo > 0)
@@ -440,8 +464,9 @@ class _OutstandingCard extends StatelessWidget {
 /// price throughout so every line is comparable.
 class _MovementCard extends StatelessWidget {
   final VanTripPosition position;
+  final Lexicon lex;
 
-  const _MovementCard({required this.position});
+  const _MovementCard({required this.position, required this.lex});
 
   @override
   Widget build(BuildContext context) {
@@ -492,7 +517,8 @@ class _MovementCard extends StatelessWidget {
               // Saying so is better than a silent discrepancy.
               'The terminal rang '
               '${formatCurrency(position.rungValueKobo / 100)}; the '
-              'reconciliation values the drinks at what was signed for.',
+              'reconciliation values the ${lex.itemPluralLower} at what was '
+              'signed for.',
               style: t.textTheme.bodySmall?.copyWith(color: t.hintColor),
             ),
           ],
@@ -502,12 +528,17 @@ class _MovementCard extends StatelessWidget {
   }
 }
 
-/// Which drinks are missing, and at what price they left.
+/// Which goods are missing, and at what price they left.
 class _ShortageCard extends StatelessWidget {
   final VanTripPosition position;
   final Map<String, String> productName;
+  final Lexicon lex;
 
-  const _ShortageCard({required this.position, required this.productName});
+  const _ShortageCard({
+    required this.position,
+    required this.productName,
+    required this.lex,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -519,7 +550,7 @@ class _ShortageCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Drinks that never came back',
+            '${lex.itemPlural} that never came back',
             style: t.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
@@ -528,7 +559,7 @@ class _ShortageCard extends StatelessWidget {
           for (final line in position.shortages)
             _Row(
               label:
-                  '${productName[line.productId] ?? 'Product'} × ${line.units}',
+                  '${productName[line.productId] ?? lex.item} × ${line.units}',
               value: formatCurrency(line.valueKobo / 100),
             ),
           SizedBox(height: context.getRSize(8)),
@@ -600,8 +631,9 @@ class _ShellMemoCard extends StatelessWidget {
 /// Naming a figure would be inventing one.
 class _UncostedCard extends StatelessWidget {
   final VanTripPosition position;
+  final Lexicon lex;
 
-  const _UncostedCard({required this.position});
+  const _UncostedCard({required this.position, required this.lex});
 
   @override
   Widget build(BuildContext context) {
@@ -628,8 +660,8 @@ class _UncostedCard extends StatelessWidget {
           ),
           SizedBox(height: context.getRSize(6)),
           Text(
-            'Record what those drinks cost you, then this trip can be '
-            'reconciled again on a true profit.',
+            'Record what those ${lex.itemPluralLower} cost you, then this trip '
+            'can be reconciled again on a true profit.',
             style: t.textTheme.bodySmall?.copyWith(color: semantic.warning),
           ),
         ],
@@ -643,8 +675,9 @@ class _UncostedCard extends StatelessWidget {
 /// figures it affects.
 class _PendingSalesWarning extends StatelessWidget {
   final int count;
+  final Lexicon lex;
 
-  const _PendingSalesWarning({required this.count});
+  const _PendingSalesWarning({required this.count, required this.lex});
 
   @override
   Widget build(BuildContext context) {
@@ -668,8 +701,8 @@ class _PendingSalesWarning extends StatelessWidget {
           Expanded(
             child: Text(
               '$count road ${count == 1 ? 'sale is' : 'sales are'} still '
-              'waiting to sync from this device. Until they go up those drinks '
-              'count as missing.',
+              'waiting to sync from this device. Until they go up those '
+              '${lex.itemPluralLower} count as missing.',
               style: t.textTheme.bodySmall?.copyWith(
                 color: t.colorScheme.onSurface,
               ),
@@ -685,8 +718,13 @@ class _PendingSalesWarning extends StatelessWidget {
 class _ClosedCard extends StatelessWidget {
   final VanTripData trip;
   final String driverName;
+  final Lexicon lex;
 
-  const _ClosedCard({required this.trip, required this.driverName});
+  const _ClosedCard({
+    required this.trip,
+    required this.driverName,
+    required this.lex,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -709,7 +747,7 @@ class _ClosedCard extends StatelessWidget {
             value: formatCurrency(trip.recoveredKobo / 100),
           ),
           _Row(
-            label: 'Cost of the drinks gone',
+            label: 'Cost of the ${lex.itemPluralLower} gone',
             value: formatCurrency(trip.cogsKobo / 100),
           ),
           _Row(

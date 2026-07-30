@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
@@ -165,8 +166,14 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
         if (isDateInPeriod(e.activityDate, _timeFilter)) e,
     ];
 
+    // The crate tab is a Bar/Beverage surface (spec §11). Dropping it entirely
+    // — rather than showing an always-zero tab — is what keeps the profile
+    // honest for a trade with no empties, and the tab COUNT has to follow or
+    // DefaultTabController and TabBarView disagree.
+    final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
+
     return DefaultTabController(
-      length: 4,
+      length: tracksCrates ? 4 : 3,
       child: _shell(
         context,
         NestedScrollView(
@@ -189,7 +196,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                   padding: EdgeInsets.symmetric(
                     horizontal: context.getRSize(16),
                   ),
-                  child: _tabBar(context),
+                  child: _tabBar(context, showCrates: tracksCrates),
                 ),
               ),
             ),
@@ -205,7 +212,8 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
               _LedgerTab(entries: periodLedger, vanNameByTripId: {
                 for (final t in trips) t.id: vanNameById[t.vanStoreId] ?? '',
               }),
-              _CratesTab(trips: periodTrips, vanNameById: vanNameById),
+              if (tracksCrates)
+                _CratesTab(trips: periodTrips, vanNameById: vanNameById),
             ],
           ),
         ),
@@ -356,7 +364,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     });
   }
 
-  Widget _tabBar(BuildContext context) {
+  Widget _tabBar(BuildContext context, {required bool showCrates}) {
     final t = Theme.of(context);
     return Container(
       margin: EdgeInsets.only(bottom: context.getRSize(8)),
@@ -395,11 +403,13 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
               fontSize: context.getRFontSize(13),
             ),
             dividerColor: Colors.transparent,
-            tabs: const [
-              Tab(text: 'Trips'),
-              Tab(text: 'Sales'),
-              Tab(text: 'Ledger'),
-              Tab(text: 'Crates'),
+            tabs: [
+              const Tab(text: 'Trips'),
+              const Tab(text: 'Sales'),
+              const Tab(text: 'Ledger'),
+              // Must stay in lockstep with the TabBarView children and the
+              // controller length above.
+              if (showCrates) const Tab(text: 'Crates'),
             ],
           ),
         ),

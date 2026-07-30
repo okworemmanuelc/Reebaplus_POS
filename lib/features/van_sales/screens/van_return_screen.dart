@@ -27,6 +27,9 @@ class _ReturnDraft {
   /// See the screen doc: that emptiness is the control, not an oversight.
   int quantity = 0;
   String condition = kVanReturnConditionGood;
+
+  /// Stays 0 for a business that does not track crates — the field is not shown
+  /// (see [_ReturnLineCard]), because empties are a Bar/Beverage concept only.
   int shellsBack = 0;
 
   /// The idempotency key for this line, minted ONCE when the row is added and
@@ -54,7 +57,7 @@ class _ReturnDraft {
 /// before anything is written:
 ///
 ///  * **Good** — the driver is credited at the price those units were loaded at
-///    (oldest load first), and the drinks go straight back into sellable stock
+///    (oldest load first), and the goods go straight back into sellable stock
 ///    at the warehouse.
 ///  * **Damaged** — no credit at all. The driver still owes for them, and the
 ///    business books the loss at what the goods cost, not what they would have
@@ -107,7 +110,11 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
       return;
     }
     if (_lines.isEmpty) {
-      AppNotification.showError(context, 'Add at least one drink coming back.');
+      final lex = ref.read(industryLexiconProvider);
+      AppNotification.showError(
+        context,
+        'Add at least one ${lex.itemLower} coming back.',
+      );
       return;
     }
     for (final line in _lines) {
@@ -174,6 +181,11 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    // The trade's own word for a sellable item (ADR 0015) — a pharmacy counts
+    // medicines off the van, not drinks.
+    final lex = ref.watch(industryLexiconProvider);
+    // Empties are a Bar/Beverage concept; no other trade is asked to count them.
+    final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
 
     // Body guard (layer 2, hard rule #6).
     if (!Gates.vanManage.allows(ref)) {
@@ -203,7 +215,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
     for (final lot in lots) {
       loadedProducts.putIfAbsent(
         lot.productId,
-        () => names[lot.productId] ?? 'Drink',
+        () => names[lot.productId] ?? lex.item,
       );
     }
     final options = loadedProducts.entries.toList()
@@ -241,7 +253,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
                 return AppInput(
                   controller: controller,
                   focusNode: focusNode,
-                  labelText: 'Add a drink coming back',
+                  labelText: 'Add a ${lex.itemLower} coming back',
                   onFieldSubmitted: (_) => onEditingComplete(),
                   prefixIcon: Icon(
                     FontAwesomeIcons.boxesStacked.data,
@@ -250,7 +262,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
                   ),
                   hintText: options.isEmpty
                       ? 'Nothing was loaded on this trip'
-                      : 'Start typing a drink name…',
+                      : 'Start typing a ${lex.itemLower} name…',
                   enabled: options.isNotEmpty,
                 );
               },
@@ -269,6 +281,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
               ..._lines.map(
                 (line) => _ReturnLineCard(
                   line: line,
+                  showCrates: tracksCrates,
                   onChanged: () => setState(() {}),
                   onRemove: () => setState(() => _lines.remove(line)),
                 ),
@@ -302,7 +315,8 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
               for (final e in recorded) ...[
                 _RecordedReturnRow(
                   event: e,
-                  productName: names[e.productId] ?? 'Drink',
+                  showCrates: tracksCrates,
+                  productName: names[e.productId] ?? lex.item,
                 ),
                 SizedBox(height: context.getRSize(10)),
               ],
@@ -355,14 +369,20 @@ class _CountItYourselfNote extends StatelessWidget {
   }
 }
 
-/// One drink coming back: the typed count, the condition, and the shell memo.
+/// One line coming back: the typed count, the condition, and — for a crate
+/// business only — the shell memo.
 class _ReturnLineCard extends StatelessWidget {
   final _ReturnDraft line;
+
+  /// Whether to offer the empty-crate memo field. Passed down rather than read
+  /// here so the whole screen decides the crate question once.
+  final bool showCrates;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
   const _ReturnLineCard({
     required this.line,
+    required this.showCrates,
     required this.onChanged,
     required this.onRemove,
   });
@@ -453,18 +473,20 @@ class _ReturnLineCard extends StatelessWidget {
               color: line.isGood ? subtext : semantic.warning,
             ),
           ),
-          SizedBox(height: context.getRSize(10)),
-          AppInput(
-            // §11 — counting only. No deposit money moves in v1.
-            labelText: 'Empty crates coming back (optional)',
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            hintText: '0',
-            onChanged: (v) {
-              line.shellsBack = int.tryParse(v.trim()) ?? 0;
-              onChanged();
-            },
-          ),
+          if (showCrates) ...[
+            SizedBox(height: context.getRSize(10)),
+            AppInput(
+              // §11 — counting only. No deposit money moves in v1.
+              labelText: 'Empty crates coming back (optional)',
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              hintText: '0',
+              onChanged: (v) {
+                line.shellsBack = int.tryParse(v.trim()) ?? 0;
+                onChanged();
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -476,7 +498,14 @@ class _RecordedReturnRow extends StatelessWidget {
   final VanReturnEventData event;
   final String productName;
 
-  const _RecordedReturnRow({required this.event, required this.productName});
+  /// Whether to print the shell count alongside the condition and date.
+  final bool showCrates;
+
+  const _RecordedReturnRow({
+    required this.event,
+    required this.productName,
+    required this.showCrates,
+  });
 
   static String _date(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/'
@@ -513,7 +542,7 @@ class _RecordedReturnRow extends StatelessWidget {
                   [
                     good ? 'Good' : 'Damaged',
                     _date(event.recordedAt),
-                    if (event.shellsBack > 0)
+                    if (showCrates && event.shellsBack > 0)
                       '${event.shellsBack} empty crates',
                   ].join(' • '),
                   style: t.textTheme.bodySmall?.copyWith(color: subtext),

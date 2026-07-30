@@ -151,7 +151,11 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
           top: false,
           child: Column(
             children: [
-              const _SwapOnlyBanner(),
+              // Swap-only is a statement ABOUT CRATES, so it is meaningless to
+              // a trade that has none — a pharmacy driver reading "take an
+              // empty crate for every full one" learns nothing but confusion.
+              if (businessTracksCrates(ref.watch(currentBusinessProvider)))
+                const _SwapOnlyBanner(),
               Expanded(
                 child: sellable.isEmpty
                     ? const _EmptyVan()

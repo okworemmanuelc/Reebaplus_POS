@@ -46,17 +46,19 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   bool _isListView = false;
   int _gridColumns = 3;
   bool _showPosHint = false;
-  bool _showPosTapHint = false;
 
   @override
   void initState() {
     super.initState();
     _loadViewPreferences();
-    uiHintService.shouldShow(UiHintService.hintPosLongpress).then((show) {
-      if (show && mounted) setState(() => _showPosHint = true);
-    });
-    uiHintService.shouldShow(UiHintService.hintPosTapAdd).then((show) {
-      if (show && mounted) setState(() => _showPosTapHint = true);
+    // One combined POS coach banner (tap = add to cart, hold = choose quantity),
+    // so POS never stacks two coach tips. Counted as a passive view on display so
+    // an ignored banner still self-retires after `_retireAfter` visits.
+    uiHintService.shouldShow(UiHintService.hintPosGestures).then((show) {
+      if (show && mounted) {
+        setState(() => _showPosHint = true);
+        uiHintService.markShown(UiHintService.hintPosGestures);
+      }
     });
     Future.microtask(() {
       if (!mounted) return;
@@ -297,27 +299,32 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         textCol: textCol,
                         borderCol: borderCol,
                       ),
-                // Combined discoverability hint (owner request): the tap-to-add
-                // and tap-and-hold tips used to render as TWO stacked banners
-                // that cluttered the grid. They are now ONE banner. Each tip
-                // still keeps its own retire count in the UI-hint service;
-                // dismissing the combined banner retires both. Both gestures act
-                // on a product tile, so gate on a non-empty grid.
+                // ONE combined coach banner. Tap adds to the cart; tap-and-hold
+                // opens the qty/discount sheet to add several at once (it does
+                // NOT edit the product — that's done from the Products screen),
+                // which is why the copy says "quantity", not "edit". Both
+                // gestures act on a product tile, so gate on a non-empty grid.
+                //
+                // It carries ONE hint key. Main had already merged the two
+                // banners into one widget but left them on two independently
+                // retiring keys, which is what made the ✕ a half-dismiss: it
+                // called `markShown` on each, moving both counts 0 → 1, so the
+                // banner came back once more. One key + `markDismissed` is what
+                // makes a close final (see `UiHintService.hintPosGestures`).
                 if (!_controller!.isLoading &&
+                    _showPosHint &&
                     !needsStoreSelection &&
-                    _controller!.filteredProducts.isNotEmpty &&
-                    (_showPosTapHint || _showPosHint))
+                    _controller!.filteredProducts.isNotEmpty)
                   _buildInlineHint(
-                    message: _posGridHintMessage(
-                      ref.watch(industryLexiconProvider).itemLower,
-                    ),
+                    message: 'Tap a '
+                        '${ref.watch(industryLexiconProvider).itemLower}'
+                        ' to add it to the cart, or tap and hold to choose a'
+                        ' quantity.',
                     onDismiss: () {
-                      setState(() {
-                        _showPosTapHint = false;
-                        _showPosHint = false;
-                      });
-                      uiHintService.markShown(UiHintService.hintPosTapAdd);
-                      uiHintService.markShown(UiHintService.hintPosLongpress);
+                      setState(() => _showPosHint = false);
+                      // Deliberate close retires the hint immediately so it
+                      // never reappears.
+                      uiHintService.markDismissed(UiHintService.hintPosGestures);
                     },
                   ),
                 Expanded(
@@ -429,28 +436,16 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     return 'All';
   }
 
-  /// Copy for the combined POS grid hint. Reflects whichever tips are still
-  /// live for this user: when both apply, one sentence carries both gestures.
-  /// The hold gesture opens the quantity/discount sheet (it does NOT edit the
-  /// product — see product_grid `_openAddModal`), so it reads "choose a
-  /// quantity", not "edit".
-  String _posGridHintMessage(String item) {
-    final tapAdd = _showPosTapHint;
-    final hold = _showPosHint;
-    if (tapAdd && hold) {
-      return 'Tap a $item to add it to the cart, or tap and hold to '
-          'choose a quantity.';
-    }
-    if (hold) {
-      return 'Tap and hold a $item to choose a quantity.';
-    }
-    return 'Tap a $item to add it to the cart.';
-  }
-
   // Inline dismissible hint shown above the product grid (first couple of
   // visits). Mirrors the cart screen's "tap an item to edit" banner. Renders
-  // the single combined tap-to-add / tap-and-hold tip; view-counted under each
-  // tip's own hint key (issue #32 + the long-press coach tip).
+  // the single combined tap-to-add / tap-and-hold tip, view-counted under the
+  // one `hintPosGestures` key.
+  //
+  // The per-tip adaptive copy this replaced ("…still live for this user":
+  // both / hold-only / tap-only sentences) went with the second key. Those
+  // branches only had distinct reachable states because the two keys retired
+  // independently — the very thing that made a ✕ a half-dismiss — so merging
+  // the keys collapses them to the both-gestures sentence by construction.
   Widget _buildInlineHint({
     required String message,
     required VoidCallback onDismiss,
