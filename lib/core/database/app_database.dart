@@ -6106,6 +6106,13 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         if (shortfallWriteoffsExists.isEmpty) {
           await m.createTable(crateShortfallWriteoffs);
+          // The sync-push cursor. On a fresh install the `_postCreateStatements`
+          // loop emits this for every synced tenant table; on an upgrade there
+          // is no such loop, so it is created here — the v79 shape.
+          await customStatement(
+            'CREATE INDEX idx_crate_shortfall_writeoffs_business_lua '
+            'ON crate_shortfall_writeoffs (business_id, last_updated_at)',
+          );
           await customStatement(
             'CREATE TRIGGER bump_crate_shortfall_writeoffs_last_updated_at '
             'AFTER UPDATE ON crate_shortfall_writeoffs '
@@ -6130,9 +6137,6 @@ class AppDatabase extends _$AppDatabase {
         // them.
         await customStatement(
           'DROP INDEX IF EXISTS idx_crate_shortfall_writeoffs_brand',
-        );
-        await customStatement(
-          'DROP INDEX IF EXISTS idx_crate_shortfall_writeoffs_business_lua',
         );
         for (final stmt in _crateShortfallIndexStatements) {
           await customStatement(stmt);
@@ -6895,6 +6899,12 @@ const List<String> _crateDepositIndexStatements = [
 /// The Crate Shortfall write-off indexes (#216, ADR 0023 rule 5). Separate from
 /// [_crateDepositIndexStatements] so the v79 step (which replays that list) is
 /// not asked to index a table that does not exist until v80.
+/// The `(business_id, last_updated_at)` sync-push index every synced tenant
+/// table carries is emitted for the WHOLE set by the loop in
+/// `_postCreateStatements`, so it is deliberately NOT in this list — including
+/// it would try to create the same index twice on a fresh install. The v80
+/// upgrade step creates it explicitly instead, exactly as v79 does for the
+/// Placed Deposit ledger.
 const List<String> _crateShortfallIndexStatements = [
   // The two reads there are: the brand's net written-off COUNT (which nets out
   // of the derived shortfall on the card) and the period's booked LOSS (which
@@ -6902,9 +6912,6 @@ const List<String> _crateShortfallIndexStatements = [
   // `(business_id, manufacturer_id, created_at)`.
   'CREATE INDEX idx_crate_shortfall_writeoffs_brand '
       'ON crate_shortfall_writeoffs (business_id, manufacturer_id, created_at)',
-  // The sync push cursor, the shape every synced table carries.
-  'CREATE INDEX idx_crate_shortfall_writeoffs_business_lua '
-      'ON crate_shortfall_writeoffs (business_id, last_updated_at)',
 ];
 
 /// The crate-deposit payment index (#212). Deliberately NOT part of
