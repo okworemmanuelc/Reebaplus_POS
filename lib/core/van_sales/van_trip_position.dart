@@ -408,6 +408,13 @@ class VanTripPosition {
 /// `loaded = good returns + damage + sold + shortage` true by construction at
 /// both the total and the per-product level, and makes the tie-out exact even
 /// when a restock repriced a product mid-run.
+///
+/// [shells] is the crate-shell memo grouped by manufacturer, carrying the
+/// deposit rate each brand's shells are valued at (#207, spec §11). It is
+/// **read and reported, and it enters nothing else in this function** — no
+/// balance, no outstanding, no COGS, no profit. See
+/// [VanTripPosition.shellsLostValueKobo] for why that is a decision and not an
+/// omission.
 VanTripPosition computeVanTripPosition({
   required List<VanPositionLot> lots,
   required List<VanPositionSaleLine> sales,
