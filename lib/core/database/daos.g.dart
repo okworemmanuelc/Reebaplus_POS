@@ -1164,6 +1164,8 @@ mixin _$CratePoolDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.supplierCrateDepositRequests;
   $SupplierCrateDepositsTable get supplierCrateDeposits =>
       attachedDatabase.supplierCrateDeposits;
+  $CrateShortfallWriteoffsTable get crateShortfallWriteoffs =>
+      attachedDatabase.crateShortfallWriteoffs;
   $ShipmentsTable get shipments => attachedDatabase.shipments;
   $ExpenseCategoriesTable get expenseCategories =>
       attachedDatabase.expenseCategories;
@@ -1245,6 +1247,11 @@ class CratePoolDaoManager {
       $$SupplierCrateDepositsTableTableManager(
         _db.attachedDatabase,
         _db.supplierCrateDeposits,
+      );
+  $$CrateShortfallWriteoffsTableTableManager get crateShortfallWriteoffs =>
+      $$CrateShortfallWriteoffsTableTableManager(
+        _db.attachedDatabase,
+        _db.crateShortfallWriteoffs,
       );
   $$ShipmentsTableTableManager get shipments =>
       $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);

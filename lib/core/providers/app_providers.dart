@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
+import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -322,6 +323,42 @@ final businessCrateDepositRollupProvider =
     businessScopedStreamAutoDispose<CrateDepositRollup>(
   (ref, db, businessId) => db.cratePoolDao.watchBusinessCrateDepositRollup(),
   whenAbsent: CrateDepositRollup.empty,
+);
+
+/// #216 — the **brand-level Crate Shortfall**: crates owed that are not in the
+/// yard, valued at each brand's rate, net of what has already been written off.
+///
+/// The surface #215 deliberately left open. Its card could show
+/// `unbackedValueKobo` but not this, because the pair-keyed read behind it
+/// could not answer a brand-level question honestly — subtracting a
+/// business-wide yard from one supplier's debt double-subtracts across two
+/// suppliers of the same brand. This provider reads a stream keyed by
+/// manufacturer alone, so two suppliers of one brand contribute to ONE
+/// shortfall and neither is named in it (ADR 0023 rule 4: crates are fungible,
+/// and attribution happens only at settlement).
+///
+/// A WARNING, not a booked loss (rule 5): nothing here reaches profit. The loss
+/// lands only when somebody deliberately writes a shortfall off, and that is a
+/// separate, dated figure the reconciliation P&L reads.
+///
+/// Business-scoped and store-blind, exactly like
+/// [businessCrateDepositRollupProvider] — a shortfall is a company figure.
+final crateShortfallRollupProvider =
+    businessScopedStreamAutoDispose<CrateShortfallRollup>(
+  (ref, db, businessId) => db.cratePoolDao.watchCrateShortfallRollup(),
+  whenAbsent: CrateShortfallRollup.empty,
+);
+
+/// #216 — every Crate Shortfall write-off decision, newest first.
+///
+/// Two readers: the reconciliation's P&L (which windows them to the period and
+/// books the loss on the day each was TAKEN) and the audit trail of who accepted
+/// what. Handed over unwindowed on purpose — the period filter belongs to the
+/// pure math in `crateShortfallWriteOffKobo`, not to the query.
+final crateShortfallWriteOffsProvider =
+    businessScopedStreamAutoDispose<List<CrateShortfallWriteoffData>>(
+  (ref, db, businessId) => db.cratePoolDao.watchCrateShortfallWriteOffs(),
+  whenAbsent: const [],
 );
 
 /// One supplier's empty-crate movement history (receipts + returns), newest

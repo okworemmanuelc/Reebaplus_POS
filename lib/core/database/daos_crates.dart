@@ -229,6 +229,11 @@ class SupplierCrateDepositPosition {
     // commit in ONE transaction, which they cannot do from two DAOs.
     SupplierCrateDepositRequests,
     SupplierCrateDeposits,
+    // #216 — the Crate Shortfall write-off ledger. Behind the same seam for the
+    // same reason: it is the ONE crate row that reaches profit, so it must not
+    // be writable from anywhere that could skip the arrangement gate or the
+    // rate snapshot.
+    CrateShortfallWriteoffs,
     PaymentTransactions,
     Manufacturers,
     Suppliers,
@@ -2576,5 +2581,251 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     if (row != null) {
       await db.syncDao.enqueueUpsert('manufacturers', row.toCompanion(true));
     }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Crate Shortfall (#216, PRD #203, ADR 0023 rules 4 and 5)
+  //
+  // The loss side of the loop. Everything here obeys one split: the SHORTFALL
+  // is derived on every read (which is what lets it shrink by itself when
+  // crates turn up), and only the DECISION to accept it is persisted.
+  // ───────────────────────────────────────────────────────────────────────
+
+  /// **Accept the loss** — the deliberate, dated write-off of [crateCount]
+  /// missing crates of [manufacturerId] (ADR 0023 rule 5).
+  ///
+  /// This is the one write in PRD #203 that reaches profit. Everything else the
+  /// PRD books is a refundable Placed Deposit — an asset that changed shape,
+  /// never a cost. Here an owner says the crates are not coming back, so the
+  /// deposit value standing behind them is gone, and the loss lands **on the
+  /// day this is called** at the rate SNAPSHOTTED here (`ADR 0021` — a rate
+  /// edited next month must not restate a closed day's profit).
+  ///
+  /// **No cash leg, deliberately.** [_postCrateDepositLegs] exists because a
+  /// Placed Deposit movement is money leaving or entering the drawer and the
+  /// asset must never exist without its cash half. A write-off moves no cash at
+  /// all: the money left (or never arrived) long ago, and this is only the
+  /// moment it stops being expected back. Writing a `crate_deposit_out` payment
+  /// row here would show cash moving that nobody handed over, which is exactly
+  /// the class of defect ADR 0023's spine forbids ("a book entry appears only
+  /// when money genuinely moved"). The loss reaches the report as a P&L line
+  /// read from these rows, the way `crateDamageDepositKobo` already does.
+  ///
+  /// **Nothing calls this on a timer.** There is no scheduler, no age
+  /// threshold, no "shortfalls older than N days" sweep anywhere in the app, and
+  /// the v80 migration deliberately backfills nothing. Profit is never reduced
+  /// by a decision nobody made — an owner who ignores the card keeps a silently
+  /// overstated profit, and ADR 0023 says so explicitly: the card exists to make
+  /// ignoring it a choice.
+  ///
+  /// **Unattributed.** No `supplierId` parameter, because crates are fungible
+  /// and there is no honest answer to whose went missing (rule 4). Attribution
+  /// happens once, at settlement.
+  ///
+  /// Returns the new row's id, or null when nothing was written — a
+  /// non-positive count, an unknown brand, or a brand whose Crate Money
+  /// Arrangement does not move money. That last one is the release gate: a
+  /// `none` brand has no shortfall to accept, so there is nothing to write off,
+  /// and a stray call cannot cut its profit.
+  Future<String?> writeOffCrateShortfall({
+    required String manufacturerId,
+    required int crateCount,
+    required String performedBy,
+    String? storeId,
+    String? note,
+  }) async {
+    if (crateCount <= 0) return null;
+    final manufacturer =
+        await (select(manufacturers)..where(
+              (t) => t.id.equals(manufacturerId) & whereBusiness(t),
+            ))
+            .getSingleOrNull();
+    if (manufacturer == null) return null;
+    final arrangement = crateMoneyArrangementOf(
+      manufacturer.crateMoneyArrangement,
+    );
+    // A float brand CAN write off (#214 pinned that a float brand's losses raise
+    // a Shortfall), it just moves no money doing it — which is automatic here,
+    // because this verb moves no money for any brand.
+    if (!arrangement.movesMoney) return null;
+
+    final rate = manufacturer.depositAmountKobo > 0
+        ? manufacturer.depositAmountKobo
+        : 0;
+    final now = DateTime.now();
+    final id = UuidV7.generate();
+    await transaction(() async {
+      // Every defaulted column is set explicitly: a synced write that leaves one
+      // Absent lets the cloud mint a different value and the row diverges.
+      final row = CrateShortfallWriteoffsCompanion.insert(
+        id: Value(id),
+        businessId: requireBusinessId(),
+        manufacturerId: manufacturerId,
+        storeId: Value(storeId),
+        crateCount: crateCount,
+        ratePerCrateKobo: Value(rate),
+        note: Value(note),
+        performedBy: Value(performedBy),
+        createdAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await into(crateShortfallWriteoffs).insert(row);
+      await db.syncDao.enqueueUpsert('crate_shortfall_writeoffs', row);
+    });
+    return id;
+  }
+
+  /// **The brand-level Crate Shortfall**, business-wide (#216).
+  ///
+  /// This is the read #215 could not offer. Its card carries `unbackedValueKobo`
+  /// as disclosure but deliberately no shortfall, because the pair-keyed roll-up
+  /// it had could not answer the question honestly: subtracting a business-wide
+  /// yard from ONE supplier's debt double-subtracts across two suppliers of the
+  /// same brand and reports both as square while the brand is genuinely short.
+  ///
+  /// So this stream is keyed by **manufacturer and nothing else**. Both inputs
+  /// are summed over the same brand-level scope — `cratesOwed` across EVERY
+  /// supplier of the brand, `emptiesOnHand` across every store — which is the
+  /// only scope at which `computeCrateDepositPosition` accepts an
+  /// `emptiesOnHand` argument at all (#212 made it nullable precisely to make
+  /// the mismatched call unrepresentable). Two suppliers of one brand therefore
+  /// contribute to ONE shortfall and neither is named in it.
+  ///
+  /// Business-wide with no `storeId` parameter, exactly like
+  /// [watchBusinessCrateDepositRollup]: a depot invoices the business, not the
+  /// branch, and a per-store split would repeat `CRATE_TRACKING_AUDIT` C4.
+  Stream<CrateShortfallRollup> watchCrateShortfallRollup() {
+    final brandRows =
+        (select(manufacturers)..where((t) => whereBusiness(t))).watch();
+
+    // Crates owed, per BRAND across every supplier — the roll-up of
+    // `watchSupplierCrateDebt`'s per-pair figure, grouped one level up. This is
+    // the axis that makes the shortfall unattributed by construction: the
+    // supplier column is not selected, so no attribution can leak out.
+    final owedSum = supplierCrateLedger.quantityDelta.sum();
+    final owedRows =
+        (selectOnly(supplierCrateLedger)
+              ..addColumns([supplierCrateLedger.manufacturerId, owedSum])
+              ..where(whereBusiness(supplierCrateLedger))
+              ..groupBy([supplierCrateLedger.manufacturerId]))
+            .watch();
+
+    // Empties physically on hand, per brand, business-wide — the same derived
+    // pool [watchEmptiesPoolByManufacturer] returns (ADR 0020: the ledger is the
+    // truth, never the `empty_crate_stock` scalar).
+    final emptiesRows = watchEmptiesPoolByManufacturer();
+
+    // The persisted decisions: net crates accepted as lost, plus who last
+    // accepted one and when (the "who wrote off a shortage and when" the card
+    // shows). A COUNT, never money — each decision booked its own money at its
+    // own snapshotted rate on its own day.
+    final writtenOffSum = crateShortfallWriteoffs.crateCount.sum();
+    final lastAt = crateShortfallWriteoffs.createdAt.max();
+    final writeOffRows =
+        (selectOnly(crateShortfallWriteoffs)
+              ..addColumns([
+                crateShortfallWriteoffs.manufacturerId,
+                writtenOffSum,
+                lastAt,
+              ])
+              ..where(whereBusiness(crateShortfallWriteoffs))
+              ..groupBy([crateShortfallWriteoffs.manufacturerId]))
+            .watch();
+
+    return Rx.combineLatest4<
+      List<ManufacturerData>,
+      List<TypedResult>,
+      Map<String, int>,
+      List<TypedResult>,
+      ({
+        List<ManufacturerData> brands,
+        List<TypedResult> owed,
+        Map<String, int> empties,
+        List<TypedResult> writeOffs,
+      })
+    >(
+      brandRows,
+      owedRows,
+      emptiesRows,
+      writeOffRows,
+      (brands, owed, empties, writeOffs) =>
+          (brands: brands, owed: owed, empties: empties, writeOffs: writeOffs),
+    ).asyncMap((input) async {
+      final owedBy = <String, int>{};
+      for (final r in input.owed) {
+        final id = r.read(supplierCrateLedger.manufacturerId);
+        if (id == null) continue;
+        owedBy[id] = r.read(owedSum) ?? 0;
+      }
+
+      final writtenOffBy = <String, int>{};
+      final lastAtBy = <String, DateTime>{};
+      for (final r in input.writeOffs) {
+        final id = r.read(crateShortfallWriteoffs.manufacturerId);
+        if (id == null) continue;
+        writtenOffBy[id] = r.read(writtenOffSum) ?? 0;
+        final at = r.read(lastAt);
+        if (at != null) lastAtBy[id] = at;
+      }
+
+      final shortfalls = <CrateShortfall>[];
+      for (final brand in input.brands) {
+        final arrangement = crateMoneyArrangementOf(brand.crateMoneyArrangement);
+        // Skip the read entirely for a brand that moves no money — the seam
+        // would zero it anyway, and this keeps a `none` business from paying for
+        // a name lookup it can never render.
+        if (!arrangement.movesMoney) continue;
+        shortfalls.add(
+          computeCrateShortfall(
+            manufacturerId: brand.id,
+            manufacturerName: brand.name,
+            arrangement: arrangement,
+            ratePerCrateKobo: brand.depositAmountKobo,
+            cratesOwed: owedBy[brand.id] ?? 0,
+            emptiesOnHand: input.empties[brand.id] ?? 0,
+            writtenOffCrates: writtenOffBy[brand.id] ?? 0,
+            lastWrittenOffAt: lastAtBy[brand.id],
+            lastWrittenOffBy: await _lastShortfallWriteOffBy(brand.id),
+          ),
+        );
+      }
+      return rollUpCrateShortfalls(shortfalls);
+    });
+  }
+
+  /// Who took the most recent write-off on [manufacturerId]. Read separately
+  /// from the grouped sum because SQLite's `MAX()` and a bare column in the same
+  /// aggregate is a bare-column trick this codebase does not rely on.
+  Future<String?> _lastShortfallWriteOffBy(String manufacturerId) async {
+    final row =
+        await (select(crateShortfallWriteoffs)
+              ..where(
+                (t) => whereBusiness(t) & t.manufacturerId.equals(manufacturerId),
+              )
+              ..orderBy([
+                (t) =>
+                    OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+              ])
+              ..limit(1))
+            .getSingleOrNull();
+    return row?.performedBy;
+  }
+
+  /// Every write-off decision, newest first — the rows the reconciliation's P&L
+  /// reads to book the period's loss, and the audit trail of who accepted what.
+  ///
+  /// Unfiltered by date on purpose: the report owns the period window
+  /// ([crateShortfallWriteOffKobo] applies it), exactly as every other
+  /// `ReconInputs` row set is handed over whole and filtered by the pure math.
+  Stream<List<CrateShortfallWriteoffData>> watchCrateShortfallWriteOffs() {
+    return (select(crateShortfallWriteoffs)
+          ..where((t) => whereBusiness(t))
+          ..orderBy([
+            (t) => OrderingTerm(
+              expression: t.createdAt,
+              mode: OrderingMode.desc,
+            ),
+          ]))
+        .watch();
   }
 }
