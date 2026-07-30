@@ -16,7 +16,8 @@
 //     balance rather than the run's;
 //   · a road sale that syncs after close posts the compensating pair, flags the
 //     trip restated and writes ONE audit row — audited, never prompted;
-//   · the close-vs-outbox barrier has an honest signal behind it.
+//   · the close-vs-outbox barrier has an honest signal behind it (what the UI
+//     does with that signal is van_close_barrier_test.dart's job).
 //
 // In-memory Drift via bootstrapTestDb(); same style as van_returns_test.dart.
 
@@ -736,8 +737,10 @@ void main() {
         await db.vanTripsDao.pendingSaleEnvelopeCountForTrip(tripId),
         1,
         reason:
-            'Confirm & close must warn while a road sale has not reached the '
-            'cloud — you do not assign blame from an incomplete picture',
+            'Confirm & close is DISABLED while a road sale has not reached the '
+            'cloud (#208 item 5) — you do not assign blame from an incomplete '
+            'picture. What the barrier does with this count is pinned in '
+            'van_close_barrier_test.dart; this is the honest signal under it',
       );
     });
   });

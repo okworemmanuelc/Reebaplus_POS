@@ -501,12 +501,33 @@ the driver's device still has unsynced sales, a system-derived default would
 turn unsynced sales into over-returns and misstate the shortage. The manager
 types the count they physically see.
 
-### 7.4 Close warns on a pending driver outbox
+### 7.4 Close blocks on a pending outbox, behind an explicit override
 
 The reconcile screen reads the driver device's last-sync state and shows it. If
 the driver's device has pending sale envelopes, **Confirm & close warns** (and
 may be blocked by a confirm-typed acknowledgement) — you do not assign blame from
 an incomplete picture.
+
+**Which reading shipped (#208 item 5).** v1 warned only. The stricter half is
+now built: while the outbox is dirty the primary **Confirm & close trip** is
+*disabled*, and a quieter **Close anyway** sits under it, routed through the
+ordinary close confirmation — retitled *"Close on an incomplete picture?"*,
+leading with the risk, and answering *Wait for sync* / *Close anyway*.
+
+It is deliberately **not** a hard block. Sync can be down for days (a device
+DNS/VPN failure surfaces as errno 7 and nothing in the app can clear it), and a
+trip that cannot close strands the van, the driver's rolling balance and the
+next dispatch. A sale that arrives after close posts its own correction anyway
+(§9.4 #15), so closing early is recoverable in a way "un-closable" is not.
+
+**The honest limit (#145) is unchanged.** Every string on this barrier says
+*this device*. A device can read only its own `sync_queue`; the driver's
+un-pushed envelopes live on the driver's phone, and `public.devices` is
+cloud-only analytics that never syncs down. A clean barrier means nothing is
+stuck *here*, never that the trip is complete.
+
+Not recorded on the artifact: `van_trips` has no column that says the override
+was used, and #208 did not add one.
 
 ---
 
