@@ -10,6 +10,68 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #186 — the variance card's money and units now stand on ONE basis (2026-07-30)
+Follow-up from #182, filed by two code-review agents. The Daily Reconciliation's
+variance card reported one event — a daily stock count — on two bases at once:
+
+* **Money** (`shortageCostKobo`) summed **every** count-reconciliation
+  `stock_adjustments` row in the period, filtered on the row's `created_at`,
+  undeduped.
+* **Units, retail, per-product lines, products counted** came from the count
+  **session**, deduped to the **latest** per `businessDate|storeId` and filtered
+  on `businessDate`.
+
+So a **same-day recount** charged the day twice in money and once in units — a
+recount that came out matching still raised an integrity flag over money the
+latest count says is not missing — and a **backdated / after-midnight count**
+put its units in one period and its money in another.
+
+**Decision (recorded as an ADR 0014 amendment): the money follows the units —
+the winning count session, bucketed on `businessDate`.** It is the only basis
+under which a matching latest count reads zero variance; count *surplus* is
+session-sourced by nature (a gain draws no FIFO batch, so there is no snapshot
+to sum) and `variance = surplus − shortage`, so only a session-based shortage
+puts both halves of that subtraction on one basis; and `productsCounted` /
+`shortageCount` are facts only a session holds. The competing reading —
+all-rows cumulative shrinkage — is **not lost**: it is the stock card's "Count
+corrections" line, which stays all-rows at current cost and is now labelled
+"every count" on screen and in the export.
+
+**#182 is untouched**: rows are still valued at the write-time FIFO snapshot.
+Only which rows are summed moved. The flow-equation terms are untouched too —
+they keep current cost so `stockDerivedClosingKobo` still ties to the rewound
+perpetual figure by construction.
+
+**No schema change, and none is needed.** `stock_adjustments` has no `count_id`;
+a row is attributed to its session by a `created_at` window, which works because
+`_saveCount` writes each changed line's adjustment immediately *before*
+`recordCount`. Known imperfections are documented at
+`countShortageRowsBySession` rather than hidden (a save whose session never
+landed rides on the next count; two saves inside one second cannot be told
+apart; a null-store session owns nothing). A session with no attributable rows
+values its own count lines at current cost and **labels every one** through the
+existing `legacyValuedShortageRows` footnote, so money and units can never
+disagree about whether a shortage happened at all.
+
+Files: `recon_data.dart` (`countShortageLossKobo` → `countShortageRowsValueKobo`
++ `countShortageRowsBySession` + `countSessionShortage`; the money now sums
+inside the winning-session loop), `daily_reconciliation_detail_screen.dart`
+(a plain-language basis line on the stock card; export rows renamed "latest
+count per day" / "every count"), ADR 0014 amendment.
+
+Tests: `recon_shortage_snapshot_test.dart` 4 → **10** and
+`legacy_valued_loss_label_test.dart` 9 → **17** (+14). Mutation-verified —
+restoring the all-rows basis turns 4 of the 6 new roll-up assertions red.
+**1800 passed / 128 skipped / 0 failed** on this branch (that run includes the 8
+van-sales tests below, which are not part of this change); `flutter analyze`
+clean on every file touched.
+
+**Left for later, deliberately:** the issue's other "Related" item — when
+`feature.domain_rpcs_v2.inventory_delta` is switched on, the server mints the
+`stock_adjustments` row and shortage silently reverts to current cost if that
+row carries no `value_kobo`. Same latent dependency as #170's damages; it is a
+flag-flip checklist item, not this fix.
+
 ### Van sales speaks the tenant's trade, not drinks — CODE-COMPLETE (2026-07-30)
 Owner report: *"van sales automatically defaults to drinks terms for bars and
 beverage distributor. I want it to be business agnostic."* Van sales shipped
