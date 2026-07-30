@@ -19,8 +19,8 @@ the run: **1550 passed / 126 skipped / 0 failed**.
 |---|---|---|
 | #210 receipt leg (no money) | **MERGED** | `a7a28e0` — 1561 pass / 126 skip / 0 fail |
 | #211 arrangement setting (Drift v78, cloud 0171) | **MERGED** | `7185235` — 1585 pass / 126 skip / 0 fail |
-| #212 Placed Deposit + approval + position seam | pending | — |
-| #213 settle on return | pending | — |
+| #212 Placed Deposit + approval + position seam (Drift v79, cloud 0172) | **MERGED** | `f159f46` — 1640 pass / 126 skip / 0 fail |
+| #213 settle on return | in progress | — |
 | #214 standing float | pending | — |
 | #215 worth + recon card (amends ADR 0014) | pending | — |
 | #216 shortfall + write-off | pending | — |
@@ -56,8 +56,43 @@ Two calls worth revisiting if you disagree:
   **narrow it to `none`, never delete it** — the `none` row must keep matching
   pre-slice figures forever. That is the release gate in test form.
 
+**#212 notes.** Two tables (`supplier_crate_deposits`,
+`supplier_crate_deposit_requests`) rather than folding money onto the
+append-only crate ledger. Money family is **`crate_deposit_out`** — never
+`expense`, never `refund`. Confirm flips the request with `status = 'pending'`
+in its WHERE, so a lost race writes no money. The **arrangement** decides
+whether money moves; there is no caller-supplied flag.
+`computeCrateDepositPosition` is genuinely pure — imports two domain modules,
+no drift, and its 22 tests touch no database.
+
+Its own review pass caught three that would have shipped damage:
+- **`saved_carts` silently dropped from `pos_pull_snapshot`.** Parked carts
+  reach a NEW device only via that bootstrap, so every new device would have
+  stopped receiving them with nothing failing loudly. Array re-verified as a
+  strict superset (58 → 60).
+- **The type-CHECK rewrite could roll back the whole migration.** 0169
+  deliberately skips its narrowing where a `type = 'purchase'` row survives, so
+  such a DB legitimately holds the wide CHECK; a blind DROP+ADD validates
+  against live data → `23514` → and one `BEGIN…COMMIT` takes the tables with it.
+- **The shortfall mixed two scopes** — `cratesOwed` per `(supplier,
+  manufacturer)` vs `emptiesOnHand` business-wide, double-subtracting shared
+  empties so two depots both read square while the brand is short. Fixed by
+  making `emptiesOnHand` nullable: the mix is now *unrepresentable*.
+
+**Left open by #212**, carried into later slices: the supplier screen's manual
+receive form still writes legacy `deposit_paid_kobo` on a `per_delivery` brand
+(the queue is store-scoped, `store_id` NOT NULL, nowhere to route it); no
+payment-method picker (confirm defaults to cash); nothing yet *enforces*
+`CratePoolDao` as sole writer of the new money tables — worth a
+`crate_seam_ban_test` entry now that #213/#214 add writers.
+
+**The inert-setting test stays untouched until #215.** It guards `ReconData`,
+which #212 does not touch, so it is still TRUE. #215 owns making it go red and
+narrowing it to `none`. Narrowing it earlier would delete the guard that
+`per_delivery` leaves reconciliation alone.
+
 **Cloud migrations are NOT deployed yet** — branches commit them, deployment is
-sequenced separately after the app code lands. Pending: **0171**.
+sequenced separately after the app code lands. Pending: **0171, 0172**.
 
 ### #203 — crate-deposit OUTFLOW settlement: PRD WRITTEN + published (2026-07-29)
 Grilling session on the #155 carve-out. **No code written.** Output is
