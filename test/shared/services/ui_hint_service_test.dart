@@ -12,7 +12,7 @@ void main() {
     });
 
     test('shouldShow returns true while count < 2 and false at 2', () async {
-      const key = UiHintService.hintPosLongpress;
+      const key = UiHintService.hintPosGestures;
 
       expect(await service.shouldShow(key), true);
       expect(await service.viewCount(key), 0);
@@ -30,16 +30,36 @@ void main() {
       expect(await service.viewCount(key), 3);
     });
 
-    test('POS tap-add and long-press hints are view-counted independently',
-        () async {
-      // The two POS coach banners can co-exist; dismissing one must not
-      // consume the other's view count (issue #32).
-      await service.markShown(UiHintService.hintPosTapAdd);
-      await service.markShown(UiHintService.hintPosTapAdd);
+    test('each screen\'s banner is view-counted independently', () async {
+      // Banners on different screens co-exist; retiring one must not consume
+      // another's view count (issue #32). POS's two coach tips used to be two
+      // keys tested here — they are now the single `hintPosGestures`, because
+      // independent retirement across ONE banner is what made a ✕ a
+      // half-dismiss (PR #148). Across screens it is still the right rule.
+      await service.markShown(UiHintService.hintPosGestures);
+      await service.markShown(UiHintService.hintPosGestures);
 
-      expect(await service.shouldShow(UiHintService.hintPosTapAdd), false);
-      expect(await service.shouldShow(UiHintService.hintPosLongpress), true);
-      expect(await service.viewCount(UiHintService.hintPosLongpress), 0);
+      expect(await service.shouldShow(UiHintService.hintPosGestures), false);
+      expect(await service.shouldShow(UiHintService.hintCartTapEdit), true);
+      expect(await service.viewCount(UiHintService.hintCartTapEdit), 0);
+      expect(await service.shouldShow(UiHintService.hintReceiveLongpress), true);
+    });
+
+    test('a ✕ after one passive view retires the banner — it does NOT come '
+        'back once more (PR #148)', () async {
+      // The "hint shows double" defect: the screens called `markShown` on the
+      // ✕, so a display (0 → 1) plus a dismiss (1 → 2) was needed to retire —
+      // meaning a deliberate close on the FIRST visit left the banner showable
+      // and it surfaced a second time. `markDismissed` retires outright,
+      // whatever the count already is.
+      const key = UiHintService.hintPosGestures;
+      await service.markShown(key); // the display counts one passive view
+      expect(await service.viewCount(key), 1);
+      expect(await service.shouldShow(key), true);
+
+      await service.markDismissed(key);
+      expect(await service.shouldShow(key), false,
+          reason: 'one ✕ is final, regardless of the view count so far');
     });
 
     test('inventory long-press hint retires permanently on first dismissal '
@@ -55,15 +75,14 @@ void main() {
       expect(await service.shouldShow(UiHintService.hintInventoryLongpress),
           false);
 
-      // POS keys are untouched by the inventory dismissal.
-      expect(await service.shouldShow(UiHintService.hintPosLongpress), true);
-      expect(await service.shouldShow(UiHintService.hintPosTapAdd), true);
+      // The POS key is untouched by the inventory dismissal.
+      expect(await service.shouldShow(UiHintService.hintPosGestures), true);
     });
 
     test('markDismissed retires any hint in a single call', () async {
       // markDismissed is the "permanent" counterpart to the view-counted
       // markShown — one call pushes the stored count to the retire threshold.
-      const key = UiHintService.hintPosLongpress;
+      const key = UiHintService.hintPosGestures;
       expect(await service.shouldShow(key), true);
 
       await service.markDismissed(key);
