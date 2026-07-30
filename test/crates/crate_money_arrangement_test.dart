@@ -308,6 +308,23 @@ void main() {
         // The one surface that shows and sets it.
         'lib/features/inventory/widgets/crate_money_arrangement_section.dart',
         'lib/features/inventory/screens/inventory_screen.dart',
+        // #212 — THE FIRST READERS THAT ACT ON THE VALUE. Everything above this
+        // line stores, syncs, guards or displays the setting; these two decide
+        // money from it, so the `none` release gate below is what keeps them
+        // honest:
+        //   * the pure seam — a `none` arrangement short-circuits to the
+        //     all-zero position before it looks at a single ledger row, so no
+        //     figure it can produce depends on anything but the arrangement
+        //     itself when the answer is "no money moves";
+        //   * the write boundary (CratePoolDao) — `raiseCrateDepositRequest`
+        //     returns null for
+        //     anything but `per_delivery`, so a `none` (or `standing_float`)
+        //     brand raises no pending deposit, writes no ledger row and moves
+        //     no cash on an ordinary delivery.
+        // The vocabulary module names the arrangement in prose only.
+        'lib/core/crates/crate_deposit_position.dart',
+        'lib/core/crates/crate_deposit_ledger_types.dart',
+        'lib/core/database/daos_crates.dart',
       };
 
       final found = <String>{};

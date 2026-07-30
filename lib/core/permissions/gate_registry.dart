@@ -611,6 +611,35 @@ abstract final class Gates {
     rule: Gate.key('settings.manage'),
   );
 
+  /// Decide a pending **crate deposit** — confirm it, adjust the amount before
+  /// confirming, or reject the money leg (#212, ADR 0023 rule 6).
+  ///
+  /// This is the door the whole approval queue exists to keep shut.
+  /// [receiveStock] is `stock.add` OR `products.add`, so a **stock keeper** may
+  /// receive a delivery and their crate COUNT lands immediately — but cash
+  /// movement is the one thing the permission model has always kept away from
+  /// that role. `expenses.approve` (CEO + Manager by default) is the app's
+  /// existing "this person may sign off money leaving the business" key, and it
+  /// is the right shape here: confirming a deposit is exactly that decision,
+  /// even though the money is an asset rather than a cost.
+  ///
+  /// It is a DISTINCT named gate rather than a second citation of
+  /// [approveExpenses] — the denial text must say "Confirm Crate Deposit", and
+  /// a future owner who wants deposits on a different key changes one entry —
+  /// but it deliberately mints NO new permission key. A new key must reach the
+  /// cloud catalogue before any grant syncs or `role_permissions` FK-rejects
+  /// and jams the outbox, which is the same reasoning [crateMoneyArrangement]
+  /// records.
+  ///
+  /// It is NOT [crateMoneyArrangement]'s key: that one is `settings.manage`,
+  /// CEO-only, because setting a standing money *policy* is an owner act. A
+  /// per-delivery confirmation is a manager's daily transaction.
+  static const NamedGate confirmCrateDeposit = NamedGate(
+    name: 'confirmCrateDeposit',
+    action: 'Confirm Crate Deposit',
+    rule: Gate.key('expenses.approve'),
+  );
+
   // ── Van Sales cluster (#140, PRD #139 / ADR 0019) ─────────────────────────
 
   /// Set up and run the van side of the business (`van.manage`, CEO + Manager
@@ -691,6 +720,7 @@ abstract final class Gates {
     dailyReconciliation,
     crateDepositsReport,
     crateMoneyArrangement,
+    confirmCrateDeposit,
     vanManage,
     vanSell,
   ];

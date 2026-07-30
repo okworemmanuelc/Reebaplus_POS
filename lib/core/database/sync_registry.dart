@@ -1108,6 +1108,32 @@ final List<SyncedTable> kSyncRegistry = [
       ),
     ),
   ),
+  // #212 / PRD #203, ADR 0023 rule 6 — the crate-deposit MONEY approval queue.
+  // Monotonic status (pending → confirmed/rejected, never back), the
+  // stock_adjustment_requests treatment: a stale/out-of-order `pending`
+  // snapshot must not resurrect a decided request into the approvals list and
+  // invite a second payment (issue #115). Ordered BEFORE the deposit ledger,
+  // which FK-references it.
+  SyncedTable(
+    name: 'supplier_crate_deposit_requests',
+    tenantScoped: true,
+    restore: Restore.monotonicStatus(
+      (db) => db.supplierCrateDepositRequests,
+      SupplierCrateDepositRequestData.fromJson,
+      resilient: true,
+    ),
+  ),
+  // #212 — the append-only Placed Deposit ledger (ADR 0023 rule 1). No
+  // `hardDelete` (a money row is never removed) and no `scrubCreatedAt`: the
+  // table carries no void columns, so nothing ever re-pushes an existing row
+  // and there is no immutable-created_at trigger to trip. A correction is a new
+  // opposite-signed `adjustment` row. INSERT-OR-IGNORE on the pull side too —
+  // see [_restoreSupplierCrateDeposits].
+  const SyncedTable(
+    name: 'supplier_crate_deposits',
+    tenantScoped: true,
+    restore: _restoreSupplierCrateDeposits,
+  ),
   SyncedTable(
     name: 'saved_carts',
     tenantScoped: true,
@@ -1328,6 +1354,42 @@ Future<void> _restoreOrders(
 /// about (locally written or pulled) is never clobbered by a later, divergent
 /// one from another device. FK-resilient (FK → businesses / users / stores): a
 /// snapshot can land in a pull before its store/reviewer slice.
+/// #212 — the append-only Placed Deposit ledger.
+///
+/// INSERT-OR-IGNORE, never an on-conflict UPDATE. `supplier_crate_deposits` is
+/// in `_ledgerTables`, so it carries the immutable-columns trigger — and unlike
+/// every other ledger it has NO void columns, which means **no column on it may
+/// ever change after insert**. `Restore.plain` would issue an on-conflict
+/// UPDATE on every re-delivery of a row this device already holds; the trigger
+/// only fires when a value actually differs, so it would usually pass and then
+/// abort a whole pull page the first time the cloud round-tripped a value even
+/// slightly differently. An append-only row has nothing to update anyway.
+///
+/// This is `Restore.ledger`'s insert half without its void half (the table has
+/// no void path), and the same first-writer-wins shape as
+/// [_restoreDailyClosings]. FK-resilient: its parents are suppliers,
+/// manufacturers, stores, users, `supplier_crate_ledger` and
+/// `supplier_crate_deposit_requests`, all pulled earlier — but a page that
+/// arrives out of order defers rather than dropping a money row.
+Future<void> _restoreSupplierCrateDeposits(
+  SyncRestoreExecutor ex,
+  String table,
+  List<Map<String, dynamic>> rows,
+  Set<String>? fkSkipped,
+) async {
+  for (final r in rows) {
+    final data = SupplierCrateDepositData.fromJson(r);
+    await ex.insertResilient(
+      'supplier_crate_deposits',
+      r,
+      fkSkipped,
+      () => ex.db
+          .into(ex.db.supplierCrateDeposits)
+          .insert(data, mode: InsertMode.insertOrIgnore),
+    );
+  }
+}
+
 Future<void> _restoreDailyClosings(
   SyncRestoreExecutor ex,
   String table,

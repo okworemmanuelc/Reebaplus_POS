@@ -9,6 +9,13 @@ import 'package:reebaplus_pos/core/costing/fifo_drawdown.dart';
 // boundary takes the enum, not a string, so no caller can persist a value the
 // cloud CHECK would reject.
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
+// #212: the crate-deposit money vocabulary (the closed sets the ledger and the
+// approval queue may hold) and the ONE pure function that turns those rows into
+// figures. No arithmetic lives in the DAO — it gathers rows and hands them to
+// `computeCrateDepositPosition`, so the screens, the write boundary and the
+// fixture suite can never disagree about what a supplier is holding.
+import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
+import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';

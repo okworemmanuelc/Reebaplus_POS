@@ -426,6 +426,13 @@ class _NotificationCard extends ConsumerWidget {
         return FontAwesomeIcons.circleCheck.data;
       case 'stock_approval.rejected':
         return FontAwesomeIcons.circleXmark.data;
+      // #212 (PRD #203) — the crate-deposit money leg awaiting a manager.
+      case 'crate_deposit.requested':
+        return FontAwesomeIcons.moneyBillTransfer.data;
+      case 'crate_deposit.confirmed':
+        return FontAwesomeIcons.circleCheck.data;
+      case 'crate_deposit.rejected':
+        return FontAwesomeIcons.circleXmark.data;
       case 'staff.invited':
         return FontAwesomeIcons.userPlus.data;
       case 'staff.suspended':
@@ -472,6 +479,12 @@ class _NotificationCard extends ConsumerWidget {
       case 'stock_approval.approved':
         return successCol;
       case 'stock_approval.rejected':
+        return scheme.error;
+      case 'crate_deposit.requested':
+        return warningCol;
+      case 'crate_deposit.confirmed':
+        return successCol;
+      case 'crate_deposit.rejected':
         return scheme.error;
       case 'staff.invited':
         return scheme.primary;

@@ -402,6 +402,12 @@ mixin _$OrdersDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $SupplierCrateLedgerTable get supplierCrateLedger =>
+      attachedDatabase.supplierCrateLedger;
+  $SupplierCrateDepositRequestsTable get supplierCrateDepositRequests =>
+      attachedDatabase.supplierCrateDepositRequests;
+  $SupplierCrateDepositsTable get supplierCrateDeposits =>
+      attachedDatabase.supplierCrateDeposits;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   OrdersDaoManager get managers => OrdersDaoManager(this);
@@ -481,6 +487,22 @@ class OrdersDaoManager {
       $$DeliveryReceiptsTableTableManager(
         _db.attachedDatabase,
         _db.deliveryReceipts,
+      );
+  $$SupplierCrateLedgerTableTableManager get supplierCrateLedger =>
+      $$SupplierCrateLedgerTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateLedger,
+      );
+  $$SupplierCrateDepositRequestsTableTableManager
+  get supplierCrateDepositRequests =>
+      $$SupplierCrateDepositRequestsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDepositRequests,
+      );
+  $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
+      $$SupplierCrateDepositsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDeposits,
       );
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
@@ -569,6 +591,13 @@ mixin _$PaymentTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $SupplierCrateLedgerTable get supplierCrateLedger =>
+      attachedDatabase.supplierCrateLedger;
+  $SupplierCrateDepositRequestsTable get supplierCrateDepositRequests =>
+      attachedDatabase.supplierCrateDepositRequests;
+  $SupplierCrateDepositsTable get supplierCrateDeposits =>
+      attachedDatabase.supplierCrateDeposits;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   PaymentTransactionsDaoManager get managers =>
@@ -622,6 +651,24 @@ class PaymentTransactionsDaoManager {
       $$DeliveryReceiptsTableTableManager(
         _db.attachedDatabase,
         _db.deliveryReceipts,
+      );
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$SupplierCrateLedgerTableTableManager get supplierCrateLedger =>
+      $$SupplierCrateLedgerTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateLedger,
+      );
+  $$SupplierCrateDepositRequestsTableTableManager
+  get supplierCrateDepositRequests =>
+      $$SupplierCrateDepositRequestsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDepositRequests,
+      );
+  $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
+      $$SupplierCrateDepositsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDeposits,
       );
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
@@ -723,6 +770,13 @@ mixin _$WalletTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $SupplierCrateLedgerTable get supplierCrateLedger =>
+      attachedDatabase.supplierCrateLedger;
+  $SupplierCrateDepositRequestsTable get supplierCrateDepositRequests =>
+      attachedDatabase.supplierCrateDepositRequests;
+  $SupplierCrateDepositsTable get supplierCrateDeposits =>
+      attachedDatabase.supplierCrateDeposits;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   WalletTransactionsDaoManager get managers =>
@@ -776,6 +830,24 @@ class WalletTransactionsDaoManager {
       $$DeliveryReceiptsTableTableManager(
         _db.attachedDatabase,
         _db.deliveryReceipts,
+      );
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$SupplierCrateLedgerTableTableManager get supplierCrateLedger =>
+      $$SupplierCrateLedgerTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateLedger,
+      );
+  $$SupplierCrateDepositRequestsTableTableManager
+  get supplierCrateDepositRequests =>
+      $$SupplierCrateDepositRequestsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDepositRequests,
+      );
+  $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
+      $$SupplierCrateDepositsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDeposits,
       );
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
@@ -1088,6 +1160,22 @@ mixin _$CratePoolDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.supplierCrateLedger;
   $SupplierCrateBalancesTable get supplierCrateBalances =>
       attachedDatabase.supplierCrateBalances;
+  $SupplierCrateDepositRequestsTable get supplierCrateDepositRequests =>
+      attachedDatabase.supplierCrateDepositRequests;
+  $SupplierCrateDepositsTable get supplierCrateDeposits =>
+      attachedDatabase.supplierCrateDeposits;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
+  $ExpenseCategoriesTable get expenseCategories =>
+      attachedDatabase.expenseCategories;
+  $ExpensesTable get expenses => attachedDatabase.expenses;
+  $CustomerWalletsTable get customerWallets => attachedDatabase.customerWallets;
+  $WalletTransactionsTable get walletTransactions =>
+      attachedDatabase.walletTransactions;
+  $DriversTable get drivers => attachedDatabase.drivers;
+  $DeliveryReceiptsTable get deliveryReceipts =>
+      attachedDatabase.deliveryReceipts;
+  $PaymentTransactionsTable get paymentTransactions =>
+      attachedDatabase.paymentTransactions;
   CratePoolDaoManager get managers => CratePoolDaoManager(this);
 }
 
@@ -1147,6 +1235,48 @@ class CratePoolDaoManager {
         _db.attachedDatabase,
         _db.supplierCrateBalances,
       );
+  $$SupplierCrateDepositRequestsTableTableManager
+  get supplierCrateDepositRequests =>
+      $$SupplierCrateDepositRequestsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDepositRequests,
+      );
+  $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
+      $$SupplierCrateDepositsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDeposits,
+      );
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
+  $$ExpenseCategoriesTableTableManager get expenseCategories =>
+      $$ExpenseCategoriesTableTableManager(
+        _db.attachedDatabase,
+        _db.expenseCategories,
+      );
+  $$ExpensesTableTableManager get expenses =>
+      $$ExpensesTableTableManager(_db.attachedDatabase, _db.expenses);
+  $$CustomerWalletsTableTableManager get customerWallets =>
+      $$CustomerWalletsTableTableManager(
+        _db.attachedDatabase,
+        _db.customerWallets,
+      );
+  $$WalletTransactionsTableTableManager get walletTransactions =>
+      $$WalletTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.walletTransactions,
+      );
+  $$DriversTableTableManager get drivers =>
+      $$DriversTableTableManager(_db.attachedDatabase, _db.drivers);
+  $$DeliveryReceiptsTableTableManager get deliveryReceipts =>
+      $$DeliveryReceiptsTableTableManager(
+        _db.attachedDatabase,
+        _db.deliveryReceipts,
+      );
+  $$PaymentTransactionsTableTableManager get paymentTransactions =>
+      $$PaymentTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.paymentTransactions,
+      );
 }
 
 mixin _$ExpensesDaoMixin on DatabaseAccessor<AppDatabase> {
@@ -1169,6 +1299,13 @@ mixin _$ExpensesDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $SupplierCrateLedgerTable get supplierCrateLedger =>
+      attachedDatabase.supplierCrateLedger;
+  $SupplierCrateDepositRequestsTable get supplierCrateDepositRequests =>
+      attachedDatabase.supplierCrateDepositRequests;
+  $SupplierCrateDepositsTable get supplierCrateDeposits =>
+      attachedDatabase.supplierCrateDeposits;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   ExpensesDaoManager get managers => ExpensesDaoManager(this);
@@ -1223,6 +1360,24 @@ class ExpensesDaoManager {
       $$DeliveryReceiptsTableTableManager(
         _db.attachedDatabase,
         _db.deliveryReceipts,
+      );
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$SupplierCrateLedgerTableTableManager get supplierCrateLedger =>
+      $$SupplierCrateLedgerTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateLedger,
+      );
+  $$SupplierCrateDepositRequestsTableTableManager
+  get supplierCrateDepositRequests =>
+      $$SupplierCrateDepositRequestsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDepositRequests,
+      );
+  $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
+      $$SupplierCrateDepositsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDeposits,
       );
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
@@ -1423,6 +1578,12 @@ mixin _$VanTripsDaoMixin on DatabaseAccessor<AppDatabase> {
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
       attachedDatabase.deliveryReceipts;
+  $SupplierCrateLedgerTable get supplierCrateLedger =>
+      attachedDatabase.supplierCrateLedger;
+  $SupplierCrateDepositRequestsTable get supplierCrateDepositRequests =>
+      attachedDatabase.supplierCrateDepositRequests;
+  $SupplierCrateDepositsTable get supplierCrateDeposits =>
+      attachedDatabase.supplierCrateDeposits;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   VanTripsDaoManager get managers => VanTripsDaoManager(this);
@@ -1493,6 +1654,22 @@ class VanTripsDaoManager {
       $$DeliveryReceiptsTableTableManager(
         _db.attachedDatabase,
         _db.deliveryReceipts,
+      );
+  $$SupplierCrateLedgerTableTableManager get supplierCrateLedger =>
+      $$SupplierCrateLedgerTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateLedger,
+      );
+  $$SupplierCrateDepositRequestsTableTableManager
+  get supplierCrateDepositRequests =>
+      $$SupplierCrateDepositRequestsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDepositRequests,
+      );
+  $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
+      $$SupplierCrateDepositsTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateDeposits,
       );
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(

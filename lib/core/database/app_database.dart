@@ -11,6 +11,7 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
+import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
@@ -378,6 +379,175 @@ class SupplierCrateBalances extends Table {
   @override
   List<String> get customConstraints => [
     'UNIQUE (business_id, supplier_id, manufacturer_id)',
+  ];
+}
+
+/// The **approval queue for crate deposit MONEY** (#212, PRD #203, ADR 0023
+/// rule 6) — the supplier-side sibling of [StockAdjustmentRequests].
+///
+/// `Gates.receiveStock` is `stock.add` OR `products.add`, so a **stock keeper**
+/// can receive a delivery. The crate COUNT therefore lands the instant they
+/// type it — crate records are never stale — but the cash cannot: moving money
+/// is the one door the permission model has always kept shut for that role. So
+/// the money leg lands here as a `pending` row and waits for a money-permitted
+/// role, who may confirm it, adjust the amount first (a part payment, a waived
+/// deposit) or reject it outright. **Rejecting never touches the crate counts**:
+/// the crates physically arrived whatever anyone decides about the cash.
+///
+/// Nothing in this table is money that has moved. The movement is written only
+/// on confirmation, into [SupplierCrateDeposits] plus its [PaymentTransactions]
+/// cash leg, in ONE transaction — both or neither (ADR 0019's rule).
+///
+/// [kind] already carries all three money-moving slices: `placement` (#212),
+/// `release` (#213, empties going back) and the two `float_*` movements (#214).
+/// Declaring the whole set now is what lets those slices ship as code only.
+@DataClassName('SupplierCrateDepositRequestData')
+class SupplierCrateDepositRequests extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get supplierId => text().references(Suppliers, #id)();
+  TextColumn get manufacturerId => text().references(Manufacturers, #id)();
+
+  /// The store the delivery landed in. NOT NULL, because it is the approver
+  /// scoping axis: a Manager sees their own stores' requests, the CEO sees all
+  /// — exactly how [StockAdjustmentRequests] scopes.
+  TextColumn get storeId => text().references(Stores, #id)();
+
+  /// One of [kCrateDepositRequestKinds].
+  TextColumn get kind => text()();
+
+  /// Crates this money leg covers. Always >= 0; the direction is [kind]'s.
+  IntColumn get crateCount => integer().withDefault(const Constant(0))();
+
+  /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED when the request was
+  /// raised (ADR 0023 rule 2 — the single canonical rate). Snapshotted so a
+  /// rate edit next month cannot restate what a delivery last week asked for.
+  IntColumn get ratePerCrateKobo => integer().withDefault(const Constant(0))();
+
+  /// `crateCount × ratePerCrateKobo` — what the receipt implies is owed.
+  IntColumn get requestedAmountKobo =>
+      integer().withDefault(const Constant(0))();
+
+  /// What the approver ACTUALLY confirmed, which may be less (a part payment, a
+  /// waived deposit) or more. NULL until a decision is made, and NULL forever
+  /// on a rejected request — nothing moved, so there is no amount to record.
+  IntColumn get settledAmountKobo => integer().nullable()();
+
+  /// How the money moved, chosen at confirmation. One of the
+  /// `payment_transactions.method` values. NULL until then.
+  TextColumn get paymentMethod => text().nullable()();
+
+  /// Denormalised human headline ("8 crates of Star from Ade Depot"), so the
+  /// approval card renders without cross-table joins — the
+  /// [StockAdjustmentRequests] pattern.
+  TextColumn get summary => text()();
+
+  /// The crate-leg ledger row that raised this. The link is what makes the two
+  /// halves of ADR 0023 rule 6 auditable as one delivery.
+  TextColumn get supplierCrateLedgerId =>
+      text().nullable().references(SupplierCrateLedger, #id)();
+
+  TextColumn get note => text().nullable()();
+  TextColumn get requestedBy => text().nullable().references(Users, #id)();
+
+  /// One of [kCrateDepositRequestStatuses]. Monotonic: `pending` →
+  /// `confirmed`/`rejected`, never back (the sync registry's
+  /// `Restore.monotonicStatus` enforces it — issue #115).
+  TextColumn get status =>
+      text().withDefault(const Constant(kCrateDepositRequestPending))();
+  TextColumn get decidedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get decidedAt => dateTime().nullable()();
+  TextColumn get decisionNote => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (kind IN ('placement','release','float_topup','float_payout'))",
+    "CHECK (status IN ('pending','confirmed','rejected'))",
+    'CHECK (crate_count >= 0)',
+    'CHECK (rate_per_crate_kobo >= 0)',
+    'CHECK (requested_amount_kobo >= 0)',
+    'CHECK (settled_amount_kobo IS NULL OR settled_amount_kobo >= 0)',
+  ];
+}
+
+/// The **Placed Deposit ledger** (#212, PRD #203, ADR 0023 rule 1) — append-only
+/// record of money of ours sitting with a supplier for their crates.
+///
+/// It is the exact mirror of the customer-side HELD deposit, with the sign
+/// flipped: a customer's deposit raises cash and raises a liability; ours drops
+/// cash and raises an **asset**. Business worth is unchanged either way, because
+/// the money is still ours. It never touches profit, because it is refundable —
+/// see [kPaymentTypeCrateDepositOut] for why the family matters and what went
+/// wrong (#190, #201) the two times it was got wrong on the customer side.
+///
+/// Balance = `SUM(signed_amount_kobo)`, per `(supplier, manufacturer)` — ADR
+/// 0023 rule 2, because only the supplier you actually paid can pay you back,
+/// while the RATE is the manufacturer's. There is no balance cache to disagree
+/// with the sum, deliberately: `supplier_crate_balances` was demoted to a
+/// local-only projection by #160 for exactly that reason.
+///
+/// **Append-only, with no void columns.** A correction is a new, opposite-signed
+/// `adjustment` row — never an edit, never a delete. That is why this table is
+/// in `_ledgerTables` (immutable + no-delete triggers) and why it is NOT in the
+/// `scrubCreatedAt` set: there is no void path to re-push a row on.
+@DataClassName('SupplierCrateDepositData')
+class SupplierCrateDeposits extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get supplierId => text().references(Suppliers, #id)();
+  TextColumn get manufacturerId => text().references(Manufacturers, #id)();
+
+  /// The store the movement is attributed to. Nullable, matching
+  /// [SupplierCrateLedger]: a standing-float top-up (#214) belongs to the
+  /// business, not to a store.
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
+
+  /// One of [kCrateDepositMovementTypes].
+  TextColumn get movementType => text().withLength(min: 1, max: 32)();
+
+  /// **+ = money placed with the supplier; − = money back to us.** The balance
+  /// is the signed sum of this column and nothing else.
+  IntColumn get signedAmountKobo => integer()();
+
+  /// Crates this movement covers, signed the same way. 0 on the standing-float
+  /// movements and on a standalone money settlement that carries no goods.
+  IntColumn get crateCount => integer().withDefault(const Constant(0))();
+
+  /// The per-crate rate this movement was valued at, snapshotted. A later rate
+  /// edit must not restate money that has already moved.
+  IntColumn get ratePerCrateKobo => integer().withDefault(const Constant(0))();
+
+  /// The approved request this came from, when there was one. NULL for a
+  /// movement a money-permitted role posted directly (they need no approval)
+  /// and for `adjustment` corrections.
+  TextColumn get requestId =>
+      text().nullable().references(SupplierCrateDepositRequests, #id)();
+
+  /// The crate-count ledger row this money leg answers, when there is one.
+  TextColumn get supplierCrateLedgerId =>
+      text().nullable().references(SupplierCrateLedger, #id)();
+
+  TextColumn get note => text().nullable()();
+  TextColumn get performedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (movement_type IN ('placement','release','float_topup',"
+        "'float_payout','adjustment'))",
+    'CHECK (rate_per_crate_kobo >= 0)',
   ];
 }
 
@@ -1950,6 +2120,20 @@ class PaymentTransactions extends Table {
   /// exists. (That re-sort is why adding this one column produced a large
   /// generated-file diff: the `$PaymentTransactionsTable` class moved.)
   TextColumn get vanTripId => text().nullable().references(VanTrips, #id)();
+
+  /// The SEVENTH parent (#212, PRD #203, ADR 0023 rule 1): the Placed Deposit
+  /// ledger row this cash movement is the other leg of.
+  ///
+  /// A supplier crate deposit has no order, no shipment, no expense, no wallet
+  /// transaction, no delivery and no trip — the deposit IS its cause, and it
+  /// must not be forced under any of the other six, least of all `expense_id`
+  /// (the money is refundable; calling it a cost is the exact mistake ADR 0023
+  /// rejects). So the exactly-one-parent CHECK grows rather than the row being
+  /// left parentless.
+  ///
+  /// Set on [kPaymentTypeCrateDepositOut] rows only; null on every other type.
+  TextColumn get crateDepositId =>
+      text().nullable().references(SupplierCrateDeposits, #id)();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
@@ -1988,16 +2172,27 @@ class PaymentTransactions extends Table {
     // than aborting the upgrade. Mirrors 0169_drop_purchase_payment_type.sql.
     // A goods purchase is a SUPPLIER invoice + `expense`/supplier-ledger payment
     // — do not resurrect this value for it.
+    //
+    // #212 widened it once more with `crate_deposit_out` — the SUPPLIER-side
+    // crate deposit family (ADR 0023 rule 1). It is deliberately its own type
+    // and NOT `expense`/`refund`: the money is refundable, so it is an asset
+    // that must never cut profit, and typing held money as a refund is exactly
+    // the defect #190 and #201 fixed on the customer side. ONE type covers all
+    // of PRD #203 because the sign carries the direction (positive = out to the
+    // supplier, negative = back to us) — the in-family reversal rule #190
+    // established. Existing installs rebuild under the widened CHECK via the
+    // schemaVersion 79 upgrade step. Mirrors 0172_placed_deposit.sql.
     "CHECK (type IN "
         "('sale','expense','refund','wallet_topup','crate_deposit',"
-        "'van_remittance'))",
+        "'van_remittance','crate_deposit_out'))",
     '''CHECK (
           (CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN shipment_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN expense_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN wallet_txn_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN delivery_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN van_trip_id IS NOT NULL THEN 1 ELSE 0 END) = 1
+          (CASE WHEN van_trip_id IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN crate_deposit_id IS NOT NULL THEN 1 ELSE 0 END) = 1
         )''',
   ];
 }
@@ -2460,6 +2655,8 @@ class MigrationEvents extends Table {
     SupplierLedgerEntries,
     SupplierCrateLedger,
     SupplierCrateBalances,
+    SupplierCrateDepositRequests,
+    SupplierCrateDeposits,
     Products,
     PriceLists,
     Customers,
@@ -2596,7 +2793,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 78;
+  int get schemaVersion => 79;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4865,6 +5062,9 @@ class AppDatabase extends _$AppDatabase {
             paymentTransactions,
             columnTransformer: {
               paymentTransactions.vanTripId: const Constant<String>(null),
+              // v79 (#212) added the seventh parent. Same reasoning: at v64 it
+              // did not exist, so every row being copied has no value for it.
+              paymentTransactions.crateDepositId: const Constant<String>(null),
             },
           ),
         );
@@ -5170,7 +5370,20 @@ class AppDatabase extends _$AppDatabase {
         if (hasVanTripId.isEmpty) {
           await m.addColumn(paymentTransactions, paymentTransactions.vanTripId);
         }
-        await m.alterTable(TableMigration(paymentTransactions));
+        await m.alterTable(
+          TableMigration(
+            paymentTransactions,
+            columnTransformer: {
+              // v79 (#212) added `crate_deposit_id`, the seventh parent. At v72
+              // it does not exist on the table being copied, so it MUST be
+              // pinned to NULL — an unpinned column is emitted as a bare
+              // identifier that SQLite degrades to the string 'crate_deposit_id',
+              // which flips the exactly-one-parent sum to 2 and aborts the whole
+              // upgrade. That is precisely how `van_trip_id` broke v64.
+              paymentTransactions.crateDepositId: const Constant<String>(null),
+            },
+          ),
+        );
         await customStatement(
           'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
         );
@@ -5452,7 +5665,20 @@ class AppDatabase extends _$AppDatabase {
           "SELECT 1 FROM payment_transactions WHERE type = 'purchase' LIMIT 1",
         ).get();
         if (hasPurchasePayments.isEmpty) {
-          await m.alterTable(TableMigration(paymentTransactions));
+          await m.alterTable(
+            TableMigration(
+              paymentTransactions,
+              columnTransformer: {
+                // The v78 warning above, honoured by v79: #212 added
+                // `crate_deposit_id`, which does not exist on the v76-shaped
+                // table this step copies, so it is pinned to NULL here exactly
+                // as it is in v64 and v72.
+                paymentTransactions.crateDepositId: const Constant<String>(
+                  null,
+                ),
+              },
+            ),
+          );
           await customStatement(
             'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
           );
@@ -5559,6 +5785,206 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         if (hasCrateMoneyArrangement.isEmpty) {
           await m.addColumn(manufacturers, manufacturers.crateMoneyArrangement);
+        }
+      }
+
+      if (from < 79) {
+        // ── v79 — #212: the Placed Deposit, and the manager who confirms it ──
+        //
+        // PRD #203 slice 3/8, ADR 0023 rules 1, 2 and 6. The first slice where
+        // crate money actually moves. Mirrors
+        // supabase/migrations/0172_placed_deposit.sql.
+        //
+        // TWO new synced tenant tables and ONE column on payment_transactions:
+        //
+        //  1. `supplier_crate_deposit_requests` — the approval queue. A stock
+        //     keeper may receive (Gates.receiveStock is stock.add OR
+        //     products.add), so the crate COUNT lands on their say-so, but the
+        //     cash waits for a money-permitted role. `pending` →
+        //     `confirmed`/`rejected`, monotonic, the stock_adjustment_requests
+        //     shape.
+        //  2. `supplier_crate_deposits` — the append-only Placed Deposit
+        //     ledger, balance = SUM(signed_amount_kobo) per (supplier,
+        //     manufacturer). It carries NO void columns: a correction is a new
+        //     opposite-signed `adjustment` row, so the immutable trigger below
+        //     freezes every column but last_updated_at.
+        //  3. `payment_transactions.crate_deposit_id` — the SEVENTH parent, and
+        //     with it a widened `type` CHECK (`crate_deposit_out`) and a
+        //     widened exactly-one-parent CHECK. Both are WIDENINGS, so the copy
+        //     can never fail on existing data.
+        //
+        // THE RELEASE GATE IS UNTOUCHED. Nothing here moves a figure by itself:
+        // every write path checks the manufacturer's Crate Money Arrangement
+        // (#211) first, and every existing brand on every live tenant reads
+        // `none`. An all-`none` business produces byte-identical figures before
+        // and after this step. Do NOT add a backfill of historic
+        // supplier_crate_ledger rows into the new ledger — that would invent
+        // money movements that never happened and restate closed days, which
+        // ADR 0021 forbids.
+        //
+        // Order matters: the two tables are created BEFORE the
+        // payment_transactions rebuild, because the rebuilt table declares
+        // `REFERENCES supplier_crate_deposits (id)`.
+        //
+        // Idempotency guards mirror v45/v46/v68/v71/v74 so a DB stepped back to
+        // < 79 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        final depositRequestsExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='supplier_crate_deposit_requests'",
+        ).get();
+        if (depositRequestsExists.isEmpty) {
+          await m.createTable(supplierCrateDepositRequests);
+          await customStatement(
+            'CREATE INDEX idx_supplier_crate_deposit_requests_business_lua '
+            'ON supplier_crate_deposit_requests (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_supplier_crate_deposit_requests_last_updated_at '
+            'AFTER UPDATE ON supplier_crate_deposit_requests '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE supplier_crate_deposit_requests SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+
+        final depositLedgerExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='supplier_crate_deposits'",
+        ).get();
+        if (depositLedgerExists.isEmpty) {
+          await m.createTable(supplierCrateDeposits);
+          await customStatement(
+            'CREATE INDEX idx_supplier_crate_deposits_business_lua '
+            'ON supplier_crate_deposits (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_supplier_crate_deposits_last_updated_at '
+            'AFTER UPDATE ON supplier_crate_deposits '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE supplier_crate_deposits SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+          // The append-only pair, emitted from the single `_ledgerTables`
+          // source so onCreate and this upgrade cannot drift.
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere(
+              (l) => l.table == 'supplier_crate_deposits',
+            ),
+          )) {
+            await customStatement(stmt);
+          }
+        }
+        // Emitted OUTSIDE the guards (v72/v73/v74's shape) so a device stepped
+        // back to < 79 with the tables already present still re-emits them.
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_supplier_crate_deposits_pair',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_supplier_crate_deposits_manufacturer',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_supplier_crate_deposit_requests_status',
+        );
+        for (final stmt in _crateDepositIndexStatements) {
+          await customStatement(stmt);
+        }
+
+        // payment_transactions: add the column first (drift's TableMigration
+        // needs a new column to already exist on the old table, or it fills it
+        // with the literal column name), then rebuild for the two widened
+        // CHECKs. The v64/v72/v77 recipe, step for step — including re-emitting
+        // the indexes and the three triggers, which alterTable does NOT carry
+        // over. Without the ledger pair the money table silently stops being
+        // append-only.
+        final hasCrateDepositId = await customSelect(
+          "SELECT 1 FROM pragma_table_info('payment_transactions') "
+          "WHERE name = 'crate_deposit_id'",
+        ).get();
+        if (hasCrateDepositId.isEmpty) {
+          await m.addColumn(
+            paymentTransactions,
+            paymentTransactions.crateDepositId,
+          );
+        }
+        // The v77 guard, inherited. #202 NARROWED the type CHECK by dropping
+        // `purchase`, and deliberately SKIPPED that narrowing on a device that
+        // somehow holds such a row rather than destroying a money row. This
+        // rebuild copies from the CURRENT Drift schema, whose CHECK is the
+        // narrowed-then-widened one — so on that same device the copy would
+        // fail and abort the whole upgrade, bricking the app on open. Skip it
+        // there too, for the same reason and with the same trade-off.
+        //
+        // The cost of skipping is honest and bounded: that device keeps the
+        // SIX-way parent CHECK, so a crate deposit confirmed on it would be
+        // rejected at insert (`crate_deposit_id` alone sums to 0, not 1). A
+        // loud failure on one feature, on a device carrying a row nothing has
+        // ever written, beats an app that will not open. The column, the index
+        // and the re-baked triggers all still land, so the moment the stray row
+        // is classified a later step can finish the job.
+        final hasPurchasePaymentsAtV79 = await customSelect(
+          "SELECT 1 FROM payment_transactions WHERE type = 'purchase' LIMIT 1",
+        ).get();
+        if (hasPurchasePaymentsAtV79.isEmpty) {
+          await m.alterTable(TableMigration(paymentTransactions));
+        } else {
+          debugPrint(
+            '[AppDatabase] v79: payment_transactions still holds row(s) of the '
+            'retired `purchase` type — leaving the parent CHECK six-way rather '
+            'than aborting the upgrade. Crate deposits (#212) cannot be '
+            'confirmed on this device until the stray row is dealt with. See '
+            '#202 / 0169 and #212 / 0172.',
+          );
+        }
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
+        );
+        await customStatement(
+          'CREATE INDEX idx_payment_transactions_business_lua '
+          'ON payment_transactions (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_txn_business_type',
+        );
+        await customStatement(
+          'CREATE INDEX idx_payment_txn_business_type '
+          'ON payment_transactions (business_id, type, created_at)',
+        );
+        await customStatement('DROP INDEX IF EXISTS idx_payment_txn_van_trip');
+        for (final stmt in _vanRemittanceIndexStatements) {
+          await customStatement(stmt);
+        }
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_txn_crate_deposit',
+        );
+        for (final stmt in _crateDepositPaymentIndexStatements) {
+          await customStatement(stmt);
+        }
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_payment_transactions_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_payment_transactions_last_updated_at '
+          'AFTER UPDATE ON payment_transactions '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE payment_transactions SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+        );
+        for (final stmt in _ledgerTriggerStatements(
+          _ledgerTables.firstWhere((l) => l.table == 'payment_transactions'),
+        )) {
+          await customStatement(stmt);
         }
       }
     },
@@ -6111,6 +6537,7 @@ const List<_LedgerImmutability> _ledgerTables = [
   ]),
   // v72 (#144) added `van_trip_id` — the sixth parent. It is set at insert and
   // never changes, exactly like the other five, so it joins the immutable set.
+  // v79 (#212) added `crate_deposit_id`, the seventh, on the same terms.
   _LedgerImmutability('payment_transactions', [
     'id',
     'business_id',
@@ -6124,6 +6551,7 @@ const List<_LedgerImmutability> _ledgerTables = [
     'wallet_txn_id',
     'delivery_id',
     'van_trip_id',
+    'crate_deposit_id',
     'performed_by',
     'created_at',
   ]),
@@ -6185,6 +6613,25 @@ const List<_LedgerImmutability> _ledgerTables = [
     'quantity_delta',
     'movement_type',
     'deposit_paid_kobo',
+    'note',
+    'performed_by',
+    'created_at',
+  ]),
+  // v79 (#212, ADR 0023 rule 1) — the Placed Deposit ledger. It carries NO void
+  // columns, so EVERY column but last_updated_at is immutable: a correction is
+  // a new opposite-signed `adjustment` row, never an edit of a money row.
+  _LedgerImmutability('supplier_crate_deposits', [
+    'id',
+    'business_id',
+    'supplier_id',
+    'manufacturer_id',
+    'store_id',
+    'movement_type',
+    'signed_amount_kobo',
+    'crate_count',
+    'rate_per_crate_kobo',
+    'request_id',
+    'supplier_crate_ledger_id',
     'note',
     'performed_by',
     'created_at',
@@ -6257,6 +6704,39 @@ const List<String> _vanReturnIndexStatements = [
       'ON van_return_events (business_id, trip_id, condition)',
 ];
 
+/// The crate-deposit indexes (#212, PRD #203). Kept out of every list above for
+/// the same reason those are kept apart from each other: each is replayed by an
+/// EARLIER upgrade step, which runs before these tables exist. Shared verbatim
+/// by `_postCreateStatements` (fresh install) and the v79 upgrade step, so
+/// onCreate == upgrade — the thing the schema audit compares.
+const List<String> _crateDepositIndexStatements = [
+  // The balance read: `SUM(signed_amount_kobo)` over one (supplier,
+  // manufacturer) pair, which is what `computeCrateDepositPosition` is fed and
+  // what every supplier screen and the #215 card ultimately scan.
+  'CREATE INDEX idx_supplier_crate_deposits_pair '
+      'ON supplier_crate_deposits (business_id, supplier_id, manufacturer_id, '
+      'created_at)',
+  // The brand-level roll-up (ADR 0023 rule 4 — a shortfall is per manufacturer,
+  // across every supplier, because crates are fungible).
+  'CREATE INDEX idx_supplier_crate_deposits_manufacturer '
+      'ON supplier_crate_deposits (business_id, manufacturer_id)',
+  // The approvals queue scan: pending rows only, newest first.
+  'CREATE INDEX idx_supplier_crate_deposit_requests_status '
+      'ON supplier_crate_deposit_requests (business_id, status, created_at)',
+];
+
+/// The crate-deposit payment index (#212). Deliberately NOT part of
+/// [_crateDepositIndexStatements]: that list is replayed inside the v79 step
+/// BEFORE `payment_transactions.crate_deposit_id` exists, so a payment-table
+/// index in it would fail with "no such column". Same split, same reason, as
+/// [_vanRemittanceIndexStatements].
+const List<String> _crateDepositPaymentIndexStatements = [
+  // The cash leg of one Placed Deposit row, and #215's "what left the drawer
+  // for crates this period" scan.
+  'CREATE INDEX idx_payment_txn_crate_deposit '
+      'ON payment_transactions (business_id, crate_deposit_id)',
+];
+
 List<String> get _postCreateStatements {
   final stmts = <String>[];
 
@@ -6318,6 +6798,10 @@ List<String> get _postCreateStatements {
     ..._vanOrderTagIndexStatements,
     // v74 (#143 Van Sales) — a trip's returns, by time and by condition.
     ..._vanReturnIndexStatements,
+    // v79 (#212 PRD #203) — the Placed Deposit ledger and its approval queue,
+    // plus the cash leg's back-reference.
+    ..._crateDepositIndexStatements,
+    ..._crateDepositPaymentIndexStatements,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',

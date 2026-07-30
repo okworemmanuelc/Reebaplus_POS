@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -41,14 +42,29 @@ class StockApprovalsScreen extends ConsumerWidget {
         p.product.id: p.product.buyingPriceKobo,
     };
 
+    // #212: crate deposits only reach this list for a brand whose Crate Money
+    // Arrangement is `per_delivery`, and only for a viewer who may decide money
+    // (`Gates.confirmCrateDeposit`). Every brand defaults to `none`, so on a
+    // business that has not deliberately switched one on this list is empty and
+    // the screen renders exactly as it did before PRD #203.
+    final crateDeposits = Gates.confirmCrateDeposit.allows(ref)
+        ? ref.watch(viewerScopedPendingCrateDepositsProvider)
+        : const <SupplierCrateDepositRequestData>[];
     // One unified list: Quick Sale requests first (a cashier is actively
-    // waiting on these), then stock-adjustment requests.
+    // waiting on these), then crate deposits (a supplier's driver may be
+    // standing there), then stock-adjustment requests.
     final cards = <Widget>[
       for (final q in quickRequests)
         _QuickSaleApprovalCard(
           request: q,
           storeName: storeNames[q.storeId] ?? 'Unknown store',
           requesterName: usersById[q.requestedBy]?.name ?? 'A cashier',
+        ),
+      for (final d in crateDeposits)
+        _CrateDepositApprovalCard(
+          request: d,
+          storeName: storeNames[d.storeId] ?? 'Unknown store',
+          requesterName: usersById[d.requestedBy]?.name ?? 'A stock keeper',
         ),
       for (final r in stockRequests)
         _ApprovalCard(
@@ -657,6 +673,306 @@ class _QuickSaleApprovalCardState
 /// Asks the approver for an optional reason before rejecting a request.
 /// Owns its own `TextEditingController` and disposes it in `dispose()` (never
 /// after an `await`) — the controller-lifecycle rule from the Update Stock
+/// A pending **crate deposit** money leg (#212, PRD #203 / ADR 0023 rule 6).
+///
+/// The crates on this delivery are already recorded — a stock keeper's say-so
+/// is enough for a crate count and never enough for cash. What waits here is
+/// only the money: confirm it, adjust the amount first (a part payment, a
+/// waived deposit), or reject it. **Rejecting leaves the crate counts exactly
+/// as they are**; the card says so, because an approver who thinks rejecting
+/// undoes the delivery will reject the wrong things.
+class _CrateDepositApprovalCard extends ConsumerStatefulWidget {
+  const _CrateDepositApprovalCard({
+    required this.request,
+    required this.storeName,
+    required this.requesterName,
+  });
+
+  final SupplierCrateDepositRequestData request;
+  final String storeName;
+  final String requesterName;
+
+  @override
+  ConsumerState<_CrateDepositApprovalCard> createState() =>
+      _CrateDepositApprovalCardState();
+}
+
+class _CrateDepositApprovalCardState
+    extends ConsumerState<_CrateDepositApprovalCard> {
+  bool _busy = false;
+  late final TextEditingController _amountCtrl = TextEditingController(
+    text: (widget.request.requestedAmountKobo / 100).toStringAsFixed(2),
+  );
+
+  Color get _accent => Colors.indigo.shade400;
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  /// The typed amount in kobo, or null when it cannot be read as money. Parsed
+  /// off the naira text the approver sees, then rounded — a deposit is typed in
+  /// naira and stored in kobo, and the app never shows a hardcoded symbol.
+  int? get _typedAmountKobo {
+    final raw = _amountCtrl.text.trim().replaceAll(',', '');
+    if (raw.isEmpty) return null;
+    final naira = double.tryParse(raw);
+    if (naira == null || naira < 0) return null;
+    return (naira * 100).round();
+  }
+
+  Future<void> _decide({required bool confirm}) async {
+    final deciderId = ref.read(authProvider).currentUser?.id;
+    if (deciderId == null) return;
+
+    int? amountKobo;
+    String? reason;
+    if (confirm) {
+      amountKobo = _typedAmountKobo;
+      if (amountKobo == null) {
+        AppNotification.showError(context, 'Enter the amount you paid.');
+        return;
+      }
+    } else {
+      final result = await showDialog<String?>(
+        context: context,
+        builder: (_) => const _RejectReasonDialog(subject: 'stock keeper'),
+      );
+      if (!mounted || result == null) return;
+      reason = result;
+    }
+
+    setState(() => _busy = true);
+    final dao = ref.read(databaseProvider).cratePoolDao;
+    try {
+      if (confirm) {
+        await dao.confirmCrateDepositRequest(
+          requestId: widget.request.id,
+          decidedBy: deciderId,
+          amountKobo: amountKobo,
+        );
+      } else {
+        await dao.rejectCrateDepositRequest(
+          requestId: widget.request.id,
+          decidedBy: deciderId,
+          reason: reason,
+        );
+      }
+      if (!mounted) return;
+      AppNotification.showSuccess(
+        context,
+        confirm
+            ? 'Deposit confirmed — recorded as money held by the supplier.'
+            : 'Deposit rejected. The crates on this delivery are unchanged.',
+      );
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'crates.deposit_approval.decide');
+      if (!mounted) return;
+      setState(() => _busy = false);
+      AppNotification.showError(
+        context,
+        confirm ? 'Could not confirm: $e' : 'Could not reject: $e',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.request;
+    return Container(
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusL),
+        border: Border.all(color: _accent.withValues(alpha: 0.25)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.symmetric(
+            horizontal: context.spacingM,
+            vertical: context.spacingXs,
+          ),
+          childrenPadding: EdgeInsets.fromLTRB(
+            context.spacingM,
+            0,
+            context.spacingM,
+            context.spacingM,
+          ),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              FontAwesomeIcons.moneyBillTransfer.data,
+              color: _accent,
+              size: 18,
+            ),
+          ),
+          title: Text(
+            'Crate deposit — ${r.summary}',
+            style: context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(
+              children: [
+                _pendingChip(context),
+                const SizedBox(width: 8),
+                Text(
+                  _timeAgo(r.createdAt),
+                  style: context.bodySmall.copyWith(
+                    color: Theme.of(context).hintColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          trailing: Text(
+            formatCurrency(r.requestedAmountKobo / 100),
+            style: context.bodyLarge.copyWith(
+              fontWeight: FontWeight.w800,
+              color: _accent,
+            ),
+          ),
+          children: [
+            _detailRow(context, 'Recorded by', widget.requesterName),
+            _detailRow(context, 'Store', widget.storeName),
+            _detailRow(context, 'Crates', '${r.crateCount}'),
+            _detailRow(
+              context,
+              'Rate per crate',
+              formatCurrency(r.ratePerCrateKobo / 100),
+            ),
+            _detailRow(context, 'When', _fullStamp(r.createdAt)),
+            SizedBox(height: context.spacingS),
+            Text(
+              'The crates are already recorded. This is only the money — '
+              'change the amount if you paid something different, or reject '
+              'it if no deposit changed hands. Either way the crate count '
+              'stays as it is.',
+              style: context.bodySmall.copyWith(
+                color: Theme.of(context).hintColor,
+              ),
+            ),
+            SizedBox(height: context.spacingS),
+            TextField(
+              controller: _amountCtrl,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Amount paid',
+                prefixText: '$activeCurrencySymbol ',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            SizedBox(height: context.spacingM),
+            if (_busy)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      text: 'Reject',
+                      variant: AppButtonVariant.outline,
+                      onPressed: () => _decide(confirm: false),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppButton(
+                      text: 'Confirm',
+                      variant: AppButtonVariant.success,
+                      onPressed: () => _decide(confirm: true),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pendingChip(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        'PENDING',
+        style: context.bodySmall.copyWith(
+          fontSize: context.getRFontSize(10),
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+          color: Colors.amber.shade800,
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: context.getRSize(96),
+            child: Text(
+              label,
+              style: context.bodySmall.copyWith(
+                color: Theme.of(context).hintColor,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: context.bodySmall.copyWith(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _timeAgo(DateTime dt) {
+    final d = DateTime.now().difference(dt);
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    if (d.inDays < 7) return '${d.inDays}d ago';
+    return _fullStamp(dt);
+  }
+
+  String _fullStamp(DateTime dt) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
+        '${two(dt.hour)}:${two(dt.minute)}';
+  }
+}
+
 /// crash fix. Pops the typed reason on Reject (may be empty), `null` on Cancel.
 /// [subject] names the requester in the prompt ("stock keeper" / "cashier").
 class _RejectReasonDialog extends StatefulWidget {
