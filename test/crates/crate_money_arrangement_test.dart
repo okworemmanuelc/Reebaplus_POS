@@ -167,6 +167,10 @@ void main() {
     // to place it there.
     const placedWithDepot = 18000000;
     const placedCrates = 60;
+    // #216 — a shortfall the owner deliberately accepted: 4 crates of Star at
+    // ₦3,500. The ONE figure in PRD #203 that reaches profit.
+    const writtenOffCrates = 4;
+    const writtenOffKobo = writtenOffCrates * starDeposit; // ₦14,000
 
     /// A cash `crate_deposit_out` row — the payment leg #212 writes beside the
     /// deposit ledger row. Positive = money went OUT to the supplier.
@@ -235,6 +239,26 @@ void main() {
           ),
         ]),
         payments: a.movesMoney ? [placementPayment()] : const [],
+        // #216 — fed to EVERY arrangement, `none` included, for exactly the
+        // reason the deposit ledger row above is: the gate must be the owner's
+        // stated arrangement, not the absence of a row. A brand switched on,
+        // written off against, then switched back off must stop reducing
+        // profit — and it does, because the write-off math reads the
+        // arrangement and skips a `none` brand.
+        crateShortfallWriteOffs: [
+          CrateShortfallWriteoffData(
+            id: 'wo-1',
+            businessId: businessId,
+            manufacturerId: star,
+            storeId: 'store-1',
+            crateCount: writtenOffCrates,
+            ratePerCrateKobo: starDeposit,
+            note: null,
+            performedBy: null,
+            createdAt: DateTime.utc(2026, 7, 30),
+            lastUpdatedAt: DateTime.utc(2026, 7, 30),
+          ),
+        ],
         isCeo: true,
       );
     }
@@ -248,6 +272,7 @@ void main() {
       'supplierCrateDebtKobo': d.supplierCrateDebtKobo,
       'placedCrateDepositsKobo': d.placedCrateDepositsKobo,
       'cashCrateDepositsPlacedKobo': d.cashCrateDepositsPlacedKobo,
+      'crateShortfallWrittenOffKobo': d.crateShortfallWrittenOffKobo,
       'businessNetPositionKobo': d.businessNetPositionKobo,
       'periodNetResultKobo': d.periodNetResultKobo,
       'totalSalesKobo': d.totalSalesKobo,
@@ -263,13 +288,42 @@ void main() {
       'crateDamageDepositKobo': d.crateDamageDepositKobo,
     };
 
-    /// The keys #215 is ALLOWED to move once a brand is switched on. Every
-    /// other key in [figures] must stay byte-identical to the `none` reading —
-    /// that is what "narrowed", rather than "deleted", means below.
+    /// The keys a money-moving arrangement is ALLOWED to move once a brand is
+    /// switched on. Every other key in [figures] must stay byte-identical to
+    /// the `none` reading — that is what "narrowed", rather than "deleted",
+    /// means below.
+    ///
+    /// **NARROWED AGAIN BY #216, NOT DELETED.** #215 owned the first three: a
+    /// Placed Deposit is an asset and a cash line, and it may never reach
+    /// profit. #216 adds the three that a WRITE-OFF moves, and this is the
+    /// first and only time this PRD is permitted to touch profit at all:
+    ///
+    ///   * `crateShortfallWrittenOffKobo` — the accepted loss itself;
+    ///   * `netProfitKobo` and `periodNetResultKobo` — the two lines it lands
+    ///     in, because crates the owner has accepted as lost are deposit value
+    ///     the business will not get back.
+    ///
+    /// Note what is STILL forbidden, and why the list grew by exactly three:
+    /// `cashInKobo`, `cashOutKobo`, `netCashMovementKobo`, `expensesKobo` and
+    /// `refundsKobo` are all unchanged. No cash moves when an owner accepts a
+    /// loss — the money left, or never arrived, long ago — and a crate loss is
+    /// not an expense and not a refund (the #190/#201 family defect).
+    /// `businessNetPositionKobo` moves only by #215's asset, never by the
+    /// write-off: the crate left the yard when it went missing and worth fell
+    /// then; this books the P&L half of an event worth already knew about.
+    ///
+    /// TO THE NEXT SLICE (#217): if settlement-time attribution ever moves a
+    /// figure, narrow this again rather than deleting it. The `none` row must
+    /// keep matching the pre-slice figures forever — it is the promise the
+    /// whole PRD ships on.
     const movedByThisSlice = {
       'placedCrateDepositsKobo',
       'cashCrateDepositsPlacedKobo',
       'businessNetPositionKobo',
+      // #216 — the loss, and the two lines it reaches.
+      'crateShortfallWrittenOffKobo',
+      'netProfitKobo',
+      'periodNetResultKobo',
     };
 
     test('the figures a crate business reads are exactly what they were before '
@@ -315,12 +369,18 @@ void main() {
       // arrangement beats the residue.
       expect(d.placedCrateDepositsKobo, 0);
       expect(d.cashCrateDepositsPlacedKobo, 0);
+      // #216 — and the accepted-loss figure reads zero at `none` too, even
+      // though the fixture feeds it a 4-crate write-off row. Profit is
+      // untouched: a swap-only brand has no shortfall to accept.
+      expect(d.crateShortfallWrittenOffKobo, 0);
+      expect(d.netProfitKobo, 0);
       expect(d.crateDeposits.bySupplier, isEmpty);
       expect(d.crateDeposits.hasMoney, isFalse);
     });
 
     test('the setting is inert at `none`: a switched-on brand moves ONLY the '
-        'figures #215 owns, and `none` still reads exactly as before', () {
+        'figures #215 and #216 own, and `none` still reads exactly as before',
+        () {
       // NARROWED BY #215, NOT DELETED — this test used to assert that no
       // ReconData figure depended on the arrangement at all, and left the next
       // slice this instruction:
@@ -375,6 +435,30 @@ void main() {
         // same amount OUTSIDE the net, and worth rises by the asset.
         expect(moved['placedCrateDepositsKobo'], placedWithDepot);
         expect(moved['cashCrateDepositsPlacedKobo'], placedWithDepot);
+        expect(
+          moved['businessNetPositionKobo'],
+          atNone['businessNetPositionKobo']! + placedWithDepot,
+        );
+
+        // …and the three #216 owns moved by EXACTLY the loss the owner
+        // accepted — not merely "differently". A permitted key that drifted by
+        // some other amount would pass the removeWhere comparison above and be
+        // wrong, so the magnitude is pinned here.
+        expect(moved['crateShortfallWrittenOffKobo'], writtenOffKobo);
+        expect(
+          moved['netProfitKobo'],
+          atNone['netProfitKobo']! - writtenOffKobo,
+          reason:
+              'an accepted crate loss is the ONE thing in PRD #203 that cuts '
+              'profit, and it cuts it by the crates × the rate snapshotted on '
+              'the day it was accepted',
+        );
+        expect(
+          moved['periodNetResultKobo'],
+          atNone['periodNetResultKobo']! - writtenOffKobo,
+        );
+        // Worth is NOT moved by the write-off — only by #215's asset. The
+        // crate left the yard when it went missing and worth fell then.
         expect(
           moved['businessNetPositionKobo'],
           atNone['businessNetPositionKobo']! + placedWithDepot,
@@ -455,6 +539,15 @@ void main() {
         // this reader cannot move a figure on a business that never switched a
         // brand on.
         'lib/features/inventory/screens/supplier_detail_screen.dart',
+        // #216 — the Crate Shortfall. The module reads the arrangement to
+        // decide whether a brand HAS a shortfall at all (a swap-only brand has
+        // no money at risk, so the warning and the write-off are both
+        // suppressed), and the reconciliation screen reads it only through the
+        // already-computed rollup. Both are release-gated by the `none` row
+        // below: every figure they can produce is 0 for a brand nobody switched
+        // on, INCLUDING the one figure in this PRD that reaches profit.
+        'lib/core/crates/crate_shortfall.dart',
+        'lib/features/dashboard/reconciliation/recon_data.dart',
       };
 
       final found = <String>{};

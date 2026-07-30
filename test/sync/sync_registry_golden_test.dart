@@ -101,6 +101,10 @@ void main() {
     // FK-references it.
     'supplier_crate_deposit_requests',
     'supplier_crate_deposits',
+    // #216 (PRD #203): the Crate Shortfall write-off ledger — the deliberate,
+    // dated acceptance of a loss. Append-only, no void columns, so it restores
+    // INSERT-OR-IGNORE like the Placed Deposit ledger above it.
+    'crate_shortfall_writeoffs',
     'saved_carts',
     'pending_crate_returns',
     'manufacturer_crate_balances',
@@ -131,6 +135,8 @@ void main() {
     // #212 (PRD #203): the crate-deposit money tables.
     'supplier_crate_deposit_requests',
     'supplier_crate_deposits',
+    // #216 (PRD #203): the Crate Shortfall write-off ledger.
+    'crate_shortfall_writeoffs',
     'products',
     'cost_batches',
     'price_lists',
