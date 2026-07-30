@@ -20,8 +20,8 @@ the run: **1550 passed / 126 skipped / 0 failed**.
 | #210 receipt leg (no money) | **MERGED** | `a7a28e0` — 1561 pass / 126 skip / 0 fail |
 | #211 arrangement setting (Drift v78, cloud 0171) | **MERGED** | `7185235` — 1585 pass / 126 skip / 0 fail |
 | #212 Placed Deposit + approval + position seam (Drift v79, cloud 0172) | **MERGED** | `f159f46` — 1640 pass / 126 skip / 0 fail |
-| #213 settle on return | in progress | — |
-| #214 standing float | pending | — |
+| #213 settle on return (code only, no migration) | **MERGED** | `4098972` — 1665 pass / 126 skip / 0 fail |
+| #214 standing float | in progress | — |
 | #215 worth + recon card (amends ADR 0014) | pending | — |
 | #216 shortfall + write-off | pending | — |
 | #217 forfeit netting | pending | — |
@@ -90,6 +90,27 @@ payment-method picker (confirm defaults to cash); nothing yet *enforces*
 which #212 does not touch, so it is still TRUE. #215 owns making it go red and
 narrowing it to `none`. Narrowing it earlier would delete the guard that
 `per_delivery` leaves reconciliation alone.
+
+**#213 notes.** Code only — 0172's design covered it exactly as predicted, so
+no Drift bump and no migration. Both settlement doors land in the same two
+ledgers by the same code: the standalone path delegates to
+`recordReturnToSupplier` when it carries crates, and raises a money-only
+release when it does not (an explicit amount is REQUIRED there — guessing is
+the defect). The suggested refund is **capped at what the pair actually
+holds**, read through `computeCrateDepositPosition`; without the cap a brand
+switched on today, while owing crates received under `none`, would offer a
+refund from a depot never paid a naira. Pending placements are excluded from
+the cap deliberately — money not yet paid must not create refund headroom.
+Added the `crate_seam_ban_test` entries #212 asked for.
+
+**GAP flagged by #213, unfiled:** a standalone settlement does **not** move the
+physical empties pool — the supplier ledger falls but
+`manufacturers.empty_crate_stock` does not. Deliberately not "fixed" there: the
+manual supplier-side return has never moved the yard (Receive Stock's empties
+box is that door), so changing it would alter the button's behaviour for every
+brand incl. `none` from inside a money slice. Either file it, or fold it into
+#216 — which already reconciles crates owed against empties on hand and would
+surface the discrepancy anyway.
 
 **Cloud migrations are NOT deployed yet** — branches commit them, deployment is
 sequenced separately after the app code lands. Pending: **0171, 0172**.
