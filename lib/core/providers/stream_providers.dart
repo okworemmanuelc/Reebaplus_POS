@@ -1964,8 +1964,27 @@ final vanTripReturnsProvider =
 /// role / user providers rather than a new query, so a suspended or removed
 /// driver drops out of the Load Van picker the moment their membership changes.
 ///
-/// Ordered by name — a flat list of one role, so the tier ordering that governs
-/// mixed role lists doesn't apply.
+/// **Ordered by name, deliberately** (#208 item 2) — not an oversight, and not
+/// a place to apply [roleRank].
+///
+/// The house rule is that people lists are tier-ordered (CEO → Manager →
+/// Cashier → Stock keeper → Driver). It does not bite here because this list is
+/// closed under a single role by construction, not by luck:
+///
+///  * `roles` carries `UNIQUE (business_id, slug)` (the `Roles` table's
+///    `customConstraints`, mirrored by the cloud's `ON CONFLICT (business_id,
+///    slug)` in 0161), so `driverRoleIds` below holds **at most one** id per
+///    business; and
+///  * every member of that one role therefore scores the same [roleRank], which
+///    makes a tier sort a constant comparator — it would leave exactly the
+///    alphabetical order already present here, with a slower sort and a false
+///    implication that the list is mixed.
+///
+/// So: tier ordering is not weakened here, it is vacuous here. Name order is
+/// what a manager scans a single-role picker by. Pinned by
+/// `test/van_sales/van_driver_ordering_test.dart` so a later reader does not
+/// "fix" it into churn — if a second driver-ish role is ever seeded, that test
+/// fails first and this decision is reopened.
 final vanDriversProvider = Provider<List<UserData>>((ref) {
   final memberships =
       ref.watch(userBusinessesProvider).valueOrNull ?? const <UserBusinessData>[];
