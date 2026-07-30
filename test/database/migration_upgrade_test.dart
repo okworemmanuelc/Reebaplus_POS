@@ -3232,4 +3232,162 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v80 -> v81 (a forfeit that gained nothing stops reading as a '
+      'gain, #217)', () {
+    /// Reverts the v81 delta: drop the one added column. Nothing references it
+    /// and there is no Drift-side CHECK mentioning it (the value set is
+    /// enforced on the cloud only, 0174), so a raw DROP COLUMN is enough — no
+    /// table rebuild, and none of the stale-column trap that comes with one.
+    Future<void> dropWriteOffSource(AppDatabase db) async {
+      await db.customStatement(
+        'ALTER TABLE crate_shortfall_writeoffs DROP COLUMN source',
+      );
+    }
+
+    /// A tenant that already accepted a crate loss under #216 — the shape a
+    /// device upgrading from v80 genuinely has on disk.
+    Future<Map<String, String>> seedAcceptedLoss(AppDatabase db) async {
+      final biz = UuidV7.generate();
+      final star = UuidV7.generate();
+      final wo = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name, type) VALUES (?, 'Biz', 'Bar')",
+        [biz],
+      );
+      await db.customStatement(
+        'INSERT INTO manufacturers (id, business_id, name, empty_crate_stock, '
+        'deposit_amount_kobo, crate_money_arrangement) '
+        "VALUES (?, ?, 'Star Lager', 42, 350000, 'per_delivery')",
+        [star, biz],
+      );
+      await db.customStatement(
+        'INSERT INTO crate_shortfall_writeoffs (id, business_id, '
+        'manufacturer_id, crate_count, rate_per_crate_kobo, created_at, '
+        'last_updated_at) VALUES (?, ?, ?, 4, 350000, 1785000000, 1785000000)',
+        [wo, biz, star],
+      );
+      return {'biz': biz, 'star': star, 'wo': wo};
+    }
+
+    test('a loss accepted before the upgrade keeps every figure it booked, and '
+        'reads `manual`', () async {
+      final db1 = await openAndInit();
+      final ids = await seedAcceptedLoss(db1);
+
+      await dropWriteOffSource(db1);
+      expect(
+        (await columnsOf(db1, 'crate_shortfall_writeoffs')).contains('source'),
+        isFalse,
+        reason: 'teeth: the pre-v81 shape must genuinely lack the column',
+      );
+
+      await db1.customStatement('PRAGMA user_version = 80');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(
+        (await columnsOf(db2, 'crate_shortfall_writeoffs')).contains('source'),
+        isTrue,
+      );
+
+      final row = await db2
+          .customSelect(
+            'SELECT id, crate_count, rate_per_crate_kobo, source '
+            'FROM crate_shortfall_writeoffs',
+          )
+          .getSingle();
+      expect(row.read<String>('id'), ids['wo']!);
+      // The loss this row booked is crate_count x rate_per_crate_kobo, and both
+      // must be exactly what they were. An upgrade that moved either would
+      // restate a day the owner already closed (ADR 0021).
+      expect(row.read<int>('crate_count'), 4);
+      expect(row.read<int>('rate_per_crate_kobo'), 350000);
+      expect(
+        row.read<String>('source'),
+        'manual',
+        reason:
+            'a decision an owner took by hand stays attributed to them — the '
+            'default is the bucket every #216 row was already in',
+      );
+    });
+
+    test('THE RELEASE GATE — the upgrade raises no netting row for any past '
+        'forfeit', () async {
+      // The whole of #217 is that the netting is decided in the settling
+      // transaction and never re-decided later. An upgrade that backfilled past
+      // forfeits would rewrite closed days — the exact thing ADR 0021 forbids —
+      // so the correct row count after this step is the one row that already
+      // existed, whatever the brand's arrangement now says.
+      final db1 = await openAndInit();
+      await seedAcceptedLoss(db1);
+      await dropWriteOffSource(db1);
+      await db1.customStatement('PRAGMA user_version = 80');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final n = await db2
+          .customSelect('SELECT COUNT(*) c FROM crate_shortfall_writeoffs')
+          .getSingle();
+      expect(n.read<int>('c'), 1);
+      final forfeitRows = await db2
+          .customSelect(
+            'SELECT COUNT(*) c FROM crate_shortfall_writeoffs '
+            "WHERE source = 'customer_forfeit'",
+          )
+          .getSingle();
+      expect(forfeitRows.read<int>('c'), 0);
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)',
+        () async {
+      final db1 = await openAndInit();
+      // Do NOT revert — just step the version back, so the v81 block runs
+      // against a schema that already has the column (also the shape a fresh
+      // install lands in). The guard must skip the addColumn cleanly.
+      //
+      // The row is INSERTED already labelled rather than updated afterwards:
+      // the table is append-only and its immutability trigger refuses an UPDATE
+      // of `source` outright — which is itself the proof that v81's column
+      // joined the guarded set rather than arriving unprotected.
+      final ids = await seedAcceptedLoss(db1);
+      await db1.customStatement(
+        'DELETE FROM crate_shortfall_writeoffs WHERE 1 = 0',
+      );
+      await expectLater(
+        db1.customStatement(
+          "UPDATE crate_shortfall_writeoffs SET source = 'customer_forfeit' "
+          'WHERE id = ?',
+          [ids['wo']!],
+        ),
+        throwsA(anything),
+        reason: 'v81 `source` is frozen with the rest of the booked loss',
+      );
+      await db1.customStatement(
+        'INSERT INTO crate_shortfall_writeoffs (id, business_id, '
+        'manufacturer_id, crate_count, rate_per_crate_kobo, source, '
+        'created_at, last_updated_at) '
+        "VALUES (?, ?, ?, 3, 350000, 'customer_forfeit', 1785000001, "
+        '1785000001)',
+        [UuidV7.generate(), ids['biz']!, ids['star']!],
+      );
+      await db1.customStatement('PRAGMA user_version = 80');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final rows = await db2
+          .customSelect(
+            'SELECT source FROM crate_shortfall_writeoffs ORDER BY created_at',
+          )
+          .get();
+      expect(
+        rows.map((r) => r.read<String>('source')),
+        ['manual', 'customer_forfeit'],
+        reason: 'the upgrade never flattens a value already on disk',
+      );
+    });
+  });
 }
