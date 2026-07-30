@@ -670,9 +670,6 @@ class _QuickSaleApprovalCardState
   }
 }
 
-/// Asks the approver for an optional reason before rejecting a request.
-/// Owns its own `TextEditingController` and disposes it in `dispose()` (never
-/// after an `await`) — the controller-lifecycle rule from the Update Stock
 /// A pending **crate deposit** money leg (#212, PRD #203 / ADR 0023 rule 6).
 ///
 /// The crates on this delivery are already recorded — a stock keeper's say-so
@@ -973,6 +970,9 @@ class _CrateDepositApprovalCardState
   }
 }
 
+/// Asks the approver for an optional reason before rejecting a request.
+/// Owns its own `TextEditingController` and disposes it in `dispose()` (never
+/// after an `await`) — the controller-lifecycle rule from the Update Stock
 /// crash fix. Pops the typed reason on Reject (may be empty), `null` on Cancel.
 /// [subject] names the requester in the prompt ("stock keeper" / "cashier").
 class _RejectReasonDialog extends StatefulWidget {

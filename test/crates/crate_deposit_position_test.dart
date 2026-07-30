@@ -299,9 +299,79 @@ void main() {
         arrangement: CrateMoneyArrangement.perDelivery,
         ratePerCrateKobo: -1,
         cratesOwed: 5,
+        emptiesOnHand: 0,
       );
       expect(p.ratePerCrateKobo, 0);
       expect(p.shortfallValueKobo, 0);
+    });
+
+    test('NOT asking is not the same as nothing missing — omitting '
+        'emptiesOnHand yields no shortfall at all', () {
+      // The scope guard. `emptiesOnHand` is the BRAND's yard, business-wide,
+      // while cratesOwed is usually ONE supplier's slice. Subtracting one from
+      // the other across two suppliers of the same brand double-subtracts and
+      // reports both as square while the brand is genuinely short — so a caller
+      // that cannot supply a same-scope count must be able to say so, and get
+      // 0 rather than a wrong number.
+      final notAsked = computeCrateDepositPosition(
+        arrangement: CrateMoneyArrangement.perDelivery,
+        ratePerCrateKobo: rate,
+        cratesOwed: 40,
+      );
+      expect(notAsked.shortfallCrates, 0);
+      expect(notAsked.shortfallValueKobo, 0);
+      expect(notAsked.hasShortfall, isFalse);
+      // …and it is genuinely the omission doing it, not the inputs: the same
+      // debt WITH an empty yard is a 40-crate shortfall.
+      final asked = computeCrateDepositPosition(
+        arrangement: CrateMoneyArrangement.perDelivery,
+        ratePerCrateKobo: rate,
+        cratesOwed: 40,
+        emptiesOnHand: 0,
+      );
+      expect(asked.shortfallCrates, 40);
+      expect(asked.shortfallValueKobo, 40 * rate);
+    });
+  });
+
+  group('pending money is signed by KIND, like the ledger', () {
+    test('#213/#214 — a pending release or float payout is money coming BACK, '
+        'so it reduces the pending figure instead of inflating it', () {
+      // `requested_amount_kobo` and `crate_count` are both `>= 0` by CHECK, so
+      // the direction has to come from `kind`. Summing additively would report
+      // a depot about to refund us as a depot about to be paid.
+      final p = computeCrateDepositPosition(
+        arrangement: CrateMoneyArrangement.perDelivery,
+        ratePerCrateKobo: rate,
+        pending: const [
+          PendingCrateDeposit(
+            kind: kCrateDepositMovementPlacement,
+            requestedAmountKobo: 2800000,
+            crateCount: 8,
+          ),
+          PendingCrateDeposit(
+            kind: kCrateDepositMovementRelease,
+            requestedAmountKobo: 1050000,
+            crateCount: 3,
+          ),
+        ],
+      );
+      expect(p.pendingDepositKobo, 2800000 - 1050000);
+      expect(p.pendingCrates, 8 - 3);
+    });
+
+    test('a pending float payout is negative too', () {
+      final p = computeCrateDepositPosition(
+        arrangement: CrateMoneyArrangement.standingFloat,
+        ratePerCrateKobo: rate,
+        pending: const [
+          PendingCrateDeposit(
+            kind: kCrateDepositMovementFloatPayout,
+            requestedAmountKobo: 5000000,
+          ),
+        ],
+      );
+      expect(p.pendingDepositKobo, -5000000);
     });
   });
 

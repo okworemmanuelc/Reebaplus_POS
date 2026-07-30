@@ -328,6 +328,7 @@ DO $$
 DECLARE
   v_conname text;
   v_def     text;
+  v_legacy  bigint;
 BEGIN
   SELECT c.conname, pg_get_constraintdef(c.oid)
     INTO v_conname, v_def
@@ -341,17 +342,46 @@ BEGIN
     RETURN;
   END IF;
 
+  -- 0169's guard, inherited. That migration SKIPPED its narrowing (leaving the
+  -- CHECK wide, `purchase` and all) on any database that still held a
+  -- `type = 'purchase'` row, because a money row is never deleted to satisfy a
+  -- constraint. On such a database this ADD CONSTRAINT would validate against
+  -- live data, raise 23514, and — since this whole file is one BEGIN…COMMIT —
+  -- roll back the ENTIRE migration, tables and all.
+  --
+  -- So keep `purchase` in the set when it is still in use. The result is a
+  -- CHECK that is wide by one retired value and correct for everything that
+  -- matters, on a database that is already in that state. The Drift side takes
+  -- the same decision in the v79 upgrade step (`hasPurchasePaymentsAtV79`),
+  -- and 0169's own advice still applies: reclassify the rows, then ship the
+  -- narrowing as a NEW migration.
+  SELECT count(*) INTO v_legacy
+    FROM public.payment_transactions
+   WHERE type = 'purchase';
+
   IF v_conname IS NOT NULL THEN
     EXECUTE format(
       'ALTER TABLE public.payment_transactions DROP CONSTRAINT %I', v_conname
     );
   END IF;
 
-  ALTER TABLE public.payment_transactions
-    ADD CONSTRAINT payment_transactions_type_check
-    CHECK (type IN
-      ('sale','expense','refund','wallet_topup','crate_deposit',
-       'van_remittance','crate_deposit_out'));
+  IF v_legacy > 0 THEN
+    RAISE WARNING
+      '0172: % payment_transactions row(s) still have type = ''purchase''; '
+      'keeping that value in the CHECK so the deploy does not abort. See 0169.',
+      v_legacy;
+    ALTER TABLE public.payment_transactions
+      ADD CONSTRAINT payment_transactions_type_check
+      CHECK (type IN
+        ('sale','expense','refund','wallet_topup','crate_deposit',
+         'van_remittance','crate_deposit_out','purchase'));
+  ELSE
+    ALTER TABLE public.payment_transactions
+      ADD CONSTRAINT payment_transactions_type_check
+      CHECK (type IN
+        ('sale','expense','refund','wallet_topup','crate_deposit',
+         'van_remittance','crate_deposit_out'));
+  END IF;
 END $$;
 
 -- =========================================================================
@@ -366,6 +396,7 @@ DO $$
 DECLARE
   v_conname text;
   v_def     text;
+  v_orphans bigint;
 BEGIN
   SELECT c.conname, pg_get_constraintdef(c.oid)
     INTO v_conname, v_def
@@ -376,6 +407,30 @@ BEGIN
    LIMIT 1;
 
   IF v_def IS NOT NULL AND v_def ILIKE '%crate_deposit_id%' THEN
+    RETURN;
+  END IF;
+
+  -- Same refusal-to-abort rule as the type CHECK above. 0163 already enforces
+  -- exactly-one-parent, so a violating row should be impossible — but a
+  -- DROP-then-ADD that validates against live data is exactly the shape that
+  -- rolls the whole migration back if that assumption is ever wrong, and the
+  -- post-deploy verification query at the bottom of this file finds out far too
+  -- late to help. Check BEFORE dropping.
+  SELECT count(*) INTO v_orphans
+    FROM public.payment_transactions
+   WHERE ((order_id      IS NOT NULL)::int +
+          (shipment_id   IS NOT NULL)::int +
+          (expense_id    IS NOT NULL)::int +
+          (wallet_txn_id IS NOT NULL)::int +
+          (delivery_id   IS NOT NULL)::int +
+          (van_trip_id   IS NOT NULL)::int) <> 1;
+
+  IF v_orphans > 0 THEN
+    RAISE WARNING
+      '0172: % payment_transactions row(s) do not satisfy exactly-one-parent; '
+      'leaving the six-way CHECK in place rather than aborting the deploy. '
+      'Crate deposits cannot be recorded until those rows are reclassified.',
+      v_orphans;
     RETURN;
   END IF;
 
@@ -480,6 +535,7 @@ DECLARE
     -- 0105: cashier Quick Sale approval queue (§12.3.1).
     'quick_sale_requests',
     'customer_wallets','wallet_transactions',
+    'saved_carts',
     -- 0093: per-order crate deposit + return queue (§13.4).
     'pending_crate_returns','crate_ledger','manufacturer_crate_balances',
     -- 0104: per-store empty crate balance cache (§16.8.1 Phase 2).

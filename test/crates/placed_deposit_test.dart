@@ -262,6 +262,74 @@ void main() {
     });
   });
 
+  // ── 1b. One ledger per brand, whichever door the delivery came through ────
+
+  group('the manual supplier form routes to the SAME ledger', () {
+    test('on a `per_delivery` brand it raises a request and writes NOTHING to '
+        'the legacy deposit column', () async {
+      // The supplier screen's own "receive crates" form types a deposit
+      // straight into `supplier_crate_ledger.deposit_paid_kobo`. If that stayed
+      // live for a `per_delivery` brand, the same brand's deposit money would
+      // sit in TWO ledgers that never agree — ADR 0023 finding #3, recreated
+      // inside the slice that exists to fix it. The arrangement decides, not
+      // the caller, so this path lands in the queue like any other.
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierA,
+        manufacturerId: moneyBrand,
+        quantity: 6,
+        performedBy: stockKeeperId,
+        storeId: storeId,
+        depositPaidKobo: 2100000,
+      );
+
+      final crateRow = (await db.select(db.supplierCrateLedger).get()).single;
+      expect(crateRow.quantityDelta, 6);
+      expect(
+        crateRow.depositPaidKobo,
+        0,
+        reason: 'the legacy column must not move for a per_delivery brand',
+      );
+
+      final requests = await db.select(db.supplierCrateDepositRequests).get();
+      expect(requests, hasLength(1));
+      expect(requests.single.crateCount, 6);
+      expect(requests.single.status, kCrateDepositRequestPending);
+    });
+
+    test('on a `none` brand the legacy column still works exactly as it did — '
+        'and no request is raised', () async {
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierA,
+        manufacturerId: swapBrand,
+        quantity: 6,
+        performedBy: stockKeeperId,
+        storeId: storeId,
+        depositPaidKobo: 2100000,
+      );
+      final crateRow = (await db.select(db.supplierCrateLedger).get()).single;
+      expect(crateRow.depositPaidKobo, 2100000);
+      expect(await db.select(db.supplierCrateDepositRequests).get(), isEmpty);
+    });
+
+    test('with no active store there is nowhere to route the money, so the '
+        'typed figure is kept rather than silently dropped', () async {
+      // The approval queue scopes approvers BY store and `store_id` is NOT
+      // NULL, so under "All Stores" there is no queue to raise into. Keeping
+      // the legacy column is the pre-existing behaviour and beats discarding a
+      // number the user typed.
+      await db.cratePoolDao.recordReceiveFromSupplier(
+        supplierId: supplierA,
+        manufacturerId: moneyBrand,
+        quantity: 6,
+        performedBy: stockKeeperId,
+        depositPaidKobo: 2100000,
+      );
+      final crateRow = (await db.select(db.supplierCrateLedger).get()).single;
+      expect(crateRow.depositPaidKobo, 2100000);
+      expect(await db.select(db.supplierCrateDepositRequests).get(), isEmpty);
+    });
+  });
+
   // ── 2. The count commits, the money waits ─────────────────────────────────
 
   group('the count commits on the stock keeper; the money waits', () {

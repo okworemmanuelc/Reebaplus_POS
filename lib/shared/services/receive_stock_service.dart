@@ -179,14 +179,13 @@ class ReceiveStockService {
             quantity: cratesReceived,
             performedBy: staffId,
             storeId: storeId,
-            // #212, ADR 0023 rule 6 — the MONEY half of the same event. The
-            // seam raises a pending deposit for a money-permitted role when
-            // (and only when) this brand's Crate Money Arrangement is
-            // `per_delivery`; a `none` brand raises nothing and this receipt
-            // behaves exactly as it did before PRD #203. The count above is
-            // already committed either way: whoever is standing at the
-            // delivery may record crates, and may never move cash.
-            raiseDepositRequest: true,
+            // #212, ADR 0023 rule 6 — the MONEY half of the same event needs no
+            // argument here. The seam reads this brand's Crate Money
+            // Arrangement itself and raises a pending deposit for a
+            // money-permitted role when (and only when) it is `per_delivery`; a
+            // `none` brand raises nothing and this receipt behaves exactly as
+            // it did before PRD #203. Whoever is standing at the delivery may
+            // record crates, and may never move cash.
           );
           totalCratesReceived += cratesReceived;
         }

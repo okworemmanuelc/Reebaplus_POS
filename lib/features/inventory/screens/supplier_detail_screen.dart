@@ -875,16 +875,21 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                               color: _text,
                             ),
                           ),
-                          if (p.position.hasShortfall)
+                          // Deliberately NOT a shortfall line. A shortfall is
+                          // brand-level across every supplier (ADR 0023 rule
+                          // 4); printing it on a per-supplier card would show
+                          // the same missing crates twice and imply this depot
+                          // is the one who lost them. #215 carries it, once,
+                          // business-wide. What belongs here is how much of
+                          // this supplier's crate debt carries no money.
+                          if (p.position.unbackedCrates > 0)
                             Text(
-                              '${p.position.shortfallCrates} crate'
-                              '${p.position.shortfallCrates == 1 ? '' : 's'} '
-                              'short — '
-                              '${formatCurrency(p.position.shortfallValueKobo / 100)} '
-                              'at risk',
+                              '${p.position.unbackedCrates} crate'
+                              '${p.position.unbackedCrates == 1 ? '' : 's'} '
+                              'with no deposit paid',
                               style: TextStyle(
                                 fontSize: context.getRFontSize(11),
-                                color: Colors.amber.shade800,
+                                color: _subtext,
                               ),
                             ),
                         ],

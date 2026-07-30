@@ -134,6 +134,11 @@ class CrateDepositPosition {
   /// It is a suspicion — crates turn up behind the store, a driver returns
   /// late, a count was wrong — and it hits profit only when somebody
   /// deliberately writes it off, which is #216's job, not this function's.
+  ///
+  /// **0 when the caller did not ask a shortfall question** — see
+  /// [computeCrateDepositPosition]'s `emptiesOnHand`. A shortfall is a
+  /// BRAND-level figure across every supplier; asking it of one supplier's
+  /// slice would answer a question nobody posed.
   final int shortfallCrates;
 
   /// [shortfallCrates] at [ratePerCrateKobo].
@@ -187,7 +192,9 @@ class CrateDepositPosition {
   /// True when this brand's crate money moves at all.
   bool get movesMoney => arrangement.movesMoney;
 
-  /// True when crates owed exceed empties on hand.
+  /// True when a shortfall was ASKED FOR and is non-zero. False whenever the
+  /// caller passed no `emptiesOnHand` — absence of an answer is never a claim
+  /// that nothing is missing.
   bool get hasShortfall => shortfallCrates > 0;
 
   /// True when a money leg is waiting on a money-permitted role.
@@ -210,9 +217,20 @@ class CrateDepositPosition {
 /// Compute a crate-deposit position from plain data.
 ///
 /// [movements] are the Placed Deposit ledger rows for the scope; [pending] the
-/// undecided requests; [cratesOwed] the signed sum of the supplier crate ledger
-/// and [emptiesOnHand] the physical empties pool. [ratePerCrateKobo] is
-/// `manufacturers.deposit_amount_kobo`.
+/// undecided requests; [cratesOwed] the signed sum of the supplier crate
+/// ledger. [ratePerCrateKobo] is `manufacturers.deposit_amount_kobo`.
+///
+/// **[emptiesOnHand] is nullable, and that is load-bearing.** The empties pool
+/// (`manufacturers.empty_crate_stock`) is BRAND-level and business-wide, while
+/// [cratesOwed] is whatever scope the caller summed — usually ONE
+/// `(supplier, manufacturer)` pair. Subtracting the whole brand's yard from one
+/// supplier's debt is not a small inaccuracy: with two suppliers of the same
+/// brand it double-subtracts, so each supplier reads a shortfall of ~0 while
+/// the brand is genuinely short. Pass `null` (the default) to say "I am not
+/// asking a shortfall question at this scope" and get 0; pass it only when
+/// [cratesOwed] was summed over the SAME brand-level scope. ADR 0023 rule 4
+/// puts the shortfall at brand level precisely because crates are fungible and
+/// attributing a loss to one supplier invents a fact.
 ///
 /// **A `none` brand returns [CrateDepositPosition.zero] and reads nothing
 /// else.** That is the release gate for the whole of PRD #203, expressed as
@@ -228,13 +246,17 @@ class CrateDepositPosition {
 /// is the money-at-risk warning of rules 4 and 5, and a swap-only brand has no
 /// money at risk. The physical crate counts a `none` brand does carry are
 /// unchanged and still read from the crate screens they always did.
+///
+/// [unbackedCrates] has no such caveat: it is `cratesOwed − placedCrates`, both
+/// of which the caller summed over the same scope by construction, so it is
+/// meaningful at pair level and at brand level alike.
 CrateDepositPosition computeCrateDepositPosition({
   required CrateMoneyArrangement arrangement,
   required int ratePerCrateKobo,
   List<CrateDepositMovement> movements = const [],
   List<PendingCrateDeposit> pending = const [],
   int cratesOwed = 0,
-  int emptiesOnHand = 0,
+  int? emptiesOnHand,
 }) {
   if (!arrangement.movesMoney) return CrateDepositPosition.zero;
 
@@ -247,14 +269,28 @@ CrateDepositPosition computeCrateDepositPosition({
     placedCrates += m.crateCount;
   }
 
+  // Signed by KIND, exactly as the ledger is. `requested_amount_kobo` and
+  // `crate_count` are both `>= 0` by CHECK, so the direction has to come from
+  // somewhere — and a pending `release` or `float_payout` is money coming BACK
+  // to us. Summing those additively would report a supplier about to refund us
+  // as a supplier about to be paid, which is the sign error this whole family
+  // exists to avoid. #212 only ever raises `placement`; the two slices that
+  // raise the others inherit this correct.
   var pendingDepositKobo = 0;
   var pendingCrates = 0;
   for (final p in pending) {
-    pendingDepositKobo += p.requestedAmountKobo;
-    pendingCrates += p.crateCount;
+    final outward = crateDepositMovementIsOutward(p.kind);
+    pendingDepositKobo += outward
+        ? p.requestedAmountKobo
+        : -p.requestedAmountKobo;
+    pendingCrates += outward ? p.crateCount : -p.crateCount;
   }
 
-  final shortfallCrates = _max0(cratesOwed - emptiesOnHand);
+  // Only when the caller supplied a same-scope empties count. See the doc
+  // above: a null here is "not asking", never "nothing is missing".
+  final shortfallCrates = emptiesOnHand == null
+      ? 0
+      : _max0(cratesOwed - emptiesOnHand);
   final unbackedCrates = _max0(cratesOwed - placedCrates);
 
   return CrateDepositPosition(
@@ -265,7 +301,7 @@ CrateDepositPosition computeCrateDepositPosition({
     pendingDepositKobo: pendingDepositKobo,
     pendingCrates: pendingCrates,
     cratesOwed: cratesOwed,
-    emptiesOnHand: emptiesOnHand,
+    emptiesOnHand: emptiesOnHand ?? 0,
     shortfallCrates: shortfallCrates,
     shortfallValueKobo: shortfallCrates * rate,
     unbackedCrates: unbackedCrates,
