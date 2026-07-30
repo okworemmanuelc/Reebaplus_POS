@@ -146,7 +146,7 @@ void main() {
       expect(order['id'], orderId);
       expect(order['order_number'], orderNumber);
       expect(order['total_amount_kobo'], 200000,
-          reason: '#219 / 0174 — total_amount_kobo is THE PAYABLE '
+          reason: '#219 / 0177 — total_amount_kobo is THE PAYABLE '
               '(gross − discount + deposit), the same meaning the v1 client '
               'header writes. No discount and no deposit here, so it '
               'coincides with the server-computed gross');
@@ -207,7 +207,7 @@ void main() {
       // Goods 200000, discount 10000, no deposit → payable 190000.
       //
       // This is the case that separates the two candidate meanings: before
-      // migration 0174 the header recorded the GROSS (200000) while the v1
+      // migration 0177 the header recorded the GROSS (200000) while the v1
       // client path recorded 190000 for the identical sale, so the same column
       // meant two things depending on which sync path wrote the row.
       final response = await clients.userClient.rpc(
@@ -230,7 +230,7 @@ void main() {
 
       final order = response['order'] as Map;
       expect(order['total_amount_kobo'], 190000,
-          reason: '#219 / 0174 — the payable = gross − discount + deposit, '
+          reason: '#219 / 0177 — the payable = gross − discount + deposit, '
               'NOT the 200000 gross');
       expect(order['net_amount_kobo'], 190000,
           reason: 'both money columns agree, as they do on the v1 path');

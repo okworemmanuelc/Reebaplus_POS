@@ -1,4 +1,4 @@
--- 0174_v2_total_amount_is_payable.sql
+-- 0177_v2_total_amount_is_payable.sql
 --
 -- #219 / PRD #155 close-out — `orders.total_amount_kobo` MEANS THE PAYABLE, AND
 -- THE v2 RECORD-SALE RPC NOW WRITES THAT.
@@ -94,8 +94,13 @@
 -- ₦discount too high and reprints a receipt that disagrees with the original.
 -- Add to the flag-flip checklist alongside #121.
 --
--- MIGRATION-NUMBER LANE: 0174 is #219's. 0171/0172 and 0175/0176 belong to
--- PRD #203's crate-deposit outflow slices and touch no RPC; 0173 is #209's.
+-- MIGRATION-NUMBER LANE: 0177 is #219's, and it deliberately sits ABOVE 0176.
+-- The gap at 0174 is real but unusable: 0175 and 0176 are ALREADY APPLIED on
+-- the cloud, so a migration numbered below them is out-of-order history the
+-- CLI rejects. 0171/0172 and 0175/0176 belong to PRD #203's crate-deposit
+-- outflow slices and redefine no RPC — nothing there re-replaces
+-- `pos_record_sale_v2`, so this fix cannot be reverted by applying them.
+-- 0173 is #209's.
 
 BEGIN;
 

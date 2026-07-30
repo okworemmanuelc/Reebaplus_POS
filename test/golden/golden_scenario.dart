@@ -826,7 +826,7 @@ void expectGolden(
   expect(actual.order.totalAmountKobo, e.totalAmountKobo,
       // #219 — the column is THE PAYABLE (gross − discount + crate deposit),
       // not the gross. The label said "gross" because every fixture here has
-      // discount_kobo 0, where the two coincide; migration 0174 settles the
+      // discount_kobo 0, where the two coincide; migration 0177 settles the
       // meaning for the v2 writer too.
       reason: '${s.name}: total_amount_kobo (the payable)');
   expect(actual.order.discountKobo, e.discountKobo,
