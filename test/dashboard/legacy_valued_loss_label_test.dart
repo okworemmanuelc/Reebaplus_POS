@@ -14,8 +14,14 @@
 // The disclosure needs a count, and the count has to describe EXACTLY the rows
 // the money summed — otherwise the footnote and the figure drift. These tests
 // drive `countShortageRows` (the one definition of the shortage row set, shared
-// with `countShortageLossKobo`) and `legacyValuedRowCount` against real
+// with `countShortageRowsValueKobo`) and `legacyValuedRowCount` against real
 // `stock_adjustments` rows written by the real mutator.
+//
+// #186 kept both halves and added a third case: a winning count session with no
+// attributable rows at all values its own count lines at current cost, and every
+// one of them is counted here too — see the group at the foot of this file, and
+// `recon_shortage_snapshot_test.dart` for the same thing through the real
+// roll-up.
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_test/flutter_test.dart';
@@ -139,8 +145,8 @@ void main() {
       expect(legacyValuedRowCount(shortageRows(rows)), 0,
           reason: 'the mutator snapshotted value_kobo — no footnote owed');
       expect(
-        countShortageLossKobo(rows,
-            productById: await productById(), inSpan: always, inScope: always),
+        countShortageRowsValueKobo(shortageRows(rows),
+            productById: await productById()),
         30000,
       );
     });
@@ -154,8 +160,8 @@ void main() {
       // The money is unchanged behaviour — 4 × today's cost. The count is the
       // new part: it says out loud that this figure moves with the price.
       expect(
-        countShortageLossKobo(rows,
-            productById: await productById(), inSpan: always, inScope: always),
+        countShortageRowsValueKobo(shortageRows(rows),
+            productById: await productById()),
         48000,
       );
     });
@@ -194,8 +200,8 @@ void main() {
       // The disclosure therefore counts 1, matching the one row the money summed.
       expect(legacyValuedRowCount(shortageRows(rows)), 1);
       expect(
-        countShortageLossKobo(rows,
-            productById: await productById(), inSpan: always, inScope: always),
+        countShortageRowsValueKobo(shortageRows(rows),
+            productById: await productById()),
         36000, // 3 × 12,000
       );
     });
@@ -209,10 +215,8 @@ void main() {
       expect(shortageRows(rows, inScope: onlyMain), isEmpty);
       expect(legacyValuedRowCount(shortageRows(rows, inScope: onlyMain)), 0);
       expect(
-        countShortageLossKobo(rows,
-            productById: await productById(),
-            inSpan: always,
-            inScope: onlyMain),
+        countShortageRowsValueKobo(shortageRows(rows, inScope: onlyMain),
+            productById: await productById()),
         0,
         reason: 'a footnote must never outlive the figure it annotates',
       );
@@ -279,6 +283,210 @@ void main() {
       await legacyRow(productId, 4, 'damage:breakage'); // nonsensical, but +ve
       final rows = await allAdjustments();
       expect(damageLossRows(rows, inSpan: always, inScope: always), isEmpty);
+    });
+  });
+
+  group('countSessionShortage — the disclosure follows the SESSION (#186)', () {
+    /// A saved count session over one shorted product.
+    StockCountData sessionShort(String productId, int units) => StockCountData(
+          id: UuidV7.generate(),
+          businessId: businessId,
+          storeId: storeId,
+          businessDate: '2026-07-20',
+          productsCounted: 1,
+          shortageCount: 1,
+          surplusCount: 0,
+          shortageUnits: units,
+          surplusUnits: 0,
+          linesJson:
+              '[{"p":"$productId","n":"Star 60cl","s":20,"a":${20 - units},'
+              '"d":-$units}]',
+          countedBy: null,
+          createdAt: DateTime(2026, 7, 20, 9),
+          lastUpdatedAt: DateTime(2026, 7, 20, 9),
+        );
+
+    test('a session whose rows carry snapshots discloses nothing', () async {
+      final productId = await newProduct();
+      await db.inventoryDao.adjustStock(
+        productId, storeId, 20, 'Stock in', staffId,
+        inflowUnitCostKobo: 10000,
+      );
+      await db.inventoryDao
+          .adjustStock(productId, storeId, -3, countReason, staffId);
+
+      final money = countSessionShortage(
+        sessionShort(productId, 3),
+        attributedRows: shortageRows(await allAdjustments()),
+        productById: await productById(),
+      );
+      expect(money.lossKobo, 30000);
+      expect(money.legacyValuedRows, 0);
+    });
+
+    test('a session whose rows are pre-#170 discloses each of them', () async {
+      final productId = await newProduct(buyingKobo: 12000);
+      await legacyRow(productId, -3, countReason);
+
+      final money = countSessionShortage(
+        sessionShort(productId, 3),
+        attributedRows: shortageRows(await allAdjustments()),
+        productById: await productById(),
+      );
+      expect(money.lossKobo, 36000); // 3 × today's 12,000
+      expect(money.legacyValuedRows, 1);
+    });
+
+    test('a session with NO attributable rows values its own count lines at '
+        'current cost — and discloses every one of them', () async {
+      // The money must never go silent while the units keep talking: a shortage
+      // with ₦0 beside it is exactly the divergence #186 exists to end.
+      final productId = await newProduct(buyingKobo: 12000);
+
+      final money = countSessionShortage(
+        sessionShort(productId, 5),
+        attributedRows: const [],
+        productById: await productById(),
+      );
+      expect(money.lossKobo, 60000); // 5 × 12,000
+      expect(money.legacyValuedRows, 1,
+          reason: 'this figure moves with the buying price — say so');
+    });
+
+    test('an all-matched session owes no money and no footnote', () async {
+      final productId = await newProduct(buyingKobo: 12000);
+      final matched = StockCountData(
+        id: UuidV7.generate(),
+        businessId: businessId,
+        storeId: storeId,
+        businessDate: '2026-07-20',
+        productsCounted: 4,
+        shortageCount: 0,
+        surplusCount: 0,
+        shortageUnits: 0,
+        surplusUnits: 0,
+        linesJson: '[]',
+        countedBy: null,
+        createdAt: DateTime(2026, 7, 20, 14),
+        lastUpdatedAt: DateTime(2026, 7, 20, 14),
+      );
+
+      final money = countSessionShortage(
+        matched,
+        attributedRows: const [],
+        productById: {productId: (await productById())[productId]!},
+      );
+      expect(money.lossKobo, 0);
+      expect(money.legacyValuedRows, 0);
+    });
+  });
+
+  group('countShortageRowsBySession — which session wrote which row (#186)', () {
+    /// A session for [store] stamped at [createdAt].
+    StockCountData sessionAt(DateTime createdAt, {String? store}) =>
+        StockCountData(
+          id: 'sc-${createdAt.millisecondsSinceEpoch}',
+          businessId: businessId,
+          storeId: store ?? storeId,
+          businessDate: '2026-07-20',
+          productsCounted: 1,
+          shortageCount: 0,
+          surplusCount: 0,
+          shortageUnits: 0,
+          surplusUnits: 0,
+          linesJson: '[]',
+          countedBy: null,
+          createdAt: createdAt,
+          lastUpdatedAt: createdAt,
+        );
+
+    /// A count-shortage row for [store], stamped at [createdAt].
+    Future<String> shortageRowAt(
+      String productId,
+      DateTime createdAt, {
+      String? store,
+    }) async {
+      final id = UuidV7.generate();
+      await db.into(db.stockAdjustments).insert(
+            StockAdjustmentsCompanion.insert(
+              id: Value(id),
+              businessId: businessId,
+              productId: productId,
+              storeId: store ?? storeId,
+              quantityDiff: -1,
+              reason: countReason,
+              createdAt: Value(createdAt),
+            ),
+          );
+      return id;
+    }
+
+    test('a row belongs to the earliest session at or after it, and never to '
+        'an earlier one', () async {
+      final productId = await newProduct(buyingKobo: 12000);
+      final morningRow =
+          await shortageRowAt(productId, DateTime(2026, 7, 20, 9));
+      final afternoonRow =
+          await shortageRowAt(productId, DateTime(2026, 7, 20, 13));
+      final morning = sessionAt(DateTime(2026, 7, 20, 9, 5));
+      final afternoon = sessionAt(DateTime(2026, 7, 20, 14));
+
+      final bySession = countShortageRowsBySession(
+        [afternoon, morning], // deliberately out of order
+        await allAdjustments(),
+        inScope: always,
+      );
+      expect(bySession[morning.id]!.map((a) => a.id), [morningRow]);
+      expect(bySession[afternoon.id]!.map((a) => a.id), [afternoonRow]);
+    });
+
+    test('a row after the last session attributes to nothing — the units are '
+        'silent too, so the money is', () async {
+      final productId = await newProduct(buyingKobo: 12000);
+      await shortageRowAt(productId, DateTime(2026, 7, 20, 18));
+
+      final only = sessionAt(DateTime(2026, 7, 20, 9, 5));
+      final bySession = countShortageRowsBySession(
+        [only],
+        await allAdjustments(),
+        inScope: always,
+      );
+      expect(bySession, isEmpty);
+    });
+
+    test('a row never crosses stores', () async {
+      final productId = await newProduct(buyingKobo: 12000);
+      final annexRow = await shortageRowAt(
+        productId,
+        DateTime(2026, 7, 20, 9),
+        store: otherStoreId,
+      );
+      final mainSession = sessionAt(DateTime(2026, 7, 20, 9, 5));
+      final annexSession =
+          sessionAt(DateTime(2026, 7, 20, 9, 6), store: otherStoreId);
+
+      final bySession = countShortageRowsBySession(
+        [mainSession, annexSession],
+        await allAdjustments(),
+        inScope: always,
+      );
+      expect(bySession[mainSession.id], isNull);
+      expect(bySession[annexSession.id]!.map((a) => a.id), [annexRow]);
+    });
+
+    test('a damage and a surplus are not count-shortage rows, so no session '
+        'owns them', () async {
+      final productId = await newProduct(buyingKobo: 12000);
+      await legacyRow(productId, -2, 'damage:breakage');
+      await legacyRow(productId, 4, countReason); // a surplus
+
+      final session = sessionAt(DateTime(2026, 7, 20, 23));
+      final bySession = countShortageRowsBySession(
+        [session],
+        await allAdjustments(),
+        inScope: always,
+      );
+      expect(bySession, isEmpty);
     });
   });
 }
