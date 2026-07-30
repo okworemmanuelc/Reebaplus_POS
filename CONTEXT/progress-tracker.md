@@ -263,7 +263,7 @@ marked `-- #209 delta`.
 - **NOT deployed.** `supabase migration list` shows 0171 and 0172 (PRD #203
   slices #211/#212) still un-applied on prod, so a `db push` would carry them
   too. 0173 is inert until the v2 flag flips, so it waits for the #203 deploy.
-- **Adjacent divergence found, NOT fixed here — needs its own issue.** The RPC
+- **Adjacent divergence found, NOT fixed here — FILED as #219.** The RPC
   writes `orders.total_amount_kobo := v_total_amount`, the **gross**, while the
   v1 path pushes the **payable** (`sub − discount + deposit`) and
   `receiptTotalsFromOrder` reads the column as "already NET of the discount and
@@ -272,7 +272,9 @@ marked `-- #209 delta`.
   it. Different root cause (a column-meaning disagreement, not a dropped term),
   not latent behind the crate credit, and the fix changes every v2 sale's header
   — so it is a separate decision. The Tier-2 test even pins today's behaviour
-  (`reason: 'server computes total = sum(qty * unit_price)'`).
+  (`reason: 'server computes total = sum(qty * unit_price)'`). #209 lands
+  `net_amount_kobo` correctly on both paths; `total_amount_kobo` is the one
+  still diverging. Keep it on the flag-flip checklist until #219 closes.
 
 ### #206 — the golden fixtures pin cancel + the catalogue price — DONE (2026-07-29)
 PRD #155's hard rule is that a money rule changed there **must** be pinned in the
