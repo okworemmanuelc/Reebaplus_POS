@@ -204,6 +204,76 @@ ADR 0019 rejects full crate handling as scope and v1 writes memo counts
 module). The "#203 blocks #161" claim in the issue is stale — #161 closed
 2026-07-25 and shipped 2026-07-27. The real dependency is **#207**.
 
+### #209 — the v2 sale envelope stops dropping the crate credit — CODE-COMPLETE (2026-07-30)
+The last money gap #201 had to leave open. `pos_record_sale_v2` is
+server-authoritative on totals — it recomputes the gross from `p_items` and
+derives the payable itself — but it derived it from ONE client-sent reduction,
+`p_discount_kobo`. The cart's goods total is `gross − discount − crateCredit`,
+so the credit had nowhere to ride and vanished on the wire. `v_net_amount` then
+came out higher than the header the device had already written, and **two**
+numbers moved off that one dropped term:
+
+1. **The order header.** The RPC writes `orders.total_amount_kobo` /
+   `net_amount_kobo` from its own figures and the response overwrites the local
+   mirror (`_applyDomainResponse` → `_restoreTableData('orders', …)`), so a
+   credit sale recorded a payable the customer was never charged. Predates #175.
+2. **The tender split** (0170 / #201), which divides `v_net_amount − depositHeld`
+   — so an over-stated goods payable books up to `credit` MORE as goods `sale`
+   and less as `wallet_topup` than v1 books for the same sale.
+
+**The fix is one forwarded value**, cloud `0173_v2_envelope_crate_credit.sql`
+(new param `p_crate_credit_kobo int DEFAULT 0`, one line of math:
+`net = gross − discount − credit + deposit`) plus the envelope in
+`OrdersDao.createOrder`. Body copied VERBATIM from 0170; the two delta lines are
+marked `-- #209 delta`.
+
+- **A separate term, NOT folded into `p_discount_kobo`** — that column is
+  STORED as `orders.discount_kobo` and read back as a discount: the receipt
+  rebuilds Subtotal → Discount → Total from it (`receiptTotalsFromOrder`, #200 /
+  US 33). Folding them would have made `net_amount_kobo` right and the discount
+  column wrong — trading a visible defect for an invisible one. Also given **no
+  `orders` column**: `net_amount_kobo` is the credit's whole effect, and a column
+  would cost a Drift bump + sync-registry entry + pull-restore case for a figure
+  the client re-derives. When a real credit ships and needs itemising, that is
+  the change to make — with its own printed receipt line, as
+  `ReceiptTotals.totalKobo` already says.
+- **The client DERIVES it, it is not plumbed.** `createOrder` takes no credit
+  argument and no caller supplies one; it computes
+  `Σ(qty × unit_price_kobo) − discount_kobo − (total_amount_kobo −
+  crate_deposit_paid_kobo)`. So any FUTURE reduction the cart applies rides the
+  envelope automatically and this seam cannot silently drop one again — and the
+  client still never asserts a total, so the RPC stays the authority on gross.
+  Signed on purpose: a term that RAISED the payable rides as a negative rather
+  than being clamped into a fresh divergence.
+- **Deploy order is free BOTH ways today, and that expires.** The new parameter
+  has a DEFAULT (0173 ahead of the client is a no-op), and the client OMITS the
+  key when the credit is 0 — which is always, since #202 deleted the cart block
+  that computed one — so a client ahead of 0173 never sends an unknown parameter
+  (PGRST202 ⇒ jammed sale outbox). The moment a real credit is wired up, **0173
+  must be deployed first**. `feature.domain_rpcs_v2.record_sale` remains HELD OFF
+  on #121 regardless, so nothing is reachable today either way.
+- **Tests.** 4 dispatch tests (`test/sync/dispatch/record_sale_dispatch_test.dart`)
+  pin the contract on a header a credit sale WOULD write — discount-only forwards
+  nothing, a payable below `gross − discount` forwards the gap, the deposit is
+  added back before the credit is derived, and the v1 path is unaffected — plus
+  the byte-identical guarantee (`p_crate_credit_kobo` absent on an ordinary
+  sale). 2 Tier-2 RPC tests pin the server half (header + split move together;
+  omitting the param reproduces pre-0173 arithmetic exactly).
+  **1702 pass / 128 skip / 0 fail** (main baseline 1698 / 126).
+- **NOT deployed.** `supabase migration list` shows 0171 and 0172 (PRD #203
+  slices #211/#212) still un-applied on prod, so a `db push` would carry them
+  too. 0173 is inert until the v2 flag flips, so it waits for the #203 deploy.
+- **Adjacent divergence found, NOT fixed here — needs its own issue.** The RPC
+  writes `orders.total_amount_kobo := v_total_amount`, the **gross**, while the
+  v1 path pushes the **payable** (`sub − discount + deposit`) and
+  `receiptTotalsFromOrder` reads the column as "already NET of the discount and
+  INCLUSIVE of the deposit". So on ANY discounted v2 sale the mirrored header
+  over-states the goods by the discount and a reprint's Subtotal is inflated by
+  it. Different root cause (a column-meaning disagreement, not a dropped term),
+  not latent behind the crate credit, and the fix changes every v2 sale's header
+  — so it is a separate decision. The Tier-2 test even pins today's behaviour
+  (`reason: 'server computes total = sum(qty * unit_price)'`).
+
 ### #206 — the golden fixtures pin cancel + the catalogue price — DONE (2026-07-29)
 PRD #155's hard rule is that a money rule changed there **must** be pinned in the
 shared Golden-Scenario fixtures (ADR 0009). Two never were.
@@ -369,15 +439,16 @@ change, no RLS change, no data rewrite.
   leaves the v2 flags un-flippable, which is the status quo. Branch
   `fix/201-flag-gated-rpc-155-parity` (merged with main at `7edb3a0`; the
   migration was renumbered 0169 → 0170 because #202 took 0169).
-- **Open follow-up FILED as #209, not fixed here.** The v2 envelope forwards only
-  the per-line discount, never the customer's crate CREDIT, so on a credit sale
-  the server's goods cap exceeds the client's payable and the split books more as
-  `sale` and less as `wallet_topup`. That gap predates #175 (it already moves the
-  order header's own `net_amount_kobo`) and closing it needs the envelope to
-  forward the credit — one place that fixes header and split together. **Doubly
-  latent:** #202 deleted the cart block that computed the credit (its source
-  field was hardcoded empty), so the figure is ₦0 today; #209 is about the
-  envelope contract, which is wrong again the moment a real credit is wired up.
+- **Open follow-up FILED as #209 — now CLOSED by cloud 0173 (2026-07-30).** The
+  v2 envelope forwarded only the per-line discount, never the customer's crate
+  CREDIT, so on a credit sale the server's goods cap exceeded the client's
+  payable and the split booked more as `sale` and less as `wallet_topup`. That
+  gap predated #175 (it already moved the order header's own `net_amount_kobo`)
+  and closing it took the envelope forwarding the credit — one place that fixed
+  header and split together. **Doubly latent:** #202 deleted the cart block that
+  computed the credit (its source field was hardcoded empty), so the figure is
+  ₦0 today; #209 was about the envelope contract, which would have been wrong
+  again the moment a real credit was wired up. See the #209 section above.
 
 ### #202 — the PRD #155 dead-code sweep (3 promised removals) — CODE-COMPLETE (2026-07-29)
 Process debt from the #155 close-out audit: the PRD's "Further Notes" promised a
