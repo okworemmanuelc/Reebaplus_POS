@@ -172,6 +172,12 @@ void main() {
     // ₦3,500. The ONE figure in PRD #203 that reaches profit.
     const writtenOffCrates = 4;
     const writtenOffKobo = writtenOffCrates * starDeposit; // ₦14,000
+    // #217 — a customer who never brought 3 crates of Star back. The deposit
+    // they paid stays with the business (income since #176, on EVERY
+    // arrangement), and on a switched-on brand the crate they kept raises a
+    // matching shortfall so the pair nets to zero.
+    const forfeitCrates = 3;
+    const forfeitKobo = forfeitCrates * starDeposit; // ₦10,500
 
     /// A cash `crate_deposit_out` row — the payment leg #212 writes beside the
     /// deposit ledger row. Positive = money went OUT to the supplier.
@@ -189,6 +195,28 @@ void main() {
       deliveryId: null,
       vanTripId: null,
       crateDepositId: 'dep-1',
+      performedBy: null,
+      voidedAt: null,
+      voidedBy: null,
+      voidReason: null,
+      createdAt: DateTime.utc(2026, 7, 30),
+      lastUpdatedAt: DateTime.utc(2026, 7, 30),
+    );
+
+    /// The `crate_deposit_forfeited` wallet debit a kept deposit writes (#176).
+    /// Fed to EVERY arrangement, because a kept deposit really was kept on every
+    /// brand — #217 does not suppress the income, it adds the other half.
+    WalletTransactionData forfeitRow() => WalletTransactionData(
+      id: 'wt-forfeit',
+      businessId: businessId,
+      walletId: 'wallet-1',
+      customerId: 'cust-1',
+      type: 'debit',
+      amountKobo: forfeitKobo,
+      signedAmountKobo: -forfeitKobo,
+      referenceType: 'crate_deposit_forfeited',
+      orderId: 'ord-1',
+      customerVerified: false,
       performedBy: null,
       voidedAt: null,
       voidedBy: null,
@@ -260,7 +288,33 @@ void main() {
             createdAt: DateTime.utc(2026, 7, 30),
             lastUpdatedAt: DateTime.utc(2026, 7, 30),
           ),
+          // #217 — the NETTING row a customer forfeit raises. Gated on
+          // `movesMoney`, like the payment row above and for the same reason:
+          // this is where the WRITE BOUNDARY gates it. A `none` brand's forfeit
+          // never writes one at all
+          // (`CratePoolDao.recordCustomerForfeitShortfall` returns null), so a
+          // fixture that fed one to `none` would be testing a state the app
+          // cannot reach — and it would hide the fact that `none` keeps its
+          // income because no row exists, not merely because the math skips it.
+          if (a.movesMoney)
+            CrateShortfallWriteoffData(
+              id: 'wo-forfeit',
+              businessId: businessId,
+              manufacturerId: star,
+              storeId: 'store-1',
+              crateCount: forfeitCrates,
+              source: kCrateWriteOffSourceCustomerForfeit,
+              ratePerCrateKobo: starDeposit,
+              note: null,
+              performedBy: null,
+              createdAt: DateTime.utc(2026, 7, 30),
+              lastUpdatedAt: DateTime.utc(2026, 7, 30),
+            ),
         ],
+        // #217 — the kept deposit itself, on EVERY arrangement. This is the
+        // income the netting cancels, and it is NOT arrangement-gated: the
+        // customer's money was kept whatever the brand's setting says.
+        crateForfeitRows: [forfeitRow()],
         isCeo: true,
       );
     }
@@ -275,6 +329,11 @@ void main() {
       'placedCrateDepositsKobo': d.placedCrateDepositsKobo,
       'cashCrateDepositsPlacedKobo': d.cashCrateDepositsPlacedKobo,
       'crateShortfallWrittenOffKobo': d.crateShortfallWrittenOffKobo,
+      // #217 — the netting, and the income it cancels. BOTH are listed: the
+      // first is a figure this slice is allowed to move, the second is one it
+      // must NOT, and that pairing is the point.
+      'crateForfeitNettedKobo': d.crateForfeitNettedKobo,
+      'forfeitIncomeKobo': d.forfeitIncomeKobo,
       'businessNetPositionKobo': d.businessNetPositionKobo,
       'periodNetResultKobo': d.periodNetResultKobo,
       'totalSalesKobo': d.totalSalesKobo,
@@ -314,10 +373,26 @@ void main() {
     /// write-off: the crate left the yard when it went missing and worth fell
     /// then; this books the P&L half of an event worth already knew about.
     ///
-    /// TO THE NEXT SLICE (#217): if settlement-time attribution ever moves a
-    /// figure, narrow this again rather than deleting it. The `none` row must
-    /// keep matching the pre-slice figures forever — it is the promise the
-    /// whole PRD ships on.
+    /// **NARROWED ONCE MORE BY #217 — the last slice of the PRD.** It adds
+    /// exactly ONE key, `crateForfeitNettedKobo`, and moves no line #216 had
+    /// not already opened: a forfeit nets by raising a Crate Shortfall, so it
+    /// lands in `crateShortfallWrittenOffKobo` and flows to the same two profit
+    /// lines. What changes is the MAGNITUDE of those three, and the magnitudes
+    /// are pinned below precisely because a permitted key drifting by the wrong
+    /// amount would sail through the comparison and be wrong.
+    ///
+    /// Note the key #217 deliberately did NOT add: `forfeitIncomeKobo`. A kept
+    /// deposit really was kept, on every brand, and it reads the same at `none`
+    /// and at `per_delivery`. The slice does not hide the income — it books the
+    /// crate the income paid for, which is a different figure, so the two cancel
+    /// instead of one of them vanishing. If a later change makes the income
+    /// itself depend on the arrangement, this list is where it must be argued
+    /// for, and the argument had better be very good.
+    ///
+    /// TO ANYONE AFTER THIS PRD: if settlement-time attribution (ADR 0023 rule
+    /// 4's "attribution happens once, at settlement") is ever built, narrow this
+    /// again rather than deleting it. The `none` row must keep matching the
+    /// pre-slice figures forever — it is the promise the whole PRD ships on.
     const movedByThisSlice = {
       'placedCrateDepositsKobo',
       'cashCrateDepositsPlacedKobo',
@@ -326,6 +401,9 @@ void main() {
       'crateShortfallWrittenOffKobo',
       'netProfitKobo',
       'periodNetResultKobo',
+      // #217 — the forfeit netting: a disclosure split of the loss above, and
+      // the only new key this slice needs.
+      'crateForfeitNettedKobo',
     };
 
     test('the figures a crate business reads are exactly what they were before '
@@ -355,15 +433,24 @@ void main() {
       );
       expect(d.businessNetPositionKobo, 14500000);
 
-      // And nothing became income, an expense or a cash movement. A Placed
-      // Deposit is an ASSET, never an expense (ADR 0023 rule 1) — and at `none`
-      // there is no placed deposit at all.
+      // Nothing became an expense or a cash movement. A Placed Deposit is an
+      // ASSET, never an expense (ADR 0023 rule 1) — and at `none` there is no
+      // placed deposit at all.
       expect(d.periodNetResultKobo, 0);
-      expect(d.netProfitKobo, 0);
       expect(d.totalSalesKobo, 0);
       expect(d.expensesKobo, 0);
       expect(d.netCashMovementKobo, 0);
       expect(d.crateDamageDepositKobo, 0);
+
+      // #217 — the ONE thing at `none` that is not zero, and it is the
+      // pre-PRD behaviour, unchanged: a kept crate deposit is PURE INCOME.
+      // Nobody was ever paid a deposit for those crates, so the business really
+      // is ₦10,500 better off and the P&L says so. This is the release gate at
+      // its sharpest — the slice that makes forfeits net must leave a swap-only
+      // brand's forfeit exactly where #176 put it.
+      expect(d.forfeitIncomeKobo, forfeitKobo);
+      expect(d.crateForfeitNettedKobo, 0);
+      expect(d.netProfitKobo, forfeitKobo);
 
       // #215 — and the two figures this slice added read zero at `none` even
       // though the fixture feeds it a ₦180,000 placement row. The seam
@@ -372,16 +459,16 @@ void main() {
       expect(d.placedCrateDepositsKobo, 0);
       expect(d.cashCrateDepositsPlacedKobo, 0);
       // #216 — and the accepted-loss figure reads zero at `none` too, even
-      // though the fixture feeds it a 4-crate write-off row. Profit is
-      // untouched: a swap-only brand has no shortfall to accept.
+      // though the fixture feeds it a 4-crate write-off row. Profit is not
+      // reduced: a swap-only brand has no shortfall to accept.
       expect(d.crateShortfallWrittenOffKobo, 0);
-      expect(d.netProfitKobo, 0);
       expect(d.crateDeposits.bySupplier, isEmpty);
       expect(d.crateDeposits.hasMoney, isFalse);
     });
 
     test('the setting is inert at `none`: a switched-on brand moves ONLY the '
-        'figures #215 and #216 own, and `none` still reads exactly as before',
+        'figures #215, #216 and #217 own, and `none` still reads exactly as '
+        'before',
         () {
       // NARROWED BY #215, NOT DELETED — this test used to assert that no
       // ReconData figure depended on the arrangement at all, and left the next
@@ -405,10 +492,13 @@ void main() {
       //      what "an asset, never an expense; it must never reduce profit"
       //      means as an assertion rather than as a promise.
       //
-      // TO THE NEXT SLICE (#216+): when a write-off finally hits profit, this
-      // is again SUPPOSED to fail — for `netProfitKobo` and `periodNetResultKobo`
-      // on a WRITTEN-OFF shortfall only. Narrow `movedByThisSlice` again rather
-      // than deleting the test; the `none` row must keep matching forever.
+      // #216 was that next slice, and #217 is the last. #217 adds ONE key
+      // (`crateForfeitNettedKobo`) and re-pins the three magnitudes below,
+      // because a forfeit nets by raising a Shortfall and so lands on the lines
+      // #216 already opened. What it must NOT move is `forfeitIncomeKobo`,
+      // which is now in `figures` above precisely so that claim is checked
+      // rather than assumed: the income is identical at `none` and at
+      // `per_delivery`, and it is the LOSS beside it that differs.
       final atNone = figures(reconDataFrom(inputsWith(
         kCrateMoneyArrangementNone,
       )));
@@ -442,14 +532,39 @@ void main() {
           atNone['businessNetPositionKobo']! + placedWithDepot,
         );
 
-        // …and the three #216 owns moved by EXACTLY the loss the owner
-        // accepted — not merely "differently". A permitted key that drifted by
-        // some other amount would pass the removeWhere comparison above and be
-        // wrong, so the magnitude is pinned here.
-        expect(moved['crateShortfallWrittenOffKobo'], writtenOffKobo);
+        // …and the lines #216 and #217 own moved by EXACTLY the losses booked —
+        // not merely "differently". A permitted key that drifted by some other
+        // amount would pass the removeWhere comparison above and be wrong, so
+        // every magnitude is pinned here.
+        //
+        // The total is the owner's 4-crate write-off PLUS the 3 crates a
+        // customer kept: two origins, one line, because a crate that is not
+        // coming back costs the same however it left.
+        expect(
+          moved['crateShortfallWrittenOffKobo'],
+          writtenOffKobo + forfeitKobo,
+        );
+        expect(
+          moved['crateForfeitNettedKobo'],
+          forfeitKobo,
+          reason: '#217 — the split of the line above that a forfeit raised',
+        );
+        // THE SLICE, as one assertion: the kept deposit is income on BOTH
+        // arrangements, and on the switched-on one the crate it paid for costs
+        // exactly the same — so the pair contributes zero and the only thing
+        // left cutting profit is the write-off the owner actually decided.
+        expect(moved['forfeitIncomeKobo'], atNone['forfeitIncomeKobo']);
+        expect(
+          moved['netProfitKobo']! + forfeitKobo,
+          atNone['netProfitKobo']! - writtenOffKobo,
+          reason:
+              'add the netting back and the two arrangements differ only by '
+              'the loss the owner accepted — which is what "a forfeit nets to '
+              'zero" means as arithmetic',
+        );
         expect(
           moved['netProfitKobo'],
-          atNone['netProfitKobo']! - writtenOffKobo,
+          atNone['netProfitKobo']! - writtenOffKobo - forfeitKobo,
           reason:
               'an accepted crate loss is the ONE thing in PRD #203 that cuts '
               'profit, and it cuts it by the crates × the rate snapshotted on '
@@ -457,7 +572,7 @@ void main() {
         );
         expect(
           moved['periodNetResultKobo'],
-          atNone['periodNetResultKobo']! - writtenOffKobo,
+          atNone['periodNetResultKobo']! - writtenOffKobo - forfeitKobo,
         );
         // Worth is NOT moved by the write-off — only by #215's asset. The
         // crate left the yard when it went missing and worth fell then.
