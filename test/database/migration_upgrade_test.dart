@@ -3237,7 +3237,7 @@ void main() {
       'gain, #217)', () {
     /// Reverts the v81 delta: drop the one added column. Nothing references it
     /// and there is no Drift-side CHECK mentioning it (the value set is
-    /// enforced on the cloud only, 0174), so a raw DROP COLUMN is enough — no
+    /// enforced on the cloud only, 0176), so a raw DROP COLUMN is enough — no
     /// table rebuild, and none of the stale-column trap that comes with one.
     Future<void> dropWriteOffSource(AppDatabase db) async {
       await db.customStatement(

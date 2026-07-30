@@ -23,8 +23,8 @@ the run: **1550 passed / 126 skipped / 0 failed**.
 | #213 settle on return (code only, no migration) | **MERGED** | `4098972` — 1665 pass / 126 skip / 0 fail |
 | #214 standing float (code only, no migration) | **MERGED** | `dd1a709` — 1698 pass / 126 skip / 0 fail |
 | #215 worth + recon card (**ADR 0014 amended**) | **MERGED** | `6bccbe5` — 1714 pass / 126 skip / 0 fail |
-| #216 shortfall + write-off (Drift v80, cloud 0173) | **MERGED** | `cf4a902` — 1749 pass / 126 skip / 0 fail |
-| #217 forfeit netting | in progress | — |
+| #216 shortfall + write-off (Drift v80, cloud **0175**) | **MERGED** | `cf4a902` — 1749 pass / 126 skip / 0 fail |
+| #217 forfeit netting (Drift v81, cloud **0176**) | **MERGED** | 1766 pass / 126 skip / 0 fail |
 
 **#210 notes.** `confirmReceipt` now takes `fullCratesReceivedByManufacturer`
 as a **required** parameter — the defect was a leg nobody remembered to post,
@@ -189,8 +189,18 @@ the app writes one — a write-off taken in error has no in-app undo); the
 write-off button always dates the decision `now` even when viewing a past
 period; `lastWrittenOffBy` costs an extra query per brand in the rollup stream.
 
+**MIGRATION NUMBER COLLISION — caught at integration, fixed.** #209 landed on
+main in parallel and took **0173** (`0173_v2_envelope_crate_credit.sql`), which
+this run had already allocated to #216. Two files sharing a version prefix
+would collide on `supabase db push`. Neither was deployed, so the slices'
+migrations were renumbered **0173→0175** (#216) and **0174→0176** (#217),
+preserving their relative order (the CREATE still precedes the ALTER), and
+every in-repo reference was updated. #209's 0173 was left untouched — it
+reached main first.
+
 **Cloud migrations are NOT deployed yet** — branches commit them, deployment is
-sequenced separately after the app code lands. Pending: **0171, 0172, 0173**.
+sequenced separately after the app code lands. Pending for this PRD: **0171,
+0172, 0175, 0176** (plus #209's 0173, which is that issue's to sequence).
 
 ### #203 — crate-deposit OUTFLOW settlement: PRD WRITTEN + published (2026-07-29)
 Grilling session on the #155 carve-out. **No code written.** Output is

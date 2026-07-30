@@ -1,4 +1,4 @@
--- 0174_crate_forfeit_netting.sql
+-- 0176_crate_forfeit_netting.sql
 --
 -- #217 / PRD #203, ADR 0023 finding #4 and rule 5 — Crate deposit outflow 8/8:
 -- a forfeit that gained nothing stops being reported as a gain.
@@ -105,7 +105,7 @@ COMMENT ON COLUMN public.crate_shortfall_writeoffs.source IS
 
 -- =========================================================================
 -- 2. Re-derive the append-only guard so `source` is immutable too
---    (the 0173 DO block, re-run now that the column list has grown).
+--    (the 0175 DO block, re-run now that the column list has grown).
 -- =========================================================================
 DO $$
 DECLARE

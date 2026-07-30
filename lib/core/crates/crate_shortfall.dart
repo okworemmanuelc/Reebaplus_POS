@@ -63,7 +63,7 @@ const String kCrateWriteOffSourceManual = 'manual';
 const String kCrateWriteOffSourceCustomerForfeit = 'customer_forfeit';
 
 /// The closed set `crate_shortfall_writeoffs.source` may hold. Mirrors the cloud
-/// CHECK in `supabase/migrations/0174_crate_forfeit_netting.sql`.
+/// CHECK in `supabase/migrations/0176_crate_forfeit_netting.sql`.
 const List<String> kCrateWriteOffSources = [
   kCrateWriteOffSourceManual,
   kCrateWriteOffSourceCustomerForfeit,

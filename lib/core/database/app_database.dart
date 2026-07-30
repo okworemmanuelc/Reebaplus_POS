@@ -628,7 +628,7 @@ class CrateShortfallWriteoffs extends Table {
   /// row a v80 device pushes before it upgrades — lands in the bucket it was
   /// always in. Nothing is backfilled and no figure moves at upgrade.
   ///
-  /// The value set is enforced by a cloud CHECK (0174) rather than a Drift
+  /// The value set is enforced by a cloud CHECK (0176) rather than a Drift
   /// table-level CHECK, exactly as `manufacturers.crate_money_arrangement` and
   /// `stores.kind` are: SQLite cannot add a table constraint without rebuilding
   /// the table, and rebuilding an append-only money ledger to gain a constraint
@@ -6100,7 +6100,7 @@ class AppDatabase extends _$AppDatabase {
         // ── v80 — #216: accepting the loss ────────────────────────────────
         //
         // PRD #203 slice 7/8, ADR 0023 rules 4 and 5. Mirrors
-        // supabase/migrations/0173_crate_shortfall_writeoff.sql.
+        // supabase/migrations/0175_crate_shortfall_writeoff.sql.
         //
         // ONE new synced tenant table, `crate_shortfall_writeoffs`, and
         // nothing else — no column added to an existing table, so there is no
@@ -6173,12 +6173,12 @@ class AppDatabase extends _$AppDatabase {
         // ── v81 — #217: a forfeit that gained nothing stops reading as gain ──
         //
         // PRD #203 slice 8/8, ADR 0023 finding #4 and rule 5. Mirrors
-        // supabase/migrations/0174_crate_forfeit_netting.sql.
+        // supabase/migrations/0176_crate_forfeit_netting.sql.
         //
         // ONE column on `crate_shortfall_writeoffs`: `source`, NOT NULL
         // defaulting to `manual`. A plain `addColumn` — no TableMigration, so
         // none of the stale-column trap, and the value set stays a cloud CHECK
-        // (0174) exactly as `manufacturers.crate_money_arrangement` does.
+        // (0176) exactly as `manufacturers.crate_money_arrangement` does.
         //
         // **NOTHING IS BACKFILLED, AND THAT IS THE WHOLE SLICE.** The netting
         // this column labels is written in the same transaction as the forfeit
