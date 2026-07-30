@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
+import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
@@ -611,6 +612,31 @@ class CrateShortfallWriteoffs extends Table {
   IntColumn get ratePerCrateKobo => integer().withDefault(const Constant(0))();
 
   TextColumn get note => text().nullable()();
+
+  /// **Where this booked loss came from** (#217): `manual` — an owner accepted
+  /// it on the Crate Shortfall card — or `customer_forfeit` — a customer kept
+  /// the crates, and their deposit with them.
+  ///
+  /// Both book the same money on the same P&L line. The column exists so the
+  /// reconciliation can SAY WHICH, because "your profit fell and nobody
+  /// decided anything" is how a correct figure gets reported as a bug, and so
+  /// "who accepted this loss and when" keeps naming the person who actually
+  /// stood in front of the card rather than whichever cashier last confirmed an
+  /// order.
+  ///
+  /// NOT NULL defaulting to `manual`, so every row #216 already wrote — and any
+  /// row a v80 device pushes before it upgrades — lands in the bucket it was
+  /// always in. Nothing is backfilled and no figure moves at upgrade.
+  ///
+  /// The value set is enforced by a cloud CHECK (0174) rather than a Drift
+  /// table-level CHECK, exactly as `manufacturers.crate_money_arrangement` and
+  /// `stores.kind` are: SQLite cannot add a table constraint without rebuilding
+  /// the table, and rebuilding an append-only money ledger to gain a constraint
+  /// the client can already only satisfy is a bad trade. The client writes only
+  /// the [kCrateWriteOffSources] constants, from the one seam
+  /// (`CratePoolDao`).
+  TextColumn get source =>
+      text().withDefault(const Constant(kCrateWriteOffSourceManual))();
 
   /// Who accepted the loss. Half of "who wrote off a shortage and when".
   TextColumn get performedBy => text().nullable().references(Users, #id)();
@@ -2875,7 +2901,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 80;
+  int get schemaVersion => 81;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6142,6 +6168,43 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(stmt);
         }
       }
+
+      if (from < 81) {
+        // ── v81 — #217: a forfeit that gained nothing stops reading as gain ──
+        //
+        // PRD #203 slice 8/8, ADR 0023 finding #4 and rule 5. Mirrors
+        // supabase/migrations/0174_crate_forfeit_netting.sql.
+        //
+        // ONE column on `crate_shortfall_writeoffs`: `source`, NOT NULL
+        // defaulting to `manual`. A plain `addColumn` — no TableMigration, so
+        // none of the stale-column trap, and the value set stays a cloud CHECK
+        // (0174) exactly as `manufacturers.crate_money_arrangement` does.
+        //
+        // **NOTHING IS BACKFILLED, AND THAT IS THE WHOLE SLICE.** The netting
+        // this column labels is written in the same transaction as the forfeit
+        // that caused it, so a forfeit settled before an owner switched a brand
+        // on has no netting row and never grows one. Upgrading a device cannot
+        // change last March's profit, because there is no pass over history
+        // here to change it with — the only rows that exist are the ones #216
+        // already wrote, and every one of them stays exactly the loss it was.
+        // Do NOT add a backfill that raises netting rows for past forfeits:
+        // that is a restatement of closed days and ADR 0021 forbids it outright.
+        //
+        // Idempotency guard mirrors v64/v66/v67/v69/v70/v72/v73/v76/v78 so a DB
+        // stepped back to < 81 by the revert-then-re-upgrade tests re-upgrades
+        // cleanly, and so a fresh install (whose createTable already builds the
+        // column) that is stepped back does not fail on a duplicate column.
+        final hasWriteOffSource = await customSelect(
+          "SELECT 1 FROM pragma_table_info('crate_shortfall_writeoffs') "
+          "WHERE name = 'source'",
+        ).get();
+        if (hasWriteOffSource.isEmpty) {
+          await m.addColumn(
+            crateShortfallWriteoffs,
+            crateShortfallWriteoffs.source,
+          );
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -6804,6 +6867,11 @@ const List<_LedgerImmutability> _ledgerTables = [
     'crate_count',
     'rate_per_crate_kobo',
     'note',
+    // v81 (#217) — the origin is frozen with everything else. A netting row
+    // relabelled `manual` afterwards would hand an owner a loss nobody took
+    // responsibility for; a manual one relabelled `customer_forfeit` would
+    // blame a customer for a decision the owner made.
+    'source',
     'performed_by',
     'created_at',
   ]),
