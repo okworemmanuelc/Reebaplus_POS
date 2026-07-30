@@ -228,36 +228,33 @@ bool damageForfeitsFullCrate(String reason) =>
 int lossValueKobo(int? snapshotValueKobo, int units, int? currentCostKobo) =>
     snapshotValueKobo ?? (units * (currentCostKobo ?? 0));
 
-/// Value the daily-stock-count SHORTAGE loss for the P&L / variance card from
-/// the #170 write-time snapshot (#182) — the deferral #170 left open (audit
-/// #30). A stock count applies each shortage line through
-/// `InventoryDao.adjustStock` with the reason "Daily stock count adjustment" (a
-/// decrease), which draws the FIFO queue down oldest-first and records the drawn
-/// cost on the `stock_adjustments` row (`value_kobo`). Summing those snapshots —
-/// exactly as the Damages figure already does via [lossValueKobo] — means a
-/// later product-cost edit can never restate a past period's shortage/variance
-/// figure. Legacy quantity-only rows (written before #170, no snapshot) fall
-/// back to current cost, per [lossValueKobo]. Only count-reconciliation removals
-/// in span + scope are summed; the `isCountReconciliationReason` guard is
-/// disjoint from `isDamageReason`, so a shortage is never double-counted as a
-/// damage. Surplus (a gain) draws down no queue and carries no snapshot, so it
-/// stays current-cost in the caller.
-int countShortageLossKobo(
-  Iterable<StockAdjustmentData> adjustments, {
+/// Value an already-selected set of count-shortage rows from the #170
+/// write-time snapshot (#182) — the deferral #170 left open (audit #30).
+///
+/// A stock count applies each shortage line through `InventoryDao.adjustStock`
+/// with the reason "Daily stock count adjustment" (a decrease), which draws the
+/// FIFO queue down oldest-first and records the drawn cost on the
+/// `stock_adjustments` row (`value_kobo`). Summing those snapshots — exactly as
+/// the Damages figure already does via [lossValueKobo] — means a later
+/// product-cost edit can never restate a past period's shortage/variance figure.
+/// Legacy quantity-only rows (written before #170, no snapshot) fall back to
+/// current cost, per [lossValueKobo]. Surplus (a gain) draws down no queue and
+/// carries no snapshot, so it stays current-cost in the caller.
+///
+/// **Selecting the rows is a separate decision from valuing them, and #186 moved
+/// only the selection.** This reducer values whatever it is handed;
+/// [countShortageRowsBySession] decides which rows a period's figure is built
+/// from. Splitting the two is what let the basis change without touching the
+/// valuation the #182 regression guard pins.
+int countShortageRowsValueKobo(
+  Iterable<StockAdjustmentData> rows, {
   required Map<String, ProductData> productById,
-  required bool Function(DateTime) inSpan,
-  required bool Function(String?) inScope,
 }) {
   var total = 0;
-  for (final a in countShortageRows(
-    adjustments,
-    inSpan: inSpan,
-    inScope: inScope,
-  )) {
-    final units = -a.quantityDiff;
+  for (final a in rows) {
     total += lossValueKobo(
       a.valueKobo,
-      units,
+      -a.quantityDiff,
       productById[a.productId]?.buyingPriceKobo,
     );
   }
@@ -266,8 +263,10 @@ int countShortageLossKobo(
 
 /// The count-reconciliation SHORTAGE rows inside [inSpan] + [inScope] — the one
 /// definition of "which rows are a count shortage", so the money
-/// ([countShortageLossKobo]) and the footnote that discloses how it was valued
-/// ([legacyValuedRowCount]) can never disagree about the row set they describe.
+/// ([countShortageRowsValueKobo]) and the footnote that discloses how it was
+/// valued ([legacyValuedRowCount]) can never disagree about the row set they
+/// describe. The `isCountReconciliationReason` guard is disjoint from
+/// `isDamageReason`, so a shortage is never double-counted as a damage.
 Iterable<StockAdjustmentData> countShortageRows(
   Iterable<StockAdjustmentData> adjustments, {
   required bool Function(DateTime) inSpan,
@@ -278,6 +277,174 @@ Iterable<StockAdjustmentData> countShortageRows(
   inSpan: inSpan,
   inScope: inScope,
 );
+
+// ── Count shortage: one basis for the money and the units (#186) ─────────────
+//
+// The variance card reports ONE event — a daily stock count — as several
+// figures, and until #186 they stood on two different bases. The money
+// ([ReconData.shortageCostKobo]) summed EVERY count-reconciliation
+// `stock_adjustments` row in the period, filtered on the row's `created_at` and
+// not deduped; the units, retail value, per-product lines and products-counted
+// came from the count SESSION, deduped to the LATEST session per
+// `businessDate|storeId` and filtered on `businessDate`. Two ways for one card
+// to contradict itself:
+//
+//  1. **Same-day recount.** Every Save Count writes a fresh adjustment row per
+//     changed line (`stock_count_screen.dart`), so a day counted twice
+//     accumulated money from both saves while the units showed only the latest.
+//     A recount that came out matching still raised an integrity flag, over
+//     money the latest count says is not missing.
+//  2. **Backdated / day-boundary count.** A count saved after midnight, or for
+//     a past day, put its units in the `businessDate` period and its money in
+//     the `created_at` one — two periods each reporting half the event.
+//
+// **Decision (#186): the money follows the units — latest deduped session,
+// bucketed on `businessDate`.** Recorded in ADR 0014's 2026-07-30 addendum. The
+// short form of the reasoning: it is the only basis under which a matching
+// latest count reads zero variance; `surplusCostKobo` is session-sourced and
+// CANNOT move to the adjustment rows (a gain draws no batch, so there is no
+// snapshot to sum), and `stockVarianceKobo` is `surplus − shortage`, so only a
+// session-based shortage puts both halves of the subtraction on one basis; and
+// `productsCounted` / `shortageCount` only a session knows at all. Cumulative
+// shrinkage across every save of a day is not lost — it is the stock card's
+// "Count corrections" line ([ReconData.stockCountAdjustmentsKobo]), which stays
+// all-rows at current cost on purpose so the flow equation still ties out.
+//
+// What did NOT change: the money is still valued at the write-time FIFO
+// snapshot (#182). Only which rows are summed moved.
+
+/// Deliberately span-free attribution: a shortage row is placed by the SESSION
+/// that wrote it, never by the reporting period. Filtering rows by the period
+/// first is precisely what put a backdated count's money in a different period
+/// from its units.
+bool _anyTime(DateTime _) => true;
+
+/// Which count SESSION wrote each count-reconciliation shortage row (#186),
+/// keyed by `stock_counts.id`.
+///
+/// `stock_adjustments` carries **no `count_id`** — there is no stored link from
+/// a shortage row back to the count that applied it, and adding one would be a
+/// Drift + cloud migration for what is a reporting-basis question. The link is
+/// recoverable from the write ORDER instead: `_saveCount` applies each changed
+/// line through `InventoryDao.adjustStock` and only THEN calls
+/// `StockCountsDao.recordCount` (`stock_count_screen.dart`), so every row a
+/// session wrote carries a `created_at` at or before that session's own, and
+/// after the previous session's. A row therefore belongs to the EARLIEST
+/// session of its own store whose `created_at` is not before the row's.
+///
+/// **Known imperfections, all documented rather than papered over:**
+///  * A save whose `recordCount` never ran (the mid-loop
+///    `InsufficientStockException` path applies some lines, then throws) leaves
+///    rows with no session of their own; they attach to the NEXT session for
+///    that store. Dropping them instead would hide stock that really did move.
+///  * Rows with no later session at all stay unattributed. That is the
+///    consistent answer, not a leak: with no session there are no units either,
+///    so both halves of the card stay silent together.
+///  * Two saves inside the SAME second for one store (the clock is
+///    second-resolution — both tables store epoch seconds) cannot be told
+///    apart, and their rows all attach to the earlier session. A human keying a
+///    second count cannot hit that; a test can, so tests stamp their own
+///    timestamps.
+///  * A session with a NULL `store_id` (legacy rows, and devices with no store
+///    at all) owns nothing: `stock_adjustments.store_id` is NOT NULL, so no row
+///    can match it. Such a session falls to [countSessionShortage]'s labelled
+///    current-cost fallback.
+///
+/// [inScope] applies to both sides — a row and its session must each be in the
+/// viewer's store scope, exactly as every other figure on the card is.
+Map<String, List<StockAdjustmentData>> countShortageRowsBySession(
+  Iterable<StockCountData> sessions,
+  Iterable<StockAdjustmentData> adjustments, {
+  required bool Function(String?) inScope,
+}) {
+  final byStore = <String?, List<StockCountData>>{};
+  for (final c in sessions) {
+    if (!inScope(c.storeId)) continue;
+    (byStore[c.storeId] ??= <StockCountData>[]).add(c);
+  }
+  for (final list in byStore.values) {
+    list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  final out = <String, List<StockAdjustmentData>>{};
+  for (final a in countShortageRows(
+    adjustments,
+    inSpan: _anyTime,
+    inScope: inScope,
+  )) {
+    final owner = _firstSessionAtOrAfter(byStore[a.storeId], a.createdAt);
+    if (owner == null) continue;
+    (out[owner.id] ??= <StockAdjustmentData>[]).add(a);
+  }
+  return out;
+}
+
+/// The first session in [sessions] (ascending by `createdAt`) whose `createdAt`
+/// is not before [t] — a binary search, so attributing a shop's whole history
+/// stays O(rows · log sessions) instead of a nested scan on a report screen.
+StockCountData? _firstSessionAtOrAfter(
+  List<StockCountData>? sessions,
+  DateTime t,
+) {
+  if (sessions == null || sessions.isEmpty) return null;
+  var lo = 0;
+  var hi = sessions.length;
+  while (lo < hi) {
+    final mid = (lo + hi) >> 1;
+    if (sessions[mid].createdAt.isBefore(t)) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo < sessions.length ? sessions[lo] : null;
+}
+
+/// One count session's SHORTAGE money and the disclosure that goes with it
+/// (#186) — the pair [ReconData.shortageCostKobo] and
+/// [ReconData.legacyValuedShortageRows] are summed from, once per WINNING
+/// session (the latest for its business date and store).
+///
+/// [attributedRows] are that session's rows from [countShortageRowsBySession];
+/// they are valued at their write-time snapshot by [countShortageRowsValueKobo],
+/// so #182 survives the basis change untouched.
+///
+/// **The fallback keeps money and units from ever disagreeing about PRESENCE.**
+/// If no row could be attributed — a legacy session whose device never wrote
+/// adjustments, a peer's session whose rows have not synced yet, a null-store
+/// session — the session's own `linesJson` shortage lines are valued at current
+/// cost and every one of them is counted as legacy-valued, so the report footnote
+/// says out loud that this figure moves with the buying price (#200 / PRD #155
+/// US 20). Silence would have been the worse answer: units short with ₦0 beside
+/// them is the exact divergence #186 exists to end.
+///
+/// A shortage of genuinely uncosted stock still values at ₦0 with units above 0.
+/// That is a valuation fact (nobody recorded what those units cost), not a basis
+/// divergence, and it reads the same on the Damages line.
+({int lossKobo, int legacyValuedRows}) countSessionShortage(
+  StockCountData session, {
+  required Iterable<StockAdjustmentData> attributedRows,
+  required Map<String, ProductData> productById,
+}) {
+  final rows = attributedRows.toList();
+  if (rows.isNotEmpty) {
+    return (
+      lossKobo: countShortageRowsValueKobo(rows, productById: productById),
+      legacyValuedRows: legacyValuedRowCount(rows),
+    );
+  }
+  var lossKobo = 0;
+  var legacyValuedRows = 0;
+  for (final l
+      in (jsonDecode(session.linesJson) as List).cast<Map<String, dynamic>>()) {
+    final diff = (l['d'] as num).toInt();
+    if (diff >= 0) continue;
+    final p = productById[l['p'] as String?];
+    lossKobo += -diff * (p?.buyingPriceKobo ?? 0);
+    legacyValuedRows++;
+  }
+  return (lossKobo: lossKobo, legacyValuedRows: legacyValuedRows);
+}
 
 /// The damage/loss rows inside [inSpan] + [inScope] — the [countShortageRows]
 /// twin for the Damages figure, so its money and its footnote also describe one
@@ -862,13 +1029,32 @@ class ReconData {
   /// per-manufacturer deposit rate. A realized loss, separate from the bottle's
   /// own cost (`damageCostKobo`).
   final int crateDamageDepositKobo;
+  // ── Physical stock count (#186: ONE basis for every figure here) ──────────
+  // All of these come from the count SESSIONS that won their day: the latest
+  // `stock_counts` row per `businessDate|storeId`, bucketed on `businessDate`.
+  // A day counted twice reports its LATEST count and nothing else, in units and
+  // in money alike — so a recount that comes out matching reads zero variance
+  // instead of flagging the earlier count's money as unexplained.
   final bool hasStockCount;
   final int productsCounted;
   final int shortageCount;
   final int shortageUnits;
   final int surplusCount;
   final int surplusUnits;
+
+  /// The winning sessions' shortage at the write-time FIFO cost (#182), summed
+  /// per session by [countSessionShortage] from the `stock_adjustments` rows
+  /// that session wrote ([countShortageRowsBySession]).
+  ///
+  /// Two things are true at once and both matter. The money is **frozen**: it is
+  /// what the units cost when they went missing, so editing a buying price today
+  /// cannot restate last month's variance (the exception is disclosed by
+  /// [legacyValuedShortageRows]). And the money is **session-based**: it counts
+  /// only the count each day ended on, exactly like [shortageUnits] beside it
+  /// (#186). Cumulative shrinkage across every save of a day lives on the stock
+  /// card's [stockCountAdjustmentsKobo] line instead.
   final int shortageCostKobo;
+
   final int shortageRetailKobo;
   final List<ReconShortLine> shortages;
   final int goodsReceivedKobo;
@@ -967,10 +1153,12 @@ class ReconData {
   // "Other movements" line, and still fold into [stockDerivedClosingKobo].
   final int stockTransfersKobo; // transfer_in / transfer_out legs
 
-  /// Daily-count reconciliation adjustments, at CURRENT cost — deliberately a
-  /// different basis from the P&L's [shortageCostKobo], which #182 moved onto the
-  /// #170 write-time snapshot. #200 asked whether this line should follow it. It
-  /// must not, on its own, for three reasons in ascending weight:
+  /// Daily-count reconciliation adjustments, at CURRENT cost and over **every**
+  /// row in the period — deliberately a different basis from the P&L's
+  /// [shortageCostKobo], which #182 moved onto the #170 write-time snapshot and
+  /// #186 moved onto the winning count session. #200 asked whether this line
+  /// should follow it. It must not, on its own, for three reasons in ascending
+  /// weight:
   ///
   ///  1. This term is built from **void-filtered** `stock_transactions`, while
   ///     the snapshot lives on `stock_adjustments`, which has **no void column**.
@@ -987,8 +1175,16 @@ class ReconData {
   ///     is a worse report failure than the one being fixed.
   ///
   /// So the card keeps one basis and now SAYS so, on screen and in the export:
-  /// one event reports two labelled figures instead of two silent ones. A real
-  /// basis change has to convert the whole card at once — #186.
+  /// one event reports two labelled figures instead of two silent ones.
+  ///
+  /// **#186 settled this and left the line exactly where it stands.** It moved
+  /// the *variance card's* shortage onto the count session so the money and the
+  /// units there stop contradicting each other; this term stayed all-rows at
+  /// current cost, and its three reasons above still hold word for word. That is
+  /// not an oversight — it is the useful half of what the old shortage basis was
+  /// doing: this line is the CUMULATIVE view (every save of every day, whatever
+  /// a later recount concluded), and after #186 it is the only place that view
+  /// survives. Deleting it would take a day's total shrinkage with it.
   final int stockCountAdjustmentsKobo;
 
   final int stockDeletionsKobo; // product-delete write-offs (#170 #7c)
@@ -1006,6 +1202,12 @@ class ReconData {
 
   /// Rows inside [shortageCostKobo] valued at today's cost (no write-time
   /// snapshot). 0 = the whole shortage/variance figure is frozen.
+  ///
+  /// Counted per winning session (#186), so it describes exactly the rows the
+  /// money summed — including the case where a session had no attributable rows
+  /// at all and its own count lines were valued at current cost instead
+  /// ([countSessionShortage]). A footnote that outlived, or undercounted, the
+  /// figure it annotates would be worse than no footnote.
   final int legacyValuedShortageRows;
 
   /// The product-delete write-off booked as a period LOSS (#193) — the cost of
@@ -1141,12 +1343,19 @@ class ReconData {
       stockDeletionsKobo +
       stockOtherMovementsKobo;
 
-  /// Variance = Physical count − Expected closing, valued at current cost:
-  /// a surplus (physical over system) is positive, a shortage negative. This is
-  /// the count discrepancy the recorded flows did NOT explain — the independent
-  /// signal the closing report surfaces. Uses the same count figures as the
-  /// stock audit (`surplus`/`shortage` at cost). Meaningful only when a physical
-  /// count exists in the period ([hasStockCount]).
+  /// Variance = Physical count − Expected closing: a surplus (physical over
+  /// system) is positive, a shortage negative. This is the count discrepancy the
+  /// recorded flows did NOT explain — the independent signal the closing report
+  /// surfaces. Meaningful only when a physical count exists in the period
+  /// ([hasStockCount]).
+  ///
+  /// **Both halves are the winning count sessions' (#186)**, which is what makes
+  /// the subtraction mean anything: a day whose latest count matched contributes
+  /// 0 to each side, so a corrected day reads zero variance and raises no
+  /// integrity flag rather than flagging money an earlier count already
+  /// superseded. The surplus half is at current cost because a gain draws no
+  /// FIFO batch and so has no snapshot to read; the shortage half is at the cost
+  /// each loss actually drew (#182).
   int get stockVarianceKobo => surplusCostKobo - shortageCostKobo;
 
   // ── Integrity flag (ADR 0014 slice 3) ────────────────────────────────────
@@ -1833,6 +2042,17 @@ ReconData reconDataFrom(ReconInputs input) {
   }
 
   // ── Stock audit + shortage value (latest count per store/date in span) ───
+  // #186 — the MONEY is summed inside this same loop now, so every figure on the
+  // card (units, retail, lines, products counted, and the cost) comes from the
+  // one set of winning sessions, bucketed on `businessDate`. Attribution of the
+  // valued `stock_adjustments` rows to their session happens first, over ALL
+  // counts and ALL adjustments: the windows are bounded by neighbouring
+  // sessions, never by the reporting period (see [countShortageRowsBySession]).
+  final shortageRowsBySession = countShortageRowsBySession(
+    counts,
+    adjustments,
+    inScope: inScope,
+  );
   final dayCounts =
       counts
           .where(
@@ -1851,6 +2071,15 @@ ReconData reconDataFrom(ReconInputs input) {
   var surplusUnits = 0;
   var surplusCostKobo = 0;
   var shortageRetailKobo = 0;
+  // #182 — the shortage loss is valued at the FIFO cost SNAPSHOTTED when the
+  // count was saved (`stock_adjustments.value_kobo`, #170), NOT today's cost, so
+  // a later product-cost edit can't restate a past period's shortage/variance.
+  // #186 changed WHICH rows are summed (the winning session's, not every row in
+  // the period) and changed nothing about how they are valued.
+  var shortageCostKobo = 0;
+  // #200 / US 20 — how many of those rows had NO snapshot and so were valued at
+  // today's cost. Drives the report footnote that labels the fallback.
+  var legacyValuedShortageRows = 0;
   final shortages = <ReconShortLine>[];
   for (final c in dayCounts) {
     if (!seenCount.add('${c.businessDate}|${c.storeId}')) continue;
@@ -1860,11 +2089,20 @@ ReconData reconDataFrom(ReconInputs input) {
     shortageUnits += c.shortageUnits;
     surplusCount += c.surplusCount;
     surplusUnits += c.surplusUnits;
+    final money = countSessionShortage(
+      c,
+      attributedRows: shortageRowsBySession[c.id] ?? const [],
+      productById: productById,
+    );
+    shortageCostKobo += money.lossKobo;
+    legacyValuedShortageRows += money.legacyValuedRows;
     for (final l
         in (jsonDecode(c.linesJson) as List).cast<Map<String, dynamic>>()) {
       final diff = (l['d'] as num).toInt();
       final p = productById[l['p'] as String?];
       if (diff > 0) {
+        // A surplus draws down no FIFO queue, so there is no snapshot to sum:
+        // this one figure is current-cost by nature, not by choice.
         surplusCostKobo += diff * (p?.buyingPriceKobo ?? 0);
       }
       if (diff >= 0) continue;
@@ -1880,23 +2118,6 @@ ReconData reconDataFrom(ReconInputs input) {
       );
     }
   }
-  // #182 — value the count-shortage loss at the FIFO cost SNAPSHOTTED when the
-  // count was saved (`stock_adjustments.value_kobo`, #170), NOT today's cost, so
-  // a later product-cost edit can't restate a past period's shortage/variance.
-  // Mirrors the Damages loop above; units/lines/retail stay count-sourced. The
-  // adjustment rows are the truth for the money — the count session's `linesJson`
-  // carries no snapshot — so a deleted product's shortage keeps its value too.
-  final shortageCostKobo = countShortageLossKobo(
-    adjustments,
-    productById: productById,
-    inSpan: inSpan,
-    inScope: inScope,
-  );
-  // #200 / US 20 — how many of those rows had NO snapshot and so were valued at
-  // today's cost. Drives the report footnote that labels the fallback.
-  final legacyValuedShortageRows = legacyValuedRowCount(
-    countShortageRows(adjustments, inSpan: inSpan, inScope: inScope),
-  );
 
   // ── Supplier ledger flows (CEO only) ─────────────────────────────────────
   var goodsReceivedKobo = 0;
@@ -2662,6 +2883,15 @@ final changedReviewedDaysProvider = Provider<Set<String>>((ref) {
     (e) => [e.expense.expenseDate, e.expense.createdAt],
     wanted,
   );
+  // A stock adjustment carries ONE date, so this is the only day it can be
+  // filed under. #186 note: a BACKDATED count's shortage rows therefore land in
+  // a different slice from the session that wrote them, and that session falls
+  // to [countSessionShortage]'s labelled current-cost fallback inside this sweep
+  // only. Harmless by construction — the sweep compares the FROZEN figure set,
+  // whose only count figure is `shortageUnits` (session-sourced, so unaffected)
+  // — and the day's own detail screen, which sees every row, computes the real
+  // snapshot-valued figure. Filing a row under the session's business date is
+  // not possible here: nothing on the row names its session.
   final adjustmentsByDay = _byCandidateDay<StockAdjustmentData>(
     ref.watch(allStockAdjustmentsProvider).valueOrNull ?? const [],
     (a) => [a.createdAt],

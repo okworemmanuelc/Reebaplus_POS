@@ -1034,6 +1034,20 @@ class _DailyReconciliationDetailScreenState
                     'reconcile against.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
+        // #186 — the count figures' own basis, said in the owner's words. Count
+        // a day twice and only the last count is reported, in units AND in
+        // money: this line is what stops "but I recounted and it matched" from
+        // reading as a hidden loss. "Count corrections" above is the other
+        // reading (every count of every day) and stays deliberately different.
+        if (d.hasStockCount) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Shortages, surpluses and the variance follow each day\'s LATEST '
+            'count — recounting a day replaces the earlier count, in units and '
+            'in money together.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
         // #200 / US 20 — the shortage/variance figure's own current-cost
         // fallback, labelled where that figure is shown.
         if (d.legacyValuedShortageRows > 0) ...[
@@ -1961,7 +1975,11 @@ class _DailyReconciliationDetailScreenState
         // byte-identical to before.
         if (d.deletionCostKobo > 0)
           ['Product deletions (at cost)', money(d.deletionCostKobo)],
-        ['Stock shortages (at cost)', money(d.shortageCostKobo)],
+        // #186 — the label names the basis, because the export sits beside a
+        // "Count corrections" row further down that reads every count of the
+        // day. Same event, two honest figures, exactly like Damages already is.
+        ['Stock shortages (at cost, latest count per day)',
+          money(d.shortageCostKobo)],
         // #200 / US 20 — the export carries the same disclosure the screen shows:
         // which of the two loss figures above lean on today's cost because the
         // record predates loss-cost snapshotting. Omitted when nothing does.
@@ -2065,8 +2083,10 @@ class _DailyReconciliationDetailScreenState
         ['Damages (stock, units at today\'s cost)', money(d.stockDamagesKobo)],
         ['Expired (at cost)', money(d.stockExpiredKobo)],
         ['Store transfers (at cost)', money(d.stockTransfersKobo)],
+        // #186 — "every count" is the point of difference from the shortage row
+        // above, which reports only the count each day ended on.
         [
-          'Count corrections (units at today\'s cost)',
+          'Count corrections (every count, units at today\'s cost)',
           money(d.stockCountAdjustmentsKobo),
         ],
         // #193 renamed this one to disambiguate it from the P&L's own
