@@ -10,6 +10,41 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Van v1 polish + v2 slice 1 + the v2 sale header — MERGED (2026-07-30)
+A four-branch parallel run, each branch built in its own worktree, verified
+alone, then rebased onto main and merged in blocking order (#208 v1 polish →
+#219 → #207 slice 1). Integrated state: **1811 passed / 129 skipped / 0 failed**,
+`flutter analyze` clean.
+
+| Issue | What shipped | Status |
+|---|---|---|
+| #208 items 1+3 | `VanReceiptView` shared by terminal + profile sheet; dormant-driver van fallback | **MERGED** |
+| #208 items 2+5 | driver ordering pinned as a decision; close disabled on a dirty outbox behind an override | **MERGED** |
+| #219 | v2 sale header records the payable (cloud **0177**, NOT deployed) | **MERGED** |
+| #207 slice 1 | shell loss valued at the manufacturer deposit rate, **disclosure only** | **MERGED** |
+
+**#208 is not fully closed.** Item 4 (`van_return_events.crate_shells` has no
+write surface) is intentional per spec §11 and belongs to #207, so four of the
+five items are done and the fifth is a deliberate no-op.
+
+**Still open on this thread:**
+- **0177 is NOT deployed** and must land before `feature.domain_rpcs_v2.record_sale`
+  is flipped (which #121 gates independently). Its Tier-2 expectations have never
+  executed anywhere — they skip locally on missing credentials.
+- **#207 slices 2–4 not started**: shells as real `CratePoolDao` movements +
+  backfill from the v1 memo columns; then the reconcile/crate-tab/rollup
+  surfaces. Until slice 2 lands, `shellsLostValueKobo` is 0 in production.
+- **Deposits on the road** (#207) is still an open product call. Every van
+  customer is a walk-in and `createOrder`'s crate block requires a registered
+  customer, so charging deposits at the terminal means building customer
+  registration into the driver terminal. #207 explicitly allows the alternative:
+  an explicit decision that swap-only stands. Not yet decided.
+- **Unfiled**: the web POS's `checkout_order` (0139) writes the GROSS into
+  `orders.total_amount_kobo` — the same divergence #219 fixed on the v2 path,
+  except **live today**. Belongs on #204, which does not currently list it.
+- The close-anyway override is **not recorded** on the close artifact; no
+  `van_trips` column says it happened and none was invented (spec §7.4).
+
 ### Van sales speaks the tenant's trade, not drinks — CODE-COMPLETE (2026-07-30)
 Owner report: *"van sales automatically defaults to drinks terms for bars and
 beverage distributor. I want it to be business agnostic."* Van sales shipped
@@ -257,10 +292,15 @@ reached main first, and it is deployed.
   what the default-off design promised.
 - **0173** (#209's) deployed; `pos_record_sale_v2` verified at 19 args, one
   `pg_proc` row (no PGRST203 overload), credit term present, grants restored.
-- **0175 and 0176 NOT deployed.** #216/#217 app code IS on main expecting them.
-  Safe only because every brand is `none`, so no `crate_shortfall_writeoffs` row
-  is ever written; a device that wrote one today would hit PGRST205 and jam its
-  outbox. **These must be deployed before any brand is switched on.**
+- ~~**0175 and 0176 NOT deployed.**~~ **Superseded 2026-07-30**: both ARE applied
+  on the cloud — `list_migrations` returns `0175 crate_shortfall_writeoff` and
+  `0176 crate_forfeit_netting`. The warning below no longer applies; it is kept
+  because it explains why the window was safe: every brand was `none`, so no
+  `crate_shortfall_writeoffs` row could be written, and a device that wrote one
+  before the deploy would have hit PGRST205 and jammed its outbox.
+  **Consequence for numbering**: applied history now runs to 0176, so a new
+  migration numbered **below** it is out-of-order and `supabase db push` rejects
+  it. This is why #219 took **0177** rather than the free-looking 0174 gap.
 - Security advisors after the deploy: **0 ERROR**, 111 WARN, unchanged in count
   and class from the 2026-07-29 baseline.
 
