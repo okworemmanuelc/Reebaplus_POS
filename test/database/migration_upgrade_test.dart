@@ -3042,4 +3042,194 @@ void main() {
       expect(byId[ids['gulder']!], 'none');
     });
   });
+
+  group('onUpgrade v78 → v79 (the Placed Deposit and the manager who confirms '
+      'it, #212)', () {
+    /// Reverts the v79 delta: drop the two new tables and the seventh parent
+    /// column. `payment_transactions` carries two CHECKs mentioning the column,
+    /// so it has to be REBUILT into its v78 shape rather than ALTERed — the same
+    /// dance the upgrade itself does, in reverse.
+    Future<void> revertToV78(AppDatabase db) async {
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      await db.customStatement(
+        'DROP TABLE IF EXISTS supplier_crate_deposits',
+      );
+      await db.customStatement(
+        'DROP TABLE IF EXISTS supplier_crate_deposit_requests',
+      );
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+      );
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+      );
+      await db.customStatement(
+        'CREATE TABLE pt_v78 ('
+        'id TEXT NOT NULL PRIMARY KEY, business_id TEXT NOT NULL, '
+        'store_id TEXT, amount_kobo INTEGER NOT NULL, method TEXT NOT NULL, '
+        'type TEXT NOT NULL, order_id TEXT, shipment_id TEXT, expense_id TEXT, '
+        'wallet_txn_id TEXT, delivery_id TEXT, van_trip_id TEXT, '
+        'performed_by TEXT, voided_at INTEGER, voided_by TEXT, '
+        'void_reason TEXT, created_at INTEGER NOT NULL, '
+        'last_updated_at INTEGER NOT NULL)',
+      );
+      await db.customStatement(
+        'INSERT INTO pt_v78 SELECT id, business_id, store_id, amount_kobo, '
+        'method, type, order_id, shipment_id, expense_id, wallet_txn_id, '
+        'delivery_id, van_trip_id, performed_by, voided_at, voided_by, '
+        'void_reason, created_at, last_updated_at FROM payment_transactions',
+      );
+      await db.customStatement('DROP TABLE payment_transactions');
+      await db.customStatement(
+        'ALTER TABLE pt_v78 RENAME TO payment_transactions',
+      );
+      await db.customStatement('PRAGMA foreign_keys = ON');
+    }
+
+    Future<Set<String>> tablesOf(AppDatabase db) async {
+      final rows = await db
+          .customSelect("SELECT name FROM sqlite_master WHERE type='table'")
+          .get();
+      return rows.map((r) => r.read<String>('name')).toSet();
+    }
+
+    test('the two crate-deposit tables and the seventh payment parent arrive, '
+        'and every existing money row survives the rebuild', () async {
+      final db1 = await openAndInit();
+      final biz = UuidV7.generate();
+      final order = UuidV7.generate();
+      final pay = UuidV7.generate();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name, type) VALUES (?, 'Biz', 'Bar')",
+        [biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-1', 500000, 500000, 'cash', 'completed')",
+        [order, biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, amount_kobo, method, type, order_id) '
+        "VALUES (?, ?, 500000, 'cash', 'sale', ?)",
+        [pay, biz, order],
+      );
+
+      await revertToV78(db1);
+      expect(
+        (await columnsOf(db1, 'payment_transactions')).contains(
+          'crate_deposit_id',
+        ),
+        isFalse,
+        reason: 'teeth: the pre-v79 shape must genuinely lack the column',
+      );
+      expect(
+        await tablesOf(db1),
+        isNot(contains('supplier_crate_deposits')),
+        reason: 'teeth: the pre-v79 shape must genuinely lack the ledger',
+      );
+      await db1.customStatement('PRAGMA user_version = 78');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final tables = await tablesOf(db2);
+      expect(tables, contains('supplier_crate_deposit_requests'));
+      expect(tables, contains('supplier_crate_deposits'));
+      expect(
+        (await columnsOf(db2, 'payment_transactions')).contains(
+          'crate_deposit_id',
+        ),
+        isTrue,
+      );
+
+      // The money row came through the rebuild untouched — and, critically, its
+      // crate_deposit_id is NULL rather than the string 'crate_deposit_id'
+      // (the TableMigration trap that aborted the v72 upgrade for van_trip_id).
+      final rows = await db2
+          .customSelect(
+            'SELECT id, amount_kobo, type, order_id, crate_deposit_id '
+            'FROM payment_transactions',
+          )
+          .get();
+      expect(rows, hasLength(1));
+      expect(rows.single.read<String>('id'), pay);
+      expect(rows.single.read<int>('amount_kobo'), 500000);
+      expect(rows.single.read<String>('type'), 'sale');
+      expect(rows.single.read<String?>('crate_deposit_id'), isNull);
+    });
+
+    test('THE RELEASE GATE — the upgrade backfills no deposit of any kind', () async {
+      // A tenant with real crate history: a brand, a supplier, and receipts on
+      // the books. None of it may become money. Inferring a deposit from
+      // historic supplier_crate_ledger rows would invent movements that never
+      // happened and restate closed days (ADR 0021).
+      final db1 = await openAndInit();
+      final biz = UuidV7.generate();
+      final mfr = UuidV7.generate();
+      final sup = UuidV7.generate();
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name, type) VALUES (?, 'Biz', 'Bar')",
+        [biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO manufacturers (id, business_id, name, empty_crate_stock, '
+        "deposit_amount_kobo) VALUES (?, ?, 'Star Lager', 40, 350000)",
+        [mfr, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO suppliers (id, business_id, name) VALUES (?, ?, 'Depot')",
+        [sup, biz],
+      );
+      await db1.customStatement(
+        'INSERT INTO supplier_crate_ledger (id, business_id, supplier_id, '
+        'manufacturer_id, quantity_delta, movement_type, created_at, '
+        "last_updated_at) VALUES (?, ?, ?, ?, 40, 'received', 1000, 1000)",
+        [UuidV7.generate(), biz, sup, mfr],
+      );
+
+      await revertToV78(db1);
+      await db1.customStatement('PRAGMA user_version = 78');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      Future<int> count(String table) async =>
+          (await db2.customSelect('SELECT COUNT(*) AS c FROM $table')
+                  .getSingle())
+              .read<int>('c');
+
+      expect(await count('supplier_crate_deposits'), 0);
+      expect(await count('supplier_crate_deposit_requests'), 0);
+      expect(await count('payment_transactions'), 0);
+      // And the brand is still on the default arrangement, untouched.
+      final m = await db2
+          .customSelect('SELECT crate_money_arrangement FROM manufacturers')
+          .getSingle();
+      expect(m.read<String>('crate_money_arrangement'), 'none');
+    });
+
+    test('the upgrade step is idempotent (a DB stepped back re-upgrades)', () async {
+      final db1 = await openAndInit();
+      // Do NOT revert — just step the version back, so the v79 block runs
+      // against a schema that already has everything (also the shape a fresh
+      // install lands in). Every guard must skip cleanly.
+      await db1.customStatement('PRAGMA user_version = 78');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final tables = await tablesOf(db2);
+      expect(tables, contains('supplier_crate_deposits'));
+      expect(
+        (await columnsOf(db2, 'payment_transactions')).contains(
+          'crate_deposit_id',
+        ),
+        isTrue,
+      );
+    });
+  });
 }

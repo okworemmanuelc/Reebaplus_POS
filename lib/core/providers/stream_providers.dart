@@ -959,6 +959,41 @@ final viewerScopedPendingQuickSaleRequestsProvider =
       return all.where((r) => assignedStoreIds.contains(r.storeId)).toList();
     });
 
+// ── Crate deposit approvals (#212, PRD #203 / ADR 0023 rule 6) ───────────────
+/// All still-pending crate-deposit MONEY legs for the business, newest first.
+/// Approver-side store scoping is applied by
+/// [viewerScopedPendingCrateDepositsProvider].
+///
+/// A `none` brand never produces one of these (the write boundary short-circuits
+/// on the arrangement), so on every tenant that has not deliberately switched a
+/// brand on this list is permanently empty and the Approvals screen looks
+/// exactly as it did before PRD #203.
+final pendingCrateDepositRequestsProvider =
+    businessScopedStream<List<SupplierCrateDepositRequestData>>(
+  (ref, db, businessId) => db.cratePoolDao.watchPendingCrateDepositRequests(),
+  whenAbsent: const [],
+);
+
+/// Pending crate deposits the current viewer may decide: a CEO sees every
+/// store; a Manager sees only their assigned store(s). Mirrors
+/// [viewerScopedPendingStockRequestsProvider] exactly.
+final viewerScopedPendingCrateDepositsProvider =
+    Provider<List<SupplierCrateDepositRequestData>>((ref) {
+      final all =
+          ref.watch(pendingCrateDepositRequestsProvider).valueOrNull ??
+          const [];
+      final role = ref.watch(currentUserRoleProvider);
+      if (role?.slug == 'ceo') return all;
+      final userId = ref.watch(authProvider).currentUser?.id;
+      if (userId == null) return const [];
+      final assignedStoreIds =
+          (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+                  const <UserStoreData>[])
+              .map((s) => s.storeId)
+              .toSet();
+      return all.where((r) => assignedStoreIds.contains(r.storeId)).toList();
+    });
+
 // ── Stock Transfers (§16.8.1) ────────────────────────────────────────────────
 /// All in_transit transfers for the business — the raw feed from which the
 /// viewer-scoped providers derive their lists in memory.

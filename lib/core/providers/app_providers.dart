@@ -288,6 +288,21 @@ final supplierCrateMovementTotalsProvider =
   whenAbsent: (received: 0, returned: 0),
 );
 
+/// #212 — one supplier's **Placed Deposit** position, one entry per brand they
+/// hold crate money for: what they are sitting on, what is awaiting a manager's
+/// confirmation, and the brand-level crate shortfall behind it.
+///
+/// Every figure comes from `computeCrateDepositPosition`, the one pure seam, so
+/// this list and #215's business-wide card can never disagree. A brand on the
+/// default `none` arrangement contributes nothing at all.
+final supplierCrateDepositPositionsProvider =
+    businessScopedStreamAutoDisposeFamily<List<SupplierCrateDepositPosition>,
+        String>(
+  (ref, db, businessId, id) =>
+      db.cratePoolDao.watchSupplierCrateDepositPositions(id),
+  whenAbsent: const [],
+);
+
 /// One supplier's empty-crate movement history (receipts + returns), newest
 /// first.
 final supplierCrateHistoryProvider =

@@ -96,6 +96,11 @@ void main() {
     'wallet_transactions',
     'supplier_ledger_entries',
     'supplier_crate_ledger',
+    // #212 (PRD #203): the crate-deposit money approval queue and the
+    // append-only Placed Deposit ledger. The queue precedes the ledger, which
+    // FK-references it.
+    'supplier_crate_deposit_requests',
+    'supplier_crate_deposits',
     'saved_carts',
     'pending_crate_returns',
     'manufacturer_crate_balances',
@@ -123,6 +128,9 @@ void main() {
     'suppliers',
     'supplier_ledger_entries',
     'supplier_crate_ledger',
+    // #212 (PRD #203): the crate-deposit money tables.
+    'supplier_crate_deposit_requests',
+    'supplier_crate_deposits',
     'products',
     'cost_batches',
     'price_lists',

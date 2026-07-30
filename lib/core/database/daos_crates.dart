@@ -184,6 +184,21 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+/// One supplier's crate-deposit position for ONE of their brands (#212) — the
+/// [CrateDepositPosition] plus the manufacturer it belongs to, so a screen can
+/// render "Star Lager — ₦180,000 with this supplier" without a second query.
+class SupplierCrateDepositPosition {
+  final String manufacturerId;
+  final String manufacturerName;
+  final CrateDepositPosition position;
+
+  const SupplierCrateDepositPosition({
+    required this.manufacturerId,
+    required this.manufacturerName,
+    required this.position,
+  });
+}
+
 /// The **Crate Pool seam** (#156 / ADR 0020) — the single module every empty-
 /// crate movement routes through. It is the *sole* writer of the crate tables
 /// (`crate_ledger`, `supplier_crate_ledger`, and the four `*_crate_balances`
@@ -208,7 +223,15 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
     StoreCrateBalances,
     SupplierCrateLedger,
     SupplierCrateBalances,
+    // #212 — the crate-deposit MONEY tables. They live behind the same seam as
+    // the counts on purpose (ADR 0020's sole-writer rule extended by ADR 0023
+    // rule 1): the count leg and the money leg of one delivery must be able to
+    // commit in ONE transaction, which they cannot do from two DAOs.
+    SupplierCrateDepositRequests,
+    SupplierCrateDeposits,
+    PaymentTransactions,
     Manufacturers,
+    Suppliers,
   ],
 )
 class CratePoolDao extends DatabaseAccessor<AppDatabase>
@@ -1036,6 +1059,29 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
 
   /// Full crates RECEIVED from a supplier (we now owe N empties), with an
   /// optional refundable [depositPaidKobo] paid on the receipt.
+  ///
+  /// When the manufacturer's Crate Money Arrangement is `per_delivery` (#212),
+  /// this ALSO raises a pending deposit money leg for a money-permitted role to
+  /// decide — in the same transaction as the count, so a delivery can never
+  /// land with its counts recorded and its money forgotten (ADR 0023 finding
+  /// #2). The count is committed either way: a stock keeper's say-so is enough
+  /// for a crate record and never enough for cash (rule 6).
+  ///
+  /// The ARRANGEMENT decides this, not the caller. There is no opt-in flag on
+  /// purpose: a second receive path that forgot to pass it is exactly how the
+  /// money ends up in two disagreeing ledgers.
+  ///
+  /// A `none` brand raises nothing at all and behaves exactly as it did before
+  /// PRD #203. So does `standing_float`, by design — that arrangement moves
+  /// money only on a real top-up or payout (#214), never on an ordinary
+  /// delivery.
+  ///
+  /// "The count commits regardless" is a statement about the DECISION, not
+  /// about durability: whatever a manager later decides about the cash, the
+  /// crates stay recorded. It is deliberately NOT a promise that the count
+  /// survives a failure while raising the request — both legs share one
+  /// transaction precisely so a half-recorded delivery cannot exist (ADR 0023
+  /// finding #2, where a forgotten leg is the whole defect).
   Future<void> recordReceiveFromSupplier({
     required String supplierId,
     required String manufacturerId,
@@ -1046,16 +1092,61 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     String? note,
   }) async {
     if (quantity <= 0) return;
-    await _appendSupplierMovement(
-      supplierId: supplierId,
-      manufacturerId: manufacturerId,
-      quantityDelta: quantity,
-      movementType: 'received',
-      performedBy: performedBy,
-      storeId: storeId,
-      depositPaidKobo: depositPaidKobo < 0 ? 0 : depositPaidKobo,
-      note: note,
-    );
+    await transaction(() async {
+      // ONE ledger per brand, never two. `supplier_crate_ledger.deposit_paid_kobo`
+      // is the legacy hand-typed deposit column, still the right home for a
+      // `none` or `standing_float` brand where PRD #203 raises nothing. But on a
+      // `per_delivery` brand the money belongs in `supplier_crate_deposits`, and
+      // letting BOTH move would recreate ADR 0023 finding #3 — two numbers that
+      // never meet — inside the very slice that exists to fix it. So the legacy
+      // column is forced to 0 for that brand and the money goes through the
+      // approval queue instead, whichever caller arrived: Receive Stock, or the
+      // manual "receive crates" form on the supplier screen.
+      final arrangement = await _crateMoneyArrangementOf(manufacturerId);
+      final isPerDelivery = arrangement == CrateMoneyArrangement.perDelivery;
+      // The one exception, and it is the pre-existing behaviour rather than a
+      // new fork: the manual form runs under "All Stores" with no store id, and
+      // the approval queue scopes approvers BY store (store_id is NOT NULL).
+      // With nowhere to route the money we keep the legacy column rather than
+      // silently discarding a figure the user typed.
+      final canRaise = storeId != null;
+      final legacyDeposit = (isPerDelivery && canRaise)
+          ? 0
+          : (depositPaidKobo < 0 ? 0 : depositPaidKobo);
+
+      final ledgerId = await _appendSupplierMovement(
+        supplierId: supplierId,
+        manufacturerId: manufacturerId,
+        quantityDelta: quantity,
+        movementType: 'received',
+        performedBy: performedBy,
+        storeId: storeId,
+        depositPaidKobo: legacyDeposit,
+        note: note,
+      );
+      if (isPerDelivery && canRaise) {
+        await raiseCrateDepositRequest(
+          supplierId: supplierId,
+          manufacturerId: manufacturerId,
+          storeId: storeId,
+          crateCount: quantity,
+          requestedBy: performedBy,
+          supplierCrateLedgerId: ledgerId,
+        );
+      }
+    });
+  }
+
+  /// The brand's Crate Money Arrangement, failing closed to
+  /// [CrateMoneyArrangement.none] for a manufacturer that cannot be read.
+  Future<CrateMoneyArrangement> _crateMoneyArrangementOf(
+    String manufacturerId,
+  ) async {
+    final m = await (select(manufacturers)..where(
+          (t) => t.id.equals(manufacturerId) & whereBusiness(t),
+        ))
+        .getSingleOrNull();
+    return crateMoneyArrangementOf(m?.crateMoneyArrangement);
   }
 
   /// Empties RETURNED to a supplier (reduces what we owe), with an optional
@@ -1082,7 +1173,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  Future<void> _appendSupplierMovement({
+  /// Appends one supplier crate-count movement and returns its ledger row id,
+  /// so a money leg raised in the same transaction can point back at the exact
+  /// delivery it answers (#212).
+  Future<String> _appendSupplierMovement({
     required String supplierId,
     required String manufacturerId,
     required int quantityDelta,
@@ -1092,9 +1186,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     String? storeId,
     String? note,
   }) async {
+    final ledgerId = UuidV7.generate();
     await transaction(() async {
       final ledgerComp = SupplierCrateLedgerCompanion.insert(
-        id: Value(UuidV7.generate()),
+        id: Value(ledgerId),
         businessId: requireBusinessId(),
         supplierId: supplierId,
         manufacturerId: manufacturerId,
@@ -1135,6 +1230,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       // removes — two offline tills' movements both survive a merge instead.
       await db.syncDao.enqueueUpsert('supplier_crate_ledger', ledgerComp);
     });
+    return ledgerId;
   }
 
   /// #160 — a supplier's crate debt per manufacturer, DERIVED from the append-
@@ -1222,6 +1318,521 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       }
       return total;
     });
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Crate deposit MONEY (#212, PRD #203, ADR 0023 rules 1, 2 and 6)
+  //
+  // The supplier-side mirror of the customer's held deposit, sign flipped: a
+  // Placed Deposit drops cash and raises an ASSET, because the money is still
+  // ours and is refundable. It is its own money family — never a `refund`,
+  // never an `expense`, never a `void` — for the reason spelled out in
+  // `lib/core/crates/crate_deposit_ledger_types.dart`.
+  //
+  // Two writes, and only two: a REQUEST (no money moves) and a CONFIRMATION
+  // (both legs, one transaction). Rejection moves nothing at all and, in
+  // particular, never touches the crate counts.
+  // ───────────────────────────────────────────────────────────────────────
+
+  /// Raise a pending crate-deposit money leg for a money-permitted role to
+  /// decide. Returns the request id, or `null` when nothing was raised.
+  ///
+  /// Nothing is raised — and this is the release gate for PRD #203, expressed
+  /// as the earliest possible return — when:
+  ///  * the manufacturer's arrangement is not `per_delivery` (every existing
+  ///    brand on every live tenant reads `none`, #211; `standing_float` moves
+  ///    money only on real top-ups and payouts, #214);
+  ///  * the per-crate rate is 0, so there is no money to ask about;
+  ///  * the crate count is 0.
+  ///
+  /// The rate is SNAPSHOTTED onto the request, so a rate edit next month cannot
+  /// restate what a delivery last week asked for.
+  Future<String?> raiseCrateDepositRequest({
+    required String supplierId,
+    required String manufacturerId,
+    required String storeId,
+    required int crateCount,
+    required String requestedBy,
+    String kind = kCrateDepositMovementPlacement,
+    String? supplierCrateLedgerId,
+    String? note,
+  }) async {
+    if (crateCount <= 0) return null;
+
+    final manufacturer = await (select(
+      manufacturers,
+    )..where((t) => t.id.equals(manufacturerId) & whereBusiness(t))).getSingleOrNull();
+    if (manufacturer == null) return null;
+
+    final arrangement = crateMoneyArrangementOf(
+      manufacturer.crateMoneyArrangement,
+    );
+    if (arrangement != CrateMoneyArrangement.perDelivery) return null;
+
+    final rate = manufacturer.depositAmountKobo;
+    if (rate <= 0) return null;
+
+    final supplier = await (select(
+      suppliers,
+    )..where((t) => t.id.equals(supplierId) & whereBusiness(t))).getSingleOrNull();
+
+    final requestId = UuidV7.generate();
+    final now = DateTime.now();
+    // Its OWN transaction. This method is public and #214 will call it directly
+    // for a float top-up, where the row insert, its outbox entry and the
+    // approver fan-out have no outer transaction to ride on — three bare awaits
+    // would let a crash leave a request that never reaches another device.
+    // Nested inside `recordReceiveFromSupplier` it is a savepoint and composes.
+    final row = SupplierCrateDepositRequestsCompanion.insert(
+      id: Value(requestId),
+      businessId: requireBusinessId(),
+      supplierId: supplierId,
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+      kind: kind,
+      crateCount: Value(crateCount),
+      ratePerCrateKobo: Value(rate),
+      requestedAmountKobo: Value(crateCount * rate),
+      summary:
+          '$crateCount crate${crateCount == 1 ? '' : 's'} of '
+          '${manufacturer.name}'
+          '${supplier == null ? '' : ' from ${supplier.name}'}',
+      supplierCrateLedgerId: Value(supplierCrateLedgerId),
+      note: Value(note),
+      requestedBy: Value(requestedBy),
+      status: const Value(kCrateDepositRequestPending),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await transaction(() async {
+      await into(supplierCrateDepositRequests).insert(row);
+      await db.syncDao.enqueueUpsert('supplier_crate_deposit_requests', row);
+
+      // Tell the people who can actually decide it — the CEO and the Managers of
+    // the store the delivery landed in. Same fan-out as a stock-adjustment
+    // request, and the reason is the same: the person who raised it cannot
+    // resolve it, so an unnotified queue is an invisible one.
+      final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+      final managerIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+        'manager',
+      ]);
+      final storeUserIds = (await db.userStoresDao.getUserIdsForStore(
+        storeId,
+      )).toSet();
+      final storeManagerIds = managerIds.where(storeUserIds.contains);
+      for (final uid in <String>{...ceoIds, ...storeManagerIds}) {
+        await db.notificationsDao.fireNotification(
+          type: 'crate_deposit.requested',
+          message:
+              'Crate deposit to confirm: ${row.summary.value} — '
+              '${formatCurrency(crateCount * rate / 100)}',
+          linkedRecordId: requestId,
+          recipientUserId: uid,
+        );
+      }
+    });
+    return requestId;
+  }
+
+  /// Confirm a pending crate-deposit money leg: **both legs, one transaction**
+  /// (ADR 0019's both-or-neither rule).
+  ///
+  ///  1. a `supplier_crate_deposits` row — the Placed Deposit asset, held per
+  ///     `(supplier, manufacturer)`;
+  ///  2. a `payment_transactions` row of type [kPaymentTypeCrateDepositOut] —
+  ///     the cash that really left the drawer, hanging off the deposit row as
+  ///     its seventh parent.
+  ///
+  /// [amountKobo] is what the approver actually agreed to pay, which may be
+  /// less than the request asked for (a part payment, a waived deposit) or
+  /// more. It defaults to the requested amount. A confirmation of 0 is legal
+  /// and meaningful — "we owe them the crates but paid nothing today" — and
+  /// writes the request's decision without either money row, because a book
+  /// entry appears only when money genuinely moved.
+  ///
+  /// Returns true when this call was the one that decided the request; false
+  /// when it had already been decided (another device won the race).
+  Future<bool> confirmCrateDepositRequest({
+    required String requestId,
+    required String decidedBy,
+    int? amountKobo,
+    String paymentMethod = 'cash',
+    String? note,
+  }) async {
+    var didConfirm = false;
+    await transaction(() async {
+      final req =
+          await (select(supplierCrateDepositRequests)..where(
+                (t) => t.id.equals(requestId) & whereBusiness(t),
+              ))
+              .getSingleOrNull();
+      if (req == null || req.status != kCrateDepositRequestPending) return;
+
+      final settled = (amountKobo ?? req.requestedAmountKobo);
+      final amount = settled < 0 ? 0 : settled;
+      final now = DateTime.now();
+
+      // Flip the request FIRST, with `status = 'pending'` still in the WHERE.
+      // A zero-row update means another device decided it between the read and
+      // the write; bail out before any money is written. Same guard shape as
+      // `StockAdjustmentRequestsDao.approveRequest`.
+      final affected =
+          await (update(supplierCrateDepositRequests)..where(
+                (t) =>
+                    t.id.equals(requestId) &
+                    whereBusiness(t) &
+                    t.status.equals(kCrateDepositRequestPending),
+              ))
+              .write(
+                SupplierCrateDepositRequestsCompanion(
+                  status: const Value(kCrateDepositRequestConfirmed),
+                  settledAmountKobo: Value(amount),
+                  paymentMethod: Value(paymentMethod),
+                  decidedBy: Value(decidedBy),
+                  decidedAt: Value(now),
+                  decisionNote: Value(note),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
+      if (affected == 0) return;
+      didConfirm = true;
+
+      if (amount > 0) {
+        final outward = crateDepositMovementIsOutward(req.kind);
+        final depositId = UuidV7.generate();
+        final depositRow = SupplierCrateDepositsCompanion.insert(
+          id: Value(depositId),
+          businessId: requireBusinessId(),
+          supplierId: req.supplierId,
+          manufacturerId: req.manufacturerId,
+          storeId: Value(req.storeId),
+          movementType: req.kind,
+          // The asset rises when money goes out to the supplier and falls when
+          // it comes back. Same for the crate count it covers.
+          //
+          // On an ADJUSTED amount the crate count and the snapshot rate stay
+          // WHOLE, so `signed_amount_kobo != crate_count * rate_per_crate_kobo`
+          // on that row. That is on purpose and it is the honest record: the
+          // delivery really was 8 crates at the brand's ₦3,500 rate, and we
+          // really paid less than that. Deriving a fake crate count from the
+          // part payment would invent a delivery that never happened, and
+          // rewriting the rate would lose what the brand actually charges.
+          // The consequence to know: `unbackedCrates` counts those crates as
+          // backed, because money WAS placed against them — the shortfall in
+          // naira shows up in `placedDepositKobo` instead, which is where a
+          // part payment belongs.
+          signedAmountKobo: outward ? amount : -amount,
+          crateCount: Value(outward ? req.crateCount : -req.crateCount),
+          ratePerCrateKobo: Value(req.ratePerCrateKobo),
+          requestId: Value(requestId),
+          supplierCrateLedgerId: Value(req.supplierCrateLedgerId),
+          note: Value(note),
+          performedBy: Value(decidedBy),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await into(supplierCrateDeposits).insert(depositRow);
+        await db.syncDao.enqueueUpsert(
+          'supplier_crate_deposits',
+          depositRow,
+        );
+
+        // The cash leg. `crate_deposit_out`, NEVER `expense` and NEVER
+        // `refund`: this money is refundable, so it must not cut profit, and
+        // typing held money as a refund is exactly the defect #190/#201 fixed
+        // on the customer side. Positive = out of the drawer, negative = back.
+        final paymentRow = PaymentTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          storeId: Value(req.storeId),
+          amountKobo: outward ? amount : -amount,
+          method: paymentMethod,
+          type: kPaymentTypeCrateDepositOut,
+          crateDepositId: Value(depositId),
+          performedBy: Value(decidedBy),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await into(paymentTransactions).insert(paymentRow);
+        await db.syncDao.enqueueUpsert('payment_transactions', paymentRow);
+      }
+
+      final updated =
+          await (select(supplierCrateDepositRequests)
+                ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+              .getSingleOrNull();
+      if (updated != null) {
+        await db.syncDao.enqueueUpsert(
+          'supplier_crate_deposit_requests',
+          updated.toCompanion(true),
+        );
+      }
+
+      await db.activityLogDao.log(
+        action: 'crate_deposit_confirmed',
+        description:
+            'Confirmed crate deposit: ${req.summary} — '
+            '${formatCurrency(amount / 100)}'
+            '${amount == req.requestedAmountKobo ? '' : ' (adjusted from ${formatCurrency(req.requestedAmountKobo / 100)})'}',
+        staffId: decidedBy,
+        storeId: req.storeId,
+      );
+
+      if (req.requestedBy != null) {
+        await db.notificationsDao.fireNotification(
+          type: 'crate_deposit.confirmed',
+          message: 'Crate deposit confirmed: ${req.summary}',
+          linkedRecordId: requestId,
+          recipientUserId: req.requestedBy,
+        );
+      }
+    });
+    return didConfirm;
+  }
+
+  /// Reject a pending crate-deposit money leg.
+  ///
+  /// **Nothing physical moves.** The crates arrived and the crate ledger says
+  /// so; rejecting says only that the business is not paying a deposit for
+  /// them. No `supplier_crate_deposits` row, no `payment_transactions` row, no
+  /// touch of any crate count or balance.
+  ///
+  /// Returns true when this call was the one that decided the request.
+  Future<bool> rejectCrateDepositRequest({
+    required String requestId,
+    required String decidedBy,
+    String? reason,
+  }) async {
+    final trimmed = reason?.trim();
+    final hasReason = trimmed != null && trimmed.isNotEmpty;
+    var didReject = false;
+    await transaction(() async {
+      final req =
+          await (select(supplierCrateDepositRequests)..where(
+                (t) => t.id.equals(requestId) & whereBusiness(t),
+              ))
+              .getSingleOrNull();
+      if (req == null || req.status != kCrateDepositRequestPending) return;
+
+      final now = DateTime.now();
+      final affected =
+          await (update(supplierCrateDepositRequests)..where(
+                (t) =>
+                    t.id.equals(requestId) &
+                    whereBusiness(t) &
+                    t.status.equals(kCrateDepositRequestPending),
+              ))
+              .write(
+                SupplierCrateDepositRequestsCompanion(
+                  status: const Value(kCrateDepositRequestRejected),
+                  decidedBy: Value(decidedBy),
+                  decidedAt: Value(now),
+                  decisionNote: Value(hasReason ? trimmed : null),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
+      if (affected == 0) return;
+      didReject = true;
+
+      final updated =
+          await (select(supplierCrateDepositRequests)
+                ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+              .getSingleOrNull();
+      if (updated != null) {
+        await db.syncDao.enqueueUpsert(
+          'supplier_crate_deposit_requests',
+          updated.toCompanion(true),
+        );
+      }
+
+      await db.activityLogDao.log(
+        action: 'crate_deposit_rejected',
+        description:
+            'Rejected crate deposit: ${req.summary}'
+            '${hasReason ? ' — Reason: $trimmed' : ''}'
+            ' — the crates on this delivery are unaffected',
+        staffId: decidedBy,
+        storeId: req.storeId,
+      );
+
+      if (req.requestedBy != null) {
+        await db.notificationsDao.fireNotification(
+          type: 'crate_deposit.rejected',
+          message: 'Crate deposit rejected: ${req.summary}',
+          severity: 'warning',
+          linkedRecordId: requestId,
+          recipientUserId: req.requestedBy,
+        );
+      }
+    });
+    return didReject;
+  }
+
+  /// Every crate-deposit request still awaiting a decision, newest first.
+  Stream<List<SupplierCrateDepositRequestData>>
+  watchPendingCrateDepositRequests() {
+    return (select(supplierCrateDepositRequests)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.status.equals(kCrateDepositRequestPending),
+          )
+          ..orderBy([
+            (t) => OrderingTerm(
+              expression: t.createdAt,
+              mode: OrderingMode.desc,
+            ),
+          ]))
+        .watch();
+  }
+
+  /// One supplier's crate-deposit position, one entry per manufacturer they
+  /// have ever moved crate money for.
+  ///
+  /// Everything is computed by [computeCrateDepositPosition] — this method only
+  /// gathers rows. That split is the point of the seam: the arithmetic that
+  /// tells an owner a depot is sitting on ₦180,000 of theirs lives in one pure
+  /// function that #213-#217 all read through, and it is unit-tested with no
+  /// database at all.
+  ///
+  /// Everything here is **pair-scoped**: the ledger rows, the pending requests
+  /// and `cratesOwed` are all one `(supplier, manufacturer)` slice, which is
+  /// how ADR 0023 rule 2 keys the money — only the supplier you actually paid
+  /// can pay you back.
+  ///
+  /// **No `emptiesOnHand` is passed, so no shortfall is computed here.** The
+  /// empties pool is brand-level and business-wide; subtracting it from ONE
+  /// supplier's debt would double-subtract across two suppliers of the same
+  /// brand and report both as square while the brand was genuinely short. ADR
+  /// 0023 rule 4 puts the shortfall at brand level on purpose — crates are
+  /// fungible, and guessing whose went missing invents a fact and then argues
+  /// with the supplier's own records. The brand-level card is #215's.
+  Stream<List<SupplierCrateDepositPosition>> watchSupplierCrateDepositPositions(
+    String supplierId,
+  ) {
+    final query = select(supplierCrateDeposits).join([
+      innerJoin(
+        manufacturers,
+        manufacturers.id.equalsExp(supplierCrateDeposits.manufacturerId),
+      ),
+    ])..where(
+      whereBusiness(supplierCrateDeposits) &
+          supplierCrateDeposits.supplierId.equals(supplierId),
+    );
+
+    // Combined with the pending queue rather than derived from the ledger
+    // alone: a brand whose FIRST delivery is still awaiting a decision has no
+    // ledger row at all, so a ledger-only stream would never fire and the
+    // "awaiting confirmation" figure would sit there stale until some unrelated
+    // deposit moved. Both halves of ADR 0023 rule 6 have to be live, because
+    // the point of the screen is to show the owner money they have not yet
+    // agreed to.
+    final pendingStream =
+        (select(supplierCrateDepositRequests)..where(
+              (t) =>
+                  whereBusiness(t) &
+                  t.supplierId.equals(supplierId) &
+                  t.status.equals(kCrateDepositRequestPending),
+            ))
+            .watch();
+
+    return Rx.combineLatest2<
+      List<TypedResult>,
+      List<SupplierCrateDepositRequestData>,
+      ({List<TypedResult> rows, List<SupplierCrateDepositRequestData> pending})
+    >(
+      query.watch(),
+      pendingStream,
+      (rows, pending) => (rows: rows, pending: pending),
+    ).asyncMap((input) async {
+      final rows = input.rows;
+      final movementsBy = <String, List<CrateDepositMovement>>{};
+      final manufacturerRows = <String, ManufacturerData>{};
+      for (final r in rows) {
+        final deposit = r.readTable(supplierCrateDeposits);
+        final manufacturer = r.readTable(manufacturers);
+        manufacturerRows[manufacturer.id] = manufacturer;
+        (movementsBy[manufacturer.id] ??= <CrateDepositMovement>[]).add(
+          CrateDepositMovement(
+            movementType: deposit.movementType,
+            signedAmountKobo: deposit.signedAmountKobo,
+            crateCount: deposit.crateCount,
+          ),
+        );
+      }
+
+      final pendingRows = input.pending;
+      final pendingBy = <String, List<PendingCrateDeposit>>{};
+      for (final p in pendingRows) {
+        if (!manufacturerRows.containsKey(p.manufacturerId)) {
+          // A brand whose FIRST delivery is still awaiting a decision has no
+          // ledger row yet, so the join above never saw it. It still belongs on
+          // the supplier's screen — "₦42,000 awaiting your confirmation" is
+          // exactly what the owner needs to see.
+          final m =
+              await (select(manufacturers)..where(
+                    (t) => t.id.equals(p.manufacturerId) & whereBusiness(t),
+                  ))
+                  .getSingleOrNull();
+          if (m == null) continue;
+          manufacturerRows[p.manufacturerId] = m;
+        }
+        (pendingBy[p.manufacturerId] ??= <PendingCrateDeposit>[]).add(
+          PendingCrateDeposit(
+            kind: p.kind,
+            requestedAmountKobo: p.requestedAmountKobo,
+            crateCount: p.crateCount,
+          ),
+        );
+      }
+
+      final out = <SupplierCrateDepositPosition>[];
+      for (final entry in manufacturerRows.entries) {
+        final manufacturer = entry.value;
+        final cratesOwed = await _supplierCratesOwed(
+          supplierId: supplierId,
+          manufacturerId: manufacturer.id,
+        );
+        out.add(
+          SupplierCrateDepositPosition(
+            manufacturerId: manufacturer.id,
+            manufacturerName: manufacturer.name,
+            position: computeCrateDepositPosition(
+              arrangement: crateMoneyArrangementOf(
+                manufacturer.crateMoneyArrangement,
+              ),
+              ratePerCrateKobo: manufacturer.depositAmountKobo,
+              movements: movementsBy[manufacturer.id] ?? const [],
+              pending: pendingBy[manufacturer.id] ?? const [],
+              cratesOwed: cratesOwed,
+              // Deliberately omitted — see the doc above. A shortfall is a
+              // brand-level question and this is a pair-level read.
+            ),
+          ),
+        );
+      }
+      out.sort((a, b) => a.manufacturerName.compareTo(b.manufacturerName));
+      return out;
+    });
+  }
+
+  /// `SUM(quantity_delta)` for one `(supplier, manufacturer)` pair — the
+  /// empties we still owe that supplier for their brand's full crates.
+  Future<int> _supplierCratesOwed({
+    required String supplierId,
+    required String manufacturerId,
+  }) async {
+    final sumExpr = supplierCrateLedger.quantityDelta.sum();
+    final row =
+        await (selectOnly(supplierCrateLedger)
+              ..addColumns([sumExpr])
+              ..where(
+                whereBusiness(supplierCrateLedger) &
+                    supplierCrateLedger.supplierId.equals(supplierId) &
+                    supplierCrateLedger.manufacturerId.equals(manufacturerId),
+              ))
+            .getSingleOrNull();
+    return row?.read(sumExpr) ?? 0;
   }
 
   // ── Shared helpers ─────────────────────────────────────────────────────

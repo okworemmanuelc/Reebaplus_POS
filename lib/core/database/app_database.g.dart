@@ -7377,6 +7377,2204 @@ class SupplierCrateBalancesCompanion
   }
 }
 
+class $SupplierCrateDepositRequestsTable extends SupplierCrateDepositRequests
+    with
+        TableInfo<
+          $SupplierCrateDepositRequestsTable,
+          SupplierCrateDepositRequestData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SupplierCrateDepositRequestsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _supplierIdMeta = const VerificationMeta(
+    'supplierId',
+  );
+  @override
+  late final GeneratedColumn<String> supplierId = GeneratedColumn<String>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES suppliers (id)',
+    ),
+  );
+  static const VerificationMeta _manufacturerIdMeta = const VerificationMeta(
+    'manufacturerId',
+  );
+  @override
+  late final GeneratedColumn<String> manufacturerId = GeneratedColumn<String>(
+    'manufacturer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturers (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _crateCountMeta = const VerificationMeta(
+    'crateCount',
+  );
+  @override
+  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+    'crate_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
+    'ratePerCrateKobo',
+  );
+  @override
+  late final GeneratedColumn<int> ratePerCrateKobo = GeneratedColumn<int>(
+    'rate_per_crate_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _requestedAmountKoboMeta =
+      const VerificationMeta('requestedAmountKobo');
+  @override
+  late final GeneratedColumn<int> requestedAmountKobo = GeneratedColumn<int>(
+    'requested_amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _settledAmountKoboMeta = const VerificationMeta(
+    'settledAmountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> settledAmountKobo = GeneratedColumn<int>(
+    'settled_amount_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paymentMethodMeta = const VerificationMeta(
+    'paymentMethod',
+  );
+  @override
+  late final GeneratedColumn<String> paymentMethod = GeneratedColumn<String>(
+    'payment_method',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _summaryMeta = const VerificationMeta(
+    'summary',
+  );
+  @override
+  late final GeneratedColumn<String> summary = GeneratedColumn<String>(
+    'summary',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _supplierCrateLedgerIdMeta =
+      const VerificationMeta('supplierCrateLedgerId');
+  @override
+  late final GeneratedColumn<String> supplierCrateLedgerId =
+      GeneratedColumn<String>(
+        'supplier_crate_ledger_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES supplier_crate_ledger (id)',
+        ),
+      );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _requestedByMeta = const VerificationMeta(
+    'requestedBy',
+  );
+  @override
+  late final GeneratedColumn<String> requestedBy = GeneratedColumn<String>(
+    'requested_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kCrateDepositRequestPending),
+  );
+  static const VerificationMeta _decidedByMeta = const VerificationMeta(
+    'decidedBy',
+  );
+  @override
+  late final GeneratedColumn<String> decidedBy = GeneratedColumn<String>(
+    'decided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _decidedAtMeta = const VerificationMeta(
+    'decidedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> decidedAt = GeneratedColumn<DateTime>(
+    'decided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _decisionNoteMeta = const VerificationMeta(
+    'decisionNote',
+  );
+  @override
+  late final GeneratedColumn<String> decisionNote = GeneratedColumn<String>(
+    'decision_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    supplierId,
+    manufacturerId,
+    storeId,
+    kind,
+    crateCount,
+    ratePerCrateKobo,
+    requestedAmountKobo,
+    settledAmountKobo,
+    paymentMethod,
+    summary,
+    supplierCrateLedgerId,
+    note,
+    requestedBy,
+    status,
+    decidedBy,
+    decidedAt,
+    decisionNote,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'supplier_crate_deposit_requests';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SupplierCrateDepositRequestData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('supplier_id')) {
+      context.handle(
+        _supplierIdMeta,
+        supplierId.isAcceptableOrUnknown(data['supplier_id']!, _supplierIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_supplierIdMeta);
+    }
+    if (data.containsKey('manufacturer_id')) {
+      context.handle(
+        _manufacturerIdMeta,
+        manufacturerId.isAcceptableOrUnknown(
+          data['manufacturer_id']!,
+          _manufacturerIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturerIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('crate_count')) {
+      context.handle(
+        _crateCountMeta,
+        crateCount.isAcceptableOrUnknown(data['crate_count']!, _crateCountMeta),
+      );
+    }
+    if (data.containsKey('rate_per_crate_kobo')) {
+      context.handle(
+        _ratePerCrateKoboMeta,
+        ratePerCrateKobo.isAcceptableOrUnknown(
+          data['rate_per_crate_kobo']!,
+          _ratePerCrateKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('requested_amount_kobo')) {
+      context.handle(
+        _requestedAmountKoboMeta,
+        requestedAmountKobo.isAcceptableOrUnknown(
+          data['requested_amount_kobo']!,
+          _requestedAmountKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('settled_amount_kobo')) {
+      context.handle(
+        _settledAmountKoboMeta,
+        settledAmountKobo.isAcceptableOrUnknown(
+          data['settled_amount_kobo']!,
+          _settledAmountKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payment_method')) {
+      context.handle(
+        _paymentMethodMeta,
+        paymentMethod.isAcceptableOrUnknown(
+          data['payment_method']!,
+          _paymentMethodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('summary')) {
+      context.handle(
+        _summaryMeta,
+        summary.isAcceptableOrUnknown(data['summary']!, _summaryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_summaryMeta);
+    }
+    if (data.containsKey('supplier_crate_ledger_id')) {
+      context.handle(
+        _supplierCrateLedgerIdMeta,
+        supplierCrateLedgerId.isAcceptableOrUnknown(
+          data['supplier_crate_ledger_id']!,
+          _supplierCrateLedgerIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('requested_by')) {
+      context.handle(
+        _requestedByMeta,
+        requestedBy.isAcceptableOrUnknown(
+          data['requested_by']!,
+          _requestedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('decided_by')) {
+      context.handle(
+        _decidedByMeta,
+        decidedBy.isAcceptableOrUnknown(data['decided_by']!, _decidedByMeta),
+      );
+    }
+    if (data.containsKey('decided_at')) {
+      context.handle(
+        _decidedAtMeta,
+        decidedAt.isAcceptableOrUnknown(data['decided_at']!, _decidedAtMeta),
+      );
+    }
+    if (data.containsKey('decision_note')) {
+      context.handle(
+        _decisionNoteMeta,
+        decisionNote.isAcceptableOrUnknown(
+          data['decision_note']!,
+          _decisionNoteMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SupplierCrateDepositRequestData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SupplierCrateDepositRequestData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      manufacturerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      crateCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}crate_count'],
+      )!,
+      ratePerCrateKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rate_per_crate_kobo'],
+      )!,
+      requestedAmountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}requested_amount_kobo'],
+      )!,
+      settledAmountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}settled_amount_kobo'],
+      ),
+      paymentMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_method'],
+      ),
+      summary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary'],
+      )!,
+      supplierCrateLedgerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}supplier_crate_ledger_id'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      requestedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}requested_by'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      decidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}decided_by'],
+      ),
+      decidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}decided_at'],
+      ),
+      decisionNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}decision_note'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SupplierCrateDepositRequestsTable createAlias(String alias) {
+    return $SupplierCrateDepositRequestsTable(attachedDatabase, alias);
+  }
+}
+
+class SupplierCrateDepositRequestData extends DataClass
+    implements Insertable<SupplierCrateDepositRequestData> {
+  final String id;
+  final String businessId;
+  final String supplierId;
+  final String manufacturerId;
+
+  /// The store the delivery landed in. NOT NULL, because it is the approver
+  /// scoping axis: a Manager sees their own stores' requests, the CEO sees all
+  /// — exactly how [StockAdjustmentRequests] scopes.
+  final String storeId;
+
+  /// One of [kCrateDepositRequestKinds].
+  final String kind;
+
+  /// Crates this money leg covers. Always >= 0; the direction is [kind]'s.
+  final int crateCount;
+
+  /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED when the request was
+  /// raised (ADR 0023 rule 2 — the single canonical rate). Snapshotted so a
+  /// rate edit next month cannot restate what a delivery last week asked for.
+  final int ratePerCrateKobo;
+
+  /// `crateCount × ratePerCrateKobo` — what the receipt implies is owed.
+  final int requestedAmountKobo;
+
+  /// What the approver ACTUALLY confirmed, which may be less (a part payment, a
+  /// waived deposit) or more. NULL until a decision is made, and NULL forever
+  /// on a rejected request — nothing moved, so there is no amount to record.
+  final int? settledAmountKobo;
+
+  /// How the money moved, chosen at confirmation. One of the
+  /// `payment_transactions.method` values. NULL until then.
+  final String? paymentMethod;
+
+  /// Denormalised human headline ("8 crates of Star from Ade Depot"), so the
+  /// approval card renders without cross-table joins — the
+  /// [StockAdjustmentRequests] pattern.
+  final String summary;
+
+  /// The crate-leg ledger row that raised this. The link is what makes the two
+  /// halves of ADR 0023 rule 6 auditable as one delivery.
+  final String? supplierCrateLedgerId;
+  final String? note;
+  final String? requestedBy;
+
+  /// One of [kCrateDepositRequestStatuses]. Monotonic: `pending` →
+  /// `confirmed`/`rejected`, never back (the sync registry's
+  /// `Restore.monotonicStatus` enforces it — issue #115).
+  final String status;
+  final String? decidedBy;
+  final DateTime? decidedAt;
+  final String? decisionNote;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const SupplierCrateDepositRequestData({
+    required this.id,
+    required this.businessId,
+    required this.supplierId,
+    required this.manufacturerId,
+    required this.storeId,
+    required this.kind,
+    required this.crateCount,
+    required this.ratePerCrateKobo,
+    required this.requestedAmountKobo,
+    this.settledAmountKobo,
+    this.paymentMethod,
+    required this.summary,
+    this.supplierCrateLedgerId,
+    this.note,
+    this.requestedBy,
+    required this.status,
+    this.decidedBy,
+    this.decidedAt,
+    this.decisionNote,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['supplier_id'] = Variable<String>(supplierId);
+    map['manufacturer_id'] = Variable<String>(manufacturerId);
+    map['store_id'] = Variable<String>(storeId);
+    map['kind'] = Variable<String>(kind);
+    map['crate_count'] = Variable<int>(crateCount);
+    map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
+    map['requested_amount_kobo'] = Variable<int>(requestedAmountKobo);
+    if (!nullToAbsent || settledAmountKobo != null) {
+      map['settled_amount_kobo'] = Variable<int>(settledAmountKobo);
+    }
+    if (!nullToAbsent || paymentMethod != null) {
+      map['payment_method'] = Variable<String>(paymentMethod);
+    }
+    map['summary'] = Variable<String>(summary);
+    if (!nullToAbsent || supplierCrateLedgerId != null) {
+      map['supplier_crate_ledger_id'] = Variable<String>(supplierCrateLedgerId);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || requestedBy != null) {
+      map['requested_by'] = Variable<String>(requestedBy);
+    }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || decidedBy != null) {
+      map['decided_by'] = Variable<String>(decidedBy);
+    }
+    if (!nullToAbsent || decidedAt != null) {
+      map['decided_at'] = Variable<DateTime>(decidedAt);
+    }
+    if (!nullToAbsent || decisionNote != null) {
+      map['decision_note'] = Variable<String>(decisionNote);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  SupplierCrateDepositRequestsCompanion toCompanion(bool nullToAbsent) {
+    return SupplierCrateDepositRequestsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      supplierId: Value(supplierId),
+      manufacturerId: Value(manufacturerId),
+      storeId: Value(storeId),
+      kind: Value(kind),
+      crateCount: Value(crateCount),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
+      requestedAmountKobo: Value(requestedAmountKobo),
+      settledAmountKobo: settledAmountKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledAmountKobo),
+      paymentMethod: paymentMethod == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethod),
+      summary: Value(summary),
+      supplierCrateLedgerId: supplierCrateLedgerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(supplierCrateLedgerId),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      requestedBy: requestedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(requestedBy),
+      status: Value(status),
+      decidedBy: decidedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decidedBy),
+      decidedAt: decidedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decidedAt),
+      decisionNote: decisionNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decisionNote),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory SupplierCrateDepositRequestData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SupplierCrateDepositRequestData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      supplierId: serializer.fromJson<String>(json['supplierId']),
+      manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      crateCount: serializer.fromJson<int>(json['crateCount']),
+      ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
+      requestedAmountKobo: serializer.fromJson<int>(
+        json['requestedAmountKobo'],
+      ),
+      settledAmountKobo: serializer.fromJson<int?>(json['settledAmountKobo']),
+      paymentMethod: serializer.fromJson<String?>(json['paymentMethod']),
+      summary: serializer.fromJson<String>(json['summary']),
+      supplierCrateLedgerId: serializer.fromJson<String?>(
+        json['supplierCrateLedgerId'],
+      ),
+      note: serializer.fromJson<String?>(json['note']),
+      requestedBy: serializer.fromJson<String?>(json['requestedBy']),
+      status: serializer.fromJson<String>(json['status']),
+      decidedBy: serializer.fromJson<String?>(json['decidedBy']),
+      decidedAt: serializer.fromJson<DateTime?>(json['decidedAt']),
+      decisionNote: serializer.fromJson<String?>(json['decisionNote']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'supplierId': serializer.toJson<String>(supplierId),
+      'manufacturerId': serializer.toJson<String>(manufacturerId),
+      'storeId': serializer.toJson<String>(storeId),
+      'kind': serializer.toJson<String>(kind),
+      'crateCount': serializer.toJson<int>(crateCount),
+      'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
+      'requestedAmountKobo': serializer.toJson<int>(requestedAmountKobo),
+      'settledAmountKobo': serializer.toJson<int?>(settledAmountKobo),
+      'paymentMethod': serializer.toJson<String?>(paymentMethod),
+      'summary': serializer.toJson<String>(summary),
+      'supplierCrateLedgerId': serializer.toJson<String?>(
+        supplierCrateLedgerId,
+      ),
+      'note': serializer.toJson<String?>(note),
+      'requestedBy': serializer.toJson<String?>(requestedBy),
+      'status': serializer.toJson<String>(status),
+      'decidedBy': serializer.toJson<String?>(decidedBy),
+      'decidedAt': serializer.toJson<DateTime?>(decidedAt),
+      'decisionNote': serializer.toJson<String?>(decisionNote),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  SupplierCrateDepositRequestData copyWith({
+    String? id,
+    String? businessId,
+    String? supplierId,
+    String? manufacturerId,
+    String? storeId,
+    String? kind,
+    int? crateCount,
+    int? ratePerCrateKobo,
+    int? requestedAmountKobo,
+    Value<int?> settledAmountKobo = const Value.absent(),
+    Value<String?> paymentMethod = const Value.absent(),
+    String? summary,
+    Value<String?> supplierCrateLedgerId = const Value.absent(),
+    Value<String?> note = const Value.absent(),
+    Value<String?> requestedBy = const Value.absent(),
+    String? status,
+    Value<String?> decidedBy = const Value.absent(),
+    Value<DateTime?> decidedAt = const Value.absent(),
+    Value<String?> decisionNote = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => SupplierCrateDepositRequestData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    supplierId: supplierId ?? this.supplierId,
+    manufacturerId: manufacturerId ?? this.manufacturerId,
+    storeId: storeId ?? this.storeId,
+    kind: kind ?? this.kind,
+    crateCount: crateCount ?? this.crateCount,
+    ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+    requestedAmountKobo: requestedAmountKobo ?? this.requestedAmountKobo,
+    settledAmountKobo: settledAmountKobo.present
+        ? settledAmountKobo.value
+        : this.settledAmountKobo,
+    paymentMethod: paymentMethod.present
+        ? paymentMethod.value
+        : this.paymentMethod,
+    summary: summary ?? this.summary,
+    supplierCrateLedgerId: supplierCrateLedgerId.present
+        ? supplierCrateLedgerId.value
+        : this.supplierCrateLedgerId,
+    note: note.present ? note.value : this.note,
+    requestedBy: requestedBy.present ? requestedBy.value : this.requestedBy,
+    status: status ?? this.status,
+    decidedBy: decidedBy.present ? decidedBy.value : this.decidedBy,
+    decidedAt: decidedAt.present ? decidedAt.value : this.decidedAt,
+    decisionNote: decisionNote.present ? decisionNote.value : this.decisionNote,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  SupplierCrateDepositRequestData copyWithCompanion(
+    SupplierCrateDepositRequestsCompanion data,
+  ) {
+    return SupplierCrateDepositRequestData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      supplierId: data.supplierId.present
+          ? data.supplierId.value
+          : this.supplierId,
+      manufacturerId: data.manufacturerId.present
+          ? data.manufacturerId.value
+          : this.manufacturerId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      crateCount: data.crateCount.present
+          ? data.crateCount.value
+          : this.crateCount,
+      ratePerCrateKobo: data.ratePerCrateKobo.present
+          ? data.ratePerCrateKobo.value
+          : this.ratePerCrateKobo,
+      requestedAmountKobo: data.requestedAmountKobo.present
+          ? data.requestedAmountKobo.value
+          : this.requestedAmountKobo,
+      settledAmountKobo: data.settledAmountKobo.present
+          ? data.settledAmountKobo.value
+          : this.settledAmountKobo,
+      paymentMethod: data.paymentMethod.present
+          ? data.paymentMethod.value
+          : this.paymentMethod,
+      summary: data.summary.present ? data.summary.value : this.summary,
+      supplierCrateLedgerId: data.supplierCrateLedgerId.present
+          ? data.supplierCrateLedgerId.value
+          : this.supplierCrateLedgerId,
+      note: data.note.present ? data.note.value : this.note,
+      requestedBy: data.requestedBy.present
+          ? data.requestedBy.value
+          : this.requestedBy,
+      status: data.status.present ? data.status.value : this.status,
+      decidedBy: data.decidedBy.present ? data.decidedBy.value : this.decidedBy,
+      decidedAt: data.decidedAt.present ? data.decidedAt.value : this.decidedAt,
+      decisionNote: data.decisionNote.present
+          ? data.decisionNote.value
+          : this.decisionNote,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SupplierCrateDepositRequestData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('kind: $kind, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('requestedAmountKobo: $requestedAmountKobo, ')
+          ..write('settledAmountKobo: $settledAmountKobo, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('summary: $summary, ')
+          ..write('supplierCrateLedgerId: $supplierCrateLedgerId, ')
+          ..write('note: $note, ')
+          ..write('requestedBy: $requestedBy, ')
+          ..write('status: $status, ')
+          ..write('decidedBy: $decidedBy, ')
+          ..write('decidedAt: $decidedAt, ')
+          ..write('decisionNote: $decisionNote, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    businessId,
+    supplierId,
+    manufacturerId,
+    storeId,
+    kind,
+    crateCount,
+    ratePerCrateKobo,
+    requestedAmountKobo,
+    settledAmountKobo,
+    paymentMethod,
+    summary,
+    supplierCrateLedgerId,
+    note,
+    requestedBy,
+    status,
+    decidedBy,
+    decidedAt,
+    decisionNote,
+    createdAt,
+    lastUpdatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SupplierCrateDepositRequestData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.supplierId == this.supplierId &&
+          other.manufacturerId == this.manufacturerId &&
+          other.storeId == this.storeId &&
+          other.kind == this.kind &&
+          other.crateCount == this.crateCount &&
+          other.ratePerCrateKobo == this.ratePerCrateKobo &&
+          other.requestedAmountKobo == this.requestedAmountKobo &&
+          other.settledAmountKobo == this.settledAmountKobo &&
+          other.paymentMethod == this.paymentMethod &&
+          other.summary == this.summary &&
+          other.supplierCrateLedgerId == this.supplierCrateLedgerId &&
+          other.note == this.note &&
+          other.requestedBy == this.requestedBy &&
+          other.status == this.status &&
+          other.decidedBy == this.decidedBy &&
+          other.decidedAt == this.decidedAt &&
+          other.decisionNote == this.decisionNote &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class SupplierCrateDepositRequestsCompanion
+    extends UpdateCompanion<SupplierCrateDepositRequestData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> supplierId;
+  final Value<String> manufacturerId;
+  final Value<String> storeId;
+  final Value<String> kind;
+  final Value<int> crateCount;
+  final Value<int> ratePerCrateKobo;
+  final Value<int> requestedAmountKobo;
+  final Value<int?> settledAmountKobo;
+  final Value<String?> paymentMethod;
+  final Value<String> summary;
+  final Value<String?> supplierCrateLedgerId;
+  final Value<String?> note;
+  final Value<String?> requestedBy;
+  final Value<String> status;
+  final Value<String?> decidedBy;
+  final Value<DateTime?> decidedAt;
+  final Value<String?> decisionNote;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const SupplierCrateDepositRequestsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.supplierId = const Value.absent(),
+    this.manufacturerId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.requestedAmountKobo = const Value.absent(),
+    this.settledAmountKobo = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.supplierCrateLedgerId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.requestedBy = const Value.absent(),
+    this.status = const Value.absent(),
+    this.decidedBy = const Value.absent(),
+    this.decidedAt = const Value.absent(),
+    this.decisionNote = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SupplierCrateDepositRequestsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String supplierId,
+    required String manufacturerId,
+    required String storeId,
+    required String kind,
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.requestedAmountKobo = const Value.absent(),
+    this.settledAmountKobo = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    required String summary,
+    this.supplierCrateLedgerId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.requestedBy = const Value.absent(),
+    this.status = const Value.absent(),
+    this.decidedBy = const Value.absent(),
+    this.decidedAt = const Value.absent(),
+    this.decisionNote = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       supplierId = Value(supplierId),
+       manufacturerId = Value(manufacturerId),
+       storeId = Value(storeId),
+       kind = Value(kind),
+       summary = Value(summary);
+  static Insertable<SupplierCrateDepositRequestData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? supplierId,
+    Expression<String>? manufacturerId,
+    Expression<String>? storeId,
+    Expression<String>? kind,
+    Expression<int>? crateCount,
+    Expression<int>? ratePerCrateKobo,
+    Expression<int>? requestedAmountKobo,
+    Expression<int>? settledAmountKobo,
+    Expression<String>? paymentMethod,
+    Expression<String>? summary,
+    Expression<String>? supplierCrateLedgerId,
+    Expression<String>? note,
+    Expression<String>? requestedBy,
+    Expression<String>? status,
+    Expression<String>? decidedBy,
+    Expression<DateTime>? decidedAt,
+    Expression<String>? decisionNote,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (supplierId != null) 'supplier_id': supplierId,
+      if (manufacturerId != null) 'manufacturer_id': manufacturerId,
+      if (storeId != null) 'store_id': storeId,
+      if (kind != null) 'kind': kind,
+      if (crateCount != null) 'crate_count': crateCount,
+      if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
+      if (requestedAmountKobo != null)
+        'requested_amount_kobo': requestedAmountKobo,
+      if (settledAmountKobo != null) 'settled_amount_kobo': settledAmountKobo,
+      if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (summary != null) 'summary': summary,
+      if (supplierCrateLedgerId != null)
+        'supplier_crate_ledger_id': supplierCrateLedgerId,
+      if (note != null) 'note': note,
+      if (requestedBy != null) 'requested_by': requestedBy,
+      if (status != null) 'status': status,
+      if (decidedBy != null) 'decided_by': decidedBy,
+      if (decidedAt != null) 'decided_at': decidedAt,
+      if (decisionNote != null) 'decision_note': decisionNote,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SupplierCrateDepositRequestsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? supplierId,
+    Value<String>? manufacturerId,
+    Value<String>? storeId,
+    Value<String>? kind,
+    Value<int>? crateCount,
+    Value<int>? ratePerCrateKobo,
+    Value<int>? requestedAmountKobo,
+    Value<int?>? settledAmountKobo,
+    Value<String?>? paymentMethod,
+    Value<String>? summary,
+    Value<String?>? supplierCrateLedgerId,
+    Value<String?>? note,
+    Value<String?>? requestedBy,
+    Value<String>? status,
+    Value<String?>? decidedBy,
+    Value<DateTime?>? decidedAt,
+    Value<String?>? decisionNote,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return SupplierCrateDepositRequestsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      supplierId: supplierId ?? this.supplierId,
+      manufacturerId: manufacturerId ?? this.manufacturerId,
+      storeId: storeId ?? this.storeId,
+      kind: kind ?? this.kind,
+      crateCount: crateCount ?? this.crateCount,
+      ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+      requestedAmountKobo: requestedAmountKobo ?? this.requestedAmountKobo,
+      settledAmountKobo: settledAmountKobo ?? this.settledAmountKobo,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      summary: summary ?? this.summary,
+      supplierCrateLedgerId:
+          supplierCrateLedgerId ?? this.supplierCrateLedgerId,
+      note: note ?? this.note,
+      requestedBy: requestedBy ?? this.requestedBy,
+      status: status ?? this.status,
+      decidedBy: decidedBy ?? this.decidedBy,
+      decidedAt: decidedAt ?? this.decidedAt,
+      decisionNote: decisionNote ?? this.decisionNote,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (supplierId.present) {
+      map['supplier_id'] = Variable<String>(supplierId.value);
+    }
+    if (manufacturerId.present) {
+      map['manufacturer_id'] = Variable<String>(manufacturerId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (crateCount.present) {
+      map['crate_count'] = Variable<int>(crateCount.value);
+    }
+    if (ratePerCrateKobo.present) {
+      map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
+    }
+    if (requestedAmountKobo.present) {
+      map['requested_amount_kobo'] = Variable<int>(requestedAmountKobo.value);
+    }
+    if (settledAmountKobo.present) {
+      map['settled_amount_kobo'] = Variable<int>(settledAmountKobo.value);
+    }
+    if (paymentMethod.present) {
+      map['payment_method'] = Variable<String>(paymentMethod.value);
+    }
+    if (summary.present) {
+      map['summary'] = Variable<String>(summary.value);
+    }
+    if (supplierCrateLedgerId.present) {
+      map['supplier_crate_ledger_id'] = Variable<String>(
+        supplierCrateLedgerId.value,
+      );
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (requestedBy.present) {
+      map['requested_by'] = Variable<String>(requestedBy.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (decidedBy.present) {
+      map['decided_by'] = Variable<String>(decidedBy.value);
+    }
+    if (decidedAt.present) {
+      map['decided_at'] = Variable<DateTime>(decidedAt.value);
+    }
+    if (decisionNote.present) {
+      map['decision_note'] = Variable<String>(decisionNote.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SupplierCrateDepositRequestsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('kind: $kind, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('requestedAmountKobo: $requestedAmountKobo, ')
+          ..write('settledAmountKobo: $settledAmountKobo, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('summary: $summary, ')
+          ..write('supplierCrateLedgerId: $supplierCrateLedgerId, ')
+          ..write('note: $note, ')
+          ..write('requestedBy: $requestedBy, ')
+          ..write('status: $status, ')
+          ..write('decidedBy: $decidedBy, ')
+          ..write('decidedAt: $decidedAt, ')
+          ..write('decisionNote: $decisionNote, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SupplierCrateDepositsTable extends SupplierCrateDeposits
+    with TableInfo<$SupplierCrateDepositsTable, SupplierCrateDepositData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SupplierCrateDepositsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _supplierIdMeta = const VerificationMeta(
+    'supplierId',
+  );
+  @override
+  late final GeneratedColumn<String> supplierId = GeneratedColumn<String>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES suppliers (id)',
+    ),
+  );
+  static const VerificationMeta _manufacturerIdMeta = const VerificationMeta(
+    'manufacturerId',
+  );
+  @override
+  late final GeneratedColumn<String> manufacturerId = GeneratedColumn<String>(
+    'manufacturer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturers (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _movementTypeMeta = const VerificationMeta(
+    'movementType',
+  );
+  @override
+  late final GeneratedColumn<String> movementType = GeneratedColumn<String>(
+    'movement_type',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 32,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signedAmountKoboMeta = const VerificationMeta(
+    'signedAmountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> signedAmountKobo = GeneratedColumn<int>(
+    'signed_amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _crateCountMeta = const VerificationMeta(
+    'crateCount',
+  );
+  @override
+  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+    'crate_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
+    'ratePerCrateKobo',
+  );
+  @override
+  late final GeneratedColumn<int> ratePerCrateKobo = GeneratedColumn<int>(
+    'rate_per_crate_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _requestIdMeta = const VerificationMeta(
+    'requestId',
+  );
+  @override
+  late final GeneratedColumn<String> requestId = GeneratedColumn<String>(
+    'request_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES supplier_crate_deposit_requests (id)',
+    ),
+  );
+  static const VerificationMeta _supplierCrateLedgerIdMeta =
+      const VerificationMeta('supplierCrateLedgerId');
+  @override
+  late final GeneratedColumn<String> supplierCrateLedgerId =
+      GeneratedColumn<String>(
+        'supplier_crate_ledger_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES supplier_crate_ledger (id)',
+        ),
+      );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _performedByMeta = const VerificationMeta(
+    'performedBy',
+  );
+  @override
+  late final GeneratedColumn<String> performedBy = GeneratedColumn<String>(
+    'performed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    supplierId,
+    manufacturerId,
+    storeId,
+    movementType,
+    signedAmountKobo,
+    crateCount,
+    ratePerCrateKobo,
+    requestId,
+    supplierCrateLedgerId,
+    note,
+    performedBy,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'supplier_crate_deposits';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SupplierCrateDepositData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('supplier_id')) {
+      context.handle(
+        _supplierIdMeta,
+        supplierId.isAcceptableOrUnknown(data['supplier_id']!, _supplierIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_supplierIdMeta);
+    }
+    if (data.containsKey('manufacturer_id')) {
+      context.handle(
+        _manufacturerIdMeta,
+        manufacturerId.isAcceptableOrUnknown(
+          data['manufacturer_id']!,
+          _manufacturerIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturerIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    }
+    if (data.containsKey('movement_type')) {
+      context.handle(
+        _movementTypeMeta,
+        movementType.isAcceptableOrUnknown(
+          data['movement_type']!,
+          _movementTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_movementTypeMeta);
+    }
+    if (data.containsKey('signed_amount_kobo')) {
+      context.handle(
+        _signedAmountKoboMeta,
+        signedAmountKobo.isAcceptableOrUnknown(
+          data['signed_amount_kobo']!,
+          _signedAmountKoboMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signedAmountKoboMeta);
+    }
+    if (data.containsKey('crate_count')) {
+      context.handle(
+        _crateCountMeta,
+        crateCount.isAcceptableOrUnknown(data['crate_count']!, _crateCountMeta),
+      );
+    }
+    if (data.containsKey('rate_per_crate_kobo')) {
+      context.handle(
+        _ratePerCrateKoboMeta,
+        ratePerCrateKobo.isAcceptableOrUnknown(
+          data['rate_per_crate_kobo']!,
+          _ratePerCrateKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('request_id')) {
+      context.handle(
+        _requestIdMeta,
+        requestId.isAcceptableOrUnknown(data['request_id']!, _requestIdMeta),
+      );
+    }
+    if (data.containsKey('supplier_crate_ledger_id')) {
+      context.handle(
+        _supplierCrateLedgerIdMeta,
+        supplierCrateLedgerId.isAcceptableOrUnknown(
+          data['supplier_crate_ledger_id']!,
+          _supplierCrateLedgerIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('performed_by')) {
+      context.handle(
+        _performedByMeta,
+        performedBy.isAcceptableOrUnknown(
+          data['performed_by']!,
+          _performedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SupplierCrateDepositData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SupplierCrateDepositData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      manufacturerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      ),
+      movementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}movement_type'],
+      )!,
+      signedAmountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_amount_kobo'],
+      )!,
+      crateCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}crate_count'],
+      )!,
+      ratePerCrateKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rate_per_crate_kobo'],
+      )!,
+      requestId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_id'],
+      ),
+      supplierCrateLedgerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}supplier_crate_ledger_id'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      performedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}performed_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SupplierCrateDepositsTable createAlias(String alias) {
+    return $SupplierCrateDepositsTable(attachedDatabase, alias);
+  }
+}
+
+class SupplierCrateDepositData extends DataClass
+    implements Insertable<SupplierCrateDepositData> {
+  final String id;
+  final String businessId;
+  final String supplierId;
+  final String manufacturerId;
+
+  /// The store the movement is attributed to. Nullable, matching
+  /// [SupplierCrateLedger]: a standing-float top-up (#214) belongs to the
+  /// business, not to a store.
+  final String? storeId;
+
+  /// One of [kCrateDepositMovementTypes].
+  final String movementType;
+
+  /// **+ = money placed with the supplier; − = money back to us.** The balance
+  /// is the signed sum of this column and nothing else.
+  final int signedAmountKobo;
+
+  /// Crates this movement covers, signed the same way. 0 on the standing-float
+  /// movements and on a standalone money settlement that carries no goods.
+  final int crateCount;
+
+  /// The per-crate rate this movement was valued at, snapshotted. A later rate
+  /// edit must not restate money that has already moved.
+  final int ratePerCrateKobo;
+
+  /// The approved request this came from, when there was one. NULL for a
+  /// movement a money-permitted role posted directly (they need no approval)
+  /// and for `adjustment` corrections.
+  final String? requestId;
+
+  /// The crate-count ledger row this money leg answers, when there is one.
+  final String? supplierCrateLedgerId;
+  final String? note;
+  final String? performedBy;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const SupplierCrateDepositData({
+    required this.id,
+    required this.businessId,
+    required this.supplierId,
+    required this.manufacturerId,
+    this.storeId,
+    required this.movementType,
+    required this.signedAmountKobo,
+    required this.crateCount,
+    required this.ratePerCrateKobo,
+    this.requestId,
+    this.supplierCrateLedgerId,
+    this.note,
+    this.performedBy,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['supplier_id'] = Variable<String>(supplierId);
+    map['manufacturer_id'] = Variable<String>(manufacturerId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
+    }
+    map['movement_type'] = Variable<String>(movementType);
+    map['signed_amount_kobo'] = Variable<int>(signedAmountKobo);
+    map['crate_count'] = Variable<int>(crateCount);
+    map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
+    if (!nullToAbsent || requestId != null) {
+      map['request_id'] = Variable<String>(requestId);
+    }
+    if (!nullToAbsent || supplierCrateLedgerId != null) {
+      map['supplier_crate_ledger_id'] = Variable<String>(supplierCrateLedgerId);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || performedBy != null) {
+      map['performed_by'] = Variable<String>(performedBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  SupplierCrateDepositsCompanion toCompanion(bool nullToAbsent) {
+    return SupplierCrateDepositsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      supplierId: Value(supplierId),
+      manufacturerId: Value(manufacturerId),
+      storeId: storeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeId),
+      movementType: Value(movementType),
+      signedAmountKobo: Value(signedAmountKobo),
+      crateCount: Value(crateCount),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
+      requestId: requestId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(requestId),
+      supplierCrateLedgerId: supplierCrateLedgerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(supplierCrateLedgerId),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      performedBy: performedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(performedBy),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory SupplierCrateDepositData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SupplierCrateDepositData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      supplierId: serializer.fromJson<String>(json['supplierId']),
+      manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
+      movementType: serializer.fromJson<String>(json['movementType']),
+      signedAmountKobo: serializer.fromJson<int>(json['signedAmountKobo']),
+      crateCount: serializer.fromJson<int>(json['crateCount']),
+      ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
+      requestId: serializer.fromJson<String?>(json['requestId']),
+      supplierCrateLedgerId: serializer.fromJson<String?>(
+        json['supplierCrateLedgerId'],
+      ),
+      note: serializer.fromJson<String?>(json['note']),
+      performedBy: serializer.fromJson<String?>(json['performedBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'supplierId': serializer.toJson<String>(supplierId),
+      'manufacturerId': serializer.toJson<String>(manufacturerId),
+      'storeId': serializer.toJson<String?>(storeId),
+      'movementType': serializer.toJson<String>(movementType),
+      'signedAmountKobo': serializer.toJson<int>(signedAmountKobo),
+      'crateCount': serializer.toJson<int>(crateCount),
+      'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
+      'requestId': serializer.toJson<String?>(requestId),
+      'supplierCrateLedgerId': serializer.toJson<String?>(
+        supplierCrateLedgerId,
+      ),
+      'note': serializer.toJson<String?>(note),
+      'performedBy': serializer.toJson<String?>(performedBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  SupplierCrateDepositData copyWith({
+    String? id,
+    String? businessId,
+    String? supplierId,
+    String? manufacturerId,
+    Value<String?> storeId = const Value.absent(),
+    String? movementType,
+    int? signedAmountKobo,
+    int? crateCount,
+    int? ratePerCrateKobo,
+    Value<String?> requestId = const Value.absent(),
+    Value<String?> supplierCrateLedgerId = const Value.absent(),
+    Value<String?> note = const Value.absent(),
+    Value<String?> performedBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => SupplierCrateDepositData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    supplierId: supplierId ?? this.supplierId,
+    manufacturerId: manufacturerId ?? this.manufacturerId,
+    storeId: storeId.present ? storeId.value : this.storeId,
+    movementType: movementType ?? this.movementType,
+    signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
+    crateCount: crateCount ?? this.crateCount,
+    ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+    requestId: requestId.present ? requestId.value : this.requestId,
+    supplierCrateLedgerId: supplierCrateLedgerId.present
+        ? supplierCrateLedgerId.value
+        : this.supplierCrateLedgerId,
+    note: note.present ? note.value : this.note,
+    performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  SupplierCrateDepositData copyWithCompanion(
+    SupplierCrateDepositsCompanion data,
+  ) {
+    return SupplierCrateDepositData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      supplierId: data.supplierId.present
+          ? data.supplierId.value
+          : this.supplierId,
+      manufacturerId: data.manufacturerId.present
+          ? data.manufacturerId.value
+          : this.manufacturerId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      movementType: data.movementType.present
+          ? data.movementType.value
+          : this.movementType,
+      signedAmountKobo: data.signedAmountKobo.present
+          ? data.signedAmountKobo.value
+          : this.signedAmountKobo,
+      crateCount: data.crateCount.present
+          ? data.crateCount.value
+          : this.crateCount,
+      ratePerCrateKobo: data.ratePerCrateKobo.present
+          ? data.ratePerCrateKobo.value
+          : this.ratePerCrateKobo,
+      requestId: data.requestId.present ? data.requestId.value : this.requestId,
+      supplierCrateLedgerId: data.supplierCrateLedgerId.present
+          ? data.supplierCrateLedgerId.value
+          : this.supplierCrateLedgerId,
+      note: data.note.present ? data.note.value : this.note,
+      performedBy: data.performedBy.present
+          ? data.performedBy.value
+          : this.performedBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SupplierCrateDepositData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('movementType: $movementType, ')
+          ..write('signedAmountKobo: $signedAmountKobo, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('requestId: $requestId, ')
+          ..write('supplierCrateLedgerId: $supplierCrateLedgerId, ')
+          ..write('note: $note, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    supplierId,
+    manufacturerId,
+    storeId,
+    movementType,
+    signedAmountKobo,
+    crateCount,
+    ratePerCrateKobo,
+    requestId,
+    supplierCrateLedgerId,
+    note,
+    performedBy,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SupplierCrateDepositData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.supplierId == this.supplierId &&
+          other.manufacturerId == this.manufacturerId &&
+          other.storeId == this.storeId &&
+          other.movementType == this.movementType &&
+          other.signedAmountKobo == this.signedAmountKobo &&
+          other.crateCount == this.crateCount &&
+          other.ratePerCrateKobo == this.ratePerCrateKobo &&
+          other.requestId == this.requestId &&
+          other.supplierCrateLedgerId == this.supplierCrateLedgerId &&
+          other.note == this.note &&
+          other.performedBy == this.performedBy &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class SupplierCrateDepositsCompanion
+    extends UpdateCompanion<SupplierCrateDepositData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> supplierId;
+  final Value<String> manufacturerId;
+  final Value<String?> storeId;
+  final Value<String> movementType;
+  final Value<int> signedAmountKobo;
+  final Value<int> crateCount;
+  final Value<int> ratePerCrateKobo;
+  final Value<String?> requestId;
+  final Value<String?> supplierCrateLedgerId;
+  final Value<String?> note;
+  final Value<String?> performedBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const SupplierCrateDepositsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.supplierId = const Value.absent(),
+    this.manufacturerId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.movementType = const Value.absent(),
+    this.signedAmountKobo = const Value.absent(),
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.requestId = const Value.absent(),
+    this.supplierCrateLedgerId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SupplierCrateDepositsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String supplierId,
+    required String manufacturerId,
+    this.storeId = const Value.absent(),
+    required String movementType,
+    required int signedAmountKobo,
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.requestId = const Value.absent(),
+    this.supplierCrateLedgerId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       supplierId = Value(supplierId),
+       manufacturerId = Value(manufacturerId),
+       movementType = Value(movementType),
+       signedAmountKobo = Value(signedAmountKobo);
+  static Insertable<SupplierCrateDepositData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? supplierId,
+    Expression<String>? manufacturerId,
+    Expression<String>? storeId,
+    Expression<String>? movementType,
+    Expression<int>? signedAmountKobo,
+    Expression<int>? crateCount,
+    Expression<int>? ratePerCrateKobo,
+    Expression<String>? requestId,
+    Expression<String>? supplierCrateLedgerId,
+    Expression<String>? note,
+    Expression<String>? performedBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (supplierId != null) 'supplier_id': supplierId,
+      if (manufacturerId != null) 'manufacturer_id': manufacturerId,
+      if (storeId != null) 'store_id': storeId,
+      if (movementType != null) 'movement_type': movementType,
+      if (signedAmountKobo != null) 'signed_amount_kobo': signedAmountKobo,
+      if (crateCount != null) 'crate_count': crateCount,
+      if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
+      if (requestId != null) 'request_id': requestId,
+      if (supplierCrateLedgerId != null)
+        'supplier_crate_ledger_id': supplierCrateLedgerId,
+      if (note != null) 'note': note,
+      if (performedBy != null) 'performed_by': performedBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SupplierCrateDepositsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? supplierId,
+    Value<String>? manufacturerId,
+    Value<String?>? storeId,
+    Value<String>? movementType,
+    Value<int>? signedAmountKobo,
+    Value<int>? crateCount,
+    Value<int>? ratePerCrateKobo,
+    Value<String?>? requestId,
+    Value<String?>? supplierCrateLedgerId,
+    Value<String?>? note,
+    Value<String?>? performedBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return SupplierCrateDepositsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      supplierId: supplierId ?? this.supplierId,
+      manufacturerId: manufacturerId ?? this.manufacturerId,
+      storeId: storeId ?? this.storeId,
+      movementType: movementType ?? this.movementType,
+      signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
+      crateCount: crateCount ?? this.crateCount,
+      ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+      requestId: requestId ?? this.requestId,
+      supplierCrateLedgerId:
+          supplierCrateLedgerId ?? this.supplierCrateLedgerId,
+      note: note ?? this.note,
+      performedBy: performedBy ?? this.performedBy,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (supplierId.present) {
+      map['supplier_id'] = Variable<String>(supplierId.value);
+    }
+    if (manufacturerId.present) {
+      map['manufacturer_id'] = Variable<String>(manufacturerId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (movementType.present) {
+      map['movement_type'] = Variable<String>(movementType.value);
+    }
+    if (signedAmountKobo.present) {
+      map['signed_amount_kobo'] = Variable<int>(signedAmountKobo.value);
+    }
+    if (crateCount.present) {
+      map['crate_count'] = Variable<int>(crateCount.value);
+    }
+    if (ratePerCrateKobo.present) {
+      map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
+    }
+    if (requestId.present) {
+      map['request_id'] = Variable<String>(requestId.value);
+    }
+    if (supplierCrateLedgerId.present) {
+      map['supplier_crate_ledger_id'] = Variable<String>(
+        supplierCrateLedgerId.value,
+      );
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (performedBy.present) {
+      map['performed_by'] = Variable<String>(performedBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SupplierCrateDepositsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('movementType: $movementType, ')
+          ..write('signedAmountKobo: $signedAmountKobo, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('requestId: $requestId, ')
+          ..write('supplierCrateLedgerId: $supplierCrateLedgerId, ')
+          ..write('note: $note, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ProductsTable extends Products
     with TableInfo<$ProductsTable, ProductData> {
   @override
@@ -29485,6 +31683,20 @@ class $PaymentTransactionsTable extends PaymentTransactions
       'REFERENCES van_trips (id)',
     ),
   );
+  static const VerificationMeta _crateDepositIdMeta = const VerificationMeta(
+    'crateDepositId',
+  );
+  @override
+  late final GeneratedColumn<String> crateDepositId = GeneratedColumn<String>(
+    'crate_deposit_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES supplier_crate_deposits (id)',
+    ),
+  );
   static const VerificationMeta _performedByMeta = const VerificationMeta(
     'performedBy',
   );
@@ -29574,6 +31786,7 @@ class $PaymentTransactionsTable extends PaymentTransactions
     walletTxnId,
     deliveryId,
     vanTripId,
+    crateDepositId,
     performedBy,
     voidedAt,
     voidedBy,
@@ -29671,6 +31884,15 @@ class $PaymentTransactionsTable extends PaymentTransactions
       context.handle(
         _vanTripIdMeta,
         vanTripId.isAcceptableOrUnknown(data['van_trip_id']!, _vanTripIdMeta),
+      );
+    }
+    if (data.containsKey('crate_deposit_id')) {
+      context.handle(
+        _crateDepositIdMeta,
+        crateDepositId.isAcceptableOrUnknown(
+          data['crate_deposit_id']!,
+          _crateDepositIdMeta,
+        ),
       );
     }
     if (data.containsKey('performed_by')) {
@@ -29772,6 +31994,10 @@ class $PaymentTransactionsTable extends PaymentTransactions
         DriftSqlType.string,
         data['${effectivePrefix}van_trip_id'],
       ),
+      crateDepositId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crate_deposit_id'],
+      ),
       performedBy: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}performed_by'],
@@ -29832,6 +32058,19 @@ class PaymentTransactionData extends DataClass
   /// exists. (That re-sort is why adding this one column produced a large
   /// generated-file diff: the `$PaymentTransactionsTable` class moved.)
   final String? vanTripId;
+
+  /// The SEVENTH parent (#212, PRD #203, ADR 0023 rule 1): the Placed Deposit
+  /// ledger row this cash movement is the other leg of.
+  ///
+  /// A supplier crate deposit has no order, no shipment, no expense, no wallet
+  /// transaction, no delivery and no trip — the deposit IS its cause, and it
+  /// must not be forced under any of the other six, least of all `expense_id`
+  /// (the money is refundable; calling it a cost is the exact mistake ADR 0023
+  /// rejects). So the exactly-one-parent CHECK grows rather than the row being
+  /// left parentless.
+  ///
+  /// Set on [kPaymentTypeCrateDepositOut] rows only; null on every other type.
+  final String? crateDepositId;
   final String? performedBy;
   final DateTime? voidedAt;
   final String? voidedBy;
@@ -29851,6 +32090,7 @@ class PaymentTransactionData extends DataClass
     this.walletTxnId,
     this.deliveryId,
     this.vanTripId,
+    this.crateDepositId,
     this.performedBy,
     this.voidedAt,
     this.voidedBy,
@@ -29886,6 +32126,9 @@ class PaymentTransactionData extends DataClass
     }
     if (!nullToAbsent || vanTripId != null) {
       map['van_trip_id'] = Variable<String>(vanTripId);
+    }
+    if (!nullToAbsent || crateDepositId != null) {
+      map['crate_deposit_id'] = Variable<String>(crateDepositId);
     }
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
@@ -29932,6 +32175,9 @@ class PaymentTransactionData extends DataClass
       vanTripId: vanTripId == null && nullToAbsent
           ? const Value.absent()
           : Value(vanTripId),
+      crateDepositId: crateDepositId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(crateDepositId),
       performedBy: performedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(performedBy),
@@ -29967,6 +32213,7 @@ class PaymentTransactionData extends DataClass
       walletTxnId: serializer.fromJson<String?>(json['walletTxnId']),
       deliveryId: serializer.fromJson<String?>(json['deliveryId']),
       vanTripId: serializer.fromJson<String?>(json['vanTripId']),
+      crateDepositId: serializer.fromJson<String?>(json['crateDepositId']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
       voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
       voidedBy: serializer.fromJson<String?>(json['voidedBy']),
@@ -29991,6 +32238,7 @@ class PaymentTransactionData extends DataClass
       'walletTxnId': serializer.toJson<String?>(walletTxnId),
       'deliveryId': serializer.toJson<String?>(deliveryId),
       'vanTripId': serializer.toJson<String?>(vanTripId),
+      'crateDepositId': serializer.toJson<String?>(crateDepositId),
       'performedBy': serializer.toJson<String?>(performedBy),
       'voidedAt': serializer.toJson<DateTime?>(voidedAt),
       'voidedBy': serializer.toJson<String?>(voidedBy),
@@ -30013,6 +32261,7 @@ class PaymentTransactionData extends DataClass
     Value<String?> walletTxnId = const Value.absent(),
     Value<String?> deliveryId = const Value.absent(),
     Value<String?> vanTripId = const Value.absent(),
+    Value<String?> crateDepositId = const Value.absent(),
     Value<String?> performedBy = const Value.absent(),
     Value<DateTime?> voidedAt = const Value.absent(),
     Value<String?> voidedBy = const Value.absent(),
@@ -30032,6 +32281,9 @@ class PaymentTransactionData extends DataClass
     walletTxnId: walletTxnId.present ? walletTxnId.value : this.walletTxnId,
     deliveryId: deliveryId.present ? deliveryId.value : this.deliveryId,
     vanTripId: vanTripId.present ? vanTripId.value : this.vanTripId,
+    crateDepositId: crateDepositId.present
+        ? crateDepositId.value
+        : this.crateDepositId,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
     voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
     voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
@@ -30063,6 +32315,9 @@ class PaymentTransactionData extends DataClass
           ? data.deliveryId.value
           : this.deliveryId,
       vanTripId: data.vanTripId.present ? data.vanTripId.value : this.vanTripId,
+      crateDepositId: data.crateDepositId.present
+          ? data.crateDepositId.value
+          : this.crateDepositId,
       performedBy: data.performedBy.present
           ? data.performedBy.value
           : this.performedBy,
@@ -30093,6 +32348,7 @@ class PaymentTransactionData extends DataClass
           ..write('walletTxnId: $walletTxnId, ')
           ..write('deliveryId: $deliveryId, ')
           ..write('vanTripId: $vanTripId, ')
+          ..write('crateDepositId: $crateDepositId, ')
           ..write('performedBy: $performedBy, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
@@ -30117,6 +32373,7 @@ class PaymentTransactionData extends DataClass
     walletTxnId,
     deliveryId,
     vanTripId,
+    crateDepositId,
     performedBy,
     voidedAt,
     voidedBy,
@@ -30140,6 +32397,7 @@ class PaymentTransactionData extends DataClass
           other.walletTxnId == this.walletTxnId &&
           other.deliveryId == this.deliveryId &&
           other.vanTripId == this.vanTripId &&
+          other.crateDepositId == this.crateDepositId &&
           other.performedBy == this.performedBy &&
           other.voidedAt == this.voidedAt &&
           other.voidedBy == this.voidedBy &&
@@ -30162,6 +32420,7 @@ class PaymentTransactionsCompanion
   final Value<String?> walletTxnId;
   final Value<String?> deliveryId;
   final Value<String?> vanTripId;
+  final Value<String?> crateDepositId;
   final Value<String?> performedBy;
   final Value<DateTime?> voidedAt;
   final Value<String?> voidedBy;
@@ -30182,6 +32441,7 @@ class PaymentTransactionsCompanion
     this.walletTxnId = const Value.absent(),
     this.deliveryId = const Value.absent(),
     this.vanTripId = const Value.absent(),
+    this.crateDepositId = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
@@ -30203,6 +32463,7 @@ class PaymentTransactionsCompanion
     this.walletTxnId = const Value.absent(),
     this.deliveryId = const Value.absent(),
     this.vanTripId = const Value.absent(),
+    this.crateDepositId = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
@@ -30227,6 +32488,7 @@ class PaymentTransactionsCompanion
     Expression<String>? walletTxnId,
     Expression<String>? deliveryId,
     Expression<String>? vanTripId,
+    Expression<String>? crateDepositId,
     Expression<String>? performedBy,
     Expression<DateTime>? voidedAt,
     Expression<String>? voidedBy,
@@ -30248,6 +32510,7 @@ class PaymentTransactionsCompanion
       if (walletTxnId != null) 'wallet_txn_id': walletTxnId,
       if (deliveryId != null) 'delivery_id': deliveryId,
       if (vanTripId != null) 'van_trip_id': vanTripId,
+      if (crateDepositId != null) 'crate_deposit_id': crateDepositId,
       if (performedBy != null) 'performed_by': performedBy,
       if (voidedAt != null) 'voided_at': voidedAt,
       if (voidedBy != null) 'voided_by': voidedBy,
@@ -30271,6 +32534,7 @@ class PaymentTransactionsCompanion
     Value<String?>? walletTxnId,
     Value<String?>? deliveryId,
     Value<String?>? vanTripId,
+    Value<String?>? crateDepositId,
     Value<String?>? performedBy,
     Value<DateTime?>? voidedAt,
     Value<String?>? voidedBy,
@@ -30292,6 +32556,7 @@ class PaymentTransactionsCompanion
       walletTxnId: walletTxnId ?? this.walletTxnId,
       deliveryId: deliveryId ?? this.deliveryId,
       vanTripId: vanTripId ?? this.vanTripId,
+      crateDepositId: crateDepositId ?? this.crateDepositId,
       performedBy: performedBy ?? this.performedBy,
       voidedAt: voidedAt ?? this.voidedAt,
       voidedBy: voidedBy ?? this.voidedBy,
@@ -30341,6 +32606,9 @@ class PaymentTransactionsCompanion
     if (vanTripId.present) {
       map['van_trip_id'] = Variable<String>(vanTripId.value);
     }
+    if (crateDepositId.present) {
+      map['crate_deposit_id'] = Variable<String>(crateDepositId.value);
+    }
     if (performedBy.present) {
       map['performed_by'] = Variable<String>(performedBy.value);
     }
@@ -30380,6 +32648,7 @@ class PaymentTransactionsCompanion
           ..write('walletTxnId: $walletTxnId, ')
           ..write('deliveryId: $deliveryId, ')
           ..write('vanTripId: $vanTripId, ')
+          ..write('crateDepositId: $crateDepositId, ')
           ..write('performedBy: $performedBy, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
@@ -45306,6 +47575,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SupplierCrateLedgerTable(this);
   late final $SupplierCrateBalancesTable supplierCrateBalances =
       $SupplierCrateBalancesTable(this);
+  late final $SupplierCrateDepositRequestsTable supplierCrateDepositRequests =
+      $SupplierCrateDepositRequestsTable(this);
+  late final $SupplierCrateDepositsTable supplierCrateDeposits =
+      $SupplierCrateDepositsTable(this);
   late final $ProductsTable products = $ProductsTable(this);
   late final $PriceListsTable priceLists = $PriceListsTable(this);
   late final $CustomersTable customers = $CustomersTable(this);
@@ -45501,6 +47774,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     supplierLedgerEntries,
     supplierCrateLedger,
     supplierCrateBalances,
+    supplierCrateDepositRequests,
+    supplierCrateDeposits,
     products,
     priceLists,
     customers,
@@ -45797,6 +48072,62 @@ final class $$BusinessesTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _supplierCrateBalancesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.supplierCrateDepositRequests.businessId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.supplierCrateDeposits.businessId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -47184,6 +49515,61 @@ class $$BusinessesTableFilterComposer
               }) => $$SupplierCrateBalancesTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -48813,6 +51199,61 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> productsRefs<T extends Object>(
     Expression<T> Function($$ProductsTableAnnotationComposer a) f,
   ) {
@@ -50078,6 +52519,8 @@ class $$BusinessesTableTableManager
             bool supplierLedgerEntriesRefs,
             bool supplierCrateLedgerRefs,
             bool supplierCrateBalancesRefs,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
             bool productsRefs,
             bool priceListsRefs,
             bool customersRefs,
@@ -50235,6 +52678,8 @@ class $$BusinessesTableTableManager
                 supplierLedgerEntriesRefs = false,
                 supplierCrateLedgerRefs = false,
                 supplierCrateBalancesRefs = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
                 productsRefs = false,
                 priceListsRefs = false,
                 customersRefs = false,
@@ -50297,6 +52742,9 @@ class $$BusinessesTableTableManager
                     if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
                     if (supplierCrateBalancesRefs) db.supplierCrateBalances,
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (productsRefs) db.products,
                     if (priceListsRefs) db.priceLists,
                     if (customersRefs) db.customers,
@@ -50534,6 +52982,48 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateBalancesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -51599,6 +54089,8 @@ typedef $$BusinessesTableProcessedTableManager =
         bool supplierLedgerEntriesRefs,
         bool supplierCrateLedgerRefs,
         bool supplierCrateBalancesRefs,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
         bool productsRefs,
         bool priceListsRefs,
         bool customersRefs,
@@ -52471,6 +54963,62 @@ final class $$ManufacturersTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturers.id,
+          db.supplierCrateDepositRequests.manufacturerId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.manufacturerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturers.id,
+          db.supplierCrateDeposits.manufacturerId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.manufacturerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$ProductsTable, List<ProductData>>
   _productsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.products,
@@ -52761,6 +55309,61 @@ class $$ManufacturersTableFilterComposer
               }) => $$SupplierCrateBalancesTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -53138,6 +55741,61 @@ class $$ManufacturersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> productsRefs<T extends Object>(
     Expression<T> Function($$ProductsTableAnnotationComposer a) f,
   ) {
@@ -53336,6 +55994,8 @@ class $$ManufacturersTableTableManager
             bool businessId,
             bool supplierCrateLedgerRefs,
             bool supplierCrateBalancesRefs,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
             bool productsRefs,
             bool customerCrateBalancesRefs,
             bool manufacturerCrateBalancesRefs,
@@ -53417,6 +56077,8 @@ class $$ManufacturersTableTableManager
                 businessId = false,
                 supplierCrateLedgerRefs = false,
                 supplierCrateBalancesRefs = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
                 productsRefs = false,
                 customerCrateBalancesRefs = false,
                 manufacturerCrateBalancesRefs = false,
@@ -53430,6 +56092,9 @@ class $$ManufacturersTableTableManager
                   explicitlyWatchedTables: [
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
                     if (supplierCrateBalancesRefs) db.supplierCrateBalances,
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (productsRefs) db.products,
                     if (customerCrateBalancesRefs) db.customerCrateBalances,
                     if (manufacturerCrateBalancesRefs)
@@ -53511,6 +56176,48 @@ class $$ManufacturersTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateBalancesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturerData,
+                          $ManufacturersTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturersTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturerData,
+                          $ManufacturersTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturersTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.manufacturerId == item.id,
@@ -53688,6 +56395,8 @@ typedef $$ManufacturersTableProcessedTableManager =
         bool businessId,
         bool supplierCrateLedgerRefs,
         bool supplierCrateBalancesRefs,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
         bool productsRefs,
         bool customerCrateBalancesRefs,
         bool manufacturerCrateBalancesRefs,
@@ -53813,6 +56522,62 @@ final class $$StoresTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _supplierCrateLedgerRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.supplierCrateDepositRequests.storeId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.supplierCrateDeposits.storeId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -54400,6 +57165,61 @@ class $$StoresTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -55130,6 +57950,61 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> customersRefs<T extends Object>(
     Expression<T> Function($$CustomersTableAnnotationComposer a) f,
   ) {
@@ -55681,6 +58556,8 @@ class $$StoresTableTableManager
             bool usersRefs,
             bool supplierLedgerEntriesRefs,
             bool supplierCrateLedgerRefs,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
             bool customersRefs,
             bool ordersRefs,
             bool storeCrateBalancesRefs,
@@ -55771,6 +58648,8 @@ class $$StoresTableTableManager
                 usersRefs = false,
                 supplierLedgerEntriesRefs = false,
                 supplierCrateLedgerRefs = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
                 customersRefs = false,
                 ordersRefs = false,
                 storeCrateBalancesRefs = false,
@@ -55799,6 +58678,9 @@ class $$StoresTableTableManager
                     if (usersRefs) db.users,
                     if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (customersRefs) db.customers,
                     if (ordersRefs) db.orders,
                     if (storeCrateBalancesRefs) db.storeCrateBalances,
@@ -55908,6 +58790,48 @@ class $$StoresTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateLedgerRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.storeId == item.id,
@@ -56376,6 +59300,8 @@ typedef $$StoresTableProcessedTableManager =
         bool usersRefs,
         bool supplierLedgerEntriesRefs,
         bool supplierCrateLedgerRefs,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
         bool customersRefs,
         bool ordersRefs,
         bool storeCrateBalancesRefs,
@@ -56478,6 +59404,34 @@ final class $$UsersTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.users.id,
+          db.supplierCrateDeposits.performedBy,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.performedBy.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -56829,6 +59783,32 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
           ),
     );
     return composer;
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.performedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
   }
 
   Expression<bool> stockAdjustmentsRefs(
@@ -57351,6 +60331,32 @@ class $$UsersTableAnnotationComposer
     return composer;
   }
 
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.performedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> stockAdjustmentsRefs<T extends Object>(
     Expression<T> Function($$StockAdjustmentsTableAnnotationComposer a) f,
   ) {
@@ -57645,6 +60651,7 @@ class $$UsersTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool storeId,
+            bool supplierCrateDepositsRefs,
             bool stockAdjustmentsRefs,
             bool orderCrateLinesRefs,
             bool stockCountsRefs,
@@ -57759,6 +60766,7 @@ class $$UsersTableTableManager
               ({
                 businessId = false,
                 storeId = false,
+                supplierCrateDepositsRefs = false,
                 stockAdjustmentsRefs = false,
                 orderCrateLinesRefs = false,
                 stockCountsRefs = false,
@@ -57774,6 +60782,7 @@ class $$UsersTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (orderCrateLinesRefs) db.orderCrateLines,
                     if (stockCountsRefs) db.stockCounts,
@@ -57833,6 +60842,27 @@ class $$UsersTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.performedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (stockAdjustmentsRefs)
                         await $_getPrefetchedData<
                           UserData,
@@ -58087,6 +61117,7 @@ typedef $$UsersTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool storeId,
+        bool supplierCrateDepositsRefs,
         bool stockAdjustmentsRefs,
         bool orderCrateLinesRefs,
         bool stockCountsRefs,
@@ -58714,6 +61745,62 @@ final class $$SuppliersTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.suppliers.id,
+          db.supplierCrateDepositRequests.supplierId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.supplierId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.suppliers.id,
+          db.supplierCrateDeposits.supplierId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.supplierId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$ProductsTable, List<ProductData>>
   _productsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.products,
@@ -58934,6 +62021,61 @@ class $$SuppliersTableFilterComposer
               }) => $$SupplierCrateBalancesTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.supplierId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.supplierId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -59285,6 +62427,61 @@ class $$SuppliersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.supplierId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.supplierId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> productsRefs<T extends Object>(
     Expression<T> Function($$ProductsTableAnnotationComposer a) f,
   ) {
@@ -59355,6 +62552,8 @@ class $$SuppliersTableTableManager
             bool supplierLedgerEntriesRefs,
             bool supplierCrateLedgerRefs,
             bool supplierCrateBalancesRefs,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
             bool productsRefs,
             bool shipmentsRefs,
           })
@@ -59453,6 +62652,8 @@ class $$SuppliersTableTableManager
                 supplierLedgerEntriesRefs = false,
                 supplierCrateLedgerRefs = false,
                 supplierCrateBalancesRefs = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
                 productsRefs = false,
                 shipmentsRefs = false,
               }) {
@@ -59462,6 +62663,9 @@ class $$SuppliersTableTableManager
                     if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
                     if (supplierCrateBalancesRefs) db.supplierCrateBalances,
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (productsRefs) db.products,
                     if (shipmentsRefs) db.shipments,
                   ],
@@ -59575,6 +62779,48 @@ class $$SuppliersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          SupplierData,
+                          $SuppliersTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SuppliersTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SuppliersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.supplierId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          SupplierData,
+                          $SuppliersTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SuppliersTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SuppliersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.supplierId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (productsRefs)
                         await $_getPrefetchedData<
                           SupplierData,
@@ -59643,6 +62889,8 @@ typedef $$SuppliersTableProcessedTableManager =
         bool supplierLedgerEntriesRefs,
         bool supplierCrateLedgerRefs,
         bool supplierCrateBalancesRefs,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
         bool productsRefs,
         bool shipmentsRefs,
       })
@@ -60808,6 +64056,70 @@ final class $$SupplierCrateLedgerTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.supplierCrateLedger.id,
+          db.supplierCrateDepositRequests.supplierCrateLedgerId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager =
+        $$SupplierCrateDepositRequestsTableTableManager(
+          $_db,
+          $_db.supplierCrateDepositRequests,
+        ).filter(
+          (f) =>
+              f.supplierCrateLedgerId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.supplierCrateLedger.id,
+          db.supplierCrateDeposits.supplierCrateLedgerId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager =
+        $$SupplierCrateDepositsTableTableManager(
+          $_db,
+          $_db.supplierCrateDeposits,
+        ).filter(
+          (f) =>
+              f.supplierCrateLedgerId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$SupplierCrateLedgerTableFilterComposer
@@ -61000,6 +64312,61 @@ class $$SupplierCrateLedgerTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.supplierCrateLedgerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.supplierCrateLedgerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
   }
 }
 
@@ -61379,6 +64746,61 @@ class $$SupplierCrateLedgerTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.supplierCrateLedgerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.supplierCrateLedgerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$SupplierCrateLedgerTableTableManager
@@ -61401,6 +64823,8 @@ class $$SupplierCrateLedgerTableTableManager
             bool storeId,
             bool performedBy,
             bool voidedBy,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
           })
         > {
   $$SupplierCrateLedgerTableTableManager(
@@ -61510,10 +64934,16 @@ class $$SupplierCrateLedgerTableTableManager
                 storeId = false,
                 performedBy = false,
                 voidedBy = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [],
+                  explicitlyWatchedTables: [
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -61624,7 +65054,50 @@ class $$SupplierCrateLedgerTableTableManager
                         return state;
                       },
                   getPrefetchedDataCallback: (items) async {
-                    return [];
+                    return [
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          SupplierCrateLedgerEntryData,
+                          $SupplierCrateLedgerTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SupplierCrateLedgerTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SupplierCrateLedgerTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.supplierCrateLedgerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          SupplierCrateLedgerEntryData,
+                          $SupplierCrateLedgerTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SupplierCrateLedgerTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SupplierCrateLedgerTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.supplierCrateLedgerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
                 );
               },
@@ -61651,6 +65124,8 @@ typedef $$SupplierCrateLedgerTableProcessedTableManager =
         bool storeId,
         bool performedBy,
         bool voidedBy,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
       })
     >;
 typedef $$SupplierCrateBalancesTableCreateCompanionBuilder =
@@ -62234,6 +65709,2599 @@ typedef $$SupplierCrateBalancesTableProcessedTableManager =
         bool businessId,
         bool supplierId,
         bool manufacturerId,
+      })
+    >;
+typedef $$SupplierCrateDepositRequestsTableCreateCompanionBuilder =
+    SupplierCrateDepositRequestsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String supplierId,
+      required String manufacturerId,
+      required String storeId,
+      required String kind,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<int> requestedAmountKobo,
+      Value<int?> settledAmountKobo,
+      Value<String?> paymentMethod,
+      required String summary,
+      Value<String?> supplierCrateLedgerId,
+      Value<String?> note,
+      Value<String?> requestedBy,
+      Value<String> status,
+      Value<String?> decidedBy,
+      Value<DateTime?> decidedAt,
+      Value<String?> decisionNote,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$SupplierCrateDepositRequestsTableUpdateCompanionBuilder =
+    SupplierCrateDepositRequestsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> supplierId,
+      Value<String> manufacturerId,
+      Value<String> storeId,
+      Value<String> kind,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<int> requestedAmountKobo,
+      Value<int?> settledAmountKobo,
+      Value<String?> paymentMethod,
+      Value<String> summary,
+      Value<String?> supplierCrateLedgerId,
+      Value<String?> note,
+      Value<String?> requestedBy,
+      Value<String> status,
+      Value<String?> decidedBy,
+      Value<DateTime?> decidedAt,
+      Value<String?> decisionNote,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$SupplierCrateDepositRequestsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $SupplierCrateDepositRequestsTable,
+          SupplierCrateDepositRequestData
+        > {
+  $$SupplierCrateDepositRequestsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
+      db.suppliers.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.supplierId,
+          db.suppliers.id,
+        ),
+      );
+
+  $$SuppliersTableProcessedTableManager get supplierId {
+    final $_column = $_itemColumn<String>('supplier_id')!;
+
+    final manager = $$SuppliersTableTableManager(
+      $_db,
+      $_db.suppliers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_supplierIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ManufacturersTable _manufacturerIdTable(_$AppDatabase db) =>
+      db.manufacturers.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.manufacturerId,
+          db.manufacturers.id,
+        ),
+      );
+
+  $$ManufacturersTableProcessedTableManager get manufacturerId {
+    final $_column = $_itemColumn<String>('manufacturer_id')!;
+
+    final manager = $$ManufacturersTableTableManager(
+      $_db,
+      $_db.manufacturers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.supplierCrateDepositRequests.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SupplierCrateLedgerTable _supplierCrateLedgerIdTable(
+    _$AppDatabase db,
+  ) => db.supplierCrateLedger.createAlias(
+    $_aliasNameGenerator(
+      db.supplierCrateDepositRequests.supplierCrateLedgerId,
+      db.supplierCrateLedger.id,
+    ),
+  );
+
+  $$SupplierCrateLedgerTableProcessedTableManager? get supplierCrateLedgerId {
+    final $_column = $_itemColumn<String>('supplier_crate_ledger_id');
+    if ($_column == null) return null;
+    final manager = $$SupplierCrateLedgerTableTableManager(
+      $_db,
+      $_db.supplierCrateLedger,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _supplierCrateLedgerIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _requestedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.requestedBy,
+          db.users.id,
+        ),
+      );
+
+  $$UsersTableProcessedTableManager? get requestedBy {
+    final $_column = $_itemColumn<String>('requested_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_requestedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _decidedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(
+      db.supplierCrateDepositRequests.decidedBy,
+      db.users.id,
+    ),
+  );
+
+  $$UsersTableProcessedTableManager? get decidedBy {
+    final $_column = $_itemColumn<String>('decided_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_decidedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.id,
+          db.supplierCrateDeposits.requestId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.requestId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SupplierCrateDepositRequestsTableFilterComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositRequestsTable> {
+  $$SupplierCrateDepositRequestsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get requestedAmountKobo => $composableBuilder(
+    column: $table.requestedAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get settledAmountKobo => $composableBuilder(
+    column: $table.settledAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get decidedAt => $composableBuilder(
+    column: $table.decidedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get decisionNote => $composableBuilder(
+    column: $table.decisionNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableFilterComposer get supplierId {
+    final $$SuppliersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableFilterComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableFilterComposer get manufacturerId {
+    final $$ManufacturersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableFilterComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierCrateLedgerId,
+      referencedTable: $db.supplierCrateLedger,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SupplierCrateLedgerTableFilterComposer(
+            $db: $db,
+            $table: $db.supplierCrateLedger,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get requestedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get decidedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.decidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.requestId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$SupplierCrateDepositRequestsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositRequestsTable> {
+  $$SupplierCrateDepositRequestsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get requestedAmountKobo => $composableBuilder(
+    column: $table.requestedAmountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get settledAmountKobo => $composableBuilder(
+    column: $table.settledAmountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get decidedAt => $composableBuilder(
+    column: $table.decidedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get decisionNote => $composableBuilder(
+    column: $table.decisionNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableOrderingComposer get supplierId {
+    final $$SuppliersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableOrderingComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableOrderingComposer get manufacturerId {
+    final $$ManufacturersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableOrderingComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableOrderingComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.supplierCrateLedgerId,
+          referencedTable: $db.supplierCrateLedger,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateLedgerTableOrderingComposer(
+                $db: $db,
+                $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get requestedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get decidedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.decidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SupplierCrateDepositRequestsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositRequestsTable> {
+  $$SupplierCrateDepositRequestsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get requestedAmountKobo => $composableBuilder(
+    column: $table.requestedAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get settledAmountKobo => $composableBuilder(
+    column: $table.settledAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get summary =>
+      $composableBuilder(column: $table.summary, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get decidedAt =>
+      $composableBuilder(column: $table.decidedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get decisionNote => $composableBuilder(
+    column: $table.decisionNote,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableAnnotationComposer get supplierId {
+    final $$SuppliersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableAnnotationComposer get manufacturerId {
+    final $$ManufacturersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableAnnotationComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.supplierCrateLedgerId,
+          referencedTable: $db.supplierCrateLedger,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateLedgerTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get requestedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get decidedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.decidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.requestId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$SupplierCrateDepositRequestsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SupplierCrateDepositRequestsTable,
+          SupplierCrateDepositRequestData,
+          $$SupplierCrateDepositRequestsTableFilterComposer,
+          $$SupplierCrateDepositRequestsTableOrderingComposer,
+          $$SupplierCrateDepositRequestsTableAnnotationComposer,
+          $$SupplierCrateDepositRequestsTableCreateCompanionBuilder,
+          $$SupplierCrateDepositRequestsTableUpdateCompanionBuilder,
+          (
+            SupplierCrateDepositRequestData,
+            $$SupplierCrateDepositRequestsTableReferences,
+          ),
+          SupplierCrateDepositRequestData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool supplierId,
+            bool manufacturerId,
+            bool storeId,
+            bool supplierCrateLedgerId,
+            bool requestedBy,
+            bool decidedBy,
+            bool supplierCrateDepositsRefs,
+          })
+        > {
+  $$SupplierCrateDepositRequestsTableTableManager(
+    _$AppDatabase db,
+    $SupplierCrateDepositRequestsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$SupplierCrateDepositRequestsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> supplierId = const Value.absent(),
+                Value<String> manufacturerId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<int> requestedAmountKobo = const Value.absent(),
+                Value<int?> settledAmountKobo = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                Value<String> summary = const Value.absent(),
+                Value<String?> supplierCrateLedgerId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> requestedBy = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> decidedBy = const Value.absent(),
+                Value<DateTime?> decidedAt = const Value.absent(),
+                Value<String?> decisionNote = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SupplierCrateDepositRequestsCompanion(
+                id: id,
+                businessId: businessId,
+                supplierId: supplierId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                kind: kind,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                requestedAmountKobo: requestedAmountKobo,
+                settledAmountKobo: settledAmountKobo,
+                paymentMethod: paymentMethod,
+                summary: summary,
+                supplierCrateLedgerId: supplierCrateLedgerId,
+                note: note,
+                requestedBy: requestedBy,
+                status: status,
+                decidedBy: decidedBy,
+                decidedAt: decidedAt,
+                decisionNote: decisionNote,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String supplierId,
+                required String manufacturerId,
+                required String storeId,
+                required String kind,
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<int> requestedAmountKobo = const Value.absent(),
+                Value<int?> settledAmountKobo = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                required String summary,
+                Value<String?> supplierCrateLedgerId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> requestedBy = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> decidedBy = const Value.absent(),
+                Value<DateTime?> decidedAt = const Value.absent(),
+                Value<String?> decisionNote = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SupplierCrateDepositRequestsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                supplierId: supplierId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                kind: kind,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                requestedAmountKobo: requestedAmountKobo,
+                settledAmountKobo: settledAmountKobo,
+                paymentMethod: paymentMethod,
+                summary: summary,
+                supplierCrateLedgerId: supplierCrateLedgerId,
+                note: note,
+                requestedBy: requestedBy,
+                status: status,
+                decidedBy: decidedBy,
+                decidedAt: decidedAt,
+                decisionNote: decisionNote,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SupplierCrateDepositRequestsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                supplierId = false,
+                manufacturerId = false,
+                storeId = false,
+                supplierCrateLedgerId = false,
+                requestedBy = false,
+                decidedBy = false,
+                supplierCrateDepositsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (supplierId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.supplierId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._supplierIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._supplierIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (manufacturerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturerId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._manufacturerIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._manufacturerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (supplierCrateLedgerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.supplierCrateLedgerId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._supplierCrateLedgerIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._supplierCrateLedgerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (requestedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.requestedBy,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._requestedByTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._requestedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (decidedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.decidedBy,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._decidedByTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._decidedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          SupplierCrateDepositRequestData,
+                          $SupplierCrateDepositRequestsTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable:
+                              $$SupplierCrateDepositRequestsTableReferences
+                                  ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SupplierCrateDepositRequestsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.requestId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SupplierCrateDepositRequestsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SupplierCrateDepositRequestsTable,
+      SupplierCrateDepositRequestData,
+      $$SupplierCrateDepositRequestsTableFilterComposer,
+      $$SupplierCrateDepositRequestsTableOrderingComposer,
+      $$SupplierCrateDepositRequestsTableAnnotationComposer,
+      $$SupplierCrateDepositRequestsTableCreateCompanionBuilder,
+      $$SupplierCrateDepositRequestsTableUpdateCompanionBuilder,
+      (
+        SupplierCrateDepositRequestData,
+        $$SupplierCrateDepositRequestsTableReferences,
+      ),
+      SupplierCrateDepositRequestData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool supplierId,
+        bool manufacturerId,
+        bool storeId,
+        bool supplierCrateLedgerId,
+        bool requestedBy,
+        bool decidedBy,
+        bool supplierCrateDepositsRefs,
+      })
+    >;
+typedef $$SupplierCrateDepositsTableCreateCompanionBuilder =
+    SupplierCrateDepositsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String supplierId,
+      required String manufacturerId,
+      Value<String?> storeId,
+      required String movementType,
+      required int signedAmountKobo,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<String?> requestId,
+      Value<String?> supplierCrateLedgerId,
+      Value<String?> note,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$SupplierCrateDepositsTableUpdateCompanionBuilder =
+    SupplierCrateDepositsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> supplierId,
+      Value<String> manufacturerId,
+      Value<String?> storeId,
+      Value<String> movementType,
+      Value<int> signedAmountKobo,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<String?> requestId,
+      Value<String?> supplierCrateLedgerId,
+      Value<String?> note,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$SupplierCrateDepositsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $SupplierCrateDepositsTable,
+          SupplierCrateDepositData
+        > {
+  $$SupplierCrateDepositsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDeposits.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
+      db.suppliers.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDeposits.supplierId,
+          db.suppliers.id,
+        ),
+      );
+
+  $$SuppliersTableProcessedTableManager get supplierId {
+    final $_column = $_itemColumn<String>('supplier_id')!;
+
+    final manager = $$SuppliersTableTableManager(
+      $_db,
+      $_db.suppliers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_supplierIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ManufacturersTable _manufacturerIdTable(_$AppDatabase db) =>
+      db.manufacturers.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDeposits.manufacturerId,
+          db.manufacturers.id,
+        ),
+      );
+
+  $$ManufacturersTableProcessedTableManager get manufacturerId {
+    final $_column = $_itemColumn<String>('manufacturer_id')!;
+
+    final manager = $$ManufacturersTableTableManager(
+      $_db,
+      $_db.manufacturers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.supplierCrateDeposits.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SupplierCrateDepositRequestsTable _requestIdTable(_$AppDatabase db) =>
+      db.supplierCrateDepositRequests.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDeposits.requestId,
+          db.supplierCrateDepositRequests.id,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager? get requestId {
+    final $_column = $_itemColumn<String>('request_id');
+    if ($_column == null) return null;
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_requestIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SupplierCrateLedgerTable _supplierCrateLedgerIdTable(
+    _$AppDatabase db,
+  ) => db.supplierCrateLedger.createAlias(
+    $_aliasNameGenerator(
+      db.supplierCrateDeposits.supplierCrateLedgerId,
+      db.supplierCrateLedger.id,
+    ),
+  );
+
+  $$SupplierCrateLedgerTableProcessedTableManager? get supplierCrateLedgerId {
+    final $_column = $_itemColumn<String>('supplier_crate_ledger_id');
+    if ($_column == null) return null;
+    final manager = $$SupplierCrateLedgerTableTableManager(
+      $_db,
+      $_db.supplierCrateLedger,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _supplierCrateLedgerIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _performedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(db.supplierCrateDeposits.performedBy, db.users.id),
+      );
+
+  $$UsersTableProcessedTableManager? get performedBy {
+    final $_column = $_itemColumn<String>('performed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_performedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PaymentTransactionsTable,
+    List<PaymentTransactionData>
+  >
+  _paymentTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.paymentTransactions,
+        aliasName: $_aliasNameGenerator(
+          db.supplierCrateDeposits.id,
+          db.paymentTransactions.crateDepositId,
+        ),
+      );
+
+  $$PaymentTransactionsTableProcessedTableManager get paymentTransactionsRefs {
+    final manager = $$PaymentTransactionsTableTableManager(
+      $_db,
+      $_db.paymentTransactions,
+    ).filter((f) => f.crateDepositId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _paymentTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SupplierCrateDepositsTableFilterComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositsTable> {
+  $$SupplierCrateDepositsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get movementType => $composableBuilder(
+    column: $table.movementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableFilterComposer get supplierId {
+    final $$SuppliersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableFilterComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableFilterComposer get manufacturerId {
+    final $$ManufacturersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositRequestsTableFilterComposer get requestId {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.requestId,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableFilterComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierCrateLedgerId,
+      referencedTable: $db.supplierCrateLedger,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SupplierCrateLedgerTableFilterComposer(
+            $db: $db,
+            $table: $db.supplierCrateLedger,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get performedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> paymentTransactionsRefs(
+    Expression<bool> Function($$PaymentTransactionsTableFilterComposer f) f,
+  ) {
+    final $$PaymentTransactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.paymentTransactions,
+      getReferencedColumn: (t) => t.crateDepositId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentTransactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.paymentTransactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SupplierCrateDepositsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositsTable> {
+  $$SupplierCrateDepositsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get movementType => $composableBuilder(
+    column: $table.movementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableOrderingComposer get supplierId {
+    final $$SuppliersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableOrderingComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableOrderingComposer get manufacturerId {
+    final $$ManufacturersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableOrderingComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositRequestsTableOrderingComposer get requestId {
+    final $$SupplierCrateDepositRequestsTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.requestId,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableOrderingComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableOrderingComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.supplierCrateLedgerId,
+          referencedTable: $db.supplierCrateLedger,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateLedgerTableOrderingComposer(
+                $db: $db,
+                $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get performedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SupplierCrateDepositsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositsTable> {
+  $$SupplierCrateDepositsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get movementType => $composableBuilder(
+    column: $table.movementType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableAnnotationComposer get supplierId {
+    final $$SuppliersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableAnnotationComposer get manufacturerId {
+    final $$ManufacturersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositRequestsTableAnnotationComposer get requestId {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.requestId,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableAnnotationComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.supplierCrateLedgerId,
+          referencedTable: $db.supplierCrateLedger,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateLedgerTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get performedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> paymentTransactionsRefs<T extends Object>(
+    Expression<T> Function($$PaymentTransactionsTableAnnotationComposer a) f,
+  ) {
+    final $$PaymentTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.paymentTransactions,
+          getReferencedColumn: (t) => t.crateDepositId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PaymentTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.paymentTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$SupplierCrateDepositsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SupplierCrateDepositsTable,
+          SupplierCrateDepositData,
+          $$SupplierCrateDepositsTableFilterComposer,
+          $$SupplierCrateDepositsTableOrderingComposer,
+          $$SupplierCrateDepositsTableAnnotationComposer,
+          $$SupplierCrateDepositsTableCreateCompanionBuilder,
+          $$SupplierCrateDepositsTableUpdateCompanionBuilder,
+          (SupplierCrateDepositData, $$SupplierCrateDepositsTableReferences),
+          SupplierCrateDepositData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool supplierId,
+            bool manufacturerId,
+            bool storeId,
+            bool requestId,
+            bool supplierCrateLedgerId,
+            bool performedBy,
+            bool paymentTransactionsRefs,
+          })
+        > {
+  $$SupplierCrateDepositsTableTableManager(
+    _$AppDatabase db,
+    $SupplierCrateDepositsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SupplierCrateDepositsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$SupplierCrateDepositsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> supplierId = const Value.absent(),
+                Value<String> manufacturerId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
+                Value<String> movementType = const Value.absent(),
+                Value<int> signedAmountKobo = const Value.absent(),
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<String?> requestId = const Value.absent(),
+                Value<String?> supplierCrateLedgerId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SupplierCrateDepositsCompanion(
+                id: id,
+                businessId: businessId,
+                supplierId: supplierId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                movementType: movementType,
+                signedAmountKobo: signedAmountKobo,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                requestId: requestId,
+                supplierCrateLedgerId: supplierCrateLedgerId,
+                note: note,
+                performedBy: performedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String supplierId,
+                required String manufacturerId,
+                Value<String?> storeId = const Value.absent(),
+                required String movementType,
+                required int signedAmountKobo,
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<String?> requestId = const Value.absent(),
+                Value<String?> supplierCrateLedgerId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SupplierCrateDepositsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                supplierId: supplierId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                movementType: movementType,
+                signedAmountKobo: signedAmountKobo,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                requestId: requestId,
+                supplierCrateLedgerId: supplierCrateLedgerId,
+                note: note,
+                performedBy: performedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SupplierCrateDepositsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                supplierId = false,
+                manufacturerId = false,
+                storeId = false,
+                requestId = false,
+                supplierCrateLedgerId = false,
+                performedBy = false,
+                paymentTransactionsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (paymentTransactionsRefs) db.paymentTransactions,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (supplierId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.supplierId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._supplierIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._supplierIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (manufacturerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturerId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._manufacturerIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._manufacturerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (requestId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.requestId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._requestIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._requestIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (supplierCrateLedgerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.supplierCrateLedgerId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._supplierCrateLedgerIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._supplierCrateLedgerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (performedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.performedBy,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._performedByTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._performedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (paymentTransactionsRefs)
+                        await $_getPrefetchedData<
+                          SupplierCrateDepositData,
+                          $SupplierCrateDepositsTable,
+                          PaymentTransactionData
+                        >(
+                          currentTable: table,
+                          referencedTable:
+                              $$SupplierCrateDepositsTableReferences
+                                  ._paymentTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SupplierCrateDepositsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).paymentTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.crateDepositId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SupplierCrateDepositsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SupplierCrateDepositsTable,
+      SupplierCrateDepositData,
+      $$SupplierCrateDepositsTableFilterComposer,
+      $$SupplierCrateDepositsTableOrderingComposer,
+      $$SupplierCrateDepositsTableAnnotationComposer,
+      $$SupplierCrateDepositsTableCreateCompanionBuilder,
+      $$SupplierCrateDepositsTableUpdateCompanionBuilder,
+      (SupplierCrateDepositData, $$SupplierCrateDepositsTableReferences),
+      SupplierCrateDepositData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool supplierId,
+        bool manufacturerId,
+        bool storeId,
+        bool requestId,
+        bool supplierCrateLedgerId,
+        bool performedBy,
+        bool paymentTransactionsRefs,
       })
     >;
 typedef $$ProductsTableCreateCompanionBuilder =
@@ -88282,6 +94350,7 @@ typedef $$PaymentTransactionsTableCreateCompanionBuilder =
       Value<String?> walletTxnId,
       Value<String?> deliveryId,
       Value<String?> vanTripId,
+      Value<String?> crateDepositId,
       Value<String?> performedBy,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
@@ -88304,6 +94373,7 @@ typedef $$PaymentTransactionsTableUpdateCompanionBuilder =
       Value<String?> walletTxnId,
       Value<String?> deliveryId,
       Value<String?> vanTripId,
+      Value<String?> crateDepositId,
       Value<String?> performedBy,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
@@ -88482,6 +94552,28 @@ final class $$PaymentTransactionsTableReferences
       $_db.vanTrips,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_vanTripIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SupplierCrateDepositsTable _crateDepositIdTable(_$AppDatabase db) =>
+      db.supplierCrateDeposits.createAlias(
+        $_aliasNameGenerator(
+          db.paymentTransactions.crateDepositId,
+          db.supplierCrateDeposits.id,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager? get crateDepositId {
+    final $_column = $_itemColumn<String>('crate_deposit_id');
+    if ($_column == null) return null;
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_crateDepositIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -88756,6 +94848,30 @@ class $$PaymentTransactionsTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return composer;
+  }
+
+  $$SupplierCrateDepositsTableFilterComposer get crateDepositId {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.crateDepositId,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return composer;
   }
 
@@ -89039,6 +95155,30 @@ class $$PaymentTransactionsTableOrderingComposer
     return composer;
   }
 
+  $$SupplierCrateDepositsTableOrderingComposer get crateDepositId {
+    final $$SupplierCrateDepositsTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.crateDepositId,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableOrderingComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
   $$UsersTableOrderingComposer get performedBy {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -89310,6 +95450,30 @@ class $$PaymentTransactionsTableAnnotationComposer
     return composer;
   }
 
+  $$SupplierCrateDepositsTableAnnotationComposer get crateDepositId {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.crateDepositId,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
   $$UsersTableAnnotationComposer get performedBy {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -89379,6 +95543,7 @@ class $$PaymentTransactionsTableTableManager
             bool walletTxnId,
             bool deliveryId,
             bool vanTripId,
+            bool crateDepositId,
             bool performedBy,
             bool voidedBy,
           })
@@ -89416,6 +95581,7 @@ class $$PaymentTransactionsTableTableManager
                 Value<String?> walletTxnId = const Value.absent(),
                 Value<String?> deliveryId = const Value.absent(),
                 Value<String?> vanTripId = const Value.absent(),
+                Value<String?> crateDepositId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
@@ -89436,6 +95602,7 @@ class $$PaymentTransactionsTableTableManager
                 walletTxnId: walletTxnId,
                 deliveryId: deliveryId,
                 vanTripId: vanTripId,
+                crateDepositId: crateDepositId,
                 performedBy: performedBy,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
@@ -89458,6 +95625,7 @@ class $$PaymentTransactionsTableTableManager
                 Value<String?> walletTxnId = const Value.absent(),
                 Value<String?> deliveryId = const Value.absent(),
                 Value<String?> vanTripId = const Value.absent(),
+                Value<String?> crateDepositId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
@@ -89478,6 +95646,7 @@ class $$PaymentTransactionsTableTableManager
                 walletTxnId: walletTxnId,
                 deliveryId: deliveryId,
                 vanTripId: vanTripId,
+                crateDepositId: crateDepositId,
                 performedBy: performedBy,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
@@ -89504,6 +95673,7 @@ class $$PaymentTransactionsTableTableManager
                 walletTxnId = false,
                 deliveryId = false,
                 vanTripId = false,
+                crateDepositId = false,
                 performedBy = false,
                 voidedBy = false,
               }) {
@@ -89646,6 +95816,21 @@ class $$PaymentTransactionsTableTableManager
                                   )
                                   as T;
                         }
+                        if (crateDepositId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.crateDepositId,
+                                    referencedTable:
+                                        $$PaymentTransactionsTableReferences
+                                            ._crateDepositIdTable(db),
+                                    referencedColumn:
+                                        $$PaymentTransactionsTableReferences
+                                            ._crateDepositIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
                         if (performedBy) {
                           state =
                               state.withJoin(
@@ -89709,6 +95894,7 @@ typedef $$PaymentTransactionsTableProcessedTableManager =
         bool walletTxnId,
         bool deliveryId,
         bool vanTripId,
+        bool crateDepositId,
         bool performedBy,
         bool voidedBy,
       })
@@ -102677,6 +108863,14 @@ class $AppDatabaseManager {
       $$SupplierCrateLedgerTableTableManager(_db, _db.supplierCrateLedger);
   $$SupplierCrateBalancesTableTableManager get supplierCrateBalances =>
       $$SupplierCrateBalancesTableTableManager(_db, _db.supplierCrateBalances);
+  $$SupplierCrateDepositRequestsTableTableManager
+  get supplierCrateDepositRequests =>
+      $$SupplierCrateDepositRequestsTableTableManager(
+        _db,
+        _db.supplierCrateDepositRequests,
+      );
+  $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
+      $$SupplierCrateDepositsTableTableManager(_db, _db.supplierCrateDeposits);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db, _db.products);
   $$PriceListsTableTableManager get priceLists =>

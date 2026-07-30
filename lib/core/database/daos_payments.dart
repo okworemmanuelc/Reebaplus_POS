@@ -33,8 +33,8 @@ class PaymentTransactionsDao extends DatabaseAccessor<AppDatabase>
   ///   expense / wallet_txn / delivery / van_trip) so the exactly-one-reference
   ///   CHECK holds; the reversal therefore links back to the same source
   ///   record. **Every parent column must be copied here** — #144 added a sixth
-  ///   (`van_trip_id`), and omitting one turns the CHECK from "exactly one" into
-  ///   "zero" and the insert aborts.
+  ///   (`van_trip_id`) and #212 a seventh (`crate_deposit_id`), and omitting one
+  ///   turns the CHECK from "exactly one" into "zero" and the insert aborts.
   /// - It is stamped with a [storeId] (defaults to the original's store —
   ///   nullable, so a legacy store-less original yields a store-less reversal
   ///   that reports business-wide, exactly as today).
@@ -69,6 +69,7 @@ class PaymentTransactionsDao extends DatabaseAccessor<AppDatabase>
       walletTxnId: Value(original.walletTxnId),
       deliveryId: Value(original.deliveryId),
       vanTripId: Value(original.vanTripId),
+      crateDepositId: Value(original.crateDepositId),
       performedBy: Value(performedBy),
       voidReason: Value(reason),
       createdAt: Value(now),

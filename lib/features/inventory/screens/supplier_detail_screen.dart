@@ -714,6 +714,11 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         SizedBox(height: context.getRSize(12)),
         _buildCrateMovementStats(theme, totals.received, totals.returned),
         SizedBox(height: context.getRSize(16)),
+        // #212 (PRD #203, ADR 0023 rules 1 + 2) — what this supplier is
+        // actually holding of the owner's money, per brand. Renders nothing at
+        // all for a business whose brands are all on the default `none`
+        // arrangement, which is every business until an owner switches one on.
+        ..._buildPlacedDepositSection(context, theme),
         Text(
           'By manufacturer',
           style: TextStyle(
@@ -739,6 +744,174 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
           ...active.map((b) => _buildSupplierCrateRow(theme, b)),
       ],
     );
+  }
+
+  /// **Money this supplier is holding for us** (#212, ADR 0023 rule 1) — the
+  /// Placed Deposit, per brand, plus anything still waiting on a manager and
+  /// the brand-level crate shortfall behind it.
+  ///
+  /// Every figure comes from `computeCrateDepositPosition`, the one pure seam,
+  /// so this section and the #215 business-wide card cannot disagree.
+  ///
+  /// It is deliberately SEPARATE from the "Deposit value (refundable)" tile
+  /// above, which is the NOTIONAL figure — crates owed × today's rate. ADR 0023
+  /// finding #3 is that those two numbers have never met; showing both, side by
+  /// side and labelled, is the honest fix. Making one silently overwrite the
+  /// other would only hide the disagreement.
+  ///
+  /// Empty for a brand on `none`: the position is all zeros there by
+  /// construction, so an all-`none` business sees this whole section vanish and
+  /// the screen reads exactly as it did before PRD #203.
+  List<Widget> _buildPlacedDepositSection(
+    BuildContext context,
+    ThemeData theme,
+  ) {
+    final positions =
+        ref
+            .watch(supplierCrateDepositPositionsProvider(widget.supplierId))
+            .valueOrNull ??
+        const <SupplierCrateDepositPosition>[];
+    final live = positions
+        .where(
+          (p) =>
+              p.position.movesMoney &&
+              (p.position.placedDepositKobo != 0 || p.position.hasPending),
+        )
+        .toList();
+    if (live.isEmpty) return const [];
+
+    final totalPlaced = live.fold<int>(
+      0,
+      (s, p) => s + p.position.placedDepositKobo,
+    );
+    final totalPending = live.fold<int>(
+      0,
+      (s, p) => s + p.position.pendingDepositKobo,
+    );
+
+    return [
+      Text(
+        'Your money with this supplier',
+        style: TextStyle(
+          fontSize: context.getRFontSize(14),
+          fontWeight: FontWeight.w800,
+          color: _text,
+        ),
+      ),
+      SizedBox(height: context.getRSize(4)),
+      Text(
+        'Deposits you have actually paid for their crates. It is still yours — '
+        'you get it back when the empties go home.',
+        style: TextStyle(fontSize: context.getRFontSize(12), color: _subtext),
+      ),
+      SizedBox(height: context.getRSize(12)),
+      _GlassyCard(
+        padding: EdgeInsets.all(context.getRSize(18)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Held by this supplier',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: _subtext,
+                    ),
+                  ),
+                ),
+                Text(
+                  formatCurrency(totalPlaced / 100),
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(18),
+                    fontWeight: FontWeight.w800,
+                    color: _text,
+                  ),
+                ),
+              ],
+            ),
+            if (totalPending != 0) ...[
+              SizedBox(height: context.getRSize(6)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Awaiting confirmation',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(12),
+                        color: _subtext,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    formatCurrency(totalPending / 100),
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w700,
+                      color: Colors.amber.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            SizedBox(height: context.getRSize(10)),
+            Divider(height: 1, color: theme.dividerColor),
+            SizedBox(height: context.getRSize(10)),
+            ...live.map(
+              (p) => Padding(
+                padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p.manufacturerName,
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(13),
+                              fontWeight: FontWeight.w600,
+                              color: _text,
+                            ),
+                          ),
+                          // Deliberately NOT a shortfall line. A shortfall is
+                          // brand-level across every supplier (ADR 0023 rule
+                          // 4); printing it on a per-supplier card would show
+                          // the same missing crates twice and imply this depot
+                          // is the one who lost them. #215 carries it, once,
+                          // business-wide. What belongs here is how much of
+                          // this supplier's crate debt carries no money.
+                          if (p.position.unbackedCrates > 0)
+                            Text(
+                              '${p.position.unbackedCrates} crate'
+                              '${p.position.unbackedCrates == 1 ? '' : 's'} '
+                              'with no deposit paid',
+                              style: TextStyle(
+                                fontSize: context.getRFontSize(11),
+                                color: _subtext,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      formatCurrency(p.position.placedDepositKobo / 100),
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(13),
+                        fontWeight: FontWeight.w700,
+                        color: _text,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      SizedBox(height: context.getRSize(16)),
+    ];
   }
 
   // The "+" action card pinned at the top of the Crates tab (§3.13).
