@@ -551,6 +551,87 @@ class SupplierCrateDeposits extends Table {
   ];
 }
 
+/// The **Crate Shortfall write-off ledger** (#216, PRD #203, ADR 0023 rule 5) —
+/// the deliberate, dated act of accepting that missing crates are not coming
+/// back.
+///
+/// **The shortfall itself is NOT here, and must never be.** A shortfall is
+/// `crates owed − empties on hand`, derived every time it is read (see
+/// `computeCrateShortfall`), which is exactly what lets it shrink by itself when
+/// crates turn up behind the store. Storing it as an absolute would freeze a
+/// suspicion into a fact. What this table stores is the *decision*: N crates, at
+/// the rate they were worth on the day, accepted by a named person on a named
+/// date — the same reasoning ADR 0019 used to make a van write-off a persisted
+/// artifact rather than a screen calculation.
+///
+/// **Brand-level, with no supplier column.** Crates are fungible: when one goes
+/// missing nothing says whose it was, and guessing would invent a fact the
+/// supplier will dispute (ADR 0023 rule 4). There is deliberately no
+/// `supplier_id` for an attribution to be written into. Attribution happens once,
+/// at settlement, when the business actually comes up short with a specific
+/// depot.
+///
+/// **This is the one thing in PRD #203 that hits profit.** Everything else the
+/// PRD books is a refundable Placed Deposit — an asset that changed shape. A
+/// write-off is a realized loss, booked on [createdAt], and it is why
+/// `crate_shortfall_writeoffs` needs no `payment_transactions` leg: no cash
+/// moves when an owner accepts a loss. The money left (or never arrived) long
+/// ago; this is the moment it stops being expected back.
+///
+/// Append-only with no void columns, exactly like [SupplierCrateDeposits]: it is
+/// in `_ledgerTables` (immutable + no-delete triggers), and a write-off taken in
+/// error — or crates that turn up after being accepted as lost — is corrected by
+/// a new NEGATIVE [crateCount] row that books a gain on ITS day. Never an edit,
+/// never a delete, never a restatement of a day already closed (ADR 0021).
+@DataClassName('CrateShortfallWriteoffData')
+class CrateShortfallWriteoffs extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+
+  /// The brand. The ONLY axis a shortfall has — see the class doc.
+  TextColumn get manufacturerId => text().references(Manufacturers, #id)();
+
+  /// The store whose device took the decision, for the audit trail only.
+  /// Nullable, and it never scopes the figure: a shortfall is business-wide
+  /// (`CRATE_TRACKING_AUDIT` C4), so splitting the loss per branch would let two
+  /// stores each believe the same crates were theirs to lose.
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
+
+  /// Crates accepted as lost. **Signed:** positive is a write-off, negative is
+  /// the compensating row for a reversal. A `<> 0` CHECK rather than `> 0` so a
+  /// future reversal path ships as code only — widening a CHECK on an
+  /// append-only money ledger costs a table rebuild on every device, and v71 /
+  /// #212 are the precedents for declaring the whole range up front.
+  IntColumn get crateCount => integer()();
+
+  /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED at the moment the decision
+  /// was taken. The loss booked is `crate_count × rate_per_crate_kobo` forever
+  /// after — never today's rate — so a rate edited next month cannot restate the
+  /// profit of a day already closed.
+  IntColumn get ratePerCrateKobo => integer().withDefault(const Constant(0))();
+
+  TextColumn get note => text().nullable()();
+
+  /// Who accepted the loss. Half of "who wrote off a shortage and when".
+  TextColumn get performedBy => text().nullable().references(Users, #id)();
+
+  /// **The day the loss hits profit.** The other half. Set explicitly by the
+  /// DAO, never left to the column default, so the decision date is a fact the
+  /// write path owns rather than a side effect of when a row reached SQLite.
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'CHECK (crate_count <> 0)',
+    'CHECK (rate_per_crate_kobo >= 0)',
+  ];
+}
+
 /// The unit types a product can be measured / sold in — the single source of
 /// truth for the Add / Edit Product dropdowns AND the `products.unit` CHECK
 /// constraint on the [Products] table below. Kept in lock-step so the UI can
@@ -2657,6 +2738,7 @@ class MigrationEvents extends Table {
     SupplierCrateBalances,
     SupplierCrateDepositRequests,
     SupplierCrateDeposits,
+    CrateShortfallWriteoffs,
     Products,
     PriceLists,
     Customers,
@@ -2793,7 +2875,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 79;
+  int get schemaVersion => 80;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -5987,6 +6069,75 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(stmt);
         }
       }
+
+      if (from < 80) {
+        // ── v80 — #216: accepting the loss ────────────────────────────────
+        //
+        // PRD #203 slice 7/8, ADR 0023 rules 4 and 5. Mirrors
+        // supabase/migrations/0173_crate_shortfall_writeoff.sql.
+        //
+        // ONE new synced tenant table, `crate_shortfall_writeoffs`, and
+        // nothing else — no column added to an existing table, so there is no
+        // TableMigration and none of the stale-column trap that comes with one.
+        //
+        // The Crate Shortfall ITSELF is not persisted and never will be. It is
+        // `crates owed − empties on hand`, derived on every read, which is what
+        // lets it shrink by itself when crates turn up behind the store. What
+        // lands here is the deliberate DECISION to accept the loss: N crates,
+        // at the rate they were worth that day, by a named person, on a named
+        // date. Append-only with no void columns, so it joins `_ledgerTables`
+        // and a reversal is a new NEGATIVE row rather than an edit (ADR 0021 —
+        // a closed day is never restated).
+        //
+        // THE RELEASE GATE IS UNTOUCHED. Nothing here moves a figure by itself:
+        // no backfill runs, and every read of these rows checks the brand's
+        // Crate Money Arrangement (#211) first — every existing brand on every
+        // live tenant reads `none`, which contributes nothing. An all-`none`
+        // business produces byte-identical figures before and after this step.
+        // Do NOT add a backfill that writes off historic shortfalls: that is
+        // precisely the automatic write-off rule 5 forbids, and it would cut
+        // profit on a day nobody decided anything.
+        //
+        // Idempotency guard mirrors v45/v46/v68/v71/v74/v79 so a DB stepped
+        // back to < 80 by the revert-then-re-upgrade tests re-upgrades cleanly.
+        final shortfallWriteoffsExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='crate_shortfall_writeoffs'",
+        ).get();
+        if (shortfallWriteoffsExists.isEmpty) {
+          await m.createTable(crateShortfallWriteoffs);
+          await customStatement(
+            'CREATE TRIGGER bump_crate_shortfall_writeoffs_last_updated_at '
+            'AFTER UPDATE ON crate_shortfall_writeoffs '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE crate_shortfall_writeoffs SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+          // The append-only pair, emitted from the single `_ledgerTables`
+          // source so onCreate and this upgrade cannot drift.
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere(
+              (l) => l.table == 'crate_shortfall_writeoffs',
+            ),
+          )) {
+            await customStatement(stmt);
+          }
+        }
+        // Emitted OUTSIDE the guard (v72/v73/v74/v79's shape) so a device
+        // stepped back to < 80 with the table already present still re-emits
+        // them.
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_crate_shortfall_writeoffs_brand',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_crate_shortfall_writeoffs_business_lua',
+        );
+        for (final stmt in _crateShortfallIndexStatements) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -6636,6 +6787,22 @@ const List<_LedgerImmutability> _ledgerTables = [
     'performed_by',
     'created_at',
   ]),
+  // v80 (#216, ADR 0023 rule 5) — the Crate Shortfall write-off ledger. Like the
+  // Placed Deposit ledger above it carries NO void columns, so every column but
+  // last_updated_at is frozen: an accepted loss is a dated decision, and a
+  // reversal is a new NEGATIVE row booked on ITS own day, never an edit that
+  // would restate a day already closed.
+  _LedgerImmutability('crate_shortfall_writeoffs', [
+    'id',
+    'business_id',
+    'manufacturer_id',
+    'store_id',
+    'crate_count',
+    'rate_per_crate_kobo',
+    'note',
+    'performed_by',
+    'created_at',
+  ]),
 ];
 
 /// The van-sales per-feature indexes (#141). Shared verbatim by
@@ -6725,6 +6892,21 @@ const List<String> _crateDepositIndexStatements = [
       'ON supplier_crate_deposit_requests (business_id, status, created_at)',
 ];
 
+/// The Crate Shortfall write-off indexes (#216, ADR 0023 rule 5). Separate from
+/// [_crateDepositIndexStatements] so the v79 step (which replays that list) is
+/// not asked to index a table that does not exist until v80.
+const List<String> _crateShortfallIndexStatements = [
+  // The two reads there are: the brand's net written-off COUNT (which nets out
+  // of the derived shortfall on the card) and the period's booked LOSS (which
+  // is the one crate figure that reaches profit). Both scan
+  // `(business_id, manufacturer_id, created_at)`.
+  'CREATE INDEX idx_crate_shortfall_writeoffs_brand '
+      'ON crate_shortfall_writeoffs (business_id, manufacturer_id, created_at)',
+  // The sync push cursor, the shape every synced table carries.
+  'CREATE INDEX idx_crate_shortfall_writeoffs_business_lua '
+      'ON crate_shortfall_writeoffs (business_id, last_updated_at)',
+];
+
 /// The crate-deposit payment index (#212). Deliberately NOT part of
 /// [_crateDepositIndexStatements]: that list is replayed inside the v79 step
 /// BEFORE `payment_transactions.crate_deposit_id` exists, so a payment-table
@@ -6802,6 +6984,8 @@ List<String> get _postCreateStatements {
     // plus the cash leg's back-reference.
     ..._crateDepositIndexStatements,
     ..._crateDepositPaymentIndexStatements,
+    // v80 (#216 PRD #203) — the Crate Shortfall write-off ledger.
+    ..._crateShortfallIndexStatements,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',
