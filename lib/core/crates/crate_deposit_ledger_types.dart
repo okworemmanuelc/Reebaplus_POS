@@ -22,6 +22,8 @@
 /// `SupplierCrateDepositRequests`.
 library;
 
+import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
+
 // ── The payment family ───────────────────────────────────────────────────────
 
 /// `payment_transactions.type` for every movement of supplier crate-deposit
@@ -117,3 +119,42 @@ const List<String> kCrateDepositRequestStatuses = [
   kCrateDepositRequestConfirmed,
   kCrateDepositRequestRejected,
 ];
+
+// ── Which legs an arrangement admits ─────────────────────────────────────────
+
+/// **The arrangement decides which money legs may exist at all** (#214, ADR
+/// 0023 rules 1, 3 and 4). One pure predicate, so the write path cannot drift
+/// from the story the settings screen tells an owner.
+///
+///  * [CrateMoneyArrangement.none] — nothing. A swap-only brand moves no crate
+///    money, ever. This is the release gate for the whole of PRD #203.
+///  * [CrateMoneyArrangement.perDelivery] — a [kCrateDepositMovementPlacement]
+///    on a delivery and a [kCrateDepositMovementRelease] when the empties go
+///    home. Money follows the crates.
+///  * [CrateMoneyArrangement.standingFloat] — ONLY
+///    [kCrateDepositMovementFloatTopup] and
+///    [kCrateDepositMovementFloatPayout]. A lump sum placed once for the right
+///    to hold a supplier's crates does not move because a lorry arrived, and it
+///    does not move because empties went back. **It does not move when crates
+///    go missing either**: the supplier has not deducted anything, so booking a
+///    loss would show money leaving that nobody took. Missing crates eat float
+///    headroom and raise the brand-level Crate Shortfall (#216) instead.
+///
+/// [kCrateDepositMovementAdjustment] is deliberately absent: a correction is
+/// never queued as a request (only a money-permitted role posts one, directly),
+/// and it is legal on any brand whose arrangement moves money at all.
+bool crateDepositKindAllowedFor(
+  CrateMoneyArrangement arrangement,
+  String kind,
+) {
+  switch (arrangement) {
+    case CrateMoneyArrangement.none:
+      return false;
+    case CrateMoneyArrangement.perDelivery:
+      return kind == kCrateDepositMovementPlacement ||
+          kind == kCrateDepositMovementRelease;
+    case CrateMoneyArrangement.standingFloat:
+      return kind == kCrateDepositMovementFloatTopup ||
+          kind == kCrateDepositMovementFloatPayout;
+  }
+}

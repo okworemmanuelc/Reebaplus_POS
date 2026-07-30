@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -710,6 +711,14 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         if (canManage && supplier != null) ...[
           _buildCrateActionCard(theme, supplier),
           SizedBox(height: context.getRSize(16)),
+          // #214 — the standing-float door. Only a brand on `standing_float`
+          // has money that moves on nothing but a real top-up or payout, so
+          // this card simply is not there for a business without one, which is
+          // every business until an owner switches a brand over.
+          if (_floatBrands().isNotEmpty) ...[
+            _buildFloatActionCard(theme, supplier),
+            SizedBox(height: context.getRSize(16)),
+          ],
         ],
         _buildCrateSummaryCard(theme, totalOwed, depositValueKobo),
         SizedBox(height: context.getRSize(12)),
@@ -970,6 +979,378 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         ),
       ),
     );
+  }
+
+  /// Every brand on the `standing_float` arrangement (#214). Empty for every
+  /// business until an owner deliberately switches one over, which is what
+  /// keeps this whole surface invisible on a live tenant.
+  List<ManufacturerData> _floatBrands() {
+    final all =
+        ref.watch(allManufacturersProvider).valueOrNull ??
+        const <ManufacturerData>[];
+    return all
+        .where(
+          (m) =>
+              crateMoneyArrangementOf(m.crateMoneyArrangement) ==
+              CrateMoneyArrangement.standingFloat,
+        )
+        .toList();
+  }
+
+  /// **The only door a standing float's money has** (#214, ADR 0023 rules 1
+  /// and 4). Deliveries, hand-backs and missing crates all leave it alone; a
+  /// top-up and a payout are the two times real cash changes hands, and this
+  /// is where they are recorded.
+  Widget _buildFloatActionCard(ThemeData theme, SupplierData supplier) {
+    return InkWell(
+      onTap: () => _showFloatMoneySheet(supplier),
+      borderRadius: BorderRadius.circular(16),
+      child: _GlassyCard(
+        padding: EdgeInsets.all(context.getRSize(14)),
+        child: Row(
+          children: [
+            Container(
+              width: context.getRSize(40),
+              height: context.getRSize(40),
+              decoration: BoxDecoration(
+                color: success.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                FontAwesomeIcons.moneyBillTransfer.data,
+                color: success,
+                size: context.getRSize(16),
+              ),
+            ),
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Crate float money',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w700,
+                      color: _text,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(2)),
+                  Text(
+                    'Top up what this supplier holds, or record money they '
+                    'paid back',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: _subtext,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              FontAwesomeIcons.chevronRight.data,
+              size: context.getRSize(13),
+              color: _subtext,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Record a standing-float top-up or payout (#214).
+  ///
+  /// Whoever may confirm crate money (`Gates.confirmCrateDeposit`) records it
+  /// on the spot — the money already moved, and a person who may decide a
+  /// deposit may record one they just paid. Anyone else raises it for that
+  /// role, which is why the store question appears only for them: the approval
+  /// queue routes BY store and `store_id` is NOT NULL on it, while the float
+  /// ledger itself is business-level and needs no store at all.
+  Future<void> _showFloatMoneySheet(SupplierData supplier) async {
+    final staffId = ref.read(authProvider).currentUser?.id;
+    if (staffId == null || staffId.isEmpty) {
+      AppNotification.showError(context, 'No active session.');
+      return;
+    }
+    final brands = _floatBrands();
+    if (brands.isEmpty) return;
+
+    final canPostDirectly = Gates.confirmCrateDeposit.allowsNow(ref);
+    final lockedStoreId = ref.read(lockedStoreProvider).value;
+    final stores = ref.read(selectableStoresProvider);
+    String? chosenStoreId =
+        lockedStoreId ?? (stores.length == 1 ? stores.single.id : null);
+
+    var isTopUp = true;
+    String? selectedId = brands.length == 1 ? brands.single.id : null;
+    final amountCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final needsStorePick = !canPostDirectly && lockedStoreId == null;
+          return Padding(
+            padding: EdgeInsets.only(
+              left: ctx.getRSize(20),
+              right: ctx.getRSize(20),
+              top: ctx.getRSize(16),
+              bottom:
+                  MediaQuery.of(ctx).viewInsets.bottom +
+                  ctx.deviceBottomPadding +
+                  ctx.getRSize(16),
+            ),
+            child: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: ctx.getRSize(40),
+                        height: ctx.getRSize(4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx).dividerColor,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(20)),
+                    Text(
+                      'Crate Float Money',
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(18),
+                        fontWeight: FontWeight.w800,
+                        color: _text,
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(4)),
+                    Text(
+                      supplier.name,
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(13),
+                        color: Theme.of(ctx).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(12)),
+                    Text(
+                      'Only record money that actually changed hands. Crates '
+                      'coming and going do not move this.',
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(12),
+                        color: _subtext,
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(16)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _crateMovementChip(
+                            ctx,
+                            label: 'Top up',
+                            selected: isTopUp,
+                            onTap: () => setSheet(() => isTopUp = true),
+                          ),
+                        ),
+                        SizedBox(width: ctx.getRSize(10)),
+                        Expanded(
+                          child: _crateMovementChip(
+                            ctx,
+                            label: 'They paid back',
+                            selected: !isTopUp,
+                            onTap: () => setSheet(() => isTopUp = false),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: ctx.getRSize(16)),
+                    AppDropdown<String>(
+                      value: selectedId,
+                      labelText: 'Brand',
+                      hintText: 'Select a brand',
+                      items: brands
+                          .map(
+                            (m) => DropdownMenuItem(
+                              value: m.id,
+                              child: Text(m.name),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setSheet(() => selectedId = v),
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Select a brand' : null,
+                    ),
+                    if (needsStorePick) ...[
+                      SizedBox(height: ctx.getRSize(16)),
+                      AppDropdown<String>(
+                        value: chosenStoreId,
+                        labelText: 'Store',
+                        hintText: 'Who should confirm this?',
+                        items: stores
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s.id,
+                                child: Text(s.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setSheet(() => chosenStoreId = v),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Choose the store this belongs to'
+                            : null,
+                      ),
+                    ],
+                    SizedBox(height: ctx.getRSize(16)),
+                    AppInput(
+                      controller: amountCtrl,
+                      labelText: isTopUp
+                          ? 'Amount you paid the supplier'
+                          : 'Amount the supplier paid back',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [CurrencyInputFormatter()],
+                      validator: (v) => _typedKobo(v ?? '') > 0
+                          ? null
+                          : 'Enter the amount that changed hands',
+                    ),
+                    SizedBox(height: ctx.getRSize(16)),
+                    AppInput(
+                      controller: noteCtrl,
+                      labelText: 'Note (optional)',
+                    ),
+                    SizedBox(height: ctx.getRSize(24)),
+                    AppButton(
+                      text: canPostDirectly
+                          ? (isTopUp ? 'Record Top-up' : 'Record Payout')
+                          : 'Send for Confirmation',
+                      onPressed: () => _submitFloatMovement(
+                        ctx,
+                        supplier: supplier,
+                        manufacturerId: selectedId,
+                        brands: brands,
+                        amountText: amountCtrl.text,
+                        noteText: noteCtrl.text,
+                        isTopUp: isTopUp,
+                        canPostDirectly: canPostDirectly,
+                        staffId: staffId,
+                        storeId: chosenStoreId,
+                        formKey: formKey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    amountCtrl.dispose();
+    noteCtrl.dispose();
+  }
+
+  Future<void> _submitFloatMovement(
+    BuildContext sheetCtx, {
+    required SupplierData supplier,
+    required String? manufacturerId,
+    required List<ManufacturerData> brands,
+    required String amountText,
+    required String noteText,
+    required bool isTopUp,
+    required bool canPostDirectly,
+    required String staffId,
+    required String? storeId,
+    required GlobalKey<FormState> formKey,
+  }) async {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    final mfrId = manufacturerId!;
+    final amountKobo = _typedKobo(amountText);
+    final brandName = brands.firstWhere((m) => m.id == mfrId).name;
+    final note = noteText.trim().isEmpty ? null : noteText.trim();
+    final messenger = ScaffoldMessenger.of(context);
+
+    // Write-boundary re-check (§10.2.1): honour a revoked override, and re-read
+    // the money gate rather than trusting the flag the sheet opened with.
+    if (!ref
+        .read(currentUserPermissionsProvider)
+        .contains('suppliers.manage')) {
+      Navigator.pop(sheetCtx);
+      AppNotification.showError(
+        context,
+        'You don’t have permission to do that.',
+      );
+      return;
+    }
+    final postDirectly =
+        canPostDirectly && Gates.confirmCrateDeposit.allowsNow(ref);
+    Navigator.pop(sheetCtx);
+    try {
+      final dao = ref.read(databaseProvider).cratePoolDao;
+      if (postDirectly) {
+        await dao.recordCrateFloatMovement(
+          supplierId: supplier.id,
+          manufacturerId: mfrId,
+          amountKobo: amountKobo,
+          isTopUp: isTopUp,
+          performedBy: staffId,
+          // Deliberately null unless a store is locked: a float belongs to the
+          // business, not to one store (ADR 0023's consequence note that crate
+          // money is a company obligation).
+          storeId: storeId,
+          note: note,
+        );
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              isTopUp
+                  ? 'Top-up recorded — ${supplier.name} now holds '
+                        '${formatCurrency(amountKobo / 100)} more of yours'
+                  : 'Payout recorded — ${formatCurrency(amountKobo / 100)} is '
+                        'back from ${supplier.name}',
+            ),
+          ),
+        );
+        return;
+      }
+      await dao.raiseCrateDepositRequest(
+        supplierId: supplier.id,
+        manufacturerId: mfrId,
+        storeId: storeId!,
+        crateCount: 0,
+        requestedBy: staffId,
+        kind: isTopUp
+            ? kCrateDepositMovementFloatTopup
+            : kCrateDepositMovementFloatPayout,
+        requestedAmountKobo: amountKobo,
+        note: note,
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '$brandName float ${isTopUp ? 'top-up' : 'payout'} of '
+            '${formatCurrency(amountKobo / 100)} is waiting for a manager',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not record the float money. Please try again.',
+        );
+      }
+    }
   }
 
   // Headline summary: net crates owed + refundable deposit held by the supplier.

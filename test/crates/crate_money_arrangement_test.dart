@@ -317,10 +317,11 @@ void main() {
         //     figure it can produce depends on anything but the arrangement
         //     itself when the answer is "no money moves";
         //   * the write boundary (CratePoolDao) — `raiseCrateDepositRequest`
-        //     returns null for
-        //     anything but `per_delivery`, so a `none` (or `standing_float`)
-        //     brand raises no pending deposit, writes no ledger row and moves
-        //     no cash on an ordinary delivery.
+        //     returns null unless the arrangement admits the leg's KIND
+        //     (`crateDepositKindAllowedFor`, widened by #214): a `none` brand
+        //     admits nothing at all, and a `standing_float` brand admits only a
+        //     top-up or a payout, so neither raises a pending deposit, writes a
+        //     ledger row or moves cash on an ordinary delivery.
         // The vocabulary module names the arrangement in prose only.
         'lib/core/crates/crate_deposit_position.dart',
         'lib/core/crates/crate_deposit_ledger_types.dart',

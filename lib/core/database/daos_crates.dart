@@ -1448,11 +1448,16 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   ///
   /// Nothing is raised — and this is the release gate for PRD #203, expressed
   /// as the earliest possible return — when:
-  ///  * the manufacturer's arrangement is not `per_delivery` (every existing
-  ///    brand on every live tenant reads `none`, #211; `standing_float` moves
-  ///    money only on real top-ups and payouts, #214);
-  ///  * the per-crate rate is 0, so there is no money to ask about;
-  ///  * the crate count is 0.
+  ///  * the manufacturer's arrangement does not admit this [kind]
+  ///    ([crateDepositKindAllowedFor]) — every existing brand on every live
+  ///    tenant reads `none` and admits nothing (#211), and a `standing_float`
+  ///    brand admits ONLY a top-up or a payout, so its ordinary deliveries and
+  ///    hand-backs pass through here and raise nothing (#214);
+  ///  * the per-crate rate is 0 on a `per_delivery` brand, so there is no money
+  ///    to ask about (a float carries its own stated amount and is exempt);
+  ///  * the amount works out at 0 — including a float leg nobody named an
+  ///    amount for, because how much you chose to add to a float is a fact only
+  ///    the person who paid it knows.
   ///
   /// The rate is SNAPSHOTTED onto the request, so a rate edit next month cannot
   /// restate what a delivery last week asked for.
@@ -1496,23 +1501,46 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     final arrangement = crateMoneyArrangementOf(
       manufacturer.crateMoneyArrangement,
     );
-    if (arrangement != CrateMoneyArrangement.perDelivery) return null;
+    // #214 widened this from a bare `== perDelivery`. The rule is now one pure
+    // predicate ([crateDepositKindAllowedFor]) shared with the settings screen's
+    // story: a `per_delivery` brand admits a placement and a release, a
+    // `standing_float` brand admits ONLY a top-up and a payout, and a `none`
+    // brand admits nothing. A delivery on a float brand still lands here — with
+    // `kind: placement` — and still leaves with nothing raised, which is exactly
+    // what "ordinary deliveries move no money" means at the write path.
+    if (!crateDepositKindAllowedFor(arrangement, kind)) return null;
 
     final rate = manufacturer.depositAmountKobo;
-    if (rate <= 0) return null;
+    // A `per_delivery` leg has no amount without a rate — the money IS the
+    // crates' worth — so a zero rate still stops it dead, exactly as #212/#213
+    // left it. A float leg carries its own stated amount, and a brand that
+    // simply holds a lump sum need never have set a per-crate rate at all, so a
+    // zero rate must not silence a real top-up.
+    if (rate <= 0 && arrangement != CrateMoneyArrangement.standingFloat) {
+      return null;
+    }
 
     final outward = crateDepositMovementIsOutward(kind);
     final int amount;
     if (requestedAmountKobo != null) {
       amount = requestedAmountKobo < 0 ? 0 : requestedAmountKobo;
     } else if (outward) {
+      // A float top-up covers no crates, so this is 0 and nothing is raised.
+      // That is right: how much you chose to add to a float is a fact only the
+      // person who paid it knows, and the app must never invent one.
       amount = crateCount * rate;
     } else {
       final held = (await _pairDepositPosition(
         supplierId: supplierId,
         manufacturer: manufacturer,
       )).placedDepositKobo;
-      final implied = crateCount * rate;
+      // A float payout covers no crates either, so there is nothing to value.
+      // The wind-down suggestion is everything this pair is holding — the whole
+      // float coming home is the ordinary case, and it is still only a
+      // SUGGESTION the approver overwrites with what was actually received.
+      final implied = (kind == kCrateDepositMovementFloatPayout && crateCount == 0)
+          ? held
+          : crateCount * rate;
       amount = implied < held ? implied : (held < 0 ? 0 : held);
     }
     // No money to ask about — a `none`-era return, a zero rate, or a
@@ -1648,62 +1676,35 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
 
       if (amount > 0) {
         final outward = crateDepositMovementIsOutward(req.kind);
-        final depositId = UuidV7.generate();
-        final depositRow = SupplierCrateDepositsCompanion.insert(
-          id: Value(depositId),
-          businessId: requireBusinessId(),
+        // The asset rises when money goes out to the supplier and falls when
+        // it comes back. Same for the crate count it covers.
+        //
+        // On an ADJUSTED amount the crate count and the snapshot rate stay
+        // WHOLE, so `signed_amount_kobo != crate_count * rate_per_crate_kobo`
+        // on that row. That is on purpose and it is the honest record: the
+        // delivery really was 8 crates at the brand's ₦3,500 rate, and we
+        // really paid less than that. Deriving a fake crate count from the
+        // part payment would invent a delivery that never happened, and
+        // rewriting the rate would lose what the brand actually charges.
+        // The consequence to know: `unbackedCrates` counts those crates as
+        // backed, because money WAS placed against them — the shortfall in
+        // naira shows up in `placedDepositKobo` instead, which is where a
+        // part payment belongs.
+        await _postCrateDepositLegs(
           supplierId: req.supplierId,
           manufacturerId: req.manufacturerId,
-          storeId: Value(req.storeId),
+          storeId: req.storeId,
           movementType: req.kind,
-          // The asset rises when money goes out to the supplier and falls when
-          // it comes back. Same for the crate count it covers.
-          //
-          // On an ADJUSTED amount the crate count and the snapshot rate stay
-          // WHOLE, so `signed_amount_kobo != crate_count * rate_per_crate_kobo`
-          // on that row. That is on purpose and it is the honest record: the
-          // delivery really was 8 crates at the brand's ₦3,500 rate, and we
-          // really paid less than that. Deriving a fake crate count from the
-          // part payment would invent a delivery that never happened, and
-          // rewriting the rate would lose what the brand actually charges.
-          // The consequence to know: `unbackedCrates` counts those crates as
-          // backed, because money WAS placed against them — the shortfall in
-          // naira shows up in `placedDepositKobo` instead, which is where a
-          // part payment belongs.
           signedAmountKobo: outward ? amount : -amount,
-          crateCount: Value(outward ? req.crateCount : -req.crateCount),
-          ratePerCrateKobo: Value(req.ratePerCrateKobo),
-          requestId: Value(requestId),
-          supplierCrateLedgerId: Value(req.supplierCrateLedgerId),
-          note: Value(note),
-          performedBy: Value(decidedBy),
-          createdAt: Value(now),
-          lastUpdatedAt: Value(now),
+          crateCount: outward ? req.crateCount : -req.crateCount,
+          ratePerCrateKobo: req.ratePerCrateKobo,
+          performedBy: decidedBy,
+          now: now,
+          requestId: requestId,
+          supplierCrateLedgerId: req.supplierCrateLedgerId,
+          paymentMethod: paymentMethod,
+          note: note,
         );
-        await into(supplierCrateDeposits).insert(depositRow);
-        await db.syncDao.enqueueUpsert(
-          'supplier_crate_deposits',
-          depositRow,
-        );
-
-        // The cash leg. `crate_deposit_out`, NEVER `expense` and NEVER
-        // `refund`: this money is refundable, so it must not cut profit, and
-        // typing held money as a refund is exactly the defect #190/#201 fixed
-        // on the customer side. Positive = out of the drawer, negative = back.
-        final paymentRow = PaymentTransactionsCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: requireBusinessId(),
-          storeId: Value(req.storeId),
-          amountKobo: outward ? amount : -amount,
-          method: paymentMethod,
-          type: kPaymentTypeCrateDepositOut,
-          crateDepositId: Value(depositId),
-          performedBy: Value(decidedBy),
-          createdAt: Value(now),
-          lastUpdatedAt: Value(now),
-        );
-        await into(paymentTransactions).insert(paymentRow);
-        await db.syncDao.enqueueUpsert('payment_transactions', paymentRow);
       }
 
       final updated =
@@ -1864,44 +1865,22 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.id.equals(manufacturerId) & whereBusiness(t))).getSingleOrNull();
     if (manufacturer == null) return null;
 
-    final depositId = UuidV7.generate();
     final now = DateTime.now();
+    late final String depositId;
     await transaction(() async {
-      final depositRow = SupplierCrateDepositsCompanion.insert(
-        id: Value(depositId),
-        businessId: requireBusinessId(),
+      depositId = await _postCrateDepositLegs(
         supplierId: supplierId,
         manufacturerId: manufacturerId,
-        storeId: Value(storeId),
+        storeId: storeId,
         movementType: kCrateDepositMovementAdjustment,
         signedAmountKobo: signedAmountKobo,
-        crateCount: Value(crateCount),
-        ratePerCrateKobo: Value(manufacturer.depositAmountKobo),
-        note: Value(note),
-        performedBy: Value(performedBy),
-        createdAt: Value(now),
-        lastUpdatedAt: Value(now),
+        crateCount: crateCount,
+        ratePerCrateKobo: manufacturer.depositAmountKobo,
+        performedBy: performedBy,
+        now: now,
+        paymentMethod: paymentMethod,
+        note: note,
       );
-      await into(supplierCrateDeposits).insert(depositRow);
-      await db.syncDao.enqueueUpsert('supplier_crate_deposits', depositRow);
-
-      // The cash half. Same family as the movement being corrected — a
-      // correction typed as a `refund` or an `expense` is the #190/#201 defect
-      // arriving through the back door.
-      final paymentRow = PaymentTransactionsCompanion.insert(
-        id: Value(UuidV7.generate()),
-        businessId: requireBusinessId(),
-        storeId: Value(storeId),
-        amountKobo: signedAmountKobo,
-        method: paymentMethod,
-        type: kPaymentTypeCrateDepositOut,
-        crateDepositId: Value(depositId),
-        performedBy: Value(performedBy),
-        createdAt: Value(now),
-        lastUpdatedAt: Value(now),
-      );
-      await into(paymentTransactions).insert(paymentRow);
-      await db.syncDao.enqueueUpsert('payment_transactions', paymentRow);
 
       await db.activityLogDao.log(
         action: 'crate_deposit_adjusted',
@@ -1913,6 +1892,188 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         storeId: storeId,
       );
     });
+    return depositId;
+  }
+
+  /// **A standing float moves only on real money** (#214, PRD #203, ADR 0023
+  /// rules 1 and 4).
+  ///
+  /// A `standing_float` brand's owner paid a depot a lump sum once, for the
+  /// right to hold their crates. Lorries then come and go, empties go back, and
+  /// **none of it touches the money** — that is what makes the arrangement a
+  /// float rather than a deposit per delivery, and it is why
+  /// [recordReceiveFromSupplier] and [recordReturnToSupplier] raise nothing for
+  /// one. Crates going missing move no money either: the supplier has not
+  /// deducted anything, so booking a loss here would show money leaving that
+  /// nobody took. Those crates eat float headroom and raise the brand-level
+  /// Crate Shortfall (#216) instead.
+  ///
+  /// Two things do move it, and they are both somebody handing over cash:
+  ///  * a **top-up** ([isTopUp] true) — paying more to hold more crates, a
+  ///    [kCrateDepositMovementFloatTopup] that raises the Placed Deposit asset
+  ///    and drops the drawer;
+  ///  * a **payout** ([isTopUp] false) — winding down with a supplier and
+  ///    getting the float back, a [kCrateDepositMovementFloatPayout] that
+  ///    lowers the asset and raises the drawer.
+  ///
+  /// Neither covers any particular crates, so `crate_count` is 0 (which is why
+  /// `unbackedCrates` on a float brand reads as the whole crate debt — a float
+  /// backs the RELATIONSHIP, not a numbered set of crates). [storeId] is
+  /// optional and normally null: a float belongs to the business, not to a
+  /// store, exactly as `supplier_crate_deposits.store_id` being nullable says.
+  ///
+  /// **This is the DIRECT path, for a money-permitted role**
+  /// (`Gates.confirmCrateDeposit`) — the same gate and the same reasoning as
+  /// [postCrateDepositAdjustment]: a person who may decide a deposit may record
+  /// one they just paid. Anyone else routes through
+  /// [raiseCrateDepositRequest] with a `float_topup` / `float_payout` kind and
+  /// waits for that role, which is ADR 0023 rule 6 unchanged.
+  ///
+  /// [amountKobo] is always POSITIVE — the direction comes from [isTopUp], so a
+  /// caller cannot accidentally pay a supplier by typing a minus sign. A payout
+  /// is deliberately **not capped** at what the pair holds: this records money
+  /// that genuinely arrived, and a payout larger than the recorded float is a
+  /// real disagreement between the books and the depot that the position should
+  /// surface (as a negative Placed Deposit) rather than quietly swallow.
+  ///
+  /// Returns the new ledger row's id, or null when nothing was posted — an
+  /// amount of 0 or less, an unknown brand, or a brand that is not on
+  /// `standing_float`. A `per_delivery` brand is refused here on purpose: its
+  /// money follows its crates through the approval queue, and a second,
+  /// crate-less door into the same ledger would let the two disagree.
+  Future<String?> recordCrateFloatMovement({
+    required String supplierId,
+    required String manufacturerId,
+    required int amountKobo,
+    required bool isTopUp,
+    required String performedBy,
+    String? storeId,
+    String paymentMethod = 'cash',
+    String? note,
+  }) async {
+    if (amountKobo <= 0) return null;
+
+    final manufacturer = await (select(
+      manufacturers,
+    )..where((t) => t.id.equals(manufacturerId) & whereBusiness(t))).getSingleOrNull();
+    if (manufacturer == null) return null;
+
+    final arrangement = crateMoneyArrangementOf(
+      manufacturer.crateMoneyArrangement,
+    );
+    final kind = isTopUp
+        ? kCrateDepositMovementFloatTopup
+        : kCrateDepositMovementFloatPayout;
+    if (!crateDepositKindAllowedFor(arrangement, kind)) return null;
+
+    final supplier = await (select(
+      suppliers,
+    )..where((t) => t.id.equals(supplierId) & whereBusiness(t))).getSingleOrNull();
+
+    final now = DateTime.now();
+    late final String depositId;
+    await transaction(() async {
+      depositId = await _postCrateDepositLegs(
+        supplierId: supplierId,
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        movementType: kind,
+        signedAmountKobo: isTopUp ? amountKobo : -amountKobo,
+        // A float covers no particular crates — see the doc above.
+        crateCount: 0,
+        ratePerCrateKobo: manufacturer.depositAmountKobo,
+        performedBy: performedBy,
+        now: now,
+        paymentMethod: paymentMethod,
+        note: note,
+      );
+
+      // Attributable, and it names the DIRECTION in the owner's own words: an
+      // audit trail that cannot tell you which way the cash went is not one.
+      await db.activityLogDao.log(
+        action: isTopUp ? 'crate_float_topped_up' : 'crate_float_paid_out',
+        description:
+            '${isTopUp ? 'Topped up the crate float for' : 'Received a crate float payout for'} '
+            '${manufacturer.name}'
+            '${supplier == null ? '' : (isTopUp ? ' with ${supplier.name}' : ' from ${supplier.name}')} '
+            '— ${formatCurrency(amountKobo / 100)}'
+            '${note == null || note.trim().isEmpty ? '' : ' — $note'}',
+        staffId: performedBy,
+        storeId: storeId,
+      );
+    });
+    return depositId;
+  }
+
+  /// **The two legs, in one place** — a `supplier_crate_deposits` row and the
+  /// `payment_transactions` row that is its cash half, both enqueued.
+  ///
+  /// Every writer of the Placed Deposit ledger goes through here
+  /// ([confirmCrateDepositRequest], [postCrateDepositAdjustment],
+  /// [recordCrateFloatMovement]), which is ADR 0019's both-or-neither rule made
+  /// impossible to forget: there is no way to raise the asset without moving
+  /// the cash, because one function writes both. The caller supplies the
+  /// transaction — every one of them has other work in the same unit.
+  ///
+  /// [signedAmountKobo] is the ledger's own convention: **positive = money out
+  /// to the supplier, negative = money back to us**. The cash leg carries the
+  /// SAME signed figure, in the [kPaymentTypeCrateDepositOut] family and never
+  /// as an `expense` or a `refund` — this money is refundable, so it must not
+  /// cut profit, and typing held money as a refund is exactly the defect
+  /// #190/#201 fixed on the customer side.
+  ///
+  /// Returns the deposit row's id, which the payment row points at.
+  Future<String> _postCrateDepositLegs({
+    required String supplierId,
+    required String manufacturerId,
+    required String movementType,
+    required int signedAmountKobo,
+    required int crateCount,
+    required int ratePerCrateKobo,
+    required String performedBy,
+    required DateTime now,
+    String? storeId,
+    String? requestId,
+    String? supplierCrateLedgerId,
+    String paymentMethod = 'cash',
+    String? note,
+  }) async {
+    final depositId = UuidV7.generate();
+    final depositRow = SupplierCrateDepositsCompanion.insert(
+      id: Value(depositId),
+      businessId: requireBusinessId(),
+      supplierId: supplierId,
+      manufacturerId: manufacturerId,
+      storeId: Value(storeId),
+      movementType: movementType,
+      signedAmountKobo: signedAmountKobo,
+      crateCount: Value(crateCount),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
+      requestId: Value(requestId),
+      supplierCrateLedgerId: Value(supplierCrateLedgerId),
+      note: Value(note),
+      performedBy: Value(performedBy),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await into(supplierCrateDeposits).insert(depositRow);
+    await db.syncDao.enqueueUpsert('supplier_crate_deposits', depositRow);
+
+    final paymentRow = PaymentTransactionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      storeId: Value(storeId),
+      amountKobo: signedAmountKobo,
+      method: paymentMethod,
+      type: kPaymentTypeCrateDepositOut,
+      crateDepositId: Value(depositId),
+      performedBy: Value(performedBy),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await into(paymentTransactions).insert(paymentRow);
+    await db.syncDao.enqueueUpsert('payment_transactions', paymentRow);
+
     return depositId;
   }
 
@@ -2111,6 +2272,18 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   }) {
     final crates =
         '$crateCount crate${crateCount == 1 ? '' : 's'} of $manufacturerName';
+    // #214 — a float leg covers no crates at all, so it is named by what it IS
+    // rather than by a crate count it does not have. "Top up" and "pay back"
+    // are the words an owner uses for the two, and an approver must be able to
+    // tell them apart at a glance.
+    if (kind == kCrateDepositMovementFloatTopup) {
+      return 'Top up the crate float for $manufacturerName'
+          '${supplierName == null ? '' : ' with $supplierName'}';
+    }
+    if (kind == kCrateDepositMovementFloatPayout) {
+      return 'Crate float paid back on $manufacturerName'
+          '${supplierName == null ? '' : ' by $supplierName'}';
+    }
     if (crateDepositMovementIsOutward(kind)) {
       if (crateCount == 0) {
         return 'Crate float for $manufacturerName'

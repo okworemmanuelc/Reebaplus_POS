@@ -334,6 +334,16 @@ defaults to `none`, so behaviour is unchanged until a brand is switched on.
 _Avoid_: assuming every beverage brand takes a deposit; inferring the arrangement
 from whether deposits happen to have been recorded before.
 
+**Float Top-up / Float Payout**:
+The only two events that move a `standing_float` brand's money — paying a
+supplier more to hold more crates, and winding down and getting the float back.
+Both are recorded as the payments they are, in the [Placed Deposit] family, and
+neither covers any particular crates. Everything else on a float brand —
+deliveries, hand-backs, and crates going missing — moves **no money at all**.
+_Avoid_: charging a loss when a crate on a float brand goes missing (the supplier
+has not deducted anything, so it would show money leaving that nobody took — it
+is a [Crate Shortfall]); moving the float on an ordinary delivery.
+
 **Crate Shortfall**:
 The gap between crates owed to suppliers and empties actually on hand, valued at
 the manufacturer rate — **brand-level and deliberately unattributed** to any one
