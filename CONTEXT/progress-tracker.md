@@ -10,6 +10,52 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Van sales speaks the tenant's trade, not drinks — CODE-COMPLETE (2026-07-30)
+Owner report: *"van sales automatically defaults to drinks terms for bars and
+beverage distributor. I want it to be business agnostic."* Van sales shipped
+with its copy hardcoded to the trade it was built for. Two leaks, with two
+different fixes, because they are two different kinds of word:
+
+1. **The item noun is a Lexicon slot.** Van sales sells the same catalogue the
+   shop does, so it must caption it with the same word the rest of the app
+   already uses. Every user-visible "drink"/"drinks" now resolves through
+   `ref.watch(industryLexiconProvider)` (ADR 0015) — `lex.item`,
+   `lex.itemLower`, `lex.itemPlural`, `lex.itemPluralLower`. A pharmacy now
+   reads *"Add a medicine"*, *"Medicines unaccounted for"*, *"Cost of the
+   medicines gone"*. **Bars change too**: Beverage/Bar resolve to
+   `item: 'Product'`, so van sales now agrees with inventory and the POS
+   instead of being the one surface saying "Drinks".
+2. **Empty crates are NOT a Lexicon slot and never will be** — there is no
+   pharmacy word for a crate. `lexicon.dart` already says so ("Beverage-only
+   nouns (crate, empties) are NOT here: their surfaces are already gated by
+   `isCrateBusiness`") — van sales was simply the one feature that never
+   applied the gate. Every crate surface now sits behind
+   `businessTracksCrates`, the same gate the POS, inventory and reconciliation
+   use: the load/return shell fields, the reconcile shell-memo card and its
+   line in the close dialog, the driver profile's whole **Crates tab** (tab
+   count 4 → 3 in lockstep), and the terminal's swap-only banner.
+
+`VanOverReturnException`'s message named a drinks noun from inside the DAO,
+where the Lexicon (a UI seam) cannot reach — rewritten to name no item noun at
+all rather than pick one that reads wrong outside a drinks business.
+
+No schema, no migration, no sync change: `shells_out`/`shells_back` still exist
+and still write, they simply stay 0 for a trade with no empties to count.
+
+Files: `load_van_screen.dart`, `van_return_screen.dart`,
+`van_reconcile_screen.dart`, `driver_profile_screen.dart`,
+`driver_terminal_screen.dart`, `van_write_off_sheet.dart`,
+`daos_van_sales.dart`.
+
+New guard `test/van_sales/van_sales_trade_neutral_test.dart` (8 cases): the
+rendered lexicon words per trade, the crate gate BOTH ways (hidden for a
+pharmacy, still present for a bar — asserting only the first half would be
+passed by deleting the feature), the opted-out bar, and a source ban so no new
+drinks noun creeps into a van sales string literal. Verified by reintroducing
+both bugs: **6 of the 8 go red**, then green again on restore.
+
+**1762 passed / 128 skipped / 0 failed**; `flutter analyze lib test` clean.
+
 ### #203 — crate-deposit OUTFLOW: IMPLEMENTATION IN PROGRESS (2026-07-29)
 Slices are being built in dependency order, each verified on the **merged**
 state before the next one branches from it. Verified baseline on main before
