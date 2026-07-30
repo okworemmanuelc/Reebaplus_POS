@@ -325,6 +325,14 @@ void main() {
         'lib/core/crates/crate_deposit_position.dart',
         'lib/core/crates/crate_deposit_ledger_types.dart',
         'lib/core/database/daos_crates.dart',
+        // #213 — the settlement sheet. It reads the arrangement to decide the
+        // SHAPE OF A FORM, never a figure: on a `per_delivery` brand the refund
+        // is real money that waits for a manager, so the sheet asks which store
+        // the trip belongs to and stops offering the legacy hand-typed deposit
+        // box. A `none` brand takes the untouched pre-#203 branch, which is why
+        // this reader cannot move a figure on a business that never switched a
+        // brand on.
+        'lib/features/inventory/screens/supplier_detail_screen.dart',
       };
 
       final found = <String>{};

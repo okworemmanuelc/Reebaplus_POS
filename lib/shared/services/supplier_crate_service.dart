@@ -98,4 +98,69 @@ class SupplierCrateService {
       );
     });
   }
+
+  /// **A settlement run** (#213, PRD #203 / ADR 0023) — a trip that delivered
+  /// nothing, carrying empties home, or a pure money settlement with no crates
+  /// on it at all. The counterpart of [recordReturn] for a brand whose Crate
+  /// Money Arrangement is `per_delivery`, where the refund is real money and
+  /// waits for a money-permitted role rather than being typed into the legacy
+  /// deposit column.
+  ///
+  /// [refundAmountKobo] is what the supplier ACTUALLY handed back, when the
+  /// person on the trip already knows. Null means "ask for the crates' worth"
+  /// and lets the approver record the real figure. Either way the money leg is
+  /// a pending request, not a movement: nothing is on the books until someone
+  /// who may move money says the money moved.
+  ///
+  /// [storeId] is required. The approval queue scopes approvers by store, so a
+  /// settlement raised under "All Stores" would have no one to route to.
+  Future<void> recordSettlement({
+    required String supplierId,
+    required String supplierName,
+    required String manufacturerId,
+    required String manufacturerName,
+    required int crateCount,
+    required String staffId,
+    required String storeId,
+    int? refundAmountKobo,
+    String? note,
+  }) async {
+    if (crateCount < 0) {
+      throw ArgumentError('Crate count cannot be negative');
+    }
+    if (crateCount == 0 && (refundAmountKobo ?? 0) <= 0) {
+      throw ArgumentError(
+        'A settlement with no crates needs the refund amount',
+      );
+    }
+    await _db.transaction(() async {
+      await _db.cratePoolDao.recordCrateSettlement(
+        supplierId: supplierId,
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        crateCount: crateCount,
+        performedBy: staffId,
+        refundAmountKobo: refundAmountKobo,
+        note: note,
+      );
+      final crateClause = crateCount == 0
+          ? 'no crates'
+          : '$crateCount $manufacturerName crate'
+                '${crateCount == 1 ? '' : 's'}';
+      final refundClause = refundAmountKobo == null
+          ? ' — refund awaiting confirmation'
+          : ' — refund of ${formatCurrency(refundAmountKobo / 100)} '
+                'awaiting confirmation';
+      await _db.activityLogDao.logActivity(
+        action: 'supplier.crate_settled',
+        description:
+            'Settled crate deposit with $supplierName: $crateClause returned'
+            '$refundClause',
+        staffId: staffId,
+        storeId: storeId,
+        entityType: 'supplier',
+        entityId: supplierId,
+      );
+    });
+  }
 }

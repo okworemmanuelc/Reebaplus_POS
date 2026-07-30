@@ -23,7 +23,16 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   const seamFile = 'lib/core/database/daos_crates.dart';
 
-  // The six crate tables — SQL names + their Drift table getters.
+  // The eight crate tables — SQL names + their Drift table getters.
+  //
+  // The last two are the supplier crate-MONEY pair (#212 raised them, #213 and
+  // #214 add writers). They belong here for a sharper reason than the counts
+  // do: `supplier_crate_deposits` is an append-only money ledger whose balance
+  // IS the signed sum of its rows, so a single write from outside the seam —
+  // one that skipped the arrangement gate, or wrote the asset without its cash
+  // leg — moves an owner's money figures with nothing to reconcile it against.
+  // ADR 0023 rule 1 and ADR 0019's both-or-neither rule are only as good as the
+  // guarantee that one function does the writing.
   const crateSqlTables = {
     'crate_ledger',
     'supplier_crate_ledger',
@@ -31,6 +40,8 @@ void main() {
     'manufacturer_crate_balances',
     'store_crate_balances',
     'supplier_crate_balances',
+    'supplier_crate_deposits',
+    'supplier_crate_deposit_requests',
   };
   const crateGetters = {
     'crateLedger',
@@ -39,6 +50,8 @@ void main() {
     'manufacturerCrateBalances',
     'storeCrateBalances',
     'supplierCrateBalances',
+    'supplierCrateDeposits',
+    'supplierCrateDepositRequests',
   };
 
   // Builder writes: into(t) / update(t) / delete(t), optionally db.-/_db.-qualified.

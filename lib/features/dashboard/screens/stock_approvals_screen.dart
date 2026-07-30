@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -701,7 +702,14 @@ class _CrateDepositApprovalCardState
     text: (widget.request.requestedAmountKobo / 100).toStringAsFixed(2),
   );
 
-  Color get _accent => Colors.indigo.shade400;
+  /// #213 — the same queue carries money going OUT to a supplier and money
+  /// coming BACK from one, and an approver who cannot tell which is which at a
+  /// glance will confirm cash in the wrong direction. Every label, the accent
+  /// and the confirmation text all turn on this one flag.
+  bool get _isRefund => !crateDepositMovementIsOutward(widget.request.kind);
+
+  Color get _accent =>
+      _isRefund ? Colors.teal.shade500 : Colors.indigo.shade400;
 
   @override
   void dispose() {
@@ -729,7 +737,12 @@ class _CrateDepositApprovalCardState
     if (confirm) {
       amountKobo = _typedAmountKobo;
       if (amountKobo == null) {
-        AppNotification.showError(context, 'Enter the amount you paid.');
+        AppNotification.showError(
+          context,
+          _isRefund
+              ? 'Enter the amount the supplier actually refunded.'
+              : 'Enter the amount you paid.',
+        );
         return;
       }
     } else {
@@ -758,11 +771,24 @@ class _CrateDepositApprovalCardState
         );
       }
       if (!mounted) return;
+      final short =
+          _isRefund &&
+          (amountKobo ?? 0) < widget.request.requestedAmountKobo;
       AppNotification.showSuccess(
         context,
         confirm
-            ? 'Deposit confirmed — recorded as money held by the supplier.'
-            : 'Deposit rejected. The crates on this delivery are unchanged.',
+            ? (_isRefund
+                  ? (short
+                        ? 'Refund recorded. The rest is still yours — it stays '
+                              'as money this supplier holds.'
+                        : 'Refund recorded — the money is back and this '
+                              'supplier holds that much less of yours.')
+                  : 'Deposit confirmed — recorded as money held by the '
+                        'supplier.')
+            : (_isRefund
+                  ? 'Refund rejected. The crates you handed back are unchanged.'
+                  : 'Deposit rejected. The crates on this delivery are '
+                        'unchanged.'),
       );
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'crates.deposit_approval.decide');
@@ -812,7 +838,7 @@ class _CrateDepositApprovalCardState
             ),
           ),
           title: Text(
-            'Crate deposit — ${r.summary}',
+            '${_isRefund ? 'Crate refund' : 'Crate deposit'} — ${r.summary}',
             style: context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
           ),
           subtitle: Padding(
@@ -849,10 +875,15 @@ class _CrateDepositApprovalCardState
             _detailRow(context, 'When', _fullStamp(r.createdAt)),
             SizedBox(height: context.spacingS),
             Text(
-              'The crates are already recorded. This is only the money — '
-              'change the amount if you paid something different, or reject '
-              'it if no deposit changed hands. Either way the crate count '
-              'stays as it is.',
+              _isRefund
+                  ? 'The empties are already recorded. This is only the money '
+                        '— enter what the supplier ACTUALLY handed back, even '
+                        'if it is less than the deposit. Anything short of it '
+                        'stays yours, still held by them.'
+                  : 'The crates are already recorded. This is only the money — '
+                        'change the amount if you paid something different, or '
+                        'reject it if no deposit changed hands. Either way the '
+                        'crate count stays as it is.',
               style: context.bodySmall.copyWith(
                 color: Theme.of(context).hintColor,
               ),
@@ -864,7 +895,7 @@ class _CrateDepositApprovalCardState
                 decimal: true,
               ),
               decoration: InputDecoration(
-                labelText: 'Amount paid',
+                labelText: _isRefund ? 'Amount refunded' : 'Amount paid',
                 prefixText: '$activeCurrencySymbol ',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
