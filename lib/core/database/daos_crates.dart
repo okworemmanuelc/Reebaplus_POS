@@ -1241,11 +1241,35 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   ///    without crates there is nothing to derive an amount from, and guessing
   ///    one would be exactly the assumed-refund this slice exists to stop.
   ///
-  /// The **physical empties pool is deliberately untouched**. The manual
-  /// supplier-side return has never moved it — Receive Stock's empties box is
-  /// the door that moves both the yard and the supplier ledger — and quietly
-  /// changing that here would alter what the same button does for every brand,
-  /// including `none` ones, inside a money slice.
+  /// **The empties leave the yard too** (#216 — the gap #213 flagged and left).
+  ///
+  /// #213 shipped this verb writing the SUPPLIER ledger only, on the reasoning
+  /// that the manual supplier-side return had never moved the physical pool and
+  /// a money slice should not quietly change what a shared button does for
+  /// `none` brands. The gap was real and it is not survivable once a Crate
+  /// Shortfall exists, because a shortfall is `cratesOwed − emptiesOnHand`:
+  /// dropping `cratesOwed` by N while the yard still claims to hold those N
+  /// empties makes the shortfall come out **N too small**. Settle 40 crates
+  /// while genuinely 10 short and the warning reads zero — a real loss silently
+  /// erased, and profit overstated by it. That is the exact failure ADR 0023
+  /// rule 5 exists to prevent ("it stays visible until somebody deals with it"),
+  /// and it fails in the dangerous direction, so it is fixed here.
+  ///
+  /// **No `none` brand's behaviour changes.** The button is not shared: the
+  /// settlement sheet routes to [SupplierCrateService.recordSettlement] — the
+  /// only caller of this verb — solely on the `per_delivery` branch, and a
+  /// `none` brand still takes the untouched pre-#203 `recordReturn` path into
+  /// [recordReturnToSupplier], which this slice does not touch. The empties leg
+  /// is nonetheless written **arrangement-blind**, which is the point of ADR
+  /// 0023 rule 6: a crate physically left the yard on a lorry, and whether that
+  /// is true cannot depend on a money setting.
+  ///
+  /// The result is that a settlement trip and a settlement made on a delivery
+  /// now land in exactly the same THREE ledgers by exactly the same code —
+  /// which is what #213's own doc claimed and the pool leg was the missing half
+  /// of. Receive Stock writes them as two calls
+  /// ([recordCrateReturnByManufacturer] + [recordReturnToSupplier]); so does
+  /// this, in one transaction.
   ///
   /// Returns the raised request's id, or null when nothing was raised.
   Future<String?> recordCrateSettlement({
@@ -1260,15 +1284,28 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     if (crateCount < 0) return null;
     if (crateCount == 0 && (refundAmountKobo ?? 0) <= 0) return null;
     if (crateCount > 0) {
-      return recordReturnToSupplier(
-        supplierId: supplierId,
-        manufacturerId: manufacturerId,
-        quantity: crateCount,
-        performedBy: performedBy,
-        storeId: storeId,
-        refundAmountKobo: refundAmountKobo,
-        note: note,
-      );
+      String? requestId;
+      await transaction(() async {
+        // The physical leg FIRST, so a failure cannot leave the supplier's debt
+        // reduced while the yard still claims to hold the empties — the exact
+        // one-legged state that produced the understated shortfall above.
+        await recordCrateReturnByManufacturer(
+          manufacturerId: manufacturerId,
+          quantity: crateCount,
+          performedBy: performedBy,
+          storeId: storeId,
+        );
+        requestId = await recordReturnToSupplier(
+          supplierId: supplierId,
+          manufacturerId: manufacturerId,
+          quantity: crateCount,
+          performedBy: performedBy,
+          storeId: storeId,
+          refundAmountKobo: refundAmountKobo,
+          note: note,
+        );
+      });
+      return requestId;
     }
     return raiseCrateDepositRequest(
       supplierId: supplierId,
