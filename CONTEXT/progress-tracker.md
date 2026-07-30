@@ -22,8 +22,8 @@ the run: **1550 passed / 126 skipped / 0 failed**.
 | #212 Placed Deposit + approval + position seam (Drift v79, cloud 0172) | **MERGED** | `f159f46` — 1640 pass / 126 skip / 0 fail |
 | #213 settle on return (code only, no migration) | **MERGED** | `4098972` — 1665 pass / 126 skip / 0 fail |
 | #214 standing float (code only, no migration) | **MERGED** | `dd1a709` — 1698 pass / 126 skip / 0 fail |
-| #215 worth + recon card (amends ADR 0014) | in progress | — |
-| #216 shortfall + write-off | pending | — |
+| #215 worth + recon card (**ADR 0014 amended**) | **MERGED** | `6bccbe5` — 1714 pass / 126 skip / 0 fail |
+| #216 shortfall + write-off | in progress | — |
 | #217 forfeit netting | pending | — |
 
 **#210 notes.** `confirmReceipt` now takes `fullCratesReceivedByManufacturer`
@@ -129,6 +129,32 @@ with the depot); and **crates lost on a float brand move no money** — they
 raise the Shortfall only, because the supplier has not deducted anything yet.
 Booking the loss immediately is the trap this slice exists to avoid, and the
 new `CONTEXT.md` "Float Top-up / Float Payout" entry names it.
+
+**#215 notes.** Code only. `rollUpCrateDepositPositions` sits beside the seam
+and only *adds positions up* — it derives nothing, so the card, the supplier
+screen and #213's refund cap cannot fork. The business-wide guarantee is the
+**absence** of a `lockedStoreProvider` read in the provider. The cash-line
+exclusion holds **by construction**: `cashInKobo`, `cashOutKobo`,
+`netCashMovementKobo` and `netProfitKobo` are literally unchanged getters, so
+the new line cannot leak into them by a later edit.
+
+**ADR 0014 is amended** — status line plus a closing "Amendment: the sixth
+card" section recording why it earns a card rather than a line (a total answers
+"how much"; an owner acts on *who* is holding it), why business-wide even under
+a lock (audit C4), that the count is still five for every tenant until an owner
+switches a brand on, and a note that replacing it is a decision to record, not
+a tidy-up.
+
+**⚠️ ONE AC RESOLVED BY ARGUMENT, NOT CODE.** "Business worth is no longer
+inflated by negative supplier crate debt" — `supplierCrateDebtKobo` is **not**
+clamped at zero. Clamping would change what a `none` tenant reads today, which
+directly breaks the release-gate AC in the same issue. The two criteria
+genuinely contradict for any tenant already carrying drift, and ADR 0023's
+Consequences already chose non-repair. So: **#210 stopped the drift getting
+worse and #215 books the answering asset, but the overstatement already
+accumulated on live tenants is NOT repaired.** Repairing it is an unscoped data
+migration needing a decision about the true opening crate position, which the
+app cannot infer. Reasoning is in the `businessNetPositionKobo` doc comment.
 
 **Cloud migrations are NOT deployed yet** — branches commit them, deployment is
 sequenced separately after the app code lands. Pending: **0171, 0172**.
