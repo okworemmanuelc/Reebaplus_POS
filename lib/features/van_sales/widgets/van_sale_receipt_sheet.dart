@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_receipt_view.dart';
 
 /// The receipt for one road sale, re-opened from the driver profile's Sales tab
 /// (#146).
@@ -15,9 +13,16 @@ import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 /// at the trip's load price (spec §5.1), and re-pricing the lines off today's
 /// catalogue would show a receipt that was never issued.
 ///
+/// It can be printed and shared (#208 item 1) through the same
+/// [VanReceiptView] the driver terminal uses, so the copy a manager produces
+/// from the office is byte-for-byte the copy the driver produced at the
+/// tailgate. Because the original was issued on the road, a copy taken here is
+/// stamped REPRINTED / RESHARED — the rule the orders list and the customer
+/// profile already follow, and what stops a duplicate passing as an original.
+///
 /// No crate deposit line: the road is **swap-only** in v1 (spec §11), so a road
 /// sale never took a deposit and printing one would invent money.
-class VanSaleReceiptSheet extends ConsumerWidget {
+class VanSaleReceiptSheet extends StatelessWidget {
   final OrderWithItems sale;
 
   const VanSaleReceiptSheet({super.key, required this.sale});
@@ -33,7 +38,7 @@ class VanSaleReceiptSheet extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final t = Theme.of(context);
     final order = sale.order;
 
@@ -78,17 +83,13 @@ class VanSaleReceiptSheet extends ConsumerWidget {
                 context.getRSize(16) + context.deviceBottomPadding,
               ),
               children: [
-                ReceiptWidget(
-                  orderId: order.orderNumber,
+                VanReceiptView(
+                  orderNumber: order.orderNumber,
                   cart: cart,
-                  subtotal: order.netAmountKobo / 100.0,
-                  crateDeposit: 0,
-                  total: order.netAmountKobo / 100.0,
-                  paymentMethod: 'Cash',
-                  cashReceived: order.amountPaidKobo / 100.0,
+                  totalKobo: order.netAmountKobo,
+                  cashReceivedKobo: order.amountPaidKobo,
                   orderStatus: order.status,
-                  riderName: 'Van Sale',
-                  businessName: ref.watch(currentBusinessNameProvider),
+                  isReopened: true,
                 ),
                 SizedBox(height: context.getRSize(16)),
                 SizedBox(
