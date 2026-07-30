@@ -106,10 +106,13 @@ class OrderCommands {
       // [totalAmountKobo] is the payable the customer owes, already net of
       // per-line discounts (the cart subtracts them before checkout). The
       // server's pos_record_sale_v2 RPC recomputes the gross from p_items and
-      // derives net = gross − discount + crate_deposit, so we forward
-      // [discountKobo] as the order's discount but must NOT re-subtract it from
-      // the local net here — that would double-count. The server's response
-      // overwrites these mirror values on success (_applyDomainResponse).
+      // derives net = gross − discount − crate_credit + crate_deposit, so we
+      // forward [discountKobo] as the order's discount but must NOT re-subtract
+      // it from the local net here — that would double-count. The server's
+      // response overwrites these mirror values on success
+      // (_applyDomainResponse), which is why #209 has the envelope forward the
+      // crate credit too: any reduction this header applied that the envelope
+      // drops comes back as a payable the customer was never charged.
       discountKobo: Value(discountKobo),
       netAmountKobo: totalAmountKobo,
       amountPaidKobo: Value(amountPaidKobo),
