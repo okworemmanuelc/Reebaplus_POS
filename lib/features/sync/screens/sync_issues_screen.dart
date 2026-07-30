@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -678,6 +679,10 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
 
   Widget _orphanItemTile(ThemeData t, SyncQueueOrphanData item) {
     final reasonText = item.reason;
+    // A rejected `pos_record_sale_v2` sale (an oversell the cloud rolled back)
+    // gets a one-tap recovery: run the same full local reversal as the
+    // `sale_rejected` notification, then clear this orphan (#150).
+    final rejectedOrderId = _rejectedSaleOrderId(item);
     final payloadPreview = item.payload.length > 200
         ? '${item.payload.substring(0, 200)}…'
         : item.payload;
@@ -744,9 +749,16 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
             children: [
-              const Spacer(),
+              if (rejectedOrderId != null)
+                TextButton(
+                  onPressed: () =>
+                      _confirmCancelRejectedSale(item, rejectedOrderId),
+                  child: const Text('Cancel this sale'),
+                ),
               TextButton(
                 onPressed: () async {
                   try {
@@ -795,6 +807,99 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
         ],
       ),
     );
+  }
+
+  /// The plain `p_order_id` of a rejected-sale orphan
+  /// (`domain:pos_record_sale_v2`), or null for any other orphan or an
+  /// unparseable payload. Drives the one-tap "Cancel this sale" recovery (#150).
+  String? _rejectedSaleOrderId(SyncQueueOrphanData item) {
+    if (item.actionType != 'domain:pos_record_sale_v2') return null;
+    try {
+      final decoded = jsonDecode(item.payload);
+      if (decoded is Map) {
+        final oid = decoded['p_order_id'];
+        if (oid is String && oid.isNotEmpty) return oid;
+      }
+    } catch (_) {
+      // Unparseable payload — no recovery affordance.
+    }
+    return null;
+  }
+
+  /// Confirms and runs the second recovery entry point for a server-rejected
+  /// sale (#150): the SAME full local reversal the `sale_rejected` notification
+  /// runs — order + inventory + wallet + crate — sourced from this orphan's
+  /// `p_items`, then the orphan is cleared. The reversal runs BEFORE the orphan
+  /// is discarded (it reads the payload), so it is never discard-then-recover.
+  Future<void> _confirmCancelRejectedSale(
+    SyncQueueOrphanData item,
+    String orderId,
+  ) async {
+    final t = Theme.of(context);
+    // Resolve everything off `ref` before any await — the element can unmount
+    // while the dialog is open, and touching `ref` afterwards races the
+    // riverpod invalidation (see the initState capture note above).
+    final staffId = ref.read(authProvider).currentUser?.id;
+    final orderService = ref.read(orderServiceProvider);
+    if (staffId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in again to cancel this sale.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel this rejected sale?'),
+        content: const Text(
+          'The server turned this sale down — the item was likely sold on '
+          'another till. Cancelling removes the sale from this device: the '
+          'stock and any customer empties balance go back to what they were '
+          'before it, and this entry is cleared.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: t.colorScheme.error),
+            child: const Text('Cancel the sale'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await orderService.cancelRejectedSaleFromOrphan(
+        orderId: orderId,
+        orphanId: item.id,
+        staffId: staffId,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sale cancelled. Stock and balances restored.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (_) {
+      // Mirror the notification path: show a friendly generic message rather
+      // than a raw exception string to a cashier.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not cancel the sale. Please try again.'),
+          backgroundColor: t.colorScheme.error,
+        ),
+      );
+    }
   }
 
   Widget _pendingItemTile(ThemeData t, SyncQueueData item) {

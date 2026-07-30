@@ -146,7 +146,7 @@ void main() {
 
   group('OrdersDao.markCancelled dispatch', () {
     test(
-        'flag OFF: order + stock_tx (compensation) + inventory + payment void '
+        'flag OFF: order + stock_tx (compensation) + inventory + refund cash-out '
         'enqueue, no domain envelope', () async {
       await setFlag(db, 'feature.domain_rpcs_v2.cancel_order', on: false);
       final s = await _seedCancelFixtures(db, businessId);
@@ -155,7 +155,7 @@ void main() {
       await db.ordersDao.markCancelled(orderId, 'changed mind', s.staffId);
 
       // Local mirror: order cancelled, compensating stock_tx inserted,
-      // payment voided, inventory restored.
+      // refund cash-out row appended (original sale intact), inventory restored.
       final order = await (db.select(db.orders)..where((t) => t.id.equals(orderId)))
           .getSingle();
       expect(order.status, 'cancelled');
@@ -167,9 +167,14 @@ void main() {
           stxRows.firstWhere((r) => r.movementType == 'return');
       expect(compensation.quantityDelta, 2);
 
+      // The sale row is never voided (#172); a dated 'refund' row is appended.
       final paymentRows = await db.select(db.paymentTransactions).get();
-      expect(paymentRows, hasLength(1));
-      expect(paymentRows.first.voidedAt, isNotNull);
+      expect(paymentRows, hasLength(2));
+      final saleRow = paymentRows.firstWhere((p) => p.type == 'sale');
+      expect(saleRow.voidedAt, isNull);
+      final refundRow = paymentRows.firstWhere((p) => p.type == 'refund');
+      expect(refundRow.orderId, orderId);
+      expect(refundRow.voidedAt, isNull);
 
       // Queue: per-table upserts only, no envelope.
       final pending = await getPendingQueue(db);

@@ -1,3 +1,6 @@
+// crate-seam-exempt-file: the sync engine restores cloud-authoritative crate
+// rows (pull/reconcile), not user-initiated movements — it is not a crate write
+// path (ADR 0020 / crate_seam_ban_test).
 import 'dart:async';
 import 'dart:convert';
 import 'package:drift/drift.dart';
@@ -488,12 +491,16 @@ class SupabaseSyncService {
     'order_items': 31,
     'wallet_transactions': 32,
     'crate_ledger': 33,
-    'manufacturer_crate_balances': 34,
     'store_crate_balances': 35,
-    // v53 (§3.13) — supplier crate ledger + balance cache push after their
-    // parents (suppliers=5, manufacturers=3) so the FK targets land first.
+    // #166: the `manufacturer_crate_balances` cache is OFF the push set (the
+    // business-wide empties pool is derived from the ledger — ADR 0020), so it
+    // has no push-priority entry. After this slice NO crate balance is pushed —
+    // only the append-only ledgers sync.
+    // v53 (§3.13) — supplier crate ledger pushes after its parents (suppliers=5,
+    // manufacturers=3) so the FK targets land first. #160: the
+    // `supplier_crate_balances` cache is OFF the push set (supplier crate debt is
+    // derived from the ledger — ADR 0020), so it has no push-priority entry.
     'supplier_crate_ledger': 36,
-    'supplier_crate_balances': 37,
     'system_config': 50,
   };
 
@@ -509,17 +516,14 @@ class SupabaseSyncService {
   /// the cloud domain RPC pos_transfer_crates (gen_random_uuid). A PK-keyed
   /// cloud upsert of a client-minted id would INSERT a duplicate and trip the
   /// cloud UNIQUE(business_id, store_id, manufacturer_id); keying the push on
-  /// the natural key merges into the existing row instead. (manufacturer/customer
-  /// crate caches don't mix authorities — in domain-RPC mode they're never
-  /// plain-enqueued — so they don't need an entry.)
+  /// the natural key merges into the existing row instead. (The manufacturer and
+  /// customer crate caches are OFF the push set entirely — #166 / #158, ADR 0020
+  /// — so they are never enqueued and need no natural-key entry.)
   static const Map<String, String> _naturalKeyPushConflictTargets = {
     'store_crate_balances': 'business_id,store_id,manufacturer_id',
-    // v53 (§3.13) — supplier crate balance cache is plain-enqueued by
-    // SupplierCrateLedgerDao (no domain RPC), so two devices can independently
-    // mint different ids for the same (business, supplier, manufacturer) before
-    // syncing. Key the cloud upsert on the natural key so they merge instead of
-    // tripping the cloud UNIQUE (2067).
-    'supplier_crate_balances': 'business_id,supplier_id,manufacturer_id',
+    // #160: the `supplier_crate_balances` cache is OFF the push set (supplier
+    // crate debt is derived from the append-only `supplier_crate_ledger` — ADR
+    // 0020), so it is never enqueued and needs no natural-key conflict target.
   };
 
   /// Per-table whitelist of cloud-pushable columns, DERIVED from the
@@ -973,6 +977,12 @@ class SupabaseSyncService {
           if (group.table == 'order_items') {
             collectOrderItemPairs(chunkPayloads, recostPairs);
           }
+          // #170 #7c — a delivered `return` stock_transaction (a cancel's
+          // compensating restore) makes its (product, store) pair a recost
+          // candidate, so a cancel triggers the same server recost a sale does.
+          if (group.table == 'stock_transactions') {
+            collectReturnStockTxPairs(chunkPayloads, recostPairs);
+          }
           // A clean chunk below the connection's ceiling counts toward
           // growing the adaptive size back up; already-at-ceiling just
           // resets the streak.
@@ -1368,6 +1378,34 @@ class SupabaseSyncService {
     }
   }
 
+  /// Collect the (product, store) pairs from a batch of freshly-pushed
+  /// `stock_transactions` upsert payloads whose `movement_type` is `return`
+  /// (#170 #7c). A cancel writes compensating `return` rows and restores each
+  /// consumed cost layer locally; pushing those rows makes their (product,
+  /// store) pairs recost candidates too, so the cancel triggers the SAME
+  /// server-authoritative `pos_recost_pairs` pass a sale push does — the
+  /// cancelled order leaves the sale ledger, so every SURVIVING line of that
+  /// (product, store) needs its COGS re-derived. It does NOT re-derive the batch
+  /// remainders: since #187 / migration 0167 the replay no longer writes
+  /// `cost_batches.qty_remaining`, so the client's restore layer stands (it used
+  /// to be resurrected into a double restore).
+  /// Non-`return` movements (sale/adjustment/transfer legs) are skipped here:
+  /// sale pairs already come from `order_items`, and the rest never change COGS.
+  @visibleForTesting
+  static void collectReturnStockTxPairs(
+    Iterable<Map<String, dynamic>> stockTxPayloads,
+    Set<({String productId, String storeId})> into,
+  ) {
+    for (final p in stockTxPayloads) {
+      if (p['movement_type'] != 'return') continue;
+      final pid = p['product_id'];
+      final sid = p['location_id'];
+      if (pid is String && sid is String) {
+        into.add((productId: pid, storeId: sid));
+      }
+    }
+  }
+
   /// Collect the (product, store) pairs from a freshly-pushed
   /// `pos_record_sale_v2` envelope (#40). The v2 thin-intent carries one store
   /// for the whole sale (`p_store_id`) and a `p_items` list; quick-sale lines
@@ -1700,6 +1738,15 @@ class SupabaseSyncService {
           List<dynamic>.from(walletCompens),
         );
       }
+      // pos_cancel_order (v2): the cancel also restores each sale line's consumed
+      // cost LAYER as a fresh cost_batches row (#201, migration 0170) — the
+      // server is the sole author on this path (the client's own #170 #7c restore
+      // is v1-only), and since #187 / 0167 the recost replay no longer rebuilds
+      // `qty_remaining`, so nothing else would bring those units' cost back.
+      final costBatches = map['cost_batches'];
+      if (costBatches is List && costBatches.isNotEmpty) {
+        await _restoreTableData('cost_batches', List<dynamic>.from(costBatches));
+      }
 
       // pos_create_customer (v2): server returns the canonical customer +
       // customer_wallet rows. Mirror their last_updated_at locally so the
@@ -1748,6 +1795,20 @@ class SupabaseSyncService {
         await _restoreTableData('payment_transactions', [
           Map<String, dynamic>.from(paymentTxn),
         ]);
+      }
+      // pos_record_sale_v2 (#201, migration 0170): the tender is SPLIT by money
+      // type, so one sale can mint up to three payment rows (goods `sale`,
+      // `crate_deposit`, `wallet_topup`). The singular key above carries only the
+      // goods row — kept for envelope compatibility — so restore the whole array
+      // too, or the deposit / top-up rows would exist only in the cloud until the
+      // next pull (the v2 path pre-inserts NO payment row locally). Idempotent
+      // with the singular handler: the same row upserts twice, unchanged.
+      final paymentTxns = map['payment_transactions'];
+      if (paymentTxns is List && paymentTxns.isNotEmpty) {
+        await _restoreTableData(
+          'payment_transactions',
+          List<dynamic>.from(paymentTxns),
+        );
       }
 
       // pos_record_expense (v2): server returns canonical expense and
@@ -2304,6 +2365,28 @@ class SupabaseSyncService {
       // purposes; the deferred set lives in its own pref and the
       // SyncIssues "Catching up" card surfaces it independently.
       await prefs.setInt(_consecutiveFailuresKey(businessId), 0);
+      // #145 (van-sales spec §9.4 #15) — a pull is exactly where a road sale
+      // that was rung before a trip closed finally lands. Restate the affected
+      // closed trips here: the compensating ledger pair, the artifact
+      // correction and ONE audit row, posted by the system. "Audited, never
+      // prompted" — a manager who closed a trip on Thursday cannot answer a
+      // question about a sale that arrived on Friday.
+      //
+      // Deliberately non-fatal: a sweep failure must never fail a pull that
+      // otherwise succeeded, and the next pull retries it (the drift is
+      // measured against durable state, so nothing is lost by skipping a run).
+      try {
+        final restated = await _db.vanTripsDao
+            .restateClosedTripsWithLateSales();
+        if (restated > 0) {
+          debugPrint(
+            '[SyncService] van: restated $restated closed trip(s) after a '
+            'late-arriving road sale',
+          );
+        }
+      } catch (e) {
+        debugPrint('[SyncService] van restatement sweep skipped: $e');
+      }
       pullStatus.value = pullStatus.value.copyWith(stage: PullStage.completed);
     } catch (e, st) {
       debugPrint('[SyncService] pullChanges failed: $e\n$st');
@@ -3777,11 +3860,15 @@ class SupabaseSyncService {
         'expense_categories',
         (row) => row.id,
       );
-      await _backfillTable(
-        _db.customerCrateBalances,
-        'customer_crate_balances',
-        (row) => row.id,
-      );
+      // #158/#159/#160/#166: the crate BALANCE caches (`customer_crate_balances`,
+      // `manufacturer_crate_balances`, `store_crate_balances`,
+      // `supplier_crate_balances`, and the `manufacturers.empty_crate_stock`
+      // scalar) are LOCAL-ONLY projections — every crate balance is DERIVED from
+      // the append-only `crate_ledger` / `supplier_crate_ledger`, so no absolute
+      // cache value is ever pushed (not by the DAO write paths and not by a
+      // recovery backfill). There is deliberately NO `_backfillTable` for them
+      // here; re-enqueuing one would reintroduce the last-write-wins clobber the
+      // model removes.
       await _backfillTable(
         _db.deliveryReceipts,
         'delivery_receipts',

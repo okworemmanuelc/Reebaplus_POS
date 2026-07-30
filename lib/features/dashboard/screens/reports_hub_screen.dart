@@ -38,9 +38,16 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     // §16.6.1 + §12.3.1 — count of stock-keeper adjustments AND cashier Quick
     // Sale requests awaiting this viewer's approval (a CEO sees all stores; a
     // Manager only their assigned store(s)).
+    // #212 adds a third kind: crate-deposit MONEY legs (ADR 0023 rule 6),
+    // counted only for a viewer who may actually decide money. Every brand
+    // defaults to `none`, so this term is 0 on any business that has not
+    // deliberately switched a brand on and the badge reads exactly as before.
     final pendingApprovals =
         ref.watch(viewerScopedPendingStockRequestsProvider).length +
-        ref.watch(viewerScopedPendingQuickSaleRequestsProvider).length;
+        ref.watch(viewerScopedPendingQuickSaleRequestsProvider).length +
+        (Gates.confirmCrateDeposit.allows(ref)
+            ? ref.watch(viewerScopedPendingCrateDepositsProvider).length
+            : 0);
 
     // Build the visible card list first so the grid can size itself to what
     // actually renders (cards are hidden per role / business type — rule #7).
@@ -53,7 +60,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
         _buildReportCard(
           context,
           title: 'Approvals',
-          subtitle: 'Stock & quick sales',
+          subtitle: 'Stock, quick sales & crate deposits',
           icon: FontAwesomeIcons.clipboardList.data,
           color: Colors.orange,
           badgeCount: pendingApprovals,

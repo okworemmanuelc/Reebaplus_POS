@@ -1,0 +1,159 @@
+# The crate pool is ledger-as-truth behind one write seam
+
+**Status:** accepted (2026-07-22)
+
+The empty-crate pool is recorded in **three representations that no single write
+path keeps in step**: the append-only `crate_ledger` / `supplier_crate_ledger`,
+the four balance caches (`customer_crate_balances`, `manufacturer_crate_balances`,
+`store_crate_balances`, `supplier_crate_balances`), and the
+`manufacturers.empty_crate_stock` scalar. Worse, the running balances sync
+between devices as **absolute "the count is now N" rows** (`isCache` LWW), so a
+late-arriving row silently overwrites another device's work. Two offline tills
+that both move the same brand's crates permanently lose one till's activity when
+they reconnect. The counts drift, never self-correct, and disagree across the
+Crates tab, a locked store's view, and the customer/supplier records. The
+append-only ledger that *could* be the single truth exists but is treated as
+secondary. (Full analysis: `CRATE_TRACKING_AUDIT.md`; PRD #156.)
+
+The customer wallet already solved exactly this problem in this codebase:
+`getWalletBalanceKobo` **derives** a balance by summing signed, append-only
+ledger rows and cancels voided rows with compensating entries — never storing or
+shipping a mutable total, so it is conflict-free under sync (architecture
+invariant #3).
+
+## Decision
+
+**The crate ledger is the one source of truth; every balance is derived, never
+stored or shipped as an absolute total.** Every crate balance the app shows —
+business empties on hand (per manufacturer), per-store empties, a customer's
+crate debt, a supplier's crate debt — is `SUM(quantity_delta)` over the relevant
+append-only ledger rows. The balance caches and the `empty_crate_stock` scalar
+stop being independently authoritative: they are replaced by live sum queries or
+demoted to local-only projections rebuilt from the ledger after each pull. The
+hard contract is: **no crate balance is ever pushed to the cloud as an
+absolute-value row — only append-only ledger rows sync.** This is the change
+that removes the last-write-wins data loss by construction (two devices' ledgers
+merge; there is no absolute-value row left to overwrite).
+
+**One write seam — the Crate Pool module (`CratePoolDao`, in
+`lib/core/database/daos_crates.dart`; it absorbs the former `CrateLedgerDao`).**
+Every write that moves a crate routes through it as a domain verb
+(issue-to-customer, return-from-customer, receive/return-supplier, record-damage,
+transfer-between-stores, reverse-order-issuance, record-manual-count-correction,
+add-empties-to-pool). Each appends a correctly-signed, store-stamped, append-only
+ledger row in one transaction and enqueues it to the Outbox. A `crate_seam_ban_test`
+fails the build if any crate-table write (or an `empty_crate_stock` mutation)
+appears outside the seam, so a new surface (a report, a van, a screen) has exactly
+one place to call and cannot reintroduce the drift.
+
+## Rejected alternatives
+
+- **Server-authoritative deltas** — keep the cache tables and route crate
+  movements through a guarded relative-decrement RPC (mirroring
+  `pos_record_sale_v2`). This still ships totals and keeps three representations;
+  it narrows the race window but leaves the drift surface. Rejected: it treats the
+  symptom (the LWW push) without making the ledger the truth.
+- **Minimal fix** — keep the three representations and schedule the existing
+  `verifyCrateReconciliation` nightly. Rejected: reconciliation papers over a
+  model with three sources of truth; it will drift again between runs, and the
+  reconciler has no authority to decide which representation is right.
+
+## Rollout (this is a multi-slice refactor)
+
+- **#157 (this slice) — prefactor, behavior-preserving.** Introduce the seam and
+  make the ledger *complete* (every movement, including a manual "set to N" as a
+  reconciling delta row and a store-less `addEmptyCrates`, appends a row). The
+  caches are still written exactly as before, so nothing the user sees changes. A
+  migration seeds one opening-balance ledger delta per existing cache balance so
+  `SUM(quantity_delta)` equals today's displayed number at cutover — without it
+  the later derive slices would zero out every existing business's counts. Opening
+  rows are **local-only** (every device seeds from its own caches; pushing them
+  would double-count).
+- **#158 (DONE 2026-07-23)** — customer crate debt derived from the ledger. The
+  Crates-tab read (`CratePoolDao.watchCustomerCrateDebt`, forwarded from
+  `CustomersDao.watchCrateBalancesWithGroups`) is `SUM(quantity_delta)` over the
+  customer's `crate_ledger` rows grouped by manufacturer, wallet-style. The
+  `customer_crate_balances` cache is demoted to a **local-only projection** (still
+  written by the seam, no longer enqueued), so only append-only ledger rows sync
+  for customer crates and two offline tills converge instead of clobbering.
+- **#159 (DONE 2026-07-23)** — the PHYSICAL empties pool (business-wide +
+  per-store) derived from the ledger. New `CratePoolDao.watchEmptiesPoolByManufacturer({storeId})`
+  is `SUM(quantity_delta)` over the store-stamped, customer-less physical-pool
+  rows (`store_id IS NOT NULL AND customer_id IS NULL`); grouping by store gives
+  the per-store figure, so the business total always equals Σ store totals by
+  construction. `InventoryDao.watchEmptyCratesByManufacturer` / `watchTotalCrateAssets`,
+  `storeCrateBalancesProvider` / `storeEmptiesByManufacturerProvider`, the
+  Inventory Crates tab, and the product-detail read all forward to it. The
+  `manufacturers.empty_crate_stock` scalar is DEMOTED off the push set (a new
+  `manufacturers` push-column whitelist that excludes it), and `store_crate_balances`
+  stops enqueuing — both become local-only projections (restore-on-pull retained,
+  values unread). This kills the counter-only-grows asymmetry (a `returned`
+  store-stamped row now pulls the pool down) and the cross-store clamp drift on a
+  damaged-empty. The dead `verifyCrateReconciliation` (no callers, print-only) is
+  removed — the ledger IS the truth, nothing left to reconcile.
+- **#160 (DONE 2026-07-23)** — supplier crate debt derived from the ledger + a
+  one-step supplier delivery. The Supplier Detail → Empty Crates read
+  (`CratePoolDao.watchSupplierCrateDebt`, forwarded from
+  `SupplierCrateBalancesDao.watchBySupplier`) is `SUM(quantity_delta)` over the
+  supplier's `supplier_crate_ledger` rows grouped by manufacturer, wallet-style
+  (inner-joined for the name + per-manufacturer deposit rate). The
+  `supplier_crate_balances` cache is demoted to a **local-only projection** (still
+  written by the seam, no longer enqueued, and off the push-priority /
+  natural-key maps), so only append-only ledger rows sync for supplier crates and
+  two offline tills converge instead of clobbering. **Receive Stock posts both
+  sides in one step (B3):** a delivery that returns empties appends, in its own
+  transaction through the seam, BOTH the physical-pool `crate_ledger` movement AND
+  the `supplier_crate_ledger` movement — one physical event, one operation — so
+  the yard count and the supplier balance can no longer disagree and the stock
+  keeper never enters the return a second time on the supplier screen.
+- **#166 (DONE 2026-07-24)** — the business-wide per-manufacturer physical-pool
+  cache (`manufacturer_crate_balances`) is demoted, closing the last leak. Its
+  READ already derived from the ledger (#159's business-wide pool); this slice
+  removes the only write-path enqueue (`recordCrateReturnByManufacturer` in
+  `daos_crates.dart` no longer pushes an absolute "balance is now N" row — it just
+  writes the local cache and enqueues the `crate_ledger` row) and drops the table
+  from the `_tablePushPriority` map. The `SyncedTable` restore-on-pull entry is
+  retained (local-only projection, values unread). **After this slice no crate
+  balance is ever pushed to the cloud — only append-only ledger rows sync — so
+  the ADR's hard contract now holds for every one of the four caches plus the
+  scalar.**
+- **#162 (DONE 2026-07-24)** — Cancel completes the crate ledger. A cancelled
+  sale's `issued` customer crate rows are reversed through a new seam verb
+  `CratePoolDao.reverseIssuedByCustomer` (the ENQUEUED counterpart of
+  `reverseIssuedByCustomerLocal` — a cancel reverses a sale the cloud ACCEPTED,
+  so the compensating `-quantity` 'adjusted' ledger row syncs; the demoted
+  `customer_crate_balances` cache stays local-only), so the customer's derived
+  crate debt nets back to its pre-sale value — no phantom debt. `markCancelled`
+  now releases the held `crate_deposit` wallet leg with a **deposit-family**
+  `crate_deposit_refunded` debit instead of the generic `'void'`: 'void' lands in
+  the SPENDABLE bucket (outside `kCrateDepositReferenceTypes`), so it wrongly
+  docked spendable AND left "deposits held" inflated; the deposit-family debit
+  deflates held to 0 and leaves spendable untouched — the wallet's own
+  compensating-entry release (`settleCrateDepositReturn`). No migration.
+- **#163 (DONE 2026-07-24)** — `businessNetPositionKobo` (Daily Reconciliation
+  "Business worth right now") now nets out BOTH crate liabilities against the
+  empties asset it already books: the crate deposits we still HOLD for customers
+  (`crateDepositSummaryProvider.heldKobo` — the `crate_deposit` wallet family net,
+  business-wide) and the crate debt we owe SUPPLIERS (a new business-wide derived
+  read `CratePoolDao.watchSupplierCrateDebtValueKobo` = `SUM(quantity_delta) ×
+  current per-manufacturer `depositAmountKobo`` over `supplier_crate_ledger`
+  across every supplier, surfaced via `supplierCrateDebtValueKoboProvider`). Both
+  legs are ledger-derived (trustworthy only after #158–#162), business-wide (like
+  outstanding customer debt), gated on `showCrates`, and valued at the SAME
+  current deposit rate as the physical-empties asset — so the asset and its two
+  matching liabilities net symmetrically. A shop holding deposits and owing
+  suppliers now shows a lower, honest position; the detail card + CSV export gain
+  the two subtracted lines. No migration, no writes (a pure read + getter). Tests:
+  `recon_data_test.dart` gains a net-position group (asset + both liability legs,
+  each subtracting independently, non-crate business unchanged);
+  `supplier_crate_debt_derived_test.dart` gains a business-wide value group
+  (all-suppliers roll-up, credit nets down, settled = 0, live). **After this slice
+  the crate asset is booked AND both crate liabilities are subtracted — the
+  net-position figure is honest in both directions.**
+
+## Invariants that still bind
+
+Kobo columns stay `bigint`; every crate write stays business-scoped; ledger rows
+are append-only and go through the Outbox; a new/changed synced table is one
+`SyncedTable` entry; migration numbers are reserved late (ADR 0018 push /
+0019 van were reserved on unmerged branches, so this is **0020**).

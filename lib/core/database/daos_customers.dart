@@ -55,30 +55,13 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
         .watchSingleOrNull();
   }
 
+  /// #158 — the Crates-tab read. Balance is DERIVED from the append-only
+  /// `crate_ledger` (the wallet model), not the demoted `customer_crate_balances`
+  /// cache; forwards to the Crate Pool seam so the SUM logic lives in one place.
   Stream<List<CrateBalanceEntry>> watchCrateBalancesWithGroups(
     String customerId,
   ) {
-    final query =
-        select(customerCrateBalances).join([
-          innerJoin(
-            manufacturers,
-            manufacturers.id.equalsExp(customerCrateBalances.manufacturerId),
-          ),
-        ])..where(
-          whereBusiness(customerCrateBalances) &
-              customerCrateBalances.customerId.equals(customerId),
-        );
-    return query.watch().map(
-      (rows) => rows
-          .map(
-            (r) => CrateBalanceEntry(
-              manufacturerId: r.readTable(customerCrateBalances).manufacturerId,
-              manufacturerName: r.readTable(manufacturers).name,
-              balance: r.readTable(customerCrateBalances).balance,
-            ),
-          )
-          .toList(),
-    );
+    return attachedDatabase.cratePoolDao.watchCustomerCrateDebt(customerId);
   }
 
   Future<String> addCustomer(CustomersCompanion customer) async {
@@ -235,40 +218,12 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// Append a wallet ledger entry. Used by legacy topup/refund flows in
-  /// `CustomerService`. Pass an empty [staffId] when no auth context exists
-  /// — it's stored as NULL.
-  Future<void> updateWalletBalance({
-    required String customerId,
-    required int amountKobo,
-    required String type,
-    required String referenceType,
-    String? note,
-    String staffId = '',
-  }) async {
-    final wallet = await attachedDatabase.customerWalletsDao.getByCustomerId(
-      customerId,
-    );
-    if (wallet == null) {
-      throw StateError('Customer $customerId has no wallet');
-    }
-    final txId = UuidV7.generate();
-    final signed = type == 'credit' ? amountKobo.abs() : -amountKobo.abs();
-    final txComp = WalletTransactionsCompanion.insert(
-      id: Value(txId),
-      businessId: requireBusinessId(),
-      walletId: wallet.id,
-      customerId: customerId,
-      type: type,
-      amountKobo: amountKobo.abs(),
-      signedAmountKobo: signed,
-      referenceType: referenceType,
-      performedBy: Value(staffId.isEmpty ? null : staffId),
-      lastUpdatedAt: Value(DateTime.now()),
-    );
-    await into(walletTransactions).insert(txComp);
-    await db.syncDao.enqueueUpsert('wallet_transactions', txComp);
-  }
+  // #202: `updateWalletBalance` lived here — a wallet ledger write with NO
+  // matching `payment_transactions` row and no staff id. Its only callers were
+  // the three unreachable `CustomerService` legacy paths deleted alongside it.
+  // Every live credit movement now goes through `CreditLedgerService`, which
+  // posts the wallet leg and the payment leg atomically (PRD #155). Do not
+  // reintroduce a wallet-only write primitive here.
 }
 
 extension CustomerDataExtension on CustomerData {
@@ -483,6 +438,29 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
       }
       return map;
     });
+  }
+
+  /// Every non-voided `crate_deposit_forfeited` wallet row, business-wide, newest
+  /// first (#176 report-truth). Kept deliberately narrow — the Daily
+  /// Reconciliation sums these IN PERIOD as forfeit income (a kept deposit is
+  /// money legitimately earned, PRD #155 story 7), so streaming the whole wallet
+  /// ledger would be wasteful. Each row's `signedAmountKobo` is a negative debit
+  /// (mirroring `keptKobo`); the report takes the absolute value in span. Wallet
+  /// rows carry no `storeId`, so this is business-wide like the held-deposit
+  /// figure.
+  Stream<List<WalletTransactionData>> watchForfeitRows() {
+    return (select(walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.referenceType.equals('crate_deposit_forfeited') &
+                t.voidedAt.isNull(),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
   }
 
   Stream<List<WalletTransactionData>> watchHistory(String customerId) {

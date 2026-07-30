@@ -27,6 +27,7 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/edit_customer_sheet.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
+import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -210,6 +211,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       case 'completed':
         return BadgeVariant.green;
       case 'cancelled':
+      // LEGACY ROWS ONLY (#196): `refunded` is a retired status (PRD #155 moved
+      // refunds to `payment_transactions`); nothing writes it, but a historic
+      // order that carries it still renders in this customer's history and reads
+      // as a reversed sale, so it keeps the reversed-sale badge.
       case 'refunded':
         return BadgeVariant.red;
       default:
@@ -377,6 +382,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           );
                           return;
                         }
+                        // PRD #155 US 36 — every new payment row carries the
+                        // store it happened at, resolved the same way an
+                        // expense (§20.8) and a POS sale resolve it.
+                        final storeId = ref.read(activeWriteStoreProvider).id;
                         Navigator.pop(ctx);
                         try {
                           await ref
@@ -386,6 +395,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 amountKobo: (amount * 100).round(),
                                 method: method,
                                 staffId: staffId,
+                                storeId: storeId,
                                 note: note.isEmpty ? null : note,
                               );
                           messenger.showSnackBar(
@@ -684,6 +694,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           );
                           return;
                         }
+                        // The Sales card's Refunds figure is store-filtered, so
+                        // an unstamped cash-out vanishes under a locked store
+                        // (#194). Same store resolution as Add Credit above.
+                        final storeId = ref.read(activeWriteStoreProvider).id;
                         Navigator.pop(ctx);
                         try {
                           final refundedKobo = await ref
@@ -693,6 +707,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 amountKobo: amountKobo,
                                 method: method,
                                 staffId: staffId,
+                                storeId: storeId,
                                 note: note.isEmpty ? null : note,
                               );
                           messenger.showSnackBar(
@@ -898,6 +913,88 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
   }
 
+  /// §18 / PRD #155 (#173) — confirm, then void a mistyped customer credit
+  /// top-up (CEO/Manager only, gated on `customers.wallet.withdraw`). Appends
+  /// the compensating wallet debit AND the reversal payment row so the amount
+  /// drops out of the reconciliation's "Debts collected". Only offered on a
+  /// live cash/transfer top-up row.
+  Future<void> _confirmVoidTopup(WalletTransactionData txn) async {
+    // Defense-in-depth: re-check the gate at the action boundary (hard rule #6).
+    if (!Gates.refundCustomerWallet.allowsNow(ref)) return;
+    final staffId = ref.read(authProvider).currentUser?.id;
+    if (staffId == null) {
+      AppNotification.showError(
+        context,
+        'Could not void this top-up yet — no active session.',
+      );
+      return;
+    }
+    final theme = Theme.of(context);
+    final reasonCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.colorScheme.surface,
+        title: const Text('Void this credit top-up?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${formatCurrency(txn.amountKobo / 100)} will be reversed from '
+              '$_name\'s credit balance and dropped from Debts collected. '
+              'This cannot be undone.',
+            ),
+            SizedBox(height: ctx.getRSize(12)),
+            TextField(
+              controller: reasonCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Void', style: TextStyle(color: danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final reason = reasonCtrl.text.trim();
+    try {
+      final voided = await ref
+          .read(customerServiceProvider)
+          .voidTopup(
+            walletTxnId: txn.id,
+            staffId: staffId,
+            reason: reason.isEmpty ? null : reason,
+          );
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            voided ? 'Top-up voided' : 'This top-up can no longer be voided',
+          ),
+          backgroundColor: voided ? success : danger,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      AppNotification.showError(
+        context,
+        'Could not void this top-up. Please try again.',
+      );
+    }
+  }
+
   /// §18 — open the prefilled Edit Customer Details sheet (CEO/Manager only,
   /// `customers.update`). Prefill comes from the live watched row, falling back
   /// to the row this screen was opened with.
@@ -962,6 +1059,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     DateTime? reshareDate;
     final surfaceCol = Theme.of(context).colorScheme.surface;
     final borderCol = Theme.of(context).dividerColor;
+    // #200 / US 33 — rebuild the ORIGINAL receipt's money block from the
+    // recorded order so this reprint prints the same Subtotal / Discount /
+    // Total. `totalKobo` returns `order.totalAmountKobo` by construction.
+    final totals = receiptTotalsFromOrder(
+      totalAmountKobo: order.totalAmountKobo,
+      crateDepositPaidKobo: order.crateDepositPaidKobo,
+      discountKobo: order.discountKobo,
+    );
 
     showModalBottomSheet(
       context: context,
@@ -1003,12 +1108,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         child: ReceiptWidget(
                           orderId: order.orderNumber,
                           cart: items,
-                          subtotal:
-                              (order.totalAmountKobo -
-                                  order.crateDepositPaidKobo) /
-                              100.0,
-                          crateDeposit: order.crateDepositPaidKobo / 100.0,
-                          total: order.totalAmountKobo / 100.0,
+                          subtotal: totals.subtotalKobo / 100.0,
+                          discount: totals.discountKobo / 100.0,
+                          crateDeposit: totals.depositKobo / 100.0,
+                          total: totals.totalKobo / 100.0,
                           paymentMethod: paymentMethodLabel(order.paymentType),
                           customerName: _name,
                           customerPhone: _phone,
@@ -1108,12 +1211,20 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       }
 
       final paperSize = await ref.read(printerServiceProvider).getPaperSize();
+      // #200 / US 33 — same shared derivation as the on-screen reprint, so the
+      // paper copy carries the identical Subtotal / Discount / Total.
+      final totals = receiptTotalsFromOrder(
+        totalAmountKobo: order.totalAmountKobo,
+        crateDepositPaidKobo: order.crateDepositPaidKobo,
+        discountKobo: order.discountKobo,
+      );
       final bytes = await ThermalReceiptService.buildReceipt(
         orderId: order.orderNumber,
         cart: items,
-        subtotal: (order.totalAmountKobo - order.crateDepositPaidKobo) / 100.0,
-        crateDeposit: order.crateDepositPaidKobo / 100.0,
-        total: order.totalAmountKobo / 100.0,
+        subtotal: totals.subtotalKobo / 100.0,
+        discount: totals.discountKobo / 100.0,
+        crateDeposit: totals.depositKobo / 100.0,
+        total: totals.totalKobo / 100.0,
         paymentMethod: paymentMethodLabel(order.paymentType),
         customerName: _name,
         customerAddress: _address,
@@ -1906,6 +2017,16 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     final isCredit = txn.type == 'credit';
                     final amount = txn.amountKobo / 100.0;
                     final color = isCredit ? success : danger;
+                    // #173 — a live cash/transfer top-up can be voided by anyone
+                    // who can withdraw from the wallet (the sanctioned fix for a
+                    // mistyped Add Credit). Hide-don't-block: no affordance
+                    // renders when the gate is denied or the row isn't a live
+                    // top-up.
+                    final isVoidableTopup =
+                        txn.voidedAt == null &&
+                        (txn.referenceType == 'topup_cash' ||
+                            txn.referenceType == 'topup_transfer') &&
+                        Gates.refundCustomerWallet.allows(ref);
                     return Padding(
                       padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
                       child: _GlassyCard(
@@ -1962,6 +2083,24 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 color: color,
                               ),
                             ),
+                            if (isVoidableTopup) ...[
+                              SizedBox(width: ctx.getRSize(6)),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: BoxConstraints(
+                                  minWidth: ctx.getRSize(32),
+                                  minHeight: ctx.getRSize(32),
+                                ),
+                                tooltip: 'Void top-up',
+                                icon: Icon(
+                                  FontAwesomeIcons.arrowRotateLeft.data,
+                                  size: ctx.getRSize(14),
+                                  color: danger,
+                                ),
+                                onPressed: () => _confirmVoidTopup(txn),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -2366,7 +2505,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         qty,
                         storeId: creditStoreId,
                       );
-                      await db.crateLedgerDao.recordCrateReturnByCustomer(
+                      await db.cratePoolDao.recordCrateReturnByCustomer(
                         customerId: id,
                         manufacturerId: mfrId,
                         quantity: qty,

@@ -2,24 +2,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 
 void main() {
-  group('computeVatKobo', () {
+  // #176 — the DEFAULT basis is now inclusive (see vat_basis_test.dart); these
+  // exclusive-formula assertions name the exclusive basis explicitly.
+  group('computeVatKobo (exclusive basis)', () {
     test('7.5% of ₦175,000 (17,500,000 kobo) = ₦13,125', () {
       // 17_500_000 * 750 / 10000 = 1_312_500 kobo = ₦13,125.
-      expect(computeVatKobo(17500000, 750), 1312500);
+      expect(computeVatKobo(17500000, 750, basis: VatBasis.exclusive),
+          1312500);
     });
 
     test('rounds half-away-from-zero to the nearest kobo', () {
       // 100 * 750 / 10000 = 7.5 → 8.
-      expect(computeVatKobo(100, 750), 8);
+      expect(computeVatKobo(100, 750, basis: VatBasis.exclusive), 8);
     });
 
     test('zero rate yields no VAT even on a positive base', () {
-      expect(computeVatKobo(50000, 0), 0);
+      expect(computeVatKobo(50000, 0, basis: VatBasis.exclusive), 0);
     });
 
     test('non-positive base yields no VAT', () {
-      expect(computeVatKobo(0, 750), 0);
-      expect(computeVatKobo(-100, 750), 0);
+      expect(computeVatKobo(0, 750, basis: VatBasis.exclusive), 0);
+      expect(computeVatKobo(-100, 750, basis: VatBasis.exclusive), 0);
     });
   });
 

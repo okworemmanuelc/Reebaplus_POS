@@ -63,12 +63,13 @@ void main() {
   tearDown(() => db.close());
 
   group('CrateLedgerDao.recordCrateReturnByCustomer dispatch', () {
-    test('flag OFF: enqueues two upsert rows, no domain envelope', () async {
+    test('flag OFF: enqueues only the ledger row, no cache, no envelope',
+        () async {
       await setFlag(db, 'feature.domain_rpcs_v2.record_crate_return',
           on: false);
       final fx = await _seedCrateFixtures(db, businessId);
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
         manufacturerId: fx.manufacturerId,
         quantity: 5,
@@ -77,6 +78,9 @@ void main() {
 
       final ledgerRows = await db.select(db.crateLedger).get();
       expect(ledgerRows, hasLength(1));
+      // The cache is still written locally (a local-only projection) but is NOT
+      // enqueued: #158 derives customer crate debt from the ledger, so only the
+      // append-only ledger row crosses the wire.
       final balRows = await db.select(db.customerCrateBalances).get();
       expect(balRows, hasLength(1));
       expect(balRows.first.balance, -5,
@@ -84,10 +88,7 @@ void main() {
 
       final pending = await getPendingQueue(db);
       final actionTypes = pending.map((r) => r.actionType).toList()..sort();
-      expect(
-        actionTypes,
-        ['crate_ledger:upsert', 'customer_crate_balances:upsert'],
-      );
+      expect(actionTypes, ['crate_ledger:upsert']);
     });
 
     test('flag ON: one envelope with owner_kind=customer + thin payload',
@@ -95,7 +96,7 @@ void main() {
       await setFlag(db, 'feature.domain_rpcs_v2.record_crate_return', on: true);
       final fx = await _seedCrateFixtures(db, businessId);
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
         manufacturerId: fx.manufacturerId,
         quantity: 3,
@@ -150,7 +151,7 @@ void main() {
             ),
           );
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
         manufacturerId: fx.manufacturerId,
         quantity: 1,
@@ -165,34 +166,37 @@ void main() {
   });
 
   group('CrateLedgerDao.recordCrateReturnByManufacturer dispatch', () {
-    test('flag OFF: enqueues two upsert rows, no domain envelope', () async {
+    test('flag OFF: enqueues only the ledger upsert (cache local-only), '
+        'no domain envelope', () async {
       await setFlag(db, 'feature.domain_rpcs_v2.record_crate_return',
           on: false);
       final fx = await _seedCrateFixtures(db, businessId);
 
-      await db.crateLedgerDao.recordCrateReturnByManufacturer(
+      await db.cratePoolDao.recordCrateReturnByManufacturer(
         manufacturerId: fx.manufacturerId,
         quantity: 7,
         performedBy: fx.staffId,
       );
 
+      // The manufacturer_crate_balances cache is STILL written locally (UI reads
+      // it) — it is just no longer enqueued (#166).
       final balRows = await db.select(db.manufacturerCrateBalances).get();
       expect(balRows, hasLength(1));
       expect(balRows.first.balance, -7);
 
+      // #166 (ADR 0020): the business-wide cache is a local-only projection now —
+      // only the append-only ledger row syncs. No absolute-value crate balance
+      // is pushed at all.
       final pending = await getPendingQueue(db);
       final actionTypes = pending.map((r) => r.actionType).toList()..sort();
-      expect(
-        actionTypes,
-        ['crate_ledger:upsert', 'manufacturer_crate_balances:upsert'],
-      );
+      expect(actionTypes, ['crate_ledger:upsert']);
     });
 
     test('flag ON: one envelope with owner_kind=manufacturer', () async {
       await setFlag(db, 'feature.domain_rpcs_v2.record_crate_return', on: true);
       final fx = await _seedCrateFixtures(db, businessId);
 
-      await db.crateLedgerDao.recordCrateReturnByManufacturer(
+      await db.cratePoolDao.recordCrateReturnByManufacturer(
         manufacturerId: fx.manufacturerId,
         quantity: 4,
         performedBy: fx.staffId,

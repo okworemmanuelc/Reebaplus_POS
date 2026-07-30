@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -96,6 +97,7 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final semantic = t.extension<AppSemanticColors>()!;
     final border = t.dividerColor;
     final text = t.colorScheme.onSurface;
     final primary = t.colorScheme.primary;
@@ -313,6 +315,38 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                 ),
               ),
             ),
+
+            // Inline Uncosted warning (#199 / PRD #155 US 37). A blank/0 unit
+            // cost is allowed — the receipt still commits — but it must not be
+            // silent: no payable is raised for these units and they later sell
+            // at 0 COGS. Save Changes stays enabled.
+            if (editBuyingPermission && buyingKobo == 0)
+              Padding(
+                padding: EdgeInsets.only(
+                  top: context.getRSize(6),
+                  left: context.getRSize(4),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      FontAwesomeIcons.triangleExclamation.data,
+                      size: context.getRSize(11),
+                      color: semantic.warning,
+                    ),
+                    SizedBox(width: context.getRSize(6)),
+                    Expanded(
+                      child: Text(
+                        'No buying price. Add what you paid so profit shows '
+                        'correctly. You can add it later.',
+                        style: t.textTheme.bodySmall?.copyWith(
+                          color: semantic.warning,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             SizedBox(height: context.getRSize(16)),
 
             AppInput(

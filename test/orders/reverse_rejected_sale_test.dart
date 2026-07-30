@@ -323,7 +323,7 @@ void main() {
     expect(adjusted.first.customerId, customerId);
     expect(adjusted.first.referenceOrderId, orderId);
 
-    // Ledger nets to the cache (0) → verifyCrateReconciliation stays clean.
+    // Ledger nets to 0 → the derived crate debt returns to its pre-sale value.
     final ledgerSum = (await (db.select(db.crateLedger)
               ..where((t) => t.customerId.equals(customerId)))
             .get())

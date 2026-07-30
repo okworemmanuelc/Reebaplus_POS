@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
+import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -709,11 +711,24 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         if (canManage && supplier != null) ...[
           _buildCrateActionCard(theme, supplier),
           SizedBox(height: context.getRSize(16)),
+          // #214 — the standing-float door. Only a brand on `standing_float`
+          // has money that moves on nothing but a real top-up or payout, so
+          // this card simply is not there for a business without one, which is
+          // every business until an owner switches a brand over.
+          if (_floatBrands().isNotEmpty) ...[
+            _buildFloatActionCard(theme, supplier),
+            SizedBox(height: context.getRSize(16)),
+          ],
         ],
         _buildCrateSummaryCard(theme, totalOwed, depositValueKobo),
         SizedBox(height: context.getRSize(12)),
         _buildCrateMovementStats(theme, totals.received, totals.returned),
         SizedBox(height: context.getRSize(16)),
+        // #212 (PRD #203, ADR 0023 rules 1 + 2) — what this supplier is
+        // actually holding of the owner's money, per brand. Renders nothing at
+        // all for a business whose brands are all on the default `none`
+        // arrangement, which is every business until an owner switches one on.
+        ..._buildPlacedDepositSection(context, theme),
         Text(
           'By manufacturer',
           style: TextStyle(
@@ -739,6 +754,174 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
           ...active.map((b) => _buildSupplierCrateRow(theme, b)),
       ],
     );
+  }
+
+  /// **Money this supplier is holding for us** (#212, ADR 0023 rule 1) — the
+  /// Placed Deposit, per brand, plus anything still waiting on a manager and
+  /// the brand-level crate shortfall behind it.
+  ///
+  /// Every figure comes from `computeCrateDepositPosition`, the one pure seam,
+  /// so this section and the #215 business-wide card cannot disagree.
+  ///
+  /// It is deliberately SEPARATE from the "Deposit value (refundable)" tile
+  /// above, which is the NOTIONAL figure — crates owed × today's rate. ADR 0023
+  /// finding #3 is that those two numbers have never met; showing both, side by
+  /// side and labelled, is the honest fix. Making one silently overwrite the
+  /// other would only hide the disagreement.
+  ///
+  /// Empty for a brand on `none`: the position is all zeros there by
+  /// construction, so an all-`none` business sees this whole section vanish and
+  /// the screen reads exactly as it did before PRD #203.
+  List<Widget> _buildPlacedDepositSection(
+    BuildContext context,
+    ThemeData theme,
+  ) {
+    final positions =
+        ref
+            .watch(supplierCrateDepositPositionsProvider(widget.supplierId))
+            .valueOrNull ??
+        const <SupplierCrateDepositPosition>[];
+    final live = positions
+        .where(
+          (p) =>
+              p.position.movesMoney &&
+              (p.position.placedDepositKobo != 0 || p.position.hasPending),
+        )
+        .toList();
+    if (live.isEmpty) return const [];
+
+    final totalPlaced = live.fold<int>(
+      0,
+      (s, p) => s + p.position.placedDepositKobo,
+    );
+    final totalPending = live.fold<int>(
+      0,
+      (s, p) => s + p.position.pendingDepositKobo,
+    );
+
+    return [
+      Text(
+        'Your money with this supplier',
+        style: TextStyle(
+          fontSize: context.getRFontSize(14),
+          fontWeight: FontWeight.w800,
+          color: _text,
+        ),
+      ),
+      SizedBox(height: context.getRSize(4)),
+      Text(
+        'Deposits you have actually paid for their crates. It is still yours — '
+        'you get it back when the empties go home.',
+        style: TextStyle(fontSize: context.getRFontSize(12), color: _subtext),
+      ),
+      SizedBox(height: context.getRSize(12)),
+      _GlassyCard(
+        padding: EdgeInsets.all(context.getRSize(18)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Held by this supplier',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: _subtext,
+                    ),
+                  ),
+                ),
+                Text(
+                  formatCurrency(totalPlaced / 100),
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(18),
+                    fontWeight: FontWeight.w800,
+                    color: _text,
+                  ),
+                ),
+              ],
+            ),
+            if (totalPending != 0) ...[
+              SizedBox(height: context.getRSize(6)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Awaiting confirmation',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(12),
+                        color: _subtext,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    formatCurrency(totalPending / 100),
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w700,
+                      color: Colors.amber.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            SizedBox(height: context.getRSize(10)),
+            Divider(height: 1, color: theme.dividerColor),
+            SizedBox(height: context.getRSize(10)),
+            ...live.map(
+              (p) => Padding(
+                padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p.manufacturerName,
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(13),
+                              fontWeight: FontWeight.w600,
+                              color: _text,
+                            ),
+                          ),
+                          // Deliberately NOT a shortfall line. A shortfall is
+                          // brand-level across every supplier (ADR 0023 rule
+                          // 4); printing it on a per-supplier card would show
+                          // the same missing crates twice and imply this depot
+                          // is the one who lost them. #215 carries it, once,
+                          // business-wide. What belongs here is how much of
+                          // this supplier's crate debt carries no money.
+                          if (p.position.unbackedCrates > 0)
+                            Text(
+                              '${p.position.unbackedCrates} crate'
+                              '${p.position.unbackedCrates == 1 ? '' : 's'} '
+                              'with no deposit paid',
+                              style: TextStyle(
+                                fontSize: context.getRFontSize(11),
+                                color: _subtext,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      formatCurrency(p.position.placedDepositKobo / 100),
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(13),
+                        fontWeight: FontWeight.w700,
+                        color: _text,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      SizedBox(height: context.getRSize(16)),
+    ];
   }
 
   // The "+" action card pinned at the top of the Crates tab (§3.13).
@@ -796,6 +979,378 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         ),
       ),
     );
+  }
+
+  /// Every brand on the `standing_float` arrangement (#214). Empty for every
+  /// business until an owner deliberately switches one over, which is what
+  /// keeps this whole surface invisible on a live tenant.
+  List<ManufacturerData> _floatBrands() {
+    final all =
+        ref.watch(allManufacturersProvider).valueOrNull ??
+        const <ManufacturerData>[];
+    return all
+        .where(
+          (m) =>
+              crateMoneyArrangementOf(m.crateMoneyArrangement) ==
+              CrateMoneyArrangement.standingFloat,
+        )
+        .toList();
+  }
+
+  /// **The only door a standing float's money has** (#214, ADR 0023 rules 1
+  /// and 4). Deliveries, hand-backs and missing crates all leave it alone; a
+  /// top-up and a payout are the two times real cash changes hands, and this
+  /// is where they are recorded.
+  Widget _buildFloatActionCard(ThemeData theme, SupplierData supplier) {
+    return InkWell(
+      onTap: () => _showFloatMoneySheet(supplier),
+      borderRadius: BorderRadius.circular(16),
+      child: _GlassyCard(
+        padding: EdgeInsets.all(context.getRSize(14)),
+        child: Row(
+          children: [
+            Container(
+              width: context.getRSize(40),
+              height: context.getRSize(40),
+              decoration: BoxDecoration(
+                color: success.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                FontAwesomeIcons.moneyBillTransfer.data,
+                color: success,
+                size: context.getRSize(16),
+              ),
+            ),
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Crate float money',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w700,
+                      color: _text,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(2)),
+                  Text(
+                    'Top up what this supplier holds, or record money they '
+                    'paid back',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: _subtext,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              FontAwesomeIcons.chevronRight.data,
+              size: context.getRSize(13),
+              color: _subtext,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Record a standing-float top-up or payout (#214).
+  ///
+  /// Whoever may confirm crate money (`Gates.confirmCrateDeposit`) records it
+  /// on the spot — the money already moved, and a person who may decide a
+  /// deposit may record one they just paid. Anyone else raises it for that
+  /// role, which is why the store question appears only for them: the approval
+  /// queue routes BY store and `store_id` is NOT NULL on it, while the float
+  /// ledger itself is business-level and needs no store at all.
+  Future<void> _showFloatMoneySheet(SupplierData supplier) async {
+    final staffId = ref.read(authProvider).currentUser?.id;
+    if (staffId == null || staffId.isEmpty) {
+      AppNotification.showError(context, 'No active session.');
+      return;
+    }
+    final brands = _floatBrands();
+    if (brands.isEmpty) return;
+
+    final canPostDirectly = Gates.confirmCrateDeposit.allowsNow(ref);
+    final lockedStoreId = ref.read(lockedStoreProvider).value;
+    final stores = ref.read(selectableStoresProvider);
+    String? chosenStoreId =
+        lockedStoreId ?? (stores.length == 1 ? stores.single.id : null);
+
+    var isTopUp = true;
+    String? selectedId = brands.length == 1 ? brands.single.id : null;
+    final amountCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final needsStorePick = !canPostDirectly && lockedStoreId == null;
+          return Padding(
+            padding: EdgeInsets.only(
+              left: ctx.getRSize(20),
+              right: ctx.getRSize(20),
+              top: ctx.getRSize(16),
+              bottom:
+                  MediaQuery.of(ctx).viewInsets.bottom +
+                  ctx.deviceBottomPadding +
+                  ctx.getRSize(16),
+            ),
+            child: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: ctx.getRSize(40),
+                        height: ctx.getRSize(4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx).dividerColor,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(20)),
+                    Text(
+                      'Crate Float Money',
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(18),
+                        fontWeight: FontWeight.w800,
+                        color: _text,
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(4)),
+                    Text(
+                      supplier.name,
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(13),
+                        color: Theme.of(ctx).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(12)),
+                    Text(
+                      'Only record money that actually changed hands. Crates '
+                      'coming and going do not move this.',
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(12),
+                        color: _subtext,
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(16)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _crateMovementChip(
+                            ctx,
+                            label: 'Top up',
+                            selected: isTopUp,
+                            onTap: () => setSheet(() => isTopUp = true),
+                          ),
+                        ),
+                        SizedBox(width: ctx.getRSize(10)),
+                        Expanded(
+                          child: _crateMovementChip(
+                            ctx,
+                            label: 'They paid back',
+                            selected: !isTopUp,
+                            onTap: () => setSheet(() => isTopUp = false),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: ctx.getRSize(16)),
+                    AppDropdown<String>(
+                      value: selectedId,
+                      labelText: 'Brand',
+                      hintText: 'Select a brand',
+                      items: brands
+                          .map(
+                            (m) => DropdownMenuItem(
+                              value: m.id,
+                              child: Text(m.name),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setSheet(() => selectedId = v),
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Select a brand' : null,
+                    ),
+                    if (needsStorePick) ...[
+                      SizedBox(height: ctx.getRSize(16)),
+                      AppDropdown<String>(
+                        value: chosenStoreId,
+                        labelText: 'Store',
+                        hintText: 'Who should confirm this?',
+                        items: stores
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s.id,
+                                child: Text(s.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setSheet(() => chosenStoreId = v),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Choose the store this belongs to'
+                            : null,
+                      ),
+                    ],
+                    SizedBox(height: ctx.getRSize(16)),
+                    AppInput(
+                      controller: amountCtrl,
+                      labelText: isTopUp
+                          ? 'Amount you paid the supplier'
+                          : 'Amount the supplier paid back',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [CurrencyInputFormatter()],
+                      validator: (v) => _typedKobo(v ?? '') > 0
+                          ? null
+                          : 'Enter the amount that changed hands',
+                    ),
+                    SizedBox(height: ctx.getRSize(16)),
+                    AppInput(
+                      controller: noteCtrl,
+                      labelText: 'Note (optional)',
+                    ),
+                    SizedBox(height: ctx.getRSize(24)),
+                    AppButton(
+                      text: canPostDirectly
+                          ? (isTopUp ? 'Record Top-up' : 'Record Payout')
+                          : 'Send for Confirmation',
+                      onPressed: () => _submitFloatMovement(
+                        ctx,
+                        supplier: supplier,
+                        manufacturerId: selectedId,
+                        brands: brands,
+                        amountText: amountCtrl.text,
+                        noteText: noteCtrl.text,
+                        isTopUp: isTopUp,
+                        canPostDirectly: canPostDirectly,
+                        staffId: staffId,
+                        storeId: chosenStoreId,
+                        formKey: formKey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    amountCtrl.dispose();
+    noteCtrl.dispose();
+  }
+
+  Future<void> _submitFloatMovement(
+    BuildContext sheetCtx, {
+    required SupplierData supplier,
+    required String? manufacturerId,
+    required List<ManufacturerData> brands,
+    required String amountText,
+    required String noteText,
+    required bool isTopUp,
+    required bool canPostDirectly,
+    required String staffId,
+    required String? storeId,
+    required GlobalKey<FormState> formKey,
+  }) async {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    final mfrId = manufacturerId!;
+    final amountKobo = _typedKobo(amountText);
+    final brandName = brands.firstWhere((m) => m.id == mfrId).name;
+    final note = noteText.trim().isEmpty ? null : noteText.trim();
+    final messenger = ScaffoldMessenger.of(context);
+
+    // Write-boundary re-check (§10.2.1): honour a revoked override, and re-read
+    // the money gate rather than trusting the flag the sheet opened with.
+    if (!ref
+        .read(currentUserPermissionsProvider)
+        .contains('suppliers.manage')) {
+      Navigator.pop(sheetCtx);
+      AppNotification.showError(
+        context,
+        'You don’t have permission to do that.',
+      );
+      return;
+    }
+    final postDirectly =
+        canPostDirectly && Gates.confirmCrateDeposit.allowsNow(ref);
+    Navigator.pop(sheetCtx);
+    try {
+      final dao = ref.read(databaseProvider).cratePoolDao;
+      if (postDirectly) {
+        await dao.recordCrateFloatMovement(
+          supplierId: supplier.id,
+          manufacturerId: mfrId,
+          amountKobo: amountKobo,
+          isTopUp: isTopUp,
+          performedBy: staffId,
+          // Deliberately null unless a store is locked: a float belongs to the
+          // business, not to one store (ADR 0023's consequence note that crate
+          // money is a company obligation).
+          storeId: storeId,
+          note: note,
+        );
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              isTopUp
+                  ? 'Top-up recorded — ${supplier.name} now holds '
+                        '${formatCurrency(amountKobo / 100)} more of yours'
+                  : 'Payout recorded — ${formatCurrency(amountKobo / 100)} is '
+                        'back from ${supplier.name}',
+            ),
+          ),
+        );
+        return;
+      }
+      await dao.raiseCrateDepositRequest(
+        supplierId: supplier.id,
+        manufacturerId: mfrId,
+        storeId: storeId!,
+        crateCount: 0,
+        requestedBy: staffId,
+        kind: isTopUp
+            ? kCrateDepositMovementFloatTopup
+            : kCrateDepositMovementFloatPayout,
+        requestedAmountKobo: amountKobo,
+        note: note,
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '$brandName float ${isTopUp ? 'top-up' : 'payout'} of '
+            '${formatCurrency(amountKobo / 100)} is waiting for a manager',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not record the float money. Please try again.',
+        );
+      }
+    }
   }
 
   // Headline summary: net crates owed + refundable deposit held by the supplier.
@@ -1046,7 +1601,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     final qtyCtrl = TextEditingController();
     final depositCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final storeId = ref.read(lockedStoreProvider).value;
+    final lockedStoreId = ref.read(lockedStoreProvider).value;
+    // #213: a crate-MONEY brand needs a store, because the approval queue
+    // scopes approvers by store and `store_id` is NOT NULL. Under "All Stores"
+    // #212 had nowhere to route the money and fell back to the legacy column;
+    // asking which store the trip belongs to is what lets the money leg exist
+    // at all. A `none` brand never sees this and behaves exactly as before.
+    final stores = ref.read(selectableStoresProvider);
+    String? chosenStoreId =
+        lockedStoreId ?? (stores.length == 1 ? stores.single.id : null);
 
     await showModalBottomSheet<void>(
       context: context,
@@ -1056,7 +1619,20 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
+        builder: (ctx, setSheet) {
+        // The selected brand's Crate Money Arrangement decides the whole shape
+        // of this sheet (#211/#213). `per_delivery` means the deposit is real
+        // money on a real ledger: it is never hand-typed into the legacy crate
+        // column, and the refund a supplier hands back waits for a manager.
+        final selectedMfr = selectedId == null
+            ? null
+            : manufacturers.where((m) => m.id == selectedId).firstOrNull;
+        final isMoneyBrand =
+            selectedMfr != null &&
+            crateMoneyArrangementOf(selectedMfr.crateMoneyArrangement) ==
+                CrateMoneyArrangement.perDelivery;
+        final needsStorePick = isMoneyBrand && lockedStoreId == null;
+        return Padding(
           padding: EdgeInsets.only(
             left: ctx.getRSize(20),
             right: ctx.getRSize(20),
@@ -1138,6 +1714,26 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                     validator: (v) =>
                         (v == null || v.isEmpty) ? 'Select a manufacturer' : null,
                   ),
+                  if (needsStorePick) ...[
+                    SizedBox(height: ctx.getRSize(16)),
+                    AppDropdown<String>(
+                      value: chosenStoreId,
+                      labelText: 'Store',
+                      hintText: 'Which store was this?',
+                      items: stores
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s.id,
+                              child: Text(s.name),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setSheet(() => chosenStoreId = v),
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Choose the store this belongs to'
+                          : null,
+                    ),
+                  ],
                   SizedBox(height: ctx.getRSize(16)),
                   AppInput(
                     controller: qtyCtrl,
@@ -1148,23 +1744,64 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     validator: (v) {
                       final n = int.tryParse((v ?? '').trim()) ?? 0;
-                      if (n <= 0) return 'Enter a crate count';
-                      return null;
+                      if (n > 0) return null;
+                      // A settlement can carry no crates at all — the day a
+                      // supplier simply pays back a balance. It then needs the
+                      // amount, because there is nothing to derive one from.
+                      if (isMoneyBrand &&
+                          isReturn &&
+                          _typedKobo(depositCtrl.text) > 0) {
+                        return null;
+                      }
+                      return 'Enter a crate count';
                     },
                   ),
                   SizedBox(height: ctx.getRSize(16)),
-                  AppInput(
-                    controller: depositCtrl,
-                    labelText: isReturn
-                        ? 'Deposit refunded to you (optional)'
-                        : 'Deposit paid to supplier (optional)',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [CurrencyInputFormatter()],
-                  ),
+                  if (isMoneyBrand && !isReturn)
+                    // The deposit on a receipt is NOT hand-typed for this brand
+                    // — it is the manufacturer's rate, and a manager confirms
+                    // it. Showing a money box here would invite a figure the
+                    // write path deliberately ignores.
+                    Text(
+                      'A manager will confirm the deposit for these crates at '
+                      "${selectedMfr.name}'s rate. You are only recording the "
+                      'crates.',
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(12),
+                        color: _subtext,
+                      ),
+                    )
+                  else ...[
+                    AppInput(
+                      controller: depositCtrl,
+                      labelText: !isReturn
+                          ? 'Deposit paid to supplier (optional)'
+                          : isMoneyBrand
+                          ? 'Refund actually received (optional)'
+                          : 'Deposit refunded to you (optional)',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [CurrencyInputFormatter()],
+                    ),
+                    if (isMoneyBrand && isReturn) ...[
+                      SizedBox(height: ctx.getRSize(6)),
+                      Text(
+                        'Type what the supplier actually handed back. Leave it '
+                        'blank and a manager records the real figure. Anything '
+                        'short of the deposit stays yours, still held.',
+                        style: TextStyle(
+                          fontSize: ctx.getRFontSize(12),
+                          color: _subtext,
+                        ),
+                      ),
+                    ],
+                  ],
                   SizedBox(height: ctx.getRSize(24)),
                   AppButton(
-                    text: isReturn ? 'Record Return' : 'Record Receipt',
+                    text: isReturn
+                        ? (isMoneyBrand ? 'Record Settlement' : 'Record Return')
+                        : 'Record Receipt',
                     onPressed: () => _submitCrateMovement(
                       ctx,
                       supplier: supplier,
@@ -1173,8 +1810,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                       qtyText: qtyCtrl.text,
                       depositText: depositCtrl.text,
                       isReturn: isReturn,
+                      isMoneyBrand: isMoneyBrand,
                       staffId: staffId,
-                      storeId: storeId,
+                      storeId: isMoneyBrand ? chosenStoreId : lockedStoreId,
                       formKey: formKey,
                     ),
                   ),
@@ -1182,7 +1820,8 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
               ),
             ),
           ),
-        ),
+        );
+        },
       ),
     );
     qtyCtrl.dispose();
@@ -1224,6 +1863,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     );
   }
 
+  /// Naira typed into a money box, in kobo. 0 when it cannot be read as money.
+  int _typedKobo(String text) {
+    final raw = text.replaceAll(',', '').trim();
+    if (raw.isEmpty) return 0;
+    final naira = double.tryParse(raw);
+    if (naira == null || naira <= 0) return 0;
+    return (naira * 100).round();
+  }
+
   Future<void> _submitCrateMovement(
     BuildContext sheetCtx, {
     required SupplierData supplier,
@@ -1232,16 +1880,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     required String qtyText,
     required String depositText,
     required bool isReturn,
+    required bool isMoneyBrand,
     required String staffId,
     required String? storeId,
     required GlobalKey<FormState> formKey,
   }) async {
     if (!(formKey.currentState?.validate() ?? false)) return;
     final mfrId = manufacturerId!;
-    final qty = int.parse(qtyText.trim());
-    final depositKobo =
-        (((double.tryParse(depositText.replaceAll(',', '').trim()) ?? 0)) * 100)
-            .round();
+    final qty = int.tryParse(qtyText.trim()) ?? 0;
+    final depositKobo = _typedKobo(depositText);
     final mfrName = manufacturers.firstWhere((m) => m.id == mfrId).name;
     final messenger = ScaffoldMessenger.of(context);
 
@@ -1259,6 +1906,33 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     Navigator.pop(sheetCtx);
     try {
       final service = ref.read(supplierCrateServiceProvider);
+      if (isReturn && isMoneyBrand && storeId != null) {
+        // #213 — the standalone settlement. No delivery is invented: this
+        // writes the empties leg (when there are empties) and parks the refund
+        // for a money-permitted role, who records what was actually handed
+        // back. A short refund leaves the remainder held, not gone.
+        await service.recordSettlement(
+          supplierId: supplier.id,
+          supplierName: supplier.name,
+          manufacturerId: mfrId,
+          manufacturerName: mfrName,
+          crateCount: qty,
+          staffId: staffId,
+          storeId: storeId,
+          refundAmountKobo: depositKobo > 0 ? depositKobo : null,
+        );
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              qty == 0
+                  ? 'Settlement recorded — the refund is waiting for a manager'
+                  : '$qty $mfrName crate${qty == 1 ? '' : 's'} returned to '
+                        '${supplier.name} — the refund is waiting for a manager',
+            ),
+          ),
+        );
+        return;
+      }
       if (isReturn) {
         await service.recordReturn(
           supplierId: supplier.id,

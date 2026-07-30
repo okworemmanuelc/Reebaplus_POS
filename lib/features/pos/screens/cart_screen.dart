@@ -899,21 +899,15 @@ class _CartScreenState extends ConsumerState<CartScreen>
       );
     }
 
-    // Customer crate balance offset — sum credits per manufacturer using
-    // the customer's stored balance (keyed by manufacturer name for now).
-    double customerCrateCredit = 0;
-    if (hasBottles && _activeCustomer != null) {
-      for (final mfrId in mfrQtys.keys) {
-        final mfrName = mfrNames[mfrId] ?? '';
-        final bal = _activeCustomer!.emptyCratesBalance[mfrName] ?? 0;
-        if (bal <= 0) continue;
-        // Use the per-manufacturer deposit amount for credit calculation
-        final mfr = _manufacturers.where((m) => m.id == mfrId).firstOrNull;
-        final depositKobo = mfr?.depositAmountKobo ?? 0;
-        if (depositKobo <= 0) continue;
-        customerCrateCredit += bal * (depositKobo / 100.0);
-      }
-    }
+    // #202: a "customer crate credit" term used to be subtracted from the
+    // payable here, read from `Customer.emptyCratesBalance` — a map hardcoded
+    // `const {}` at every construction site, so the credit was always ₦0. It was
+    // deleted rather than wired up: the crate balance sign convention is
+    // positive = the customer OWES us empties, so completing it as written would
+    // have handed checkout discounts to crate DEBTORS, keyed fragilely by
+    // manufacturer *name* (CRATE_TRACKING_AUDIT.md §D). Reviving customer crate
+    // credit needs a deliberate design AND its own printed receipt line — see
+    // `ReceiptTotals.totalKobo`.
 
     // Per-line discounts (§13.3). Summed across the cart and subtracted from
     // the payable total. discountKobo lives on each line (set in the Edit
@@ -923,11 +917,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
       (s, i) => s + (((i['discountKobo'] as int?) ?? 0) / 100.0),
     );
 
-    // Goods total = Subtotal − Discounts − Credit. The crate deposit is no
-    // longer entered here — it's captured (auto-filled per brand) at checkout
-    // and added to the payable there (§13.4 Ring 3). computedDeposit stays
+    // Goods total = Subtotal − Discounts. The crate deposit is no longer
+    // entered here — it's captured (auto-filled per brand) at checkout and
+    // added to the payable there (§13.4 Ring 3). computedDeposit stays
     // informational on the Empty Crates card below.
-    final tot = sub - discountTotal - customerCrateCredit;
+    final tot = sub - discountTotal;
 
     final customerName = _activeCustomer?.name ?? 'Walk-in Customer';
     final activeBalanceKobo = _activeCustomer == null
@@ -1634,40 +1628,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                 ),
                                               ],
                                             ),
-                                            if (customerCrateCredit > 0) ...[
-                                              SizedBox(
-                                                height: context.getRSize(6),
-                                              ),
-                                              Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                children: [
-                                                  Text(
-                                                    'Deposit Paid',
-                                                    style: TextStyle(
-                                                      fontSize: context
-                                                          .getRFontSize(12),
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: success,
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    formatCurrency(
-                                                      -customerCrateCredit,
-                                                    ),
-                                                    style: TextStyle(
-                                                      fontSize: context
-                                                          .getRFontSize(12),
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: success,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
                                           ],
                                         ),
                                       ),

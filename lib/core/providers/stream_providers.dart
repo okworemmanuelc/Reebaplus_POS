@@ -12,12 +12,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/van_sales/driver_directory.dart';
+import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 import 'package:reebaplus_pos/shared/models/activity_log.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
@@ -94,6 +99,9 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
           from: from,
           to: to,
           search: _arg.search,
+          // #140 — road sales never appear in the store-side orders list; they
+          // surface only as one aggregated Van Sales line (spec §8.1).
+          excludeStoreIds: _ref.read(vanStoresProvider).ids,
           limit: 30,
         );
 
@@ -164,6 +172,7 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
             from: from,
             to: to,
             search: _arg.search,
+            excludeStoreIds: _ref.read(vanStoresProvider).ids,
             cursor: cursor,
             limit: 30,
           );
@@ -216,6 +225,9 @@ final ordersStatsProvider = businessScopedStreamAutoDisposeFamily<
           from: from,
           to: to,
           search: arg.search,
+          // #140 — keep road sales out of the orders tab's totals too, so the
+          // list and its header can never disagree.
+          excludeStoreIds: ref.watch(vanStoresProvider).ids,
         );
   },
   whenAbsent: OrdersStats.empty(),
@@ -947,6 +959,41 @@ final viewerScopedPendingQuickSaleRequestsProvider =
       return all.where((r) => assignedStoreIds.contains(r.storeId)).toList();
     });
 
+// ── Crate deposit approvals (#212, PRD #203 / ADR 0023 rule 6) ───────────────
+/// All still-pending crate-deposit MONEY legs for the business, newest first.
+/// Approver-side store scoping is applied by
+/// [viewerScopedPendingCrateDepositsProvider].
+///
+/// A `none` brand never produces one of these (the write boundary short-circuits
+/// on the arrangement), so on every tenant that has not deliberately switched a
+/// brand on this list is permanently empty and the Approvals screen looks
+/// exactly as it did before PRD #203.
+final pendingCrateDepositRequestsProvider =
+    businessScopedStream<List<SupplierCrateDepositRequestData>>(
+  (ref, db, businessId) => db.cratePoolDao.watchPendingCrateDepositRequests(),
+  whenAbsent: const [],
+);
+
+/// Pending crate deposits the current viewer may decide: a CEO sees every
+/// store; a Manager sees only their assigned store(s). Mirrors
+/// [viewerScopedPendingStockRequestsProvider] exactly.
+final viewerScopedPendingCrateDepositsProvider =
+    Provider<List<SupplierCrateDepositRequestData>>((ref) {
+      final all =
+          ref.watch(pendingCrateDepositRequestsProvider).valueOrNull ??
+          const [];
+      final role = ref.watch(currentUserRoleProvider);
+      if (role?.slug == 'ceo') return all;
+      final userId = ref.watch(authProvider).currentUser?.id;
+      if (userId == null) return const [];
+      final assignedStoreIds =
+          (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+                  const <UserStoreData>[])
+              .map((s) => s.storeId)
+              .toSet();
+      return all.where((r) => assignedStoreIds.contains(r.storeId)).toList();
+    });
+
 // ── Stock Transfers (§16.8.1) ────────────────────────────────────────────────
 /// All in_transit transfers for the business — the raw feed from which the
 /// viewer-scoped providers derive their lists in memory.
@@ -1214,12 +1261,14 @@ final currencySymbolProvider = Provider<String>((ref) {
 });
 
 /// The business's VAT configuration (opt-in, OFF by default), streamed from the
-/// synced `vat_enabled` / `vat_rate_bps` settings keys — same mechanism as
-/// [currencyCodeProvider], so a CEO toggling VAT in Settings propagates across
-/// devices with no migration. A row is only "enabled" when the flag is `'true'`
-/// AND the rate is positive, so an enabled-but-unconfigured business shows no
-/// VAT. Consumed by the standardized daily closing (Phase 1 surfaces VAT due on
-/// net sales; the checkout/receipt VAT leg is a later slice).
+/// synced `vat_enabled` / `vat_rate_bps` / `vat_basis` settings keys — same
+/// mechanism as [currencyCodeProvider], so a CEO toggling VAT in Settings
+/// propagates across devices with no migration. A row is only "enabled" when the
+/// flag is `'true'` AND the rate is positive, so an enabled-but-unconfigured
+/// business shows no VAT. The basis (inclusive/exclusive, inclusive default)
+/// selects how the due figure is computed from recorded takings. Consumed by the
+/// standardized daily closing (Phase 1 surfaces VAT due on net sales; the
+/// checkout/receipt VAT leg is a later slice).
 final vatConfigProvider = businessScopedStream<VatConfig>(
   (ref, db, businessId) => db.settingsDao.watch(kVatEnabledKey).asyncMap((
     enabledRaw,
@@ -1227,7 +1276,8 @@ final vatConfigProvider = businessScopedStream<VatConfig>(
     final enabled = enabledRaw?.trim().toLowerCase() == 'true';
     if (!enabled) return VatConfig.off;
     final rateBps = parseVatRateBps(await db.settingsDao.get(kVatRateBpsKey));
-    return VatConfig(enabled: rateBps > 0, rateBps: rateBps);
+    final basis = parseVatBasis(await db.settingsDao.get(kVatBasisKey));
+    return VatConfig(enabled: rateBps > 0, rateBps: rateBps, basis: basis);
   }),
   whenAbsent: VatConfig.off,
 );
@@ -1566,6 +1616,25 @@ final currentUserPermissionsReadyProvider = Provider<bool>((ref) {
   return ref.watch(rolePermissionsProvider(role.id)).valueOrNull != null;
 });
 
+/// The live [GateContext] for the current user — the single Riverpod seam
+/// between the pure Gate algebra and the app's permission providers. Watches
+/// the effective permission set, the role tier, and the permissions-ready
+/// signal; every `Guarded`, `GateEvaluation.allows`, and `require` reads it.
+///
+/// Declared here, next to the three providers it composes, rather than in
+/// `core/permissions/guarded.dart` (which re-exports it, so every existing call
+/// site is unaffected): a core provider that must cite a named gate —
+/// [selectableStoresProvider] needs `Gates.vanSell` since #140 — cannot import
+/// the widget layer without an import cycle.
+final gateContextProvider = Provider<GateContext>((ref) {
+  final role = ref.watch(currentUserRoleProvider);
+  return GateContext(
+    grantedKeys: ref.watch(currentUserPermissionsProvider),
+    roleRank: role == null ? null : roleRank(role.slug),
+    isReady: ref.watch(currentUserPermissionsReadyProvider),
+  );
+});
+
 // Permission gating is expressed exclusively through the named-gate registry
 // (ADR 0002, issue #22 flip). The bare single-key permission helper and the
 // manager-tier helper (`isManagerOrAbove`) were REMOVED here: feature code
@@ -1672,13 +1741,27 @@ final canViewAllStoresProvider = Provider<bool>((ref) {
 /// means "no confinement" → all stores. A confined user with no assignment
 /// falls back to all stores so nothing dead-ends on "no store" (the §9.5
 /// staff-assignment editor normally guarantees at least one).
+///
+/// **Vans (#140, van-sales spec §4.1).** A van is a `stores` row, so without a
+/// filter here it would land in every picker and confinement default. It is
+/// dropped for everyone except its own driver: pass [canSellFromVan] true (the
+/// `van.sell` holder) and the vans this user is **explicitly assigned to** stay
+/// in. The "no assignment → no confinement" fallback is measured against the
+/// whole result, so a driver assigned only to a van is confined to that van and
+/// is never silently widened to every warehouse.
 List<StoreData> selectableStoresFor(
   List<StoreData> stores,
-  Set<String>? assigned,
-) {
-  if (assigned == null) return stores;
-  final mine = stores.where((s) => assigned.contains(s.id)).toList();
-  return mine.isEmpty ? stores : mine;
+  Set<String>? assigned, {
+  bool canSellFromVan = false,
+}) {
+  final normal = withoutVans(stores);
+  if (assigned == null) return normal;
+  final mine = normal.where((s) => assigned.contains(s.id)).toList();
+  final myVans = canSellFromVan
+      ? onlyVans(stores).where((s) => assigned.contains(s.id)).toList()
+      : const <StoreData>[];
+  if (mine.isEmpty && myVans.isEmpty) return normal;
+  return [...mine, ...myVans];
 }
 
 /// The stores the current user may select as their active store (§12.1): every
@@ -1687,15 +1770,318 @@ List<StoreData> selectableStoresFor(
 /// POS confinement, and the MainLayout confined-user default all read, so they
 /// never disagree. Returns all stores while assignments are still loading (don't
 /// confine prematurely on a cold start).
+///
+/// **Vans are never here for a normal user** (#140) — see [selectableStoresFor].
+/// This is the choke point that keeps a van out of the store picker, out of
+/// `reconStoreFilter`'s scope, and out of `activeWriteStoreProvider`, so a
+/// warehouse cashier can never see or sell van stock.
 final selectableStoresProvider = Provider<List<StoreData>>((ref) {
   final all = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
-  if (ref.watch(canViewAllStoresProvider)) return all;
+  if (ref.watch(canViewAllStoresProvider)) return withoutVans(all);
   final userId = ref.watch(authProvider).currentUser?.id;
-  if (userId == null) return all;
+  if (userId == null) return withoutVans(all);
   final assigned = ref.watch(myUserStoresProvider(userId)).valueOrNull;
-  if (assigned == null) return all;
-  return selectableStoresFor(all, assigned.map((s) => s.storeId).toSet());
+  if (assigned == null) return withoutVans(all);
+  return selectableStoresFor(
+    all,
+    assigned.map((s) => s.storeId).toSet(),
+    // The one viewer a van is selectable for: a driver (`van.sell`) standing on
+    // the van they were assigned to. Everyone else never sees it.
+    canSellFromVan:
+        Gates.vanSell.rule.evaluate(ref.watch(gateContextProvider)),
+  );
 });
+
+/// The business's van locations, keyed by id — the scope every store-**id**
+/// filter asks (#140). `reconStoreFilter`, the profit report's order set, the
+/// dashboard tiles and the orders list all read this rather than re-deriving
+/// "which stores are vans", so the exclusion can never drift between surfaces.
+final vanStoresProvider = Provider<VanStores>((ref) {
+  final all = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  return VanStores.of(all);
+});
+
+// ── Van Sales (#141, PRD #139 / ADR 0019) ───────────────────────────────────
+
+/// The business's vans, for the Van Sales hub's own list.
+///
+/// This is deliberately NOT [selectableStoresProvider]: #140 makes a van
+/// selectable only for a `van.sell` driver explicitly assigned to it, so a
+/// manager loading a van would find it in no picker at all. The hub reaches its
+/// vans through [onlyVans] instead — a manager never *stands on* a van, they
+/// dispatch one.
+final vansProvider = Provider<List<StoreData>>((ref) {
+  final all = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  return onlyVans(all);
+});
+
+/// Every trip currently on the road, newest first. Drives the hub's per-van
+/// state ("out since Tuesday" vs. "at the yard").
+final openVanTripsProvider = businessScopedStream<List<VanTripData>>(
+  (ref, db, businessId) => db.vanTripsDao.watchOpenTrips(),
+  whenAbsent: const [],
+);
+
+/// Every trip in the business, open and closed, newest first.
+///
+/// The closing report's van feed (#147, spec §8.2). Three of its four lines
+/// need trips that are NOT open: revenue is attributed through each trip's
+/// `source_store_id` (a van is outside every store scope, so the order alone
+/// cannot be placed), profit comes from trips that closed in the period, and
+/// the caveat is what is left over.
+final allVanTripsProvider = businessScopedStream<List<VanTripData>>(
+  (ref, db, businessId) => db.vanTripsDao.watchAllTrips(),
+  whenAbsent: const [],
+);
+
+/// Every trip (open and closed) for one van, newest first.
+final vanTripsForVanProvider =
+    businessScopedStreamFamily<List<VanTripData>, String>(
+  (ref, db, businessId, vanStoreId) =>
+      db.vanTripsDao.watchTripsForVan(vanStoreId),
+  whenAbsent: const [],
+);
+
+/// One trip's priced load lots, oldest dispatch first — the FIFO order returns
+/// credit against (#143) and close consumes for COGS (#145).
+final vanTripLotsProvider =
+    businessScopedStreamFamily<List<VanTripLotData>, String>(
+  (ref, db, businessId, tripId) => db.vanTripsDao.watchLotsForTrip(tripId),
+  whenAbsent: const [],
+);
+
+/// driverUserId → balance (kobo); **negative = the driver owes**. Drivers with
+/// no ledger rows are absent — render them at 0.
+final driverBalancesProvider = businessScopedStream<Map<String, int>>(
+  (ref, db, businessId) => db.driverLedgerDao.watchAllBalancesKobo(),
+  whenAbsent: const {},
+);
+
+/// One driver's live balance (kobo); negative = they owe.
+final driverBalanceProvider = businessScopedStreamFamily<int, String>(
+  (ref, db, businessId, driverUserId) =>
+      db.driverLedgerDao.watchBalanceKobo(driverUserId),
+  whenAbsent: 0,
+);
+
+/// One driver's whole ledger, newest first — the driver profile's Ledger tab
+/// (#146). Every load, restock, return, remittance, write-off, restatement and
+/// void as its own signed dated row, so any line can be disputed from the
+/// record (spec §4.4).
+final driverLedgerHistoryProvider =
+    businessScopedStreamFamily<List<DriverLedgerEntryData>, String>(
+      (ref, db, businessId, driverUserId) =>
+          db.driverLedgerDao.watchHistory(driverUserId),
+      whenAbsent: const [],
+    );
+
+/// Every trip ONE driver has run, open and closed, newest first — the driver
+/// profile's Trips tab (#146). Ordered by `opened_at`.
+final driverTripsProvider =
+    businessScopedStreamFamily<List<VanTripData>, String>(
+      (ref, db, businessId, driverUserId) =>
+          db.vanTripsDao.watchTripsForDriver(driverUserId),
+      whenAbsent: const [],
+    );
+
+/// Every road sale ONE driver has rung, across every trip, newest first, with
+/// its lines — the driver profile's Sales tab (#146).
+final driverVanSalesProvider =
+    businessScopedStreamFamily<List<OrderWithItems>, String>(
+      (ref, db, businessId, driverUserId) =>
+          db.vanTripsDao.watchSalesWithItemsForDriver(driverUserId),
+      whenAbsent: const [],
+    );
+
+/// The Drivers list (#146, spec §9.5 #19) — every current driver, plus every
+/// FORMER driver the ledger still has a balance for, badged as removed.
+///
+/// Composed from the existing membership / role / user / balance providers
+/// through the pure [buildDriversList], so the rule that keeps a debt visible
+/// after offboarding is testable without a widget tree — and so it cannot drift
+/// from the guard that stops the offboarding in the first place
+/// (`VanTripsDao.assertDriverOffboardable`).
+final vanDriverEntriesProvider = Provider<List<DriverListEntry>>((ref) {
+  final memberships =
+      ref.watch(userBusinessesProvider).valueOrNull ??
+      const <UserBusinessData>[];
+  final roles = ref.watch(allRolesProvider).valueOrNull ?? const <RoleData>[];
+  final users =
+      ref.watch(usersByBusinessProvider).valueOrNull ??
+      const <String, UserData>{};
+  final balances =
+      ref.watch(driverBalancesProvider).valueOrNull ?? const <String, int>{};
+
+  return buildDriversList(
+    memberships: memberships,
+    driverRoleIds: {
+      for (final r in roles)
+        if (r.slug == 'driver') r.id,
+    },
+    usersById: users,
+    balancesKobo: balances,
+  );
+});
+
+/// One trip by id, live — so a screen tracking a trip sees it close under it
+/// rather than acting on a stale status.
+final vanTripProvider = businessScopedStreamFamily<VanTripData?, String>(
+  (ref, db, businessId, tripId) => db.vanTripsDao.watchTrip(tripId),
+  whenAbsent: null,
+);
+
+/// One trip's driver-ledger rows, newest first — the audit list behind the
+/// balance. Every load debit and every remittance credit (#144) appears here,
+/// which is what makes a balance readable as history rather than a number.
+final vanTripLedgerProvider =
+    businessScopedStreamFamily<List<DriverLedgerEntryData>, String>(
+      (ref, db, businessId, tripId) =>
+          db.driverLedgerDao.watchTripHistory(tripId),
+      whenAbsent: const [],
+    );
+
+/// One trip's recorded returns, newest first (#143).
+///
+/// The reason the return screen shows this list at all: a return is a physical
+/// count typed by hand, so the one thing a manager needs after logging one is
+/// proof of what has already been logged — a duplicate entry is otherwise
+/// invisible until close.
+final vanTripReturnsProvider =
+    businessScopedStreamFamily<List<VanReturnEventData>, String>(
+      (ref, db, businessId, tripId) =>
+          db.vanTripsDao.watchReturnsForTrip(tripId),
+      whenAbsent: const [],
+    );
+
+// The CASH half of a remittance is read through
+// `VanTripsDao.watchRemittancesForTrip` / `remittedKoboForTrip`. No provider
+// wrapper yet: this screen shows the driver LEDGER (where a remittance already
+// appears as a credit), so a second per-trip feed would render the same money
+// twice. #145's reconcile screen is the first real consumer.
+
+/// The business's drivers: active staff whose role slug is `driver` (the role
+/// the cloud seeds per business, 0161). Composed from the existing membership /
+/// role / user providers rather than a new query, so a suspended or removed
+/// driver drops out of the Load Van picker the moment their membership changes.
+///
+/// Ordered by name — a flat list of one role, so the tier ordering that governs
+/// mixed role lists doesn't apply.
+final vanDriversProvider = Provider<List<UserData>>((ref) {
+  final memberships =
+      ref.watch(userBusinessesProvider).valueOrNull ?? const <UserBusinessData>[];
+  final roles = ref.watch(allRolesProvider).valueOrNull ?? const <RoleData>[];
+  final users = ref.watch(usersByBusinessProvider).valueOrNull ??
+      const <String, UserData>{};
+
+  final driverRoleIds = {
+    for (final r in roles)
+      if (r.slug == 'driver') r.id,
+  };
+  if (driverRoleIds.isEmpty) return const [];
+
+  final out = <UserData>[];
+  for (final m in memberships) {
+    if (m.status != 'active') continue;
+    if (!driverRoleIds.contains(m.roleId)) continue;
+    final user = users[m.userId];
+    if (user != null) out.add(user);
+  }
+  out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return out;
+});
+
+// ── Driver terminal (#142, PRD #139 / ADR 0019, spec §9.2) ──────────────────
+
+/// True when the signed-in user should get the stripped **driver terminal**
+/// instead of the ordinary ten-tab shell.
+///
+/// Two conditions, and both matter:
+///  * they hold `van.sell` — the enforcement, cited as a named gate; and
+///  * they do NOT hold `sales.make` — the discriminator. The seeded Driver role
+///    holds only `van.sell` (0161), while a CEO holds everything. Without the
+///    second clause an owner testing a van would be thrown into a terminal with
+///    no way back to their own business.
+///
+/// Fails CLOSED while permissions are still resolving (`isReady` false → both
+/// gates deny → not a driver → the normal shell), which is the safe direction:
+/// a momentary ordinary POS is recoverable, a momentary lock-out is alarming.
+final driverTerminalActiveProvider = Provider<bool>((ref) {
+  final ctx = ref.watch(gateContextProvider);
+  if (!ctx.isReady) return false;
+  return Gates.vanSell.rule.evaluate(ctx) && !Gates.makeSale.rule.evaluate(ctx);
+});
+
+/// The open trip the signed-in driver is out on, or null when they are at the
+/// yard (spec §9.2 #6 — that null is the terminal's "no open trip" state, and
+/// it is what stops them selling).
+///
+/// Keyed on the DRIVER, not the van: a driver holds at most one open trip
+/// anywhere (`van_trips_one_open_per_driver`), so this resolves without the
+/// terminal having to know which van it is standing on first.
+final currentDriverTripProvider = businessScopedStream<VanTripData?>((
+  ref,
+  db,
+  businessId,
+) {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return Stream<VanTripData?>.value(null);
+  // `openTripForDriver` is a one-shot read; re-run it whenever the trips table
+  // changes so an opened/closed trip lands on the driver's device live.
+  return db.vanTripsDao
+      .watchOpenTrips()
+      .asyncMap((_) => db.vanTripsDao.openTripForDriver(userId));
+}, whenAbsent: null);
+
+/// A trip's road price list: productId → load price (kobo). The driver sells at
+/// the price they signed for, never the catalogue tier (spec §5.1).
+final vanTripLoadPricesProvider =
+    businessScopedStreamFamily<Map<String, int>, String>(
+      (ref, db, businessId, tripId) =>
+          db.vanTripsDao.watchLoadPricesForTrip(tripId),
+      whenAbsent: const {},
+    );
+
+/// A trip's road sales, newest first — the driver's read-only run list.
+final vanTripSalesProvider = businessScopedStreamFamily<List<OrderData>, String>(
+  (ref, db, businessId, tripId) => db.vanTripsDao.watchSalesForTrip(tripId),
+  whenAbsent: const [],
+);
+
+/// A trip's whole reconciliation position, live (#145, spec §6).
+///
+/// The reconcile screen's single source: balance, the three-way breakdown,
+/// per-product shortage, lot-cost COGS and the shell memo all come from one
+/// pure computation, so the figure a manager confirms against is provably the
+/// figure the close writes.
+final vanTripPositionProvider =
+    businessScopedStreamFamily<VanTripPosition?, String>(
+      (ref, db, businessId, tripId) =>
+          db.vanTripsDao.watchPositionForTrip(tripId),
+      whenAbsent: null,
+    );
+
+/// How many of THIS device's road sales for a trip are still un-synced — the
+/// close-vs-outbox barrier (#145, spec §7.4).
+///
+/// You do not assign blame from an incomplete picture: while a sale is still in
+/// the outbox its units read as shortage, and closing would make the driver
+/// liable for goods they already sold.
+final vanTripPendingSalesProvider = businessScopedStreamFamily<int, String>(
+  (ref, db, businessId, tripId) =>
+      db.vanTripsDao.watchPendingSaleEnvelopesForTrip(tripId),
+  whenAbsent: 0,
+);
+
+/// A trip's road takings at load price (`soldValue`, spec §6.1).
+///
+/// NOT cash the business holds — a road sale writes no payment row. It is what
+/// the driver has taken in and still owes until a manager records the
+/// remittance (#144).
+final vanTripSoldValueProvider = businessScopedStreamFamily<int, String>(
+  (ref, db, businessId, tripId) =>
+      db.vanTripsDao.watchSoldValueKoboForTrip(tripId),
+  whenAbsent: 0,
+);
 
 /// Display label for the active-store scope (§21.11 supplier accounts and any
 /// other screen that wants to caption the current scope): the locked store's
@@ -1789,25 +2175,27 @@ final allCrateDamagesProvider = businessScopedStream<List<CrateLedgerData>>(
   whenAbsent: const [],
 );
 
-/// Per-store empty-crate balances for the currently locked store (§16.8.1 Phase 2).
-/// Returns an empty list when no store is locked. Crate businesses only.
-final storeCrateBalancesProvider =
-    businessScopedStream<List<StoreCrateBalanceData>>(
+/// Per-store empty-crate pool for the currently locked store (§16.8.1 Phase 2),
+/// mapped as manufacturerId -> balance. Returns an empty map when no store is
+/// locked. #159: DERIVED from the append-only `crate_ledger` via the Crate Pool
+/// seam (not the demoted `store_crate_balances` cache), so a locked store's view
+/// and the business-wide view agree. Crate businesses only.
+final storeCrateBalancesProvider = businessScopedStream<Map<String, int>>(
   (ref, db, businessId) {
     final storeId = ref.watch(lockedStoreProvider).value;
-    if (storeId == null) return Stream.value(const []);
-    return db.storeCrateBalancesDao.watchForStore(storeId);
+    if (storeId == null) return Stream.value(const {});
+    return db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId);
   },
-  whenAbsent: const [],
+  whenAbsent: const {},
 );
 
 /// Current empty-crate balance per manufacturer for a given store, mapped as
-/// manufacturerId -> balance. Scoped to [storeId] (§16.8.1).
+/// manufacturerId -> balance. Scoped to [storeId] (§16.8.1). #159: DERIVED from
+/// the ledger via the Crate Pool seam.
 final storeEmptiesByManufacturerProvider =
     businessScopedStreamFamily<Map<String, int>, String>(
-  (ref, db, businessId, storeId) => db.storeCrateBalancesDao
-      .watchForStore(storeId)
-      .map((rows) => {for (final row in rows) row.manufacturerId: row.balance}),
+  (ref, db, businessId, storeId) =>
+      db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId),
   whenAbsent: const {},
 );
 
@@ -1831,6 +2219,28 @@ final fullCratesByManufacturerProvider = businessScopedStream<Map<String, int>>(
 /// without a manual refresh (§5).
 final allStockCountsProvider = businessScopedStream<List<StockCountData>>(
   (ref, db, businessId) => db.stockCountsDao.watchAllForBusiness(),
+  whenAbsent: const [],
+);
+
+/// The persisted day-close snapshot for a calendar day (`YYYY-MM-DD`), or null
+/// when the day has not been reviewed yet (#174, PRD #155, ADR 0021 §2).
+/// Reactive so a peer device's snapshot — or this device's own first review —
+/// surfaces the reconciliation detail's as-reviewed-vs-current delta badges
+/// live. At most one row exists per (business, day) — first-writer-wins.
+final dailyClosingForDayProvider =
+    businessScopedStreamFamily<DailyClosingData?, String>(
+  (ref, db, businessId, businessDate) =>
+      db.dailyClosingsDao.watchForDay(businessDate),
+  whenAbsent: null,
+);
+
+/// Every persisted day-close snapshot in the business, newest day first (#192).
+/// One small row per REVIEWED day — days nobody opened have none — so the
+/// reconciliation LIST can mark which days were reviewed and which of those have
+/// moved since, instead of that being knowable only from inside the day itself.
+final allDailyClosingsProvider =
+    businessScopedStream<List<DailyClosingData>>(
+  (ref, db, businessId) => db.dailyClosingsDao.watchAllForBusiness(),
   whenAbsent: const [],
 );
 
@@ -1862,6 +2272,17 @@ final allSupplierLedgerEntriesProvider =
 final allPaymentTransactionsProvider =
     businessScopedStream<List<PaymentTransactionData>>(
   (ref, db, businessId) => db.ordersDao.watchAllPaymentTransactions(),
+  whenAbsent: const [],
+);
+
+/// Every non-voided `crate_deposit_forfeited` wallet row (business-wide, newest
+/// first). Feeds the Daily Reconciliation forfeit-income line (#176): a kept
+/// deposit is money legitimately earned, summed IN PERIOD as income in the P&L.
+/// Narrow by design — wallet rows carry no `storeId`, so this is business-wide
+/// like the held-deposit figure.
+final crateForfeitRowsProvider =
+    businessScopedStream<List<WalletTransactionData>>(
+  (ref, db, businessId) => db.walletTransactionsDao.watchForfeitRows(),
   whenAbsent: const [],
 );
 

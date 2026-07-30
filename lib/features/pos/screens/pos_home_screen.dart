@@ -243,6 +243,12 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           activeRoute: 'pos',
           backgroundColor: bgCol,
           appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
+          // #118 barcode scan, moved from the app bar to a FAB (owner request)
+          // in the slot the old cart FAB used. Always visible (not cart-gated).
+          floatingActionButton: PosBarcodeScanButton(
+            tier: _controller!.selectedGroup,
+            loadedProducts: _controller!.allProducts,
+          ),
           body: SafeArea(
             top: false,
             // Pull-to-refresh wraps the WHOLE body (above the header) so the
@@ -293,10 +299,18 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         textCol: textCol,
                         borderCol: borderCol,
                       ),
-                // One combined coach banner. Tap adds to the cart; tap-and-hold
+                // ONE combined coach banner. Tap adds to the cart; tap-and-hold
                 // opens the qty/discount sheet to add several at once (it does
-                // NOT edit the product — that's done from the Products screen).
-                // Only shown when there are products to tap/hold.
+                // NOT edit the product — that's done from the Products screen),
+                // which is why the copy says "quantity", not "edit". Both
+                // gestures act on a product tile, so gate on a non-empty grid.
+                //
+                // It carries ONE hint key. Main had already merged the two
+                // banners into one widget but left them on two independently
+                // retiring keys, which is what made the ✕ a half-dismiss: it
+                // called `markShown` on each, moving both counts 0 → 1, so the
+                // banner came back once more. One key + `markDismissed` is what
+                // makes a close final (see `UiHintService.hintPosGestures`).
                 if (!_controller!.isLoading &&
                     _showPosHint &&
                     !needsStoreSelection &&
@@ -304,7 +318,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                   _buildInlineHint(
                     message: 'Tap a '
                         '${ref.watch(industryLexiconProvider).itemLower}'
-                        ' to add it to the cart, or tap and hold to choose the'
+                        ' to add it to the cart, or tap and hold to choose a'
                         ' quantity.',
                     onDismiss: () {
                       setState(() => _showPosHint = false);
@@ -423,9 +437,15 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   }
 
   // Inline dismissible hint shown above the product grid (first couple of
-  // visits). Mirrors the cart screen's "tap an item to edit" banner. Drives
-  // both the POS long-press-to-edit tip and the joining-staff "tap to add"
-  // coach tip (issue #32); each is view-counted under its own hint key.
+  // visits). Mirrors the cart screen's "tap an item to edit" banner. Renders
+  // the single combined tap-to-add / tap-and-hold tip, view-counted under the
+  // one `hintPosGestures` key.
+  //
+  // The per-tip adaptive copy this replaced ("…still live for this user":
+  // both / hold-only / tap-only sentences) went with the second key. Those
+  // branches only had distinct reachable states because the two keys retired
+  // independently — the very thing that made a ✕ a half-dismiss — so merging
+  // the keys collapses them to the both-gestures sentence by construction.
   Widget _buildInlineHint({
     required String message,
     required VoidCallback onDismiss,
@@ -499,11 +519,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         truncateTitleWithReveal: true,
       ),
       actions: [
-        // #118: always-visible one-shot barcode scan. Not gated on the cart.
-        PosBarcodeScanButton(
-          tier: _controller!.selectedGroup,
-          loadedProducts: _controller!.allProducts,
-        ),
         IconButton(
           icon: Icon(
             _isListView ? FontAwesomeIcons.list.data : FontAwesomeIcons.borderAll.data,

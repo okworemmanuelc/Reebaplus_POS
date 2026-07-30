@@ -1,6 +1,8 @@
 # The closing report reconciles from recorded flows, not a cash balance
 
-**Status:** accepted (2026-07-05)
+**Status:** accepted (2026-07-05); **amended 2026-07-30 (PRD #203 slice #215)** —
+see "Amendment: the sixth card" at the foot of this file before changing the
+card count.
 
 The Daily Reconciliation (§25.9, `recon_data.dart` + `daily_reconciliation_detail_screen.dart`)
 already ships a store-scoped, Day/Week/Month/Year report with Sales, a CEO
@@ -56,6 +58,18 @@ Decisions locked:
   can diverge from the P&L COGS (per-line snapshotted FIFO cost) under a price
   change — accepted as the stated current-cost basis.
 
+  **Addendum 2026-07-25 (PRD #155, slices #170 + #182).** The *loss* surfaces no
+  longer share this card's current-cost basis. Damages (#170) and count
+  shortages (#182) are now valued from the write-time
+  `stock_adjustments.value_kobo` snapshot, so a later cost-price edit cannot
+  restate a past period's loss (ADR 0021 §4). **This card keeps current cost on
+  purpose** — its closing identity must tie to the rewound perpetual figure — so
+  the flow-equation Damages/Expired terms and the P&L Damages/Shortage lines can
+  legitimately differ after a price change. Count *surplus* remains current-cost
+  everywhere (a gain draws no batch). The residual "Other movements" is now
+  broken out by cause (transfers / count corrections / product deletions) per
+  #155 US 30.
+
 - **P&L books gross revenue and subtracts an explicit Discounts line.**
   `order_items.unitPriceKobo` is the **gross** list price; the order's real
   payable lives in `netAmountKobo`/`discountKobo` (`order_commands.dart`). The
@@ -88,9 +102,52 @@ Decisions locked:
   most faithful to "running net position," but adds a synced snapshot table +
   backfill; the flow-reconciliation flag delivers the recording-error signal now
   without new persistence. Revisit if snapshot-grade history is wanted.
+  **→ No longer deferred: landed 2026-07-25 via PRD #155 slice #174** as the
+  synced `daily_closings` table (one first-writer-wins row per business × day,
+  frozen on the first review of a finished day) plus a per-card
+  "changed since review" delta. See ADR 0021 §2. Purely observational — no money
+  flow changed.
 - **Book revenue net of discount with no discount line** — rejected: correct
   bottom line but hides how much was discounted; the ask names discounts as an
   explicit subtraction.
 - **Keep the perpetual count only / implement the literal equation** — rejected:
   the first omits the opening→closing story asked for; the second double-counts
   shortages so expected-vs-actual never ties out.
+
+## Amendment: the sixth card (2026-07-30, PRD #203 slice #215)
+
+This ADR cut the reconciliation from nine cards to five, and the cut is still
+the rule: every figure that can live on an existing card must. **One exception
+is now granted, deliberately and by the owner: a sixth card, "Crate money with
+suppliers (business-wide)".** Design record: ADR 0023, whose Consequences name
+this amendment as a required part of the slice.
+
+**Why it earns a card rather than a line.** Before PRD #203 a distributor could
+hand a depot ₦180,000 for their crates and *every money figure in the app read
+exactly the same afterwards* (ADR 0023 finding #1). Slice #215 fixes the total —
+a Placed Deposit is now an asset inside `businessNetPositionKobo`, and it gets
+its own cash line outside `cashInKobo`/`cashOutKobo`/net, the same treatment
+`cashCrateDepositsKobo` has had for the customer leg since #175. But a total
+answers "how much?", and the question an owner acts on is "**who** is holding
+it?" — that is who they ring, and who they settle with. Only a card can carry
+the per-supplier breakdown. Folding it into Business worth would have kept the
+figure invisible in the way that mattered.
+
+**Why it is business-wide, even under a locked store.** Supplier crate money is
+a company obligation: the depot invoices the business, not the branch. The card
+says "(business-wide)" on its face and its provider never reads the active
+store. Splitting it per store would repeat the defect `CRATE_TRACKING_AUDIT` C4
+already names — point-in-time business-wide crate figures presented inside a
+store-scoped report — and would let two branches each believe the same money was
+theirs.
+
+**Why the count is not really six for anyone yet.** The Crate Money Arrangement
+defaults to `none` on every manufacturer (ADR 0023 rule 3, slice #211), and the
+card renders only when a brand actually moves crate money. Every business that
+has not deliberately switched a brand on still reads exactly the five cards this
+ADR specified — which is also the release gate PRD #203 ships on.
+
+**To anyone re-tightening the card count:** this exception is deliberate, and
+the reasoning is here so you can weigh it rather than discover it. If crate
+money can be made legible without a card of its own, replacing it is a decision
+to record, not a tidy-up to perform.

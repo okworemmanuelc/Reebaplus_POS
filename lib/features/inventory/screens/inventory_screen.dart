@@ -30,6 +30,7 @@ import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.d
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/crate_money_arrangement_section.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
 import 'package:reebaplus_pos/core/constants/category_filter.dart';
@@ -1420,21 +1421,23 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   Widget _buildCratesTab(BuildContext context) {
     // §16.8.1 Phase 2: crate figures are PER-STORE when a store is active and
     // business-wide in "All Stores". Full bottles come from the active store's
-    // inventory (fullCratesByManufacturerProvider); empties come from that
-    // store's store_crate_balances, falling back to the business-wide
-    // manufacturers.empty_crate_stock when no store is locked.
+    // inventory (fullCratesByManufacturerProvider). #159: empties are DERIVED
+    // from the append-only crate_ledger for BOTH views — the per-store pool when
+    // a store is locked (storeCrateBalancesProvider) and the business-wide pool
+    // otherwise (emptyCratesByManufacturerProvider) — so the two views agree.
     final lockedStoreId = ref.watch(lockedStoreProvider).value;
     final fullByMfr =
         ref.watch(fullCratesByManufacturerProvider).valueOrNull ??
         const <String, int>{};
     final Map<String, int> emptyByMfr;
     if (lockedStoreId == null) {
-      emptyByMfr = {for (final m in _dbManufacturers) m.id: m.emptyCrateStock};
+      emptyByMfr =
+          ref.watch(emptyCratesByManufacturerProvider).valueOrNull ??
+          const <String, int>{};
     } else {
-      final balances =
+      emptyByMfr =
           ref.watch(storeCrateBalancesProvider).valueOrNull ??
-          const <StoreCrateBalanceData>[];
-      emptyByMfr = {for (final b in balances) b.manufacturerId: b.balance};
+          const <String, int>{};
     }
 
     final stats = _computeCrateStats(fullByMfr, emptyByMfr);
@@ -2083,6 +2086,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   ),
                 ),
               ],
+
+              // #211 — the brand's Crate Money Arrangement (ADR 0023 rule 3).
+              // Self-gating (crate business + Gates.crateMoneyArrangement) and
+              // self-saving: it confirms and writes on its own rather than
+              // riding the Save button below, because a money policy must not be
+              // half-chosen and abandoned. Renders nothing for a non-crate
+              // business or a role without money permission.
+              CrateMoneyArrangementSection(
+                manufacturer: mfr,
+                surfaceColor: _surface,
+                textColor: _text,
+                subtextColor: _subtext,
+              ),
 
               const SizedBox(height: 32),
               AppButton(

@@ -77,53 +77,19 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  /// Manually set a manufacturer's empty-crate count (management dialog).
+  /// Delegates to the Crate Pool seam (#157), which records the correction as a
+  /// reconciling ledger delta and maintains the scalar + per-store caches.
   Future<void> updateManufacturerStock(
     String id,
     int newStock, {
     String? storeId,
   }) async {
-    final now = DateTime.now();
-
-    if (storeId != null) {
-      // Per-store path (§16.8.1): set this store's balance and bump the
-      // business total by the delta so manufacturers.empty_crate_stock stays
-      // equal to the sum of all store balances.
-      final currentBalance = await db.storeCrateBalancesDao.getBalance(
-        storeId: storeId,
-        manufacturerId: id,
-      );
-      final delta = newStock - currentBalance;
-
-      await db.storeCrateBalancesDao.setBalance(
-        storeId: storeId,
-        manufacturerId: id,
-        newBalance: newStock,
-      );
-
-      // Bump business total by the same delta.
-      final mfr = await (select(
-        manufacturers,
-      )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingle();
-      final comp = ManufacturersCompanion(
-        id: Value(id),
-        emptyCrateStock: Value(mfr.emptyCrateStock + delta),
-        lastUpdatedAt: Value(now),
-      );
-      await (update(
-        manufacturers,
-      )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
-    } else {
-      // Legacy path (no store dimension): absolute set on business total.
-      final comp = ManufacturersCompanion(
-        id: Value(id),
-        emptyCrateStock: Value(newStock),
-        lastUpdatedAt: Value(now),
-      );
-      await (update(
-        manufacturers,
-      )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
-    }
-    await _enqueueFullManufacturer(id);
+    await db.cratePoolDao.recordManualCountCorrection(
+      id,
+      newStock,
+      storeId: storeId,
+    );
   }
 
   Future<void> updateManufacturerDeposit(String id, int depositKobo) async {
@@ -241,6 +207,39 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// 'transfer_in' for stock transfer legs (§16.8.1), along with [refId]
   /// = the StockTransfers.id (maps to stock_transactions.transfer_id in the
   /// v2 RPC via ref_type='transfer').
+  ///
+  /// **Cost semantics (money-integrity #7a, #170 / PRD #155).** The central
+  /// mutator now carries value with quantity so COGS stops drifting to zero-cost
+  /// and losses are valued at the moment they happen — applied on the v1
+  /// (flag-off) path only, and ONLY to plain `adjustment` movements (transfer
+  /// legs move their cost through the transfer DAO in #7b; the v2 domain RPC is
+  /// server-authoritative and out of scope here):
+  ///  • an **increase** creates a fresh FIFO cost batch through the same
+  ///    [CostBatchesDao.recordInflowBatch] inflow Receive Stock uses —
+  ///    [inflowUnitCostKobo] when the caller knows the cost (the existing-
+  ///    product Add path), else the product's recorded scalar cost (#189), and an
+  ///    **Uncosted** (0) batch only when no cost is knowable — so its later sales
+  ///    draw real (or backfillable) COGS, never phantom 0. See
+  ///    [_recordedUnitCostKobo] for why the omitted-cost default is not 0.
+  ///  • a **decrease** draws the FIFO queue down oldest-first
+  ///    ([CostBatchesDao.drawDownOutflow]) and SNAPSHOTS the drawn value onto
+  ///    the `stock_adjustments` row (`unit_cost_kobo` / `value_kobo`), so a
+  ///    later cost edit cannot restate that past loss.
+  ///
+  /// [trackCost] `false` opts a caller out of both hooks — used by Receive
+  /// Stock, which writes its own receipt-dated batch (double-batching would
+  /// drift the queue). [inflowReceivedAt] is the FIFO ordering key for an
+  /// increase's batch (defaults to now).
+  ///
+  /// [outflowValueKobo] is the **decrease** counterpart of [inflowUnitCostKobo]:
+  /// the total cost (kobo) to snapshot onto the `stock_adjustments` row when the
+  /// caller — not this store's FIFO queue — is the authority on what the loss
+  /// cost. Exactly one caller today: a damaged van return (#143), whose goods
+  /// sit on a VAN store that deliberately holds no cost batches at all (ADR
+  /// 0019 — the load lot's snapshot is the van's cost truth). Drawing that
+  /// store's empty queue would book the loss at 0 and understate it silently.
+  /// When supplied it WINS: no draw-down runs, and `unit_cost_kobo` is
+  /// `round(value / |delta|)` — the same blend a multi-batch draw-down produces.
   Future<void> adjustStock(
     String productId,
     String storeId,
@@ -249,6 +248,10 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     String? staffId, {
     String movementType = 'adjustment',
     String? refId,
+    int? inflowUnitCostKobo,
+    DateTime? inflowReceivedAt,
+    int? outflowValueKobo,
+    bool trackCost = true,
   }) async {
     if (delta == 0) return;
     await transaction(() async {
@@ -355,6 +358,28 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           lastUpdatedAt: Value(DateTime.now()),
         );
       } else {
+        // #7a valued loss: a decrease draws the FIFO queue down oldest-first and
+        // SNAPSHOTS what it drew onto this adjustment row, so a later cost edit
+        // can never restate the loss. Runs after the guarded inventory decrement
+        // above succeeded (a rejected decrement threw). Uncovered units cost 0
+        // (uncosted), exactly like a sale. Skipped when [trackCost] is false.
+        int? snapshotUnitCostKobo;
+        int? snapshotValueKobo;
+        if (delta < 0 && outflowValueKobo != null) {
+          // The caller holds the cost basis (a van lot's snapshot, #143). No
+          // draw-down: the store this outflow leaves has no queue to draw.
+          snapshotValueKobo = outflowValueKobo < 0 ? 0 : outflowValueKobo;
+          snapshotUnitCostKobo = (snapshotValueKobo / -delta).round();
+        } else if (trackCost && delta < 0) {
+          final drawnKobo = await db.costBatchesDao.drawDownOutflow(
+            productId,
+            storeId,
+            -delta,
+          );
+          snapshotValueKobo = drawnKobo;
+          snapshotUnitCostKobo = (drawnKobo / -delta).round();
+        }
+
         final adjustmentId = UuidV7.generate();
         final adjComp = StockAdjustmentsCompanion.insert(
           id: Value(adjustmentId),
@@ -364,6 +389,8 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           quantityDiff: delta,
           reason: note,
           performedBy: Value(staffId),
+          unitCostKobo: Value(snapshotUnitCostKobo),
+          valueKobo: Value(snapshotValueKobo),
           lastUpdatedAt: Value(DateTime.now()),
         );
         await into(stockAdjustments).insert(adjComp);
@@ -393,6 +420,119 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
               ))
               .getSingle();
       await db.syncDao.enqueueUpsert('inventory', invRow);
+
+      // #7a inflow batch: a plain-adjustment increase creates a fresh FIFO layer
+      // through the SAME inflow Receive Stock uses — a costed batch when the
+      // caller knows the price (the Add path), the product's recorded cost when
+      // it does not (#189), an Uncosted (0) batch only when no cost is knowable
+      // — so its later sales draw real (or backfillable) COGS, never phantom 0.
+      // Transfer legs (isTransfer) move cost through the transfer DAO (#7b);
+      // Receive Stock opts out (trackCost:false) and writes its own batch.
+      if (trackCost && delta > 0 && !isTransfer) {
+        await db.costBatchesDao.recordInflowBatch(
+          productId: productId,
+          storeId: storeId,
+          quantity: delta,
+          costKobo: inflowUnitCostKobo ?? await _recordedUnitCostKobo(productId),
+          receivedAt: inflowReceivedAt,
+        );
+      }
+    });
+  }
+
+  /// The cost basis for an increase whose caller hands over none (#189): the
+  /// product's scalar `buying_price_kobo`. 0 when the product carries no cost —
+  /// then, and only then, the batch is genuinely **Uncosted**.
+  ///
+  /// The scalar is not a guess. It is the derived display cache over the batch
+  /// queue (ADR 0005), re-pointed by `CostBatchesDao._recomputeScalarCost` at the
+  /// cost of the oldest remaining **costed** batch, or the price the owner
+  /// entered — the best available basis, and the same rule F1's opening-batch
+  /// migration used ("every existing product's current stock becomes one opening
+  /// batch at its existing scalar cost — zero-cost stock becomes an *uncosted*
+  /// batch"). Batching at 0 instead made these units sell at **0 COGS forever**:
+  /// #41's backfill only fires on a `0 → positive` cost edit, a transition a
+  /// product that already has a price can never make again, so nothing could ever
+  /// reach the batch.
+  ///
+  /// Keyed on the caller saying **nothing** (`inflowUnitCostKobo == null`), never
+  /// on a handed-over 0 — a caller that states "no cost" (Add Product with the
+  /// buying price left blank) still gets its deliberate Uncosted layer, and #197
+  /// composes cleanly: it passes the cost captured on the request and falls back
+  /// here when the approver captured none.
+  Future<int> _recordedUnitCostKobo(String productId) async {
+    final product =
+        await (select(products)
+              ..where((p) => p.id.equals(productId) & whereBusiness(p))
+              ..limit(1))
+            .getSingleOrNull();
+    return product?.buyingPriceKobo ?? 0;
+  }
+
+  /// The stable reason stamped on the write-off adjustments a product delete
+  /// posts (#170 #7c). A constant (not the display name) so reports can find the
+  /// rows and their snapshotted value.
+  static const productDeletedReason = 'product_deleted';
+
+  /// Write off ALL remaining stock of [productId] across every active store as a
+  /// deletion is finalised (#170 #7c), and return the TOTAL value written off
+  /// (kobo). Each per-store decrement runs through [adjustStock], so it draws the
+  /// FIFO cost batches down (closing the open layers) and SNAPSHOTS the drawn
+  /// value onto its `stock_adjustments` row — value that previously just vanished
+  /// when a product was deleted (the deleted-product cost lookup falls to 0). The
+  /// caller surfaces the returned total in the delete activity log so the
+  /// write-off is visible. Idempotent for a re-tapped delete: a store already at
+  /// 0 on-hand is skipped, and the value is read back from the row this call
+  /// wrote.
+  /// **All-or-nothing across stores (#193).** The whole multi-store sweep runs in
+  /// ONE transaction, so a failure part-way cannot leave some stores written off
+  /// and others not. That mattered less when the write-off was only an
+  /// informational stock-card line; now that the reconciliation books it as a
+  /// realized LOSS against net profit (#193), a partial sweep would post a
+  /// phantom loss for a product the caller then leaves alive — real money against
+  /// stock that is still on the shelf.
+  Future<int> writeOffAllStockForDelete(
+    String productId,
+    String? staffId,
+  ) async {
+    return transaction(() async {
+      var totalValueKobo = 0;
+      final stores = await db.storesDao.getActiveStores();
+      for (final store in stores) {
+        final invRow =
+            await (select(inventory)..where(
+                  (t) =>
+                      t.productId.equals(productId) &
+                      t.storeId.equals(store.id) &
+                      whereBusiness(t),
+                ))
+                .getSingleOrNull();
+        final qty = invRow?.quantity ?? 0;
+        if (qty <= 0) continue;
+
+        await adjustStock(
+          productId,
+          store.id,
+          -qty,
+          productDeletedReason,
+          staffId,
+        );
+
+        final adj =
+            await (select(stockAdjustments)
+                  ..where(
+                    (a) =>
+                        a.productId.equals(productId) &
+                        a.storeId.equals(store.id) &
+                        a.reason.equals(productDeletedReason) &
+                        whereBusiness(a),
+                  )
+                  ..orderBy([(a) => OrderingTerm.desc(a.createdAt)])
+                  ..limit(1))
+                .getSingleOrNull();
+        totalValueKobo += adj?.valueKobo ?? 0;
+      }
+      return totalValueKobo;
     });
   }
 
@@ -451,102 +591,43 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
 
   /// Increment a manufacturer's empty-crate stock counter. Used by the
   /// receive-delivery and crate-return flows to credit the physical pool of
-  /// returnable crates held against a manufacturer.
+  /// returnable crates held against a manufacturer. Delegates to the Crate Pool
+  /// seam (#157).
+  ///
+  /// [orderId] identifies the ORDER the crates came back against, when there is
+  /// one (Confirm's crate returns). It makes the credit idempotent across
+  /// offline devices — see [CratePoolDao.addEmptiesToPool] (#188). An order-less
+  /// credit (manual return, delivery) omits it.
   Future<void> addEmptyCrates(
     String manufacturerId,
     int quantity, {
     String? storeId,
+    String? orderId,
   }) async {
-    if (quantity == 0) return;
-    await customUpdate(
-      'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
-      'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER) '
-      'WHERE id = ? AND business_id = ?',
-      variables: [
-        Variable(quantity),
-        Variable(manufacturerId),
-        Variable(requireBusinessId()),
-      ],
-      updates: {manufacturers},
+    await db.cratePoolDao.addEmptiesToPool(
+      manufacturerId,
+      quantity,
+      storeId: storeId,
+      orderId: orderId,
     );
-    final mfrRow =
-        await (select(manufacturers)
-              ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
-            .getSingle();
-    await db.syncDao.enqueueUpsert('manufacturers', mfrRow);
-
-    // Per-store tracking (§16.8.1): if a store is provided, stamp the balance
-    // and write a store-scoped crate_ledger row.
-    if (storeId != null) {
-      await db.storeCrateBalancesDao.applyDelta(
-        storeId: storeId,
-        manufacturerId: manufacturerId,
-        delta: quantity,
-      );
-      final ledgerComp = CrateLedgerCompanion.insert(
-        id: Value(UuidV7.generate()),
-        businessId: requireBusinessId(),
-        manufacturerId: Value(manufacturerId),
-        storeId: Value(storeId),
-        quantityDelta: quantity,
-        movementType: 'adjusted',
-        lastUpdatedAt: Value(DateTime.now()),
-      );
-      await into(crateLedger).insert(ledgerComp);
-      await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-    }
   }
 
   /// Debit a manufacturer's empty-crate pool because STORED empties were
-  /// damaged/lost (§17.2 crate-aware damages, the `+crateempty` fate). Mirrors
-  /// [addEmptyCrates] but subtracts and stamps a `damaged` crate_ledger
-  /// movement. The pool is clamped at zero. Note: the "full crate lost"
-  /// (`+cratelost`) fate does NOT call this — that container was never in the
-  /// returned-empties pool, so it only forfeits the deposit on the Statement
-  /// (derived from the damage reason in `computeReconData`).
+  /// damaged/lost (§17.2 crate-aware damages, the `+crateempty` fate). The pool
+  /// is clamped at zero. Note: the "full crate lost" (`+cratelost`) fate does
+  /// NOT call this — that container was never in the returned-empties pool, so
+  /// it only forfeits the deposit on the Statement (derived from the damage
+  /// reason in `computeReconData`). Delegates to the Crate Pool seam (#157).
   Future<void> recordEmptyCrateDamage(
     String manufacturerId,
     int quantity, {
     String? storeId,
   }) async {
-    if (quantity <= 0) return;
-    await customUpdate(
-      'UPDATE manufacturers SET empty_crate_stock = MAX(0, empty_crate_stock - ?), '
-      'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER) '
-      'WHERE id = ? AND business_id = ?',
-      variables: [
-        Variable(quantity),
-        Variable(manufacturerId),
-        Variable(requireBusinessId()),
-      ],
-      updates: {manufacturers},
+    await db.cratePoolDao.recordDamage(
+      manufacturerId,
+      quantity,
+      storeId: storeId,
     );
-    final mfrRow =
-        await (select(manufacturers)
-              ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
-            .getSingle();
-    await db.syncDao.enqueueUpsert('manufacturers', mfrRow);
-
-    // Per-store tracking (§16.8.1): mirror the balance + a store-scoped
-    // crate_ledger row tagged `damaged`.
-    if (storeId != null) {
-      await db.storeCrateBalancesDao.applyDelta(
-        storeId: storeId,
-        manufacturerId: manufacturerId,
-        delta: -quantity,
-      );
-      final ledgerComp = CrateLedgerCompanion.insert(
-        id: Value(UuidV7.generate()),
-        businessId: requireBusinessId(),
-        manufacturerId: Value(manufacturerId),
-        storeId: Value(storeId),
-        quantityDelta: -quantity,
-        movementType: 'damaged',
-        lastUpdatedAt: Value(DateTime.now()),
-      );
-      await into(crateLedger).insert(ledgerComp);
-      await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-    }
   }
 
   /// Stream the per-manufacturer count of full bottles in stock, derived
@@ -588,21 +669,22 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Stream per-manufacturer empty-crate stock from the manufacturers cache.
+  /// Stream the business-wide physical empties pool per manufacturer. #159:
+  /// DERIVED from the append-only `crate_ledger` (the store-stamped, customer-
+  /// less rows) via the Crate Pool seam, not the demoted
+  /// `manufacturers.empty_crate_stock` scalar — so the business figure and a
+  /// locked store's figure agree (both derive from the same ledger).
   Stream<Map<String, int>> watchEmptyCratesByManufacturer() {
-    return (select(manufacturers)
-          ..where((t) => whereBusiness(t) & t.isDeleted.not()))
-        .watch()
-        .map((rows) => {for (final m in rows) m.id: m.emptyCrateStock});
+    return db.cratePoolDao.watchEmptiesPoolByManufacturer();
   }
 
   /// Stream the total empty-crate assets across all manufacturers — used by
-  /// the inventory dashboard summary card.
+  /// the inventory dashboard summary card. #159: the sum of the ledger-derived
+  /// per-manufacturer pool (business total == Σ store totals by construction).
   Stream<int> watchTotalCrateAssets() {
-    return (select(manufacturers)
-          ..where((t) => whereBusiness(t) & t.isDeleted.not()))
-        .watch()
-        .map((rows) => rows.fold<int>(0, (sum, m) => sum + m.emptyCrateStock));
+    return db.cratePoolDao
+        .watchEmptiesPoolByManufacturer()
+        .map((m) => m.values.fold<int>(0, (sum, v) => sum + v));
   }
 
   Future<List<ProductStockWithStore>> getProductsStockPerStore({
@@ -716,6 +798,27 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     );
     await into(stockTransactions).insert(row);
     await db.syncDao.enqueueUpsert('stock_transactions', row);
+  }
+
+  /// How many stock movements this staff member has performed in the bound
+  /// business — one of the Staff detail screen's activity figures (#205). Voided
+  /// rows still count: the figure is "how much did this person move stock",
+  /// which is what the screen has always shown.
+  ///
+  /// Business-scoped (architecture.md invariant #5): the screen's raw
+  /// `customSelect` carried no `business_id` predicate, so a device holding two
+  /// businesses' rows counted both.
+  Future<int> countPerformedByStaff(String userId) async {
+    final countCol = stockTransactions.id.count();
+    final row =
+        await (selectOnly(stockTransactions)
+              ..addColumns([countCol])
+              ..where(
+                whereBusiness(stockTransactions) &
+                    stockTransactions.performedBy.equals(userId),
+              ))
+            .getSingle();
+    return row.read(countCol) ?? 0;
   }
 
   Stream<List<StockTransactionData>> watchLedger(String productId) {
@@ -1236,7 +1339,9 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     final now = DateTime.now();
 
     await transaction(() async {
-      // 1. Write the header row (in_transit).
+      // 1. Write the header row (in_transit) — inserted first so the
+      //    transfer_out ledger row below can FK-reference it. Enqueued once at
+      //    the end, after cost_kobo is known (#7b).
       final header = StockTransfersCompanion.insert(
         id: Value(transferId),
         businessId: requireBusinessId(),
@@ -1250,7 +1355,6 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         lastUpdatedAt: Value(now),
       );
       await into(stockTransfers).insert(header);
-      await db.syncDao.enqueueUpsert('stock_transfers', header);
 
       // 2. Decrement source inventory (transfer_out). The adjustStock helper
       //    handles both the v2 domain-RPC path and the legacy flag-off path,
@@ -1264,6 +1368,23 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         movementType: 'transfer_out',
         refId: transferId,
       );
+
+      // 3. #7b: draw the source's FIFO batches down and RIDE the drawn cost on
+      //    the transfer, so receipt can create the destination batch at that
+      //    value and the source keeps no phantom coverage. Uncovered units draw
+      //    0 (uncosted). Enqueue the header once now, carrying cost_kobo.
+      final drawnKobo =
+          await db.costBatchesDao.drawDownOutflow(productId, fromStoreId, quantity);
+      await (update(stockTransfers)
+            ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
+          .write(StockTransfersCompanion(
+        costKobo: Value(drawnKobo),
+        lastUpdatedAt: Value(DateTime.now()),
+      ));
+      final row = await (select(
+        stockTransfers,
+      )..where((t) => t.id.equals(transferId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert('stock_transfers', row.toCompanion(true));
     });
 
     // 3. Activity log.
@@ -1346,6 +1467,23 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         refId: transferId,
       );
 
+      // 1b. #7b: create the destination's Cost Batch at the cost that RODE the
+      //     transfer, so the receiving store sells at real COGS. Per-unit =
+      //     round(total carried cost / qty); a legacy transfer that carried no
+      //     cost (cost_kobo NULL) makes an Uncosted (0) batch, as receipts did
+      //     before #170. adjustStock skips the batch for a transfer_in leg, so
+      //     this is the single destination inflow.
+      final perUnitCostKobo = (transfer.costKobo != null && transfer.quantity > 0)
+          ? (transfer.costKobo! / transfer.quantity).round()
+          : 0;
+      await db.costBatchesDao.recordInflowBatch(
+        productId: transfer.productId,
+        storeId: transfer.toLocationId,
+        quantity: transfer.quantity,
+        costKobo: perUnitCostKobo,
+        receivedAt: now,
+      );
+
       // 2. Flip header → received.
       final updated = transfer
           .toCompanion(true)
@@ -1395,7 +1533,12 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
 
   /// Cancel an in-transit transfer and restore the source inventory.
   ///
-  /// Throws [StateError] if the transfer is not in_transit.
+  /// Throws [StateError] if the transfer is not in_transit, and
+  /// [VanLegNotCancellableException] when either endpoint is a van (#141,
+  /// van-sales spec §7.2): a van leg is bound to a trip and a driver-ledger
+  /// debit that this path knows nothing about, so cancelling it here would put
+  /// the goods back on paper while the driver stayed debited for them.
+  /// Corrections to a van load are **return events, not cancels**.
   Future<void> cancelTransfer({
     required String transferId,
     required String cancelledBy,
@@ -1408,6 +1551,20 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
 
       if (transfer == null) {
         throw StateError('Transfer $transferId not found.');
+      }
+      // §7.2 — the write-boundary refusal. A van load writes no
+      // `stock_transfers` header of its own (the lot IS the leg), so this can
+      // only fire on a legacy or hand-made transfer that names a van; refusing
+      // is still the right answer, and it is the guard that keeps the rule true
+      // if a later slice ever does give a van leg a header.
+      for (final endpoint in [transfer.fromLocationId, transfer.toLocationId]) {
+        if (await db.vanTripsDao.isVanStoreId(endpoint)) {
+          throw const VanLegNotCancellableException(
+            'A van load can\'t be cancelled here. Record what came back as a '
+            'return on the trip instead — that credits the driver and puts the '
+            'stock back with the cost it left with.',
+          );
+        }
       }
       if (transfer.status != 'in_transit') {
         throw StateError(
@@ -1425,6 +1582,22 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         cancelledBy,
         movementType: 'transfer_in',
         refId: transferId,
+      );
+
+      // 1b. #7b: restore the source's Cost Batch at the cost that was drawn down
+      //     at dispatch — the goods physically came back, so the source keeps
+      //     its coverage instead of losing it forever. Per-unit = round(carried
+      //     cost / qty); a legacy transfer that carried no cost restores an
+      //     Uncosted layer. adjustStock skips the batch for a transfer_in leg.
+      final perUnitCostKobo = (transfer.costKobo != null && transfer.quantity > 0)
+          ? (transfer.costKobo! / transfer.quantity).round()
+          : 0;
+      await db.costBatchesDao.recordInflowBatch(
+        productId: transfer.productId,
+        storeId: transfer.fromLocationId,
+        quantity: transfer.quantity,
+        costKobo: perUnitCostKobo,
+        receivedAt: DateTime.now(),
       );
 
       // 2. Flip header → cancelled.
@@ -1455,116 +1628,8 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   /// Moves [quantity] empty crates of [manufacturerId] from [fromStoreId] to
   /// [toStoreId] atomically (Phase 3, §16.9). Executed at dispatch time — no
   /// separate confirm step for crates (they travel with the product shipment).
-  ///
-  /// Local: writes two store-stamped crate_ledger rows and updates
-  /// store_crate_balances for immediate UI feedback. Cloud: a single atomic
-  /// `domain:pos_transfer_crates` envelope (idempotent via ledger IDs).
-  /// store_crate_balances is NOT separately enqueued — the domain RPC is the
-  /// sole cloud writer (prevents double-count).
-  Future<void> _writeCrateTransferLegs({
-    required String transferId,
-    required String fromStoreId,
-    required String toStoreId,
-    required String manufacturerId,
-    required int quantity,
-    required String performedBy,
-  }) async {
-    final bizId = requireBusinessId();
-    final outLedgerId = UuidV7.generate();
-    final inLedgerId = UuidV7.generate();
-    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
-    // 1. Local crate_ledger rows (append-only; store-stamped §v44).
-    await customStatement(
-      'INSERT INTO crate_ledger '
-      '  (id, business_id, manufacturer_id, store_id, '
-      '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
-      'VALUES (?,?,?,?,?,?,?,?,?)',
-      [
-        outLedgerId,
-        bizId,
-        manufacturerId,
-        fromStoreId,
-        -quantity,
-        'transferred_out',
-        performedBy,
-        nowSec,
-        nowSec,
-      ],
-    );
-    await customStatement(
-      'INSERT INTO crate_ledger '
-      '  (id, business_id, manufacturer_id, store_id, '
-      '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
-      'VALUES (?,?,?,?,?,?,?,?,?)',
-      [
-        inLedgerId,
-        bizId,
-        manufacturerId,
-        toStoreId,
-        quantity,
-        'transferred_in',
-        performedBy,
-        nowSec,
-        nowSec,
-      ],
-    );
-
-    // 2. Local store_crate_balances — immediate UI feedback only.
-    //    NOT enqueued directly; the domain RPC is the sole cloud writer.
-    await customStatement(
-      'INSERT INTO store_crate_balances '
-      '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
-      'VALUES (?,?,?,?,?,?) '
-      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
-      '  balance = balance + excluded.balance, '
-      '  last_updated_at = excluded.last_updated_at',
-      [
-        UuidV7.generate(),
-        bizId,
-        fromStoreId,
-        manufacturerId,
-        -quantity,
-        nowSec,
-      ],
-    );
-    await customStatement(
-      'INSERT INTO store_crate_balances '
-      '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
-      'VALUES (?,?,?,?,?,?) '
-      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
-      '  balance = balance + excluded.balance, '
-      '  last_updated_at = excluded.last_updated_at',
-      [UuidV7.generate(), bizId, toStoreId, manufacturerId, quantity, nowSec],
-    );
-
-    // 3. Enqueue the domain RPC (handles cloud crate_ledger + store_crate_balances atomically).
-    final payload = <String, dynamic>{
-      'p_business_id': bizId,
-      'p_actor_id': performedBy,
-      'p_transfer_id': transferId,
-      'p_from_store_id': fromStoreId,
-      'p_to_store_id': toStoreId,
-      'p_manufacturer_id': manufacturerId,
-      'p_quantity': quantity,
-      'p_out_ledger_id': outLedgerId,
-      'p_in_ledger_id': inLedgerId,
-    };
-    await db.syncDao.enqueue(
-      'domain:pos_transfer_crates',
-      jsonEncode(payload),
-    );
-  }
-
-  /// Moves [quantity] empty crates of [manufacturerId] from [fromStoreId] to
-  /// [toStoreId] atomically (Phase 3, §16.9). Executed at dispatch time — no
-  /// separate confirm step for crates (they travel with the product shipment).
-  ///
-  /// Local: writes two store-stamped crate_ledger rows and updates
-  /// store_crate_balances for immediate UI feedback. Cloud: a single atomic
-  /// `domain:pos_transfer_crates` envelope (idempotent via ledger IDs).
-  /// store_crate_balances is NOT separately enqueued — the domain RPC is the
-  /// sole cloud writer (prevents double-count).
+  /// Delegates to the Crate Pool seam (#157), which owns the crate_ledger +
+  /// store_crate_balances writes and the `domain:pos_transfer_crates` envelope.
   Future<void> transferCrates({
     required String transferId,
     required String fromStoreId,
@@ -1574,7 +1639,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     required String performedBy,
   }) async {
     await transaction(() async {
-      await _writeCrateTransferLegs(
+      await db.cratePoolDao.transferBetweenStores(
         transferId: transferId,
         fromStoreId: fromStoreId,
         toStoreId: toStoreId,
@@ -1716,12 +1781,23 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         refId: transferId,
       );
 
-      // 2. Flip header → in_transit, persisting any altered quantity.
+      // 1b. #7b: draw the source's FIFO batches down for the DISPATCHED quantity
+      //     and ride the drawn cost on the transfer (receipt creates the
+      //     destination batch at it; the source keeps no phantom coverage).
+      final drawnKobo = await db.costBatchesDao.drawDownOutflow(
+        transfer.productId,
+        transfer.fromLocationId,
+        dispatchedQty!,
+      );
+
+      // 2. Flip header → in_transit, persisting any altered quantity + the
+      //    carried cost (#7b).
       final updated = transfer
           .toCompanion(true)
           .copyWith(
             status: const Value('in_transit'),
             quantity: Value(dispatchedQty!),
+            costKobo: Value(drawnKobo),
             lastUpdatedAt: Value(now),
           );
       await (update(stockTransfers)
@@ -1749,7 +1825,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
           throw StateError('Product ${product.name} does not have a manufacturerId.');
         }
 
-        await _writeCrateTransferLegs(
+        await db.cratePoolDao.transferBetweenStores(
           transferId: transferId,
           fromStoreId: fromStoreId!,
           toStoreId: toStoreId!,
@@ -2058,6 +2134,14 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
   /// approval-request notification to the CEO and the Manager(s) of the
   /// affected store. If no Manager is tied to that store, only the CEO is
   /// notified (same audience rule as the old §26.4 post-hoc notice).
+  ///
+  /// [unitCostKobo] is what the goods cost, per unit (#197, PRD #155 US 22).
+  /// The person filing the request is the one holding the invoice, so this is
+  /// the only place that cost can be captured; [approveRequest] threads it into
+  /// the inflow batch. `null` means "not stated" — the approval then falls back
+  /// to the product's recorded price (#189) rather than inventing a 0. Only an
+  /// **increase** carries one: a decrease values itself off this store's FIFO
+  /// queue (#7a), which the requester cannot know.
   Future<void> requestStockAdjustment({
     required String productId,
     required String storeId,
@@ -2065,6 +2149,7 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
     required String reason,
     required String summary,
     required String? requestedBy,
+    int? unitCostKobo,
   }) async {
     final row = StockAdjustmentRequestsCompanion.insert(
       id: Value(UuidV7.generate()),
@@ -2072,6 +2157,7 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
       productId: productId,
       storeId: storeId,
       quantityDiff: quantityDiff,
+      unitCostKobo: Value(quantityDiff > 0 ? unitCostKobo : null),
       reason: reason,
       summary: summary,
       requestedBy: Value(requestedBy),
@@ -2114,6 +2200,12 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
   /// `approved`, and notify the requester. Throws (rolling back the whole
   /// transaction) if the adjustment can't be applied — e.g. a Remove that would
   /// take stock negative — leaving the request `pending` for a retry.
+  ///
+  /// **US 22 (#197):** the increase is batched at the cost the REQUEST captured
+  /// (`unit_cost_kobo`), so the units it adds sell at real COGS. `null` — a
+  /// request that stated no cost, and every request written before this shipped
+  /// — hands `adjustStock` an omitted cost, which falls back to the product's
+  /// recorded scalar price (#189). A stated cost always wins over that fallback.
   Future<void> approveRequest({
     required String requestId,
     required String approverId,
@@ -2130,12 +2222,15 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
       if (req == null || req.status != 'pending') return;
 
       // Apply the actual stock movement (atomic via pos_inventory_delta_v2).
+      // #197: the cost the request captured is what the increase's FIFO batch is
+      // priced at; null defers to #189's recorded-price fallback.
       await db.inventoryDao.adjustStock(
         req.productId,
         req.storeId,
         req.quantityDiff,
         req.reason,
         req.requestedBy,
+        inflowUnitCostKobo: req.unitCostKobo,
       );
 
       final now = DateTime.now();

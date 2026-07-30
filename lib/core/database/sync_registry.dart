@@ -508,10 +508,37 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'manufacturers',
     tenantScoped: true,
+    // #159: `empty_crate_stock` is DEMOTED off the push set — the physical
+    // empties pool is DERIVED from the append-only `crate_ledger` (store-stamped,
+    // customer-less rows), so the absolute scalar is never pushed. It is
+    // deliberately absent from this whitelist; the local column is a now-unread
+    // projection that restores harmlessly on pull. Every OTHER column still
+    // syncs (name / deposit edits are unaffected).
+    pushColumns: {
+      'id',
+      'business_id',
+      'name',
+      'deposit_amount_kobo',
+      // #211 — the brand's Crate Money Arrangement (ADR 0023 rule 3). An
+      // owner-chosen money policy, so it must reach every other device; it is
+      // pushed like `deposit_amount_kobo` and for the same reason.
+      'crate_money_arrangement',
+      'is_deleted',
+      'created_at',
+      'last_updated_at',
+    },
     restore: Restore.plain(
       (db) => db.manufacturers,
       ManufacturerData.fromJson,
       resilient: true,
+      // #211 — `crate_money_arrangement` is NOT NULL locally, and
+      // [Restore.plain] runs `fromJson` BEFORE the FK-resilient wrapper, so a
+      // cloud row missing the column would throw and abort the whole pull page
+      // rather than skip one row. That is exactly what a device on Drift v78
+      // sees if it pulls before supabase/migrations/0171 is applied. Defaulting
+      // to `none` is both the right value (nobody has opted in) and the
+      // deploy-order fuse.
+      defaults: {'crate_money_arrangement': kCrateMoneyArrangementNone},
     ),
   ),
   SyncedTable(
@@ -521,6 +548,14 @@ final List<SyncedTable> kSyncRegistry = [
       (db) => db.stores,
       StoreData.fromJson,
       resilient: true,
+      // #140 — `kind` is NOT NULL locally, and [Restore.plain] runs `fromJson`
+      // BEFORE the FK-resilient wrapper, so a cloud row missing the column
+      // would throw and abort the whole pull page rather than skip one row.
+      // That is exactly what a device on Drift v70 sees if it pulls before
+      // supabase/migrations/0161 is applied, and what any legacy/web/RPC-
+      // authored row that omits the column would produce afterwards. Defaulting
+      // to a normal store is both the right value and the deploy-order fuse.
+      defaults: {'kind': kStoreKindStore},
     ),
   ),
   const SyncedTable(
@@ -743,10 +778,81 @@ final List<SyncedTable> kSyncRegistry = [
     // Root table (no parent) — NON-resilient, matching historical behaviour.
     restore: Restore.plain((db) => db.customers, CustomerData.fromJson),
   ),
+  // #141 (PRD #139, ADR 0019) — Van Sales. Three tables, in FK order among
+  // themselves: the trip, then its lots, then the ledger rows that reference
+  // both. Their other parents (stores, users, products) are all pulled earlier.
+  //
+  // They sit HERE, ahead of `orders` and `payment_transactions`, because both of
+  // those now carry a `van_trip_id` FK — `payment_transactions` since #144 (the
+  // remittance) and `orders` since #142 (the trip tag). This list is the pull
+  // order, and a child pulled before its parent fails the FK; `orders` and
+  // `payment_transactions` restore RESILIENTLY, so the failure would not be an
+  // error — it would silently DROP a money row on every restore. Trips must
+  // therefore land first.
+  //
+  // van_trips is mutated after insert (the close artifact, #145) so it is a
+  // plain resilient upsert; van_trip_lots are immutable except `qty_remaining`
+  // (the return cursor, #143), likewise a plain upsert. Neither is ever
+  // hard-deleted.
+  SyncedTable(
+    name: 'van_trips',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.vanTrips,
+      VanTripData.fromJson,
+      resilient: true,
+    ),
+  ),
+  SyncedTable(
+    name: 'van_trip_lots',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.vanTripLots,
+      VanTripLotData.fromJson,
+      resilient: true,
+    ),
+  ),
+  // #143 — a trip's returns. A child of van_trips (and products), so it lands
+  // after the two above and before the ledger rows whose `reference_id` points
+  // at it. Insert-only in v1 (a return is never edited; a correction is a new
+  // event), but a plain resilient upsert all the same: a device that restores
+  // the return before its trip must not abort the whole pull.
+  SyncedTable(
+    name: 'van_return_events',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.vanReturnEvents,
+      VanReturnEventData.fromJson,
+      resilient: true,
+    ),
+  ),
+  // The consignment ledger: append-only, void-by-compensating-row, so the
+  // ledger restore (catch-up insert + targeted void update) and the
+  // `created_at` scrub — the cloud owns created_at and a void re-push that
+  // carried it would trip the immutable-column trigger (P0001) and orphan the
+  // row. See [[project_ledger_void_created_at_scrub]].
+  SyncedTable(
+    name: 'driver_ledger_entries',
+    tenantScoped: true,
+    scrubCreatedAt: true,
+    restore: Restore.ledger(
+      (db) => db.driverLedgerEntries,
+      DriverLedgerEntryData.fromJson,
+      (d) => d.voidedAt,
+      (t, d) => t.id.equals(d.id) & t.voidedAt.isNull(),
+      (d) => DriverLedgerEntriesCompanion(
+        voidedAt: Value(d.voidedAt),
+        voidedBy: Value(d.voidedBy),
+        voidReason: Value(d.voidReason),
+        lastUpdatedAt: Value(d.lastUpdatedAt),
+      ),
+    ),
+  ),
   const SyncedTable(
     name: 'orders',
     tenantScoped: true,
-    // Resilient + §30.8.1 legacy order-number collision heal.
+    // Resilient + §30.8.1 legacy order-number collision heal. FK → van_trips
+    // since #142's trip tag, which is why the van block above precedes this one.
     restore: _restoreOrders,
   ),
   SyncedTable(
@@ -984,6 +1090,11 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'supplier_crate_ledger',
     tenantScoped: true,
+    // #169: preemptively drop `created_at` on every push so a future void
+    // re-push (the money-integrity slices) can't trip the immutable-column
+    // trigger (P0001) and orphan the row — same trap already closed for the
+    // wallet / supplier / payment ledgers.
+    scrubCreatedAt: true,
     restore: Restore.ledger(
       (db) => db.supplierCrateLedger,
       SupplierCrateLedgerEntryData.fromJson,
@@ -996,6 +1107,44 @@ final List<SyncedTable> kSyncRegistry = [
         lastUpdatedAt: Value(d.lastUpdatedAt),
       ),
     ),
+  ),
+  // #212 / PRD #203, ADR 0023 rule 6 — the crate-deposit MONEY approval queue.
+  // Monotonic status (pending → confirmed/rejected, never back), the
+  // stock_adjustment_requests treatment: a stale/out-of-order `pending`
+  // snapshot must not resurrect a decided request into the approvals list and
+  // invite a second payment (issue #115). Ordered BEFORE the deposit ledger,
+  // which FK-references it.
+  SyncedTable(
+    name: 'supplier_crate_deposit_requests',
+    tenantScoped: true,
+    restore: Restore.monotonicStatus(
+      (db) => db.supplierCrateDepositRequests,
+      SupplierCrateDepositRequestData.fromJson,
+      resilient: true,
+    ),
+  ),
+  // #212 — the append-only Placed Deposit ledger (ADR 0023 rule 1). No
+  // `hardDelete` (a money row is never removed) and no `scrubCreatedAt`: the
+  // table carries no void columns, so nothing ever re-pushes an existing row
+  // and there is no immutable-created_at trigger to trip. A correction is a new
+  // opposite-signed `adjustment` row. INSERT-OR-IGNORE on the pull side too —
+  // see [_restoreSupplierCrateDeposits].
+  const SyncedTable(
+    name: 'supplier_crate_deposits',
+    tenantScoped: true,
+    restore: _restoreSupplierCrateDeposits,
+  ),
+  // #216 / PRD #203, ADR 0023 rule 5 — the Crate Shortfall write-off ledger.
+  // The same treatment as the Placed Deposit ledger above and for the same
+  // reasons: no `hardDelete` (an accepted loss is never removed), no
+  // `scrubCreatedAt` (the table carries no void columns, so no row is ever
+  // re-pushed and there is no immutable-created_at trigger to trip), and
+  // INSERT-OR-IGNORE on the pull side. A correction is a new NEGATIVE
+  // `crate_count` row.
+  const SyncedTable(
+    name: 'crate_shortfall_writeoffs',
+    tenantScoped: true,
+    restore: _restoreCrateShortfallWriteoffs,
   ),
   SyncedTable(
     name: 'saved_carts',
@@ -1077,6 +1226,10 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'crate_ledger',
     tenantScoped: true,
+    // #169: preemptively drop `created_at` on every push (see supplier_crate_
+    // ledger above) — closes the latent void-push orphan trap before any void
+    // feature ships.
+    scrubCreatedAt: true,
     restore: Restore.ledger(
       (db) => db.crateLedger,
       CrateLedgerData.fromJson,
@@ -1135,6 +1288,19 @@ final List<SyncedTable> kSyncRegistry = [
       resilient: true,
     ),
   ),
+  // #174 (PRD #155, ADR 0021 §2) — persisted day close. A normal synced tenant
+  // table, but append/FIRST-WRITE-ONLY: the row is frozen at the first review of
+  // a finished day and never mutated, so no `scrubCreatedAt` (not a void-able
+  // ledger) and no `hardDelete` (never tombstoned). FK → businesses / users /
+  // stores (all pulled earlier), so a bespoke FK-RESILIENT restore that
+  // insert-or-IGNOREs — first-writer-wins holds on the pull side too (a pulled
+  // divergent snapshot from another device never clobbers the one this device
+  // already knows). See [_restoreDailyClosings].
+  const SyncedTable(
+    name: 'daily_closings',
+    tenantScoped: true,
+    restore: _restoreDailyClosings,
+  ),
   SyncedTable(
     name: 'sessions',
     tenantScoped: true,
@@ -1190,6 +1356,99 @@ Future<void> _restoreOrders(
       fkSkipped,
       () => ex.db.into(ex.db.orders).insertOnConflictUpdate(data),
       healUniqueCollision: () => ex.healLocalOrderNumberBlocker(data),
+    );
+  }
+}
+
+/// `daily_closings` (#174): append/first-write-only snapshot restore. A pulled
+/// row for a day already snapshotted locally is IGNORED (`insertOrIgnore`), so
+/// first-writer-wins holds on the pull side — the first snapshot a device knows
+/// about (locally written or pulled) is never clobbered by a later, divergent
+/// one from another device. FK-resilient (FK → businesses / users / stores): a
+/// snapshot can land in a pull before its store/reviewer slice.
+/// #212 — the append-only Placed Deposit ledger.
+///
+/// INSERT-OR-IGNORE, never an on-conflict UPDATE. `supplier_crate_deposits` is
+/// in `_ledgerTables`, so it carries the immutable-columns trigger — and unlike
+/// every other ledger it has NO void columns, which means **no column on it may
+/// ever change after insert**. `Restore.plain` would issue an on-conflict
+/// UPDATE on every re-delivery of a row this device already holds; the trigger
+/// only fires when a value actually differs, so it would usually pass and then
+/// abort a whole pull page the first time the cloud round-tripped a value even
+/// slightly differently. An append-only row has nothing to update anyway.
+///
+/// This is `Restore.ledger`'s insert half without its void half (the table has
+/// no void path), and the same first-writer-wins shape as
+/// [_restoreDailyClosings]. FK-resilient: its parents are suppliers,
+/// manufacturers, stores, users, `supplier_crate_ledger` and
+/// `supplier_crate_deposit_requests`, all pulled earlier — but a page that
+/// arrives out of order defers rather than dropping a money row.
+Future<void> _restoreSupplierCrateDeposits(
+  SyncRestoreExecutor ex,
+  String table,
+  List<Map<String, dynamic>> rows,
+  Set<String>? fkSkipped,
+) async {
+  for (final r in rows) {
+    final data = SupplierCrateDepositData.fromJson(r);
+    await ex.insertResilient(
+      'supplier_crate_deposits',
+      r,
+      fkSkipped,
+      () => ex.db
+          .into(ex.db.supplierCrateDeposits)
+          .insert(data, mode: InsertMode.insertOrIgnore),
+    );
+  }
+}
+
+/// #216 — the append-only Crate Shortfall write-off ledger.
+///
+/// INSERT-OR-IGNORE, never an on-conflict UPDATE, for the identical reason
+/// [_restoreSupplierCrateDeposits] is: `crate_shortfall_writeoffs` is in
+/// `_ledgerTables` and has NO void columns, so **no column on it may ever change
+/// after insert**. `Restore.plain` would issue an on-conflict UPDATE on every
+/// re-delivery of a row this device already holds and abort a whole pull page
+/// the first time the cloud round-tripped a value even slightly differently. An
+/// append-only row has nothing to update anyway.
+///
+/// FK-resilient: its parents are manufacturers, stores and users, all pulled
+/// earlier — but a page that arrives out of order defers rather than dropping a
+/// row that carries a booked loss.
+Future<void> _restoreCrateShortfallWriteoffs(
+  SyncRestoreExecutor ex,
+  String table,
+  List<Map<String, dynamic>> rows,
+  Set<String>? fkSkipped,
+) async {
+  for (final r in rows) {
+    final data = CrateShortfallWriteoffData.fromJson(r);
+    await ex.insertResilient(
+      'crate_shortfall_writeoffs',
+      r,
+      fkSkipped,
+      () => ex.db
+          .into(ex.db.crateShortfallWriteoffs)
+          .insert(data, mode: InsertMode.insertOrIgnore),
+    );
+  }
+}
+
+Future<void> _restoreDailyClosings(
+  SyncRestoreExecutor ex,
+  String table,
+  List<Map<String, dynamic>> rows,
+  Set<String>? fkSkipped,
+) async {
+  for (final r in rows) {
+    final data = DailyClosingData.fromJson(r);
+    await ex.insertResilient(
+      'daily_closings',
+      r,
+      fkSkipped,
+      () => ex.db
+          .into(ex.db.dailyClosings)
+          .insert(data, mode: InsertMode.insertOrIgnore),
     );
   }
 }

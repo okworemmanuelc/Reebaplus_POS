@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/changed_since_review_badge.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -18,7 +24,7 @@ import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 /// / profit / goods-received (cost wall, §25.3); their shrinkage is valued at
 /// selling price (an accountability figure). A non-Day bucket lists the
 /// next-finer buckets inside it as a drill-down breakdown.
-class DailyReconciliationDetailScreen extends ConsumerWidget {
+class DailyReconciliationDetailScreen extends ConsumerStatefulWidget {
   const DailyReconciliationDetailScreen({
     super.key,
     required this.start,
@@ -33,17 +39,184 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DailyReconciliationDetailScreen> createState() =>
+      _DailyReconciliationDetailScreenState();
+}
+
+class _DailyReconciliationDetailScreenState
+    extends ConsumerState<DailyReconciliationDetailScreen> {
+  // One-shot guard so the day-close snapshot is attempted once per screen mount
+  // (build can run many times). First-writer-wins in the DAO makes a repeat a
+  // no-op regardless, but this avoids re-scheduling the write on every rebuild.
+  bool _snapshotAttempted = false;
+
+  /// `YYYY-MM-DD` for the Day bucket [DailyReconciliationDetailScreen.start] —
+  /// the natural-key day (matches `DailyClosings.businessDate`).
+  String get _businessDate =>
+      '${widget.start.year.toString().padLeft(4, '0')}-'
+      '${widget.start.month.toString().padLeft(2, '0')}-'
+      '${widget.start.day.toString().padLeft(2, '0')}';
+
+  /// A Day bucket whose whole calendar day has elapsed — the only bucket a day
+  /// close snapshot is written for (#174). Weeks / months / years and the
+  /// current or future day never freeze.
+  bool get _isFinishedDay =>
+      widget.grouping == ReconGrouping.day &&
+      !widget.endExclusive.isAfter(DateTime.now());
+
+  /// True once every stream that feeds a FROZEN figure has emitted its first
+  /// value, so a snapshot never freezes zeros captured mid-load:
+  /// [computeReconData] treats a still-loading stream as empty
+  /// (`valueOrNull ?? const []`), and a zeroed snapshot would lock in
+  /// permanently under first-writer-wins. Until every source is loaded the write
+  /// is deferred — a genuinely empty day still has real (loaded, all-zero)
+  /// streams, so it snapshots correctly. Called during build so the watches
+  /// register and the write retries the instant the last stream warms.
+  ///
+  /// **The gate must mirror the gather's watch set exactly (#192).** It used to
+  /// list eight streams while the frozen `netProfitKobo` also nets out three crate
+  /// terms — the per-manufacturer deposit rates, the damaged-empties ledger and
+  /// the kept-deposit forfeit rows. On a Bar / Beer Distributor a cold open could
+  /// therefore win the first-writer race with a net profit missing those terms and
+  /// freeze it permanently. A missing figure is worse than a late snapshot: the
+  /// write can always retry, but first-writer-wins never lets it be corrected.
+  ///
+  /// [showCrates] keeps the gate honest in the other direction. `crate_deposit`
+  /// forfeit rows are read ONLY behind the opt-in (`computeReconData`'s
+  /// conditional watch), so a business that tracks no crates must not be made to
+  /// open — or wait on — that stream. The manufacturer and crate-damage streams
+  /// are watched unconditionally by the gather, so naming them here opens nothing
+  /// new for anyone.
+  bool _frozenFiguresReady(
+    String? activeStoreId, {
+    required bool showCrates,
+  }) {
+    bool ready<T>(ProviderListenable<AsyncValue<T>> p) => ref.watch(p).hasValue;
+    return ready(allOrdersProvider) &&
+        ready(allPaymentTransactionsProvider) &&
+        ready(allExpensesProvider) &&
+        ready(allStockAdjustmentsProvider) &&
+        ready(allStockTransactionsProvider) &&
+        ready(allStockCountsProvider) &&
+        ready(allSupplierLedgerEntriesProvider) &&
+        ready(productsWithStockProvider(activeStoreId)) &&
+        // Crate-deposit forfeiture on a damaged bottle / stored empty — both
+        // subtracted from the frozen net profit.
+        ready(allManufacturersProvider) &&
+        ready(allCrateDamagesProvider) &&
+        // Kept deposits, ADDED to the frozen net profit. Short-circuits for a
+        // non-crate business so no crate stream is opened at all.
+        (!showCrates || ready(crateForfeitRowsProvider));
+  }
+
+  /// Freezes the day's computed figures as a `daily_closings` snapshot the FIRST
+  /// time a permitted user (Manager+ via [Gates.dailyReconciliation]) opens a
+  /// finished day — natural-key first-writer-wins; re-opening is a no-op.
+  /// PURELY OBSERVATIONAL: no money flow or existing figure changes. [dataReady]
+  /// gates on every source stream having loaded (see [_frozenFiguresReady]) so a
+  /// zeroed mid-load snapshot can't freeze permanently. Deferred past the current
+  /// build so it never mutates a provider mid-build.
+  ///
+  /// [businessWideFigures] — NOT the viewer's scoped figures (#191, ADR 0022).
+  /// The natural key is (business, day) with first-writer-wins, so freezing
+  /// whatever store the opener happened to be locked to let that accident decide
+  /// the day's baseline forever, and left every other scope with none.
+  void _maybeWriteSnapshot(
+    ReconData businessWideFigures, {
+    required bool dataReady,
+  }) {
+    if (_snapshotAttempted || !_isFinishedDay || !dataReady) return;
+    if (!Gates.dailyReconciliation.allows(ref)) return;
+    _snapshotAttempted = true;
+    final reviewedBy = ref.read(currentUserIdProvider);
+    final db = ref.read(databaseProvider);
+    Future.microtask(() async {
+      try {
+        await db.dailyClosingsDao.snapshotIfAbsent(
+          businessDate: _businessDate,
+          figures: dailyClosingFiguresFrom(businessWideFigures),
+          reviewedBy: reviewedBy,
+        );
+      } on Exception catch (e) {
+        // Observational-only: a snapshot write must never surface an error into
+        // the reconciliation view. Log (never swallow silently) and allow a
+        // retry on the next open. Programmer errors (e.g. a missing session)
+        // stay uncaught and reach the global handler.
+        debugPrint('[DailyClose] snapshot write failed for $_businessDate: $e');
+        _snapshotAttempted = false;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider); // rebuild money on currency change
     final theme = Theme.of(context);
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     final scopeLabel = ref.watch(activeStoreLabelProvider);
+    final grouping = widget.grouping;
+    final start = widget.start;
+    final endExclusive = widget.endExclusive;
+    final title = widget.title;
     final d = computeReconData(
       ref,
       start: start,
       endExclusive: endExclusive,
       isCeo: isCeo,
     );
+
+    // The day close's basis (#191, ADR 0022): the BUSINESS-WIDE figures, so one
+    // durable record says what the whole business's day looked like whatever
+    // store the opener was locked to — and the same record is comparable from
+    // every scope. Deliberately computed ONLY for a FINISHED Day — a
+    // week/month/year bucket must not pay for a second full aggregate pass it
+    // has no snapshot for — so this and the snapshot read below register their
+    // watches conditionally; Riverpod re-resolves the dependency set on every
+    // build, so a bucket that becomes a finished day simply picks them up.
+    //
+    // `isCeo: true` is deliberate and is NOT the viewer's role (#192, closing
+    // ADR 0022's flagged cousin). The frozen record must be opener-independent
+    // in role terms exactly as it is in scope terms — a Manager and a CEO opening
+    // the same finished day must freeze the same numbers, because
+    // first-writer-wins means whoever gets there first decides the baseline
+    // forever. The flag gates only the supplier-ledger flows, none of which reach
+    // the frozen figure set, so this changes no number today; it removes the way
+    // one could start to.
+    final dayCloseBasis = _isFinishedDay
+        ? computeReconData(
+            ref,
+            start: start,
+            endExclusive: endExclusive,
+            isCeo: true,
+            businessWide: true,
+          )
+        : null;
+    if (dayCloseBasis != null) {
+      // null = All Stores: the frozen figures read the UNSCOPED stock totals, so
+      // that is the stream whose warmth the readiness gate must check.
+      _maybeWriteSnapshot(
+        dayCloseBasis,
+        dataReady: _frozenFiguresReady(null, showCrates: d.showCrates),
+      );
+    }
+
+    // As-reviewed-vs-current delta (#174): for a FINISHED Day that HAS a
+    // snapshot, at EVERY viewing scope (#191 — a snapshot is business-wide, so
+    // the badges are no longer gated on the scope that happened to capture it).
+    // Null for a week/month/year or an unreviewed day, which render exactly as
+    // before — no banner, no badges.
+    final snapshot = _isFinishedDay
+        ? ref.watch(dailyClosingForDayProvider(_businessDate)).valueOrNull
+        : null;
+    final comparison = dayCloseBasis == null
+        ? null
+        : reconClosingComparisonOrNull(snapshot, dayCloseBasis);
+    final reviewerName = comparison?.reviewedBy == null
+        ? null
+        : (ref.watch(usersByBusinessProvider).valueOrNull ??
+                const {})[comparison!.reviewedBy]
+            ?.name;
+
     final children = grouping.finer == null
         ? const <ReconBucket>[]
         : buildReconBuckets(
@@ -52,6 +225,94 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             endExclusive: endExclusive,
             grouping: grouping.finer!,
           );
+
+    // ── Which frozen figures each card actually FLAGS (#192) ────────────────
+    // Built before the cards, not inside them, for one reason: the banner's
+    // wording promises "the flagged cards show what moved", and the only way that
+    // promise cannot lie is for the banner to be told what was actually flagged.
+    // Before #192 `anyChanged` covered figures that live on CEO-only cards, so a
+    // Manager could read that sentence with no flagged card anywhere on screen.
+    //
+    // Role visibility follows the §25.3 cost wall, per card: a Manager is shown
+    // money deltas only where the same money is already on their card (sales,
+    // refunds, expenses) and unit deltas anywhere; the cost-basis stock figures
+    // are flagged for them WITHOUT a naira amount rather than not at all.
+    final salesBadges = _deltaChips([
+      _CardFigure(label: 'Total sales', delta: comparison?.totalSales),
+      _CardFigure(label: 'Refunds', delta: comparison?.refunds),
+      _CardFigure(
+        label: 'Items sold',
+        delta: comparison?.itemsSold,
+        isUnits: true,
+      ),
+    ]);
+    final plBadges = !isCeo
+        ? const <Widget>[]
+        : _deltaChips([
+            _CardFigure(label: 'Net profit', delta: comparison?.netProfit),
+            _CardFigure(label: 'Gross profit', delta: comparison?.grossProfit),
+            _CardFigure(label: 'Discounts', delta: comparison?.discounts),
+            _CardFigure(label: 'Cost of goods sold', delta: comparison?.cogs),
+            _CardFigure(label: 'Expenses', delta: comparison?.expenses),
+            _CardFigure(label: 'Damages', delta: comparison?.damagesCost),
+          ]);
+    final cashBadges = !isCeo
+        ? const <Widget>[]
+        : _deltaChips([
+            _CardFigure(
+              label: 'Net cash movement',
+              delta: comparison?.netCashMovement,
+            ),
+            _CardFigure(label: 'Cash sales', delta: comparison?.cashSales),
+            _CardFigure(label: 'Cash in', delta: comparison?.cashIn),
+            _CardFigure(label: 'Cash out', delta: comparison?.cashOut),
+          ]);
+    final stockBadges = isCeo
+        ? _deltaChips([
+            _CardFigure(
+              label: 'Expected closing',
+              delta: comparison?.stockExpectedClosing,
+            ),
+            _CardFigure(
+              label: 'Cost of goods sold',
+              delta: comparison?.stockCogs,
+            ),
+            _CardFigure(
+              label: 'Short',
+              delta: comparison?.shortageUnits,
+              isUnits: true,
+            ),
+          ])
+        : [
+            ..._deltaChips([
+              _CardFigure(
+                label: 'Short',
+                delta: comparison?.shortageUnits,
+                isUnits: true,
+              ),
+            ]),
+            // Cost wall: the amounts belong to the CEO's card, so a Manager gets
+            // the fact that stock value moved without the figure itself.
+            if (comparison != null &&
+                (comparison.stockExpectedClosing.changed ||
+                    comparison.stockCogs.changed ||
+                    comparison.damagesCost.changed))
+              _changedChip('Stock value'),
+          ];
+    // The Manager's own money card — the one that rendered the frozen
+    // `expensesKobo` with no delta at all before #192.
+    final debtsBadges = isCeo
+        ? const <Widget>[]
+        : _deltaChips([
+            _CardFigure(label: 'Expenses', delta: comparison?.expenses),
+          ]);
+    final hasFlaggedCard = [
+      salesBadges,
+      plBadges,
+      cashBadges,
+      stockBadges,
+      debtsBadges,
+    ].any((b) => b.isNotEmpty);
 
     return SharedScaffold(
       activeRoute: 'dashboard',
@@ -90,26 +351,82 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           context.spacingM,
         ).copyWith(bottom: context.spacingM + context.deviceBottomPadding),
         children: [
-          _salesCard(context, theme, d),
+          if (comparison != null) ...[
+            _reviewedBanner(
+              context,
+              theme,
+              comparison,
+              reviewerName,
+              hasFlaggedCard: hasFlaggedCard,
+              isCeo: isCeo,
+            ),
+            SizedBox(height: context.spacingM),
+          ],
+          _salesCard(
+            context,
+            theme,
+            d,
+            badges: salesBadges,
+            // Keep the line whose badge is on this card (#192): a refund VOIDED
+            // after the review takes `refundsKobo` to 0, which would otherwise
+            // badge a line the card no longer renders.
+            showRefunds:
+                d.refundsKobo > 0 || (comparison?.refunds.changed ?? false),
+          ),
+          // #147 — the van channel, as one aggregated block. Rendered only when
+          // the period actually saw van activity, so a business with no vans
+          // reads exactly as it did before.
+          if (d.van.hasActivity) ...[
+            SizedBox(height: context.spacingM),
+            _vanSalesCard(context, theme, d, isCeo: isCeo),
+          ],
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
-            _plCard(context, theme, d),
+            _plCard(context, theme, d, badges: plBadges),
             SizedBox(height: context.spacingM),
-            _cashFlowCard(context, theme, d),
+            _cashFlowCard(context, theme, d, badges: cashBadges),
           ],
           SizedBox(height: context.spacingM),
-          _stockReconciliationCard(context, theme, d, isCeo: isCeo),
+          _stockReconciliationCard(
+            context,
+            theme,
+            d,
+            isCeo: isCeo,
+            badges: stockBadges,
+          ),
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
             _businessWorthCard(context, theme, d),
           ],
           if (!isCeo) ...[
             SizedBox(height: context.spacingM),
-            _debtsExpensesCard(context, theme, d),
+            _debtsExpensesCard(context, theme, d, badges: debtsBadges),
           ],
           if (d.showCrates) ...[
             SizedBox(height: context.spacingM),
             _cratesCard(context, theme, d),
+          ],
+          // #215 / ADR 0023 — THE SIXTH CARD, and it amends ADR 0014's
+          // deliberate nine-to-five cut. See `_crateMoneyCard` for why the
+          // exception was taken, and ADR 0014's "Amended 2026-07-30" note
+          // before you re-tighten the count.
+          //
+          // Rendered only when a brand actually moves crate money, so every
+          // business on the default `none` arrangement — which is every live
+          // tenant until an owner switches one on — still reads exactly five.
+          //
+          // #216 widens the condition: a brand can be short of crates before
+          // any deposit money has moved (a `standing_float` brand's losses raise
+          // a Shortfall and move no money at all), and an accepted loss must
+          // stay visible in the period it was booked even after the shortfall
+          // itself has closed. A `none` business still reads exactly five —
+          // every one of these three is zero for it.
+          if (d.showCrates &&
+              (d.crateDeposits.hasMoney ||
+                  d.crateShortfalls.hasShortfall ||
+                  d.crateShortfallWrittenOffKobo != 0)) ...[
+            SizedBox(height: context.spacingM),
+            _crateMoneyCard(context, theme, d),
           ],
           if (children.isNotEmpty) ...[
             SizedBox(height: context.spacingM),
@@ -122,7 +439,13 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
 
   // ── Cards ───────────────────────────────────────────────────────────────
 
-  Widget _salesCard(BuildContext context, ThemeData theme, ReconData d) {
+  Widget _salesCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    List<Widget> badges = const [],
+    bool showRefunds = false,
+  }) {
     return _card(
       context,
       theme,
@@ -136,10 +459,26 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           context,
           theme,
           'Total sales',
-          formatCurrency(d.totalRevenueKobo / 100.0),
+          formatCurrency(d.totalSalesKobo / 100.0),
           strong: true,
         ),
-        if (d.refundsKobo > 0)
+        // #176 — paid-now vs on-credit split so the drawer isn't over-expected
+        // by the credit amount. Shown only when some sale was on credit.
+        if (d.salesOnCreditKobo != 0) ...[
+          _line(
+            context,
+            theme,
+            'Paid now',
+            formatCurrency(d.salesPaidNowKobo / 100.0),
+          ),
+          _line(
+            context,
+            theme,
+            'On credit',
+            formatCurrency(d.salesOnCreditKobo / 100.0),
+          ),
+        ],
+        if (showRefunds)
           _line(
             context,
             theme,
@@ -150,7 +489,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           _line(
             context,
             theme,
-            'VAT due (${d.vatRateLabel}%)',
+            'VAT due (${d.vatRateLabel}%, ${d.vatBasisLabel})',
             formatCurrency(d.vatKobo / 100.0),
           ),
         _line(
@@ -170,14 +509,23 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
               : d.topItems.map((e) => '${e.name} (×${e.qty})').join('\n'),
         ),
       ],
+      badges: badges,
     );
   }
 
-  Widget _plCard(BuildContext context, ThemeData theme, ReconData d) {
+  Widget _plCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    List<Widget> badges = const [],
+  }) {
     final net = d.netProfitKobo;
     final netColor = net >= 0
         ? theme.extension<AppSemanticColors>()!.success
         : theme.colorScheme.error;
+    // #198 — only disclose the two expense date bases when there is expense
+    // money in the period on either basis; an expense-free day needs no note.
+    final hasExpenseFigures = d.expensesKobo != 0 || d.cashExpensesKobo != 0;
     return _card(
       context,
       theme,
@@ -219,6 +567,22 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           formatCurrency(d.grossProfitKobo / 100.0),
           strong: true,
         ),
+        // #176 — earnings the P&L used to hide: quick-sale takings (no recorded
+        // cost, so pure margin — see the footnote) and kept crate deposits.
+        if (d.uncostedTakingsKobo != 0)
+          _line(
+            context,
+            theme,
+            'Quick-sale takings (no recorded cost)',
+            '+ ${formatCurrency(d.uncostedTakingsKobo / 100.0)}',
+          ),
+        if (d.forfeitIncomeKobo != 0)
+          _line(
+            context,
+            theme,
+            'Forfeit income (kept crate deposits)',
+            '+ ${formatCurrency(d.forfeitIncomeKobo / 100.0)}',
+          ),
         _line(
           context,
           theme,
@@ -238,6 +602,16 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             'Crate deposit loss',
             '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}',
           ),
+        // #193 — stock written off because its product was deleted. One family
+        // with Damages: value the business paid for and no longer has, so it is
+        // netted out of the result rather than only noted on the stock card.
+        if (d.deletionCostKobo > 0)
+          _line(
+            context,
+            theme,
+            'Product deletions (at cost)',
+            '− ${formatCurrency(d.deletionCostKobo / 100.0)}',
+          ),
         _divider(theme),
         _line(
           context,
@@ -250,12 +624,43 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         if (d.uncostedItems > 0) ...[
           const SizedBox(height: 6),
           Text(
-            'Excludes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
-            'buying price (e.g. quick sales).',
+            'Includes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
+            'buying price (e.g. quick sales) as takings — counted in full above '
+            'because no cost was recorded to deduct, so they carry no COGS or '
+            'gross margin.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+        // #200 / US 20 — label the current-cost fallback. Newer damages are held
+        // at the cost they actually drew, so editing a buying price today cannot
+        // move them; older records kept only a quantity, so they DO move. Saying
+        // so is the difference between a frozen figure and one that looks frozen.
+        if (d.legacyValuedDamageRows > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            '${fmtNumber(d.legacyValuedDamageRows)} older damage record(s) are '
+            'valued at today\'s cost — they were saved before the cost of each '
+            'loss was recorded, so changing a buying price also changes this '
+            'figure.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+        // #198 (#155 US 34) — the two expense date bases, said out loud. Profit
+        // uses the date the owner picked; the cash card uses the day the drawer
+        // actually moved. Without this note a CEO reads two different expense
+        // figures on one screen and assumes one of them is broken.
+        if (hasExpenseFigures) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Expenses are counted on the date you picked when you recorded them, '
+            'so a bill entered late still lands in the period it was spent. Cash '
+            'flow counts that same money on the day it left the drawer, so the '
+            'two expense figures can differ.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
       ],
+      badges: badges,
     );
   }
 
@@ -264,10 +669,82 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
   /// cash expenses + cash supplier payments out. **Business-wide** (the
   /// payment_transactions ledger has no store) and **not a counted drawer**:
   /// there is no opening float to add this to (Hard Rule #8). CEO-only.
-  Widget _cashFlowCard(BuildContext context, ThemeData theme, ReconData d) {
+  /// Van Sales — the road channel's whole contribution to the period (#147,
+  /// van-sales spec §8.2, ADR 0019 decision 3).
+  ///
+  /// One aggregated revenue line and no detail: the per-order story lives on
+  /// the driver profile, and a closing report that listed every road sale would
+  /// bury the shop's own day. Profit is **read from each closed trip's
+  /// persisted artifact**, never re-derived — and when a trip is still out, the
+  /// card prints the caveat instead of a figure, because revenue was recognised
+  /// at the sale and profit is only decided at the close.
+  Widget _vanSalesCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    required bool isCeo,
+  }) {
+    final van = d.van;
+    final semantic = theme.extension<AppSemanticColors>()!;
+    return _card(
+      context,
+      theme,
+      'Van sales',
+      FontAwesomeIcons.truck.data,
+      semantic.info,
+      [
+        _line(
+          context,
+          theme,
+          'Van sales (all trips)',
+          formatCurrency(van.salesKobo / 100.0),
+          strong: true,
+        ),
+        _line(context, theme, 'Cash from drivers',
+            formatCurrency(van.remittedKobo / 100.0)),
+        if (isCeo) ...[
+          _divider(theme),
+          _line(context, theme, 'Cost of goods gone (closed trips)',
+              formatCurrency(van.cogsKobo / 100.0)),
+          _line(
+            context,
+            theme,
+            'Van profit (closed trips)',
+            formatCurrency(van.profitKobo / 100.0),
+            strong: true,
+            color: van.profitKobo >= 0 ? semantic.success : theme.colorScheme.error,
+          ),
+        ],
+        if (van.hasOpenTripCaveat) ...[
+          const SizedBox(height: 6),
+          Text(
+            van.caveatLine((v) => formatCurrency(v)),
+            style: context.bodySmall.copyWith(color: semantic.warning),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'Road sales are counted through the warehouse each van loaded from, '
+          'and are kept out of every per-store figure. Profit is booked when '
+          'the trip is reconciled and closed.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+    );
+  }
+
+  Widget _cashFlowCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    List<Widget> badges = const [],
+  }) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
     final netColor = d.netCashMovementKobo >= 0 ? successColor : dangerColor;
+    // #198 — mirrors the Profit & Loss card: name the basis wherever an expense
+    // figure is shown, so the CEO can see why the two differ.
+    final hasExpenseFigures = d.expensesKobo != 0 || d.cashExpensesKobo != 0;
     return _card(
       context,
       theme,
@@ -279,6 +756,14 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             '+ ${formatCurrency(d.cashSalesKobo / 100.0)}'),
         _line(context, theme, 'Debts collected (cash)',
             '+ ${formatCurrency(d.cashDebtsCollectedKobo / 100.0)}'),
+        // #147 — "Cash from drivers": remittances, on the day the money
+        // arrived. Beside Cash sales, never inside it: a road sale wrote no
+        // payment row at all (ADR 0019 decision 2), so this is the one moment
+        // van money enters the cash books, and folding it into Cash sales would
+        // double-count revenue the driver already rang.
+        if (d.cashFromDriversKobo != 0)
+          _line(context, theme, 'Cash from drivers',
+              '+ ${formatCurrency(d.cashFromDriversKobo / 100.0)}'),
         _line(context, theme, 'Cash in',
             formatCurrency(d.cashInKobo / 100.0), strong: true),
         _divider(theme),
@@ -294,13 +779,43 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         _line(context, theme, 'Net cash movement',
             formatCurrency(d.netCashMovementKobo / 100.0),
             strong: true, color: netColor),
+        // #175 — refundable crate deposits collected in cash this period, HELD
+        // (net of any cancelled deposit sale). Shown below the net, OUTSIDE it:
+        // it is customers' money in the drawer, never earnings.
+        if (d.cashCrateDepositsKobo != 0) ...[
+          const SizedBox(height: 6),
+          _line(context, theme, 'Crate deposits held (cash)',
+              formatCurrency(d.cashCrateDepositsKobo / 100.0)),
+        ],
+        // #215 — the SUPPLIER leg, on its own line beside the customer leg and
+        // outside the net for the identical reason: refundable money passing
+        // through the drawer, never operating cash. Paying it is not an
+        // expense, so it must not sit above with "Expenses paid (cash)", and it
+        // never reduces profit.
+        if (d.cashCrateDepositsPlacedKobo != 0) ...[
+          const SizedBox(height: 6),
+          _line(context, theme, 'Crate deposits placed with suppliers (cash)',
+              formatCurrency(d.cashCrateDepositsPlacedKobo / 100.0)),
+        ],
         const SizedBox(height: 6),
         Text(
           'Expected cash movement from recorded cash tenders — business-wide, '
-          'not a counted drawer.',
+          'not a counted drawer. Crate deposits are refundable money — held for '
+          'customers, or placed with suppliers — and both are kept out of the '
+          'net.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
+        if (hasExpenseFigures) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Expenses here are counted on the day the money left the drawer, not '
+            'the date picked on the expense — so this can differ from Expenses '
+            'in Profit & Loss. Both are right: this card follows the cash.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
       ],
+      badges: badges,
     );
   }
 
@@ -316,6 +831,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     ThemeData theme,
     ReconData d, {
     required bool isCeo,
+    List<Widget> badges = const [],
   }) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
@@ -394,6 +910,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           if (d.hasStockCount) ...[_divider(theme), ...countSection()],
         ],
         danger: hasShortage,
+        badges: badges,
       );
     }
 
@@ -418,14 +935,19 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
               '− ${formatCurrency(d.stockDamagesKobo / 100.0)}'),
           _line(context, theme, 'Expired',
               '− ${formatCurrency(d.stockExpiredKobo / 100.0)}'),
+          // #176 — the former single "Other movements" residual, broken out by
+          // cause so a delete / transfer / count-fix can't hide unlabeled.
+          if (d.stockTransfersKobo != 0)
+            _signedLine(context, theme, 'Store transfers', d.stockTransfersKobo),
+          if (d.stockCountAdjustmentsKobo != 0)
+            _signedLine(context, theme, 'Count corrections',
+                d.stockCountAdjustmentsKobo),
+          if (d.stockDeletionsKobo != 0)
+            _signedLine(context, theme, 'Product deletions',
+                d.stockDeletionsKobo),
           if (d.stockOtherMovementsKobo != 0)
-            _line(
-              context,
-              theme,
-              'Other movements',
-              '${d.stockOtherMovementsKobo >= 0 ? '+ ' : '− '}'
-                  '${formatCurrency(d.stockOtherMovementsKobo.abs() / 100.0)}',
-            ),
+            _signedLine(context, theme, 'Other movements',
+                d.stockOtherMovementsKobo),
           _divider(theme),
           _line(context, theme, 'Expected closing',
               formatCurrency(d.stockExpectedClosingKobo / 100.0),
@@ -463,16 +985,39 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
                       'and expiries — reported profit reconciles.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
-        ] else ...[
+        ],
+        // #200 — the card's valuation basis, stated on EVERY view rather than
+        // only when no count exists (the old `else` branch). The flow lines above
+        // price the units that MOVED at today's cost, which is what lets the
+        // column add up to Expected closing; the Profit & Loss card values the
+        // same losses at what they actually cost when they happened. One event,
+        // two figures, each labelled — see the report note on #186.
+        const SizedBox(height: 6),
+        Text(
+          d.hasStockCount
+              ? 'The lines above value the units that moved at today\'s cost, so '
+                    'the column adds up to Expected closing. What those losses '
+                    'actually cost you is on the Profit & Loss card.'
+              : 'The lines above value the units that moved at today\'s cost. No '
+                    'stock count in this period, so there is no variance to '
+                    'reconcile against.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+        // #200 / US 20 — the shortage/variance figure's own current-cost
+        // fallback, labelled where that figure is shown.
+        if (d.legacyValuedShortageRows > 0) ...[
           const SizedBox(height: 6),
           Text(
-            'Valued at current cost. No stock count in this period, so there is '
-            'no variance to reconcile against.',
+            '${fmtNumber(d.legacyValuedShortageRows)} older shortage record(s) '
+            'are valued at today\'s cost — they were saved before the cost of '
+            'each shortage was recorded, so changing a buying price also changes '
+            'the variance.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
       ],
       danger: hasVariance,
+      badges: badges,
     );
   }
 
@@ -491,9 +1036,27 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
       positionColor,
       [
         _line(context, theme, 'Inventory on hand (at cost)', '+ ${formatCurrency(d.inventoryOnHandKobo / 100.0)}'),
+        // #176 / #170 #7b — stock dispatched between stores but not yet received.
+        // Value that used to vanish between dispatch and receipt; now its own
+        // line in worth. Shown only when something is in transit.
+        if (d.inTransitValueKobo != 0)
+          _line(context, theme, 'In-transit stock (dispatched, not received)', '+ ${formatCurrency(d.inTransitValueKobo / 100.0)}'),
         if (d.showCrates)
           _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
+        // #215 / ADR 0023 rule 1 — deposits we PAID suppliers are still our
+        // money, merely held elsewhere. An asset, never an expense; before this
+        // slice it left the drawer and vanished from worth altogether.
+        if (d.showCrates && d.placedCrateDepositsKobo != 0)
+          _line(context, theme, 'Crate deposits held by suppliers (now)', '+ ${formatCurrency(d.placedCrateDepositsKobo / 100.0)}'),
         _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
+        // #163 — crate liabilities netted against the empties asset above: the
+        // deposits we still hold for customers (owed back on return) and the
+        // crate debt we owe suppliers for full crates delivered. Only shown when
+        // there is something to owe, so the card stays clean for a settled shop.
+        if (d.showCrates && d.heldCrateDepositsKobo != 0)
+          _line(context, theme, 'Crate deposits held for customers (now)', '− ${formatCurrency(d.heldCrateDepositsKobo / 100.0)}', color: dangerColor),
+        if (d.showCrates && d.supplierCrateDebtKobo != 0)
+          _line(context, theme, 'Crate debt owed to suppliers (now)', '− ${formatCurrency(d.supplierCrateDebtKobo / 100.0)}', color: dangerColor),
         // Supplier account position — tracks payments made to suppliers vs
         // goods received. Negative (red) = a debt we owe them for unpaid goods;
         // positive (green) = money we paid them in advance (a prepayment), not
@@ -520,8 +1083,9 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
   Widget _debtsExpensesCard(
     BuildContext context,
     ThemeData theme,
-    ReconData d,
-  ) {
+    ReconData d, {
+    List<Widget> badges = const [],
+  }) {
     return _card(
       context,
       theme,
@@ -543,6 +1107,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           formatCurrency(d.expensesKobo / 100.0),
         ),
       ],
+      badges: badges,
     );
   }
 
@@ -574,6 +1139,409 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           ),
         ],
       ],
+    );
+  }
+
+  /// **Crate money with suppliers (business-wide)** — the sixth reconciliation
+  /// card (#215, PRD #203, ADR 0023).
+  ///
+  /// ADR 0014 cut this report from nine cards to five on purpose, and this is a
+  /// deliberate, owner-chosen exception to that count, recorded in ADR 0023's
+  /// Consequences and in an amendment note on ADR 0014 itself. The reason it
+  /// earns a card of its own rather than a line on another: before PRD #203 a
+  /// business could hand a depot ₦180,000 and every money figure in the app
+  /// read exactly the same afterwards. A line inside Business worth would show
+  /// the total; only a card can name WHICH supplier is holding it, which is the
+  /// question an owner actually rings someone about.
+  ///
+  /// **"(business-wide)" is on the title for a reason, and it stays there under
+  /// a locked store.** Supplier crate money is a company obligation — the depot
+  /// invoices the business, not the branch. Splitting it per store would repeat
+  /// the defect `CRATE_TRACKING_AUDIT` C4 already names (point-in-time
+  /// business-wide crate figures presented inside a store-scoped report) and
+  /// would let two branches each believe the same money is theirs. The figures
+  /// come from a business-scoped provider that never reads the active store, so
+  /// the label is a description of the data, not a promise the screen keeps.
+  ///
+  /// Not behind the §25.3 cost wall: this is a receivable, not cost, margin or
+  /// profit — the same category as the customer debt a Manager already sees.
+  Widget _crateMoneyCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final rollup = d.crateDeposits;
+    return _card(
+      context,
+      theme,
+      'Crate money with suppliers (business-wide)',
+      FontAwesomeIcons.handHoldingDollar.data,
+      successColor,
+      [
+        if (rollup.bySupplier.isEmpty)
+          _line(context, theme, 'Held by suppliers', formatCurrency(0))
+        else ...[
+          for (final s in rollup.bySupplier)
+            _line(
+              context,
+              theme,
+              s.supplierName,
+              formatCurrency(s.placedDepositKobo / 100.0),
+            ),
+          _divider(theme),
+        ],
+        _line(
+          context,
+          theme,
+          'Total held by suppliers (now)',
+          formatCurrency(rollup.placedDepositKobo / 100.0),
+          strong: true,
+          color: successColor,
+        ),
+        // Raised but not yet decided (ADR 0023 rule 6). Deliberately BELOW the
+        // total and outside it: nothing has moved, and a book entry appears
+        // only when money genuinely moved.
+        if (rollup.hasPending) ...[
+          const SizedBox(height: 6),
+          _line(
+            context,
+            theme,
+            'Awaiting your confirmation',
+            formatCurrency(rollup.pendingDepositKobo / 100.0),
+          ),
+        ],
+        // ADR 0023 finding #3 — "two numbers that never meet", shown side by
+        // side instead of one being quietly reported as the other. Large and
+        // CORRECT on a brand switched on today: every crate received before the
+        // switch was received under `none`, and ADR 0021 forbids restating it.
+        if (rollup.unbackedValueKobo != 0) ...[
+          const SizedBox(height: 6),
+          _line(
+            context,
+            theme,
+            'Crates owed with no deposit behind them',
+            formatCurrency(rollup.unbackedValueKobo / 100.0),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'Your money, held by your suppliers — refundable when you settle, so '
+          'it counts in Business worth and never as a cost. Business-wide: a '
+          'depot invoices the business, not a branch, so this is the same '
+          'figure in every store.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+        // ── #216 — the warning, and the loss somebody took ──────────────────
+        ...(_crateShortfallSection(context, theme, d)),
+      ],
+    );
+  }
+
+  /// **Crates missing** — the Crate Shortfall, and the write-off that accepts
+  /// it (#216, PRD #203, ADR 0023 rules 4 and 5).
+  ///
+  /// It shares #215's card rather than growing a seventh, because it is the
+  /// same story told to its end: money placed with a depot, crates owed back,
+  /// and the gap between what is owed and what is actually in the yard.
+  ///
+  /// Three things about how this renders are decisions:
+  ///
+  ///  * **It is a warning, not a loss.** The open figure appears BELOW the
+  ///    total and is in no total on this report — not profit, not worth, not
+  ///    cash. Crates turn up behind the store, a driver returns late, a count
+  ///    was wrong. It shrinks by itself when they reappear, because it is
+  ///    derived from today's counts every time this screen rebuilds.
+  ///  * **It names the brand, never a supplier.** Crates are fungible, and the
+  ///    app must not guess whose went missing (rule 4).
+  ///  * **The write-off is the owner's move to make.** There is no timer and no
+  ///    automatic sweep anywhere behind this button. Profit must never be
+  ///    reduced by a decision nobody made — so the shortfall simply stays here,
+  ///    visible, until someone deals with it.
+  List<Widget> _crateShortfallSection(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d,
+  ) {
+    final shortfalls = d.crateShortfalls;
+    final writtenOff = d.crateShortfallWrittenOffKobo;
+    if (!shortfalls.hasShortfall && writtenOff == 0) return const [];
+
+    final warnColor = theme.extension<AppSemanticColors>()!.warning;
+    final dangerColor = theme.colorScheme.error;
+    // Only a money-permitted role may accept a loss — the same gate that
+    // confirms a crate deposit (`expenses.approve`). No new permission key: a
+    // key that has not reached the cloud catalogue FK-rejects every grant and
+    // jams the outbox.
+    final mayWriteOff = Gates.confirmCrateDeposit.allows(ref);
+
+    return [
+      SizedBox(height: context.spacingM),
+      _divider(theme),
+      if (shortfalls.hasShortfall) ...[
+        for (final s in shortfalls.brands)
+          _line(
+            context,
+            theme,
+            '${s.manufacturerName} — '
+            '${s.openShortfallCrates} crate'
+            '${s.openShortfallCrates == 1 ? '' : 's'} missing',
+            formatCurrency(s.openShortfallValueKobo / 100.0),
+            danger: true,
+          ),
+        _line(
+          context,
+          theme,
+          'Crates missing (now)',
+          formatCurrency(shortfalls.openValueKobo / 100.0),
+          strong: true,
+          color: warnColor,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Crates you owe that are not in the yard. This is a warning, not a '
+          'loss — it has not touched your profit, and it goes down by itself '
+          'if the crates turn up. It stays here until you decide to write it '
+          'off.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+      // The accepted loss, in the period it was accepted. Shown even once the
+      // shortfall has closed: the money left the profit on that day and the
+      // report for that day must keep saying so (ADR 0021 — a closed day is
+      // never restated).
+      if (writtenOff != 0) ...[
+        const SizedBox(height: 6),
+        _line(
+          context,
+          theme,
+          'Crate losses written off this period',
+          '− ${formatCurrency(writtenOff / 100.0)}',
+          color: dangerColor,
+        ),
+        for (final s in shortfalls.brands)
+          if (s.lastWrittenOffAt != null)
+            Text(
+              'Last written off on ${_dayLabel(s.lastWrittenOffAt!)}'
+              '${_staffLabel(s.lastWrittenOffBy)} — ${s.manufacturerName}',
+              style: context.bodySmall.copyWith(color: theme.hintColor),
+            ),
+        const SizedBox(height: 6),
+        Text(
+          'Crates you accepted as lost. This one DOES come out of your profit, '
+          'on the day you accepted it.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+      if (shortfalls.hasShortfall && mayWriteOff) ...[
+        SizedBox(height: context.spacingS),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _openCrateWriteOffSheet(shortfalls),
+            icon: Icon(
+              FontAwesomeIcons.circleMinus.data,
+              size: context.getRSize(14),
+            ),
+            label: const Text('Write off missing crates'),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  /// The day a write-off was taken, in the owner's own date format.
+  String _dayLabel(DateTime at) => DateFormat('d MMM yyyy').format(at);
+
+  /// " by Ada" when the actor is known and named, "" otherwise. Never "by
+  /// unknown" — an unnamed actor is better left unsaid than asserted.
+  String _staffLabel(String? userId) {
+    if (userId == null) return '';
+    final name = ref.read(usersByBusinessProvider).valueOrNull?[userId]?.name;
+    return name == null ? '' : ' by $name';
+  }
+
+  /// **Accept the loss** — the write-off sheet (#216, ADR 0023 rule 5).
+  ///
+  /// Deliberately a two-step, typed confirmation rather than a one-tap
+  /// "write off all". It is the only action in PRD #203 that reduces profit,
+  /// and it is irreversible in the sense that matters: the ledger is
+  /// append-only, so a mistake is corrected by a compensating row that books a
+  /// gain on a LATER day rather than by un-doing this one (ADR 0021).
+  Future<void> _openCrateWriteOffSheet(CrateShortfallRollup shortfalls) async {
+    final theme = Theme.of(context);
+    var selected = shortfalls.brands.first;
+    final qtyCtl = TextEditingController(
+      text: '${shortfalls.brands.first.openShortfallCrates}',
+    );
+    final noteCtl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) => Padding(
+          padding: EdgeInsets.only(
+            left: sheetCtx.getRSize(20),
+            right: sheetCtx.getRSize(20),
+            top: sheetCtx.getRSize(16),
+            // The keyboard inset PLUS the device's own bottom padding — the
+            // modal rule: `deviceBottomPadding`, never `deviceBottomInset`.
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom +
+                sheetCtx.deviceBottomPadding +
+                sheetCtx.getRSize(16),
+          ),
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: sheetCtx.getRSize(40),
+                      height: sheetCtx.getRSize(4),
+                      decoration: BoxDecoration(
+                        color: theme.dividerColor,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(20)),
+                  Text(
+                    'Write off missing crates',
+                    style: sheetCtx.bodyLarge.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(8)),
+                  Text(
+                    'Only do this once you are sure the crates are gone. It '
+                    'comes out of today’s profit and it stays on today’s '
+                    'record — it does not change any day already closed.',
+                    style: sheetCtx.bodySmall.copyWith(color: theme.hintColor),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(16)),
+                  DropdownButtonFormField<String>(
+                    initialValue: selected.manufacturerId,
+                    decoration: const InputDecoration(labelText: 'Brand'),
+                    items: [
+                      for (final s in shortfalls.brands)
+                        DropdownMenuItem(
+                          value: s.manufacturerId,
+                          child: Text(
+                            '${s.manufacturerName} — '
+                            '${s.openShortfallCrates} missing',
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) => setSheet(() {
+                      selected = shortfalls.brands.firstWhere(
+                        (s) => s.manufacturerId == v,
+                      );
+                      qtyCtl.text = '${selected.openShortfallCrates}';
+                    }),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(12)),
+                  TextFormField(
+                    controller: qtyCtl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'How many crates are you accepting as lost?',
+                    ),
+                    validator: (v) {
+                      final n = int.tryParse((v ?? '').trim()) ?? 0;
+                      if (n <= 0) return 'Enter how many crates';
+                      // Capped at what is actually missing: writing off more
+                      // than the gap would book a loss for crates that are
+                      // sitting in the yard.
+                      if (n > selected.openShortfallCrates) {
+                        return 'Only ${selected.openShortfallCrates} '
+                            'missing';
+                      }
+                      return null;
+                    },
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(12)),
+                  TextFormField(
+                    controller: noteCtl,
+                    decoration: const InputDecoration(
+                      labelText: 'Note (optional)',
+                    ),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(16)),
+                  Builder(
+                    builder: (btnCtx) {
+                      final qty = int.tryParse(qtyCtl.text.trim()) ?? 0;
+                      final cost = qty * selected.ratePerCrateKobo;
+                      return FilledButton(
+                        onPressed: () => _confirmCrateWriteOff(
+                          sheetCtx: sheetCtx,
+                          formKey: formKey,
+                          manufacturerId: selected.manufacturerId,
+                          manufacturerName: selected.manufacturerName,
+                          crateCount: int.tryParse(qtyCtl.text.trim()) ?? 0,
+                          note: noteCtl.text.trim().isEmpty
+                              ? null
+                              : noteCtl.text.trim(),
+                        ),
+                        child: Text(
+                          cost > 0
+                              ? 'Write off ${formatCurrency(cost / 100.0)}'
+                              : 'Write off',
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    qtyCtl.dispose();
+    noteCtl.dispose();
+  }
+
+  Future<void> _confirmCrateWriteOff({
+    required BuildContext sheetCtx,
+    required GlobalKey<FormState> formKey,
+    required String manufacturerId,
+    required String manufacturerName,
+    required int crateCount,
+    String? note,
+  }) async {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    // Write-boundary re-check (§10.2.1): honour a permission revoked while the
+    // sheet was open. The gate is the money gate, not a new key.
+    if (!Gates.confirmCrateDeposit.allows(ref)) {
+      Navigator.pop(sheetCtx);
+      return;
+    }
+    final actorId = ref.read(authProvider).currentUser?.id;
+    if (actorId == null) return;
+    final storeId = ref.read(lockedStoreProvider).value;
+    Navigator.pop(sheetCtx);
+    final id = await ref
+        .read(databaseProvider)
+        .cratePoolDao
+        .writeOffCrateShortfall(
+          manufacturerId: manufacturerId,
+          crateCount: crateCount,
+          performedBy: actorId,
+          storeId: storeId,
+          note: note,
+        );
+    if (!mounted) return;
+    if (id == null) return;
+    AppNotification.showSuccess(
+      context,
+      '$crateCount $manufacturerName crate${crateCount == 1 ? '' : 's'} '
+      'written off. It comes out of today’s profit, and today’s report will '
+      'show who accepted it.',
     );
   }
 
@@ -688,6 +1656,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     Color color,
     List<Widget> children, {
     bool danger = false,
+    List<Widget> badges = const [],
   }) {
     return Container(
       padding: EdgeInsets.all(context.spacingM),
@@ -707,14 +1676,129 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             children: [
               Icon(icon, size: 15, color: color),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  title,
+                  style:
+                      context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
+          // #192 — a card can now flag SEVERAL frozen figures (expenses and
+          // damages move independently of net profit), so the badges wrap onto
+          // their own line under the title instead of competing with it for the
+          // header row's width.
+          if (badges.isNotEmpty) ...[
+            SizedBox(height: context.spacingS),
+            Wrap(
+              spacing: context.getRSize(6),
+              runSpacing: context.getRSize(6),
+              children: badges,
+            ),
+          ],
           SizedBox(height: context.spacingS),
           ...children,
+        ],
+      ),
+    );
+  }
+
+  // ── Persisted day close (#174) — delta badge + reviewed banner ─────────────
+
+  /// The card's "changed since review" badges — one per figure in [figures] that
+  /// actually moved, and none at all for an unreviewed or unchanged day.
+  ///
+  /// Callers pass only what THIS card renders for THIS role, so the list doubles
+  /// as the answer to "did anything visible get flagged?" that the reviewed
+  /// banner is worded from.
+  List<Widget> _deltaChips(List<_CardFigure> figures) => [
+    for (final f in figures)
+      if (f.delta != null && f.delta!.changed)
+        ChangedSinceReviewBadge(
+          label:
+              '${f.label} ${f.delta!.delta > 0 ? '+' : '−'} '
+              '${f.isUnits ? fmtNumber(f.delta!.delta.abs()) : formatCurrency(f.delta!.delta.abs() / 100.0)}',
+        ),
+  ];
+
+  /// A "changed since review" badge with NO figure on it — the form used where
+  /// the money behind the change is on the far side of the §25.3 cost wall
+  /// (#192). A Manager is told their stock value moved after the review without
+  /// being shown the cost it moved by.
+  Widget _changedChip(String label) =>
+      ChangedSinceReviewBadge(label: '$label changed');
+
+  /// The screen-level banner shown once, above the cards, when the finished day
+  /// has a persisted review snapshot (#174). States when (and by whom) the day
+  /// was reviewed, and whether any figure has changed since — turning silent
+  /// history mutation into a visible statement.
+  ///
+  /// [hasFlaggedCard] is what the changed wording is allowed to promise (#192).
+  /// The banner used to say "the flagged cards show what moved" off `anyChanged`
+  /// alone, which includes figures that live on CEO-only cards — so a Manager
+  /// could be told to look at flagged cards when the screen had none. It is now
+  /// told what was actually flagged, and when the answer is "nothing you can
+  /// see", it says that instead of pointing at cards that do not exist.
+  Widget _reviewedBanner(
+    BuildContext context,
+    ThemeData theme,
+    ReconClosingComparison c,
+    String? reviewerName, {
+    required bool hasFlaggedCard,
+    required bool isCeo,
+  }) {
+    final changed = c.anyChanged;
+    final accent = changed
+        ? theme.extension<AppSemanticColors>()!.warning
+        : theme.extension<AppSemanticColors>()!.success;
+    final reviewedOn = DateFormat('d MMM yyyy').format(c.reviewedAt.toLocal());
+    final by = reviewerName == null ? '' : ' by $reviewerName';
+    return Container(
+      padding: EdgeInsets.all(context.spacingM),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(context.radiusL),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            changed
+                ? FontAwesomeIcons.clockRotateLeft.data
+                : FontAwesomeIcons.circleCheck.data,
+            size: 15,
+            color: accent,
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reviewed $reviewedOn$by',
+                  style:
+                      context.bodySmall.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  !changed
+                      ? 'The figures still match what was reviewed.'
+                      : hasFlaggedCard
+                      ? 'Some figures changed after this day was reviewed — the '
+                            'flagged cards show what moved since.'
+                      : isCeo
+                      ? 'Some figures changed after this day was reviewed, but '
+                            'not on any card shown here — the CSV export lists '
+                            'every figure.'
+                      : 'Some figures changed after this day was reviewed, but '
+                            'not on any card you can see here — ask the owner to '
+                            'open this day.',
+                  style: context.bodySmall.copyWith(color: theme.hintColor),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -754,6 +1838,22 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     );
   }
 
+  /// A stock-flow line whose value is signed: a positive delta reads `+ ₦x`, a
+  /// negative one `− ₦x`. Keeps the broken-out movement classes (#176) readable
+  /// without repeating the sign ternary at every call site.
+  Widget _signedLine(
+    BuildContext context,
+    ThemeData theme,
+    String label,
+    int kobo,
+  ) =>
+      _line(
+        context,
+        theme,
+        label,
+        '${kobo >= 0 ? '+ ' : '− '}${formatCurrency(kobo.abs() / 100.0)}',
+      );
+
   Widget _divider(ThemeData theme) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Divider(
@@ -772,8 +1872,26 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     final rows = <List<String>>[
       ['Items sold', '${d.itemsSold}'],
       ['Products (SKUs) sold', '${d.skus}'],
-      ['Total sales', money(d.totalRevenueKobo)],
-      if (d.vatEnabled) ['VAT due (${d.vatRateLabel}%)', money(d.vatKobo)],
+      ['Total sales', money(d.totalSalesKobo)],
+      if (d.salesOnCreditKobo != 0) ...[
+        ['Total sales — paid now', money(d.salesPaidNowKobo)],
+        ['Total sales — on credit', money(d.salesOnCreditKobo)],
+      ],
+      if (d.vatEnabled)
+        ['VAT due (${d.vatRateLabel}%, ${d.vatBasisLabel})', money(d.vatKobo)],
+      // #147 — the van card's lines, in the same order the card renders them.
+      // Emitted only when the period saw van activity, so an export from a
+      // business with no vans is byte-identical to before.
+      if (d.van.hasActivity) ...[
+        ['Van sales (all trips)', money(d.van.salesKobo)],
+        ['Cash from drivers', money(d.van.remittedKobo)],
+        if (isCeo) ...[
+          ['Van cost of goods gone (closed trips)', money(d.van.cogsKobo)],
+          ['Van profit (closed trips)', money(d.van.profitKobo)],
+        ],
+        if (d.van.hasOpenTripCaveat)
+          ['Van revenue awaiting trip close', money(d.van.openRevenueKobo)],
+      ],
       if (isCeo) ...[
         // Net result for this period (flow) — mirrors _netResultCard.
         ['Inventory on hand (at cost)', money(d.inventoryOnHandKobo)],
@@ -784,7 +1902,28 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Damages (at cost)', money(d.damageCostKobo)],
         if (d.crateDamageDepositKobo > 0)
           ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
+        // #193 — the deleted-product write-off as a loss, beside Damages, at the
+        // write-time snapshot. The stock-card row further down is the SAME event
+        // on that card's current-cost basis (ADR 0014), so it is disambiguated as
+        // "(stock, at cost)" exactly as Damages already is. Conditional like the
+        // crate row above, so an export from a business that deleted nothing is
+        // byte-identical to before.
+        if (d.deletionCostKobo > 0)
+          ['Product deletions (at cost)', money(d.deletionCostKobo)],
         ['Stock shortages (at cost)', money(d.shortageCostKobo)],
+        // #200 / US 20 — the export carries the same disclosure the screen shows:
+        // which of the two loss figures above lean on today's cost because the
+        // record predates loss-cost snapshotting. Omitted when nothing does.
+        if (d.legacyValuedDamageRows > 0)
+          [
+            'Damages — older records valued at today\'s cost',
+            '${d.legacyValuedDamageRows}',
+          ],
+        if (d.legacyValuedShortageRows > 0)
+          [
+            'Stock shortages — older records valued at today\'s cost',
+            '${d.legacyValuedShortageRows}',
+          ],
         ['Net result for period', money(d.periodNetResultKobo)],
         // Profit & Loss — mirrors _plCard.
         ['Revenue (costed, gross)', money(d.costedRevenueKobo)],
@@ -793,25 +1932,89 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Cost of goods sold', money(d.cogsKobo)],
         ['Gross profit', money(d.grossProfitKobo)],
         ['Gross margin %', d.grossMarginPct],
+        if (d.uncostedTakingsKobo != 0)
+          ['Quick-sale takings (no recorded cost)',
+            money(d.uncostedTakingsKobo)],
+        if (d.forfeitIncomeKobo != 0)
+          ['Forfeit income (kept crate deposits)', money(d.forfeitIncomeKobo)],
+        // #216 — the one crate figure that reaches profit: crates the owner
+        // deliberately accepted as lost, on the day they accepted them.
+        if (d.showCrates && d.crateShortfallWrittenOffKobo != 0)
+          ['Crate losses written off (accepted this period)',
+            money(-d.crateShortfallWrittenOffKobo)],
         ['Net profit', money(d.netProfitKobo)],
         // Business worth right now (point-in-time) — mirrors _businessWorthCard.
         // Supplier account position: negative = a debt we owe for unpaid goods,
         // positive = money we paid the supplier in advance (a prepayment).
+        if (d.inTransitValueKobo != 0)
+          ['In-transit stock (dispatched, not received)',
+            money(d.inTransitValueKobo)],
         ['Supplier account balance (now)', money(d.supplierAccountBalanceKobo)],
+        // #163 — crate liabilities netted into the position below.
+        if (d.showCrates)
+          ['Crate deposits held for customers (now)',
+            money(d.heldCrateDepositsKobo)],
+        if (d.showCrates)
+          ['Crate debt owed to suppliers (now)',
+            money(d.supplierCrateDebtKobo)],
+        // #215 — the Placed Deposit ASSET added into the position below, and
+        // its per-supplier breakdown. Business-wide even when a store is
+        // locked; the label says so, like it does on the card.
+        if (d.showCrates && d.placedCrateDepositsKobo != 0)
+          ['Crate deposits held by suppliers (now, business-wide)',
+            money(d.placedCrateDepositsKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
+        // Crate money with suppliers (business-wide) — mirrors _crateMoneyCard.
+        if (d.showCrates)
+          for (final s in d.crateDeposits.bySupplier)
+            ['Crate money held by ${s.supplierName} (now)',
+              money(s.placedDepositKobo)],
+        // #216 — the WARNING, deliberately outside every total above: it has
+        // not touched profit and shrinks by itself if the crates turn up.
+        if (d.showCrates && d.crateShortfalls.hasShortfall) ...[
+          for (final s in d.crateShortfalls.brands)
+            ['${s.manufacturerName} crates missing (now)',
+              money(s.openShortfallValueKobo)],
+          ['Crates missing, not yet written off (now, business-wide)',
+            money(d.crateShortfalls.openValueKobo)],
+        ],
+        if (d.showCrates && d.crateDeposits.hasPending)
+          ['Crate money awaiting confirmation (now)',
+            money(d.crateDeposits.pendingDepositKobo)],
         // Cash flow (business-wide) — mirrors _cashFlowCard.
         ['Cash sales', money(d.cashSalesKobo)],
         ['Debts collected (cash)', money(d.cashDebtsCollectedKobo)],
+        if (d.cashFromDriversKobo != 0)
+          ['Cash from drivers', money(d.cashFromDriversKobo)],
         ['Refunds paid (cash)', money(d.cashRefundsKobo)],
         ['Expenses paid (cash)', money(d.cashExpensesKobo)],
         ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
         ['Net cash movement', money(d.netCashMovementKobo)],
+        ['Crate deposits held (cash)', money(d.cashCrateDepositsKobo)],
+        // #215 — outside Net cash movement above, exactly like the line before
+        // it. Refundable money through the drawer, not operating cash.
+        if (d.cashCrateDepositsPlacedKobo != 0)
+          ['Crate deposits placed with suppliers (cash)',
+            money(d.cashCrateDepositsPlacedKobo)],
         // Stock reconciliation (at cost) — mirrors _stockFlowCard.
         ['Opening stock (at cost)', money(d.stockOpeningKobo)],
         ['Goods received (at cost)', money(d.stockReceivedKobo)],
         ['COGS (at current cost)', money(d.stockCogsKobo)],
-        ['Damages (stock, at cost)', money(d.stockDamagesKobo)],
+        // #200 — this block is the stock FLOW: every line prices the units that
+        // moved at TODAY's cost, which is what makes it add up to Expected
+        // closing. Spelled out here because the same export also carries the
+        // Profit & Loss "Damages (at cost)" row above, which is the write-time
+        // cost of the very same damages — one event, two labelled figures.
+        ['Damages (stock, units at today\'s cost)', money(d.stockDamagesKobo)],
         ['Expired (at cost)', money(d.stockExpiredKobo)],
+        ['Store transfers (at cost)', money(d.stockTransfersKobo)],
+        [
+          'Count corrections (units at today\'s cost)',
+          money(d.stockCountAdjustmentsKobo),
+        ],
+        // #193 renamed this one to disambiguate it from the P&L's own
+        // "Product deletions (at cost)", which carries the snapshot value.
+        ['Product deletions (stock, at cost)', money(d.stockDeletionsKobo)],
         ['Other stock movements (at cost)', money(d.stockOtherMovementsKobo)],
         ['Expected closing (at cost)', money(d.stockExpectedClosingKobo)],
         ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],
@@ -833,8 +2036,9 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     try {
       await shareCsv(
         csv: buildCsv(['Metric', 'Value'], rows),
-        fileName: '${name}_${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}',
-        subject: 'Reconciliation — $scope — $title',
+        fileName:
+            '${name}_${widget.title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}',
+        subject: 'Reconciliation — $scope — ${widget.title}',
       );
     } catch (e) {
       if (context.mounted) {
@@ -844,4 +2048,24 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
       }
     }
   }
+}
+
+/// One frozen figure a card can flag (#192): the label the badge names it by,
+/// the figure's as-reviewed-vs-current delta (null when the day was never
+/// reviewed), and whether that delta reads as a unit COUNT rather than money.
+///
+/// Naming the figure is what makes several badges on one card readable, and what
+/// lets a Manager tell an "Expenses" badge from a "Total sales" one without
+/// inferring it from position. The unit flag is not cosmetic: `itemsSold` and
+/// `shortageUnits` are frozen as counts, and formatting a count as naira would
+/// state a number that never existed.
+class _CardFigure {
+  const _CardFigure({
+    required this.label,
+    required this.delta,
+    this.isUnits = false,
+  });
+  final String label;
+  final ReconFigureDelta? delta;
+  final bool isUnits;
 }

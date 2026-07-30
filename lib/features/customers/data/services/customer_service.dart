@@ -5,7 +5,6 @@ import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
 import 'package:reebaplus_pos/shared/services/credit_ledger_service.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
-import 'package:reebaplus_pos/features/customers/data/models/payment.dart';
 
 class CustomerService extends ValueNotifier<List<Customer>> {
   final AppDatabase _db;
@@ -89,28 +88,6 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     );
   }
 
-  Future<void> addPayment(String customerId, Payment payment) async {
-    final customer = getById(customerId);
-    if (customer == null) return;
-
-    final amountKobo = (payment.amount * 100).round();
-    // TODO(PR 4d): pass real staff id from auth context once wallet writes restore.
-    await _db.customersDao.updateWalletBalance(
-      customerId: customerId,
-      amountKobo: amountKobo,
-      type: 'credit',
-      referenceType: 'topup_cash',
-      note: payment.note,
-      staffId: '',
-    );
-
-    await _log.logAction(
-      'Payment Added',
-      'Added payment of ${formatCurrency(payment.amount)} for ${customer.name}',
-      customerId: customer.id,
-    );
-  }
-
   Future<void> addCratesToBalance(
     String customerId,
     Map<String, int> cratesAdded,
@@ -141,11 +118,15 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
   /// §18 Add Credit — top up a registered customer's credit balance. The credit + payment
   /// ledger writes are atomic via CreditLedgerService.topup.
+  ///
+  /// [storeId] is the active write store the collection is stamped against
+  /// (PRD #155 US 36) — the caller resolves it from `activeWriteStoreProvider`.
   Future<void> topUpWallet({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' | 'transfer'
     required String staffId,
+    String? storeId,
     String? note,
   }) async {
     final customer = getById(customerId);
@@ -154,6 +135,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
       amountKobo: amountKobo,
       method: method,
       staffId: staffId,
+      storeId: storeId,
     );
     final naira = (amountKobo / 100).round();
     await _log.logAction(
@@ -169,11 +151,17 @@ class CustomerService extends ValueNotifier<List<Customer>> {
   /// spendable credit). Delegates to CreditLedgerService.refundCash, which writes the
   /// wallet + payment ledger, the activity log, and the notification atomically.
   /// Returns the amount actually refunded after capping at what's available.
+  ///
+  /// [storeId] is the active write store the cash-out is stamped against — the
+  /// Refunds figure is store-filtered, so an unstamped refund disappears from
+  /// the Sales card under a locked store (#194). The caller resolves it from
+  /// `activeWriteStoreProvider`.
   Future<int> refundCashFromWallet({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' | 'transfer' | 'pos' | 'other'
     required String staffId,
+    String? storeId,
     String? note,
   }) {
     return CreditLedgerService(_db).refundCash(
@@ -181,7 +169,26 @@ class CustomerService extends ValueNotifier<List<Customer>> {
       amountKobo: amountKobo,
       method: method,
       staffId: staffId,
+      storeId: storeId,
       note: note,
+    );
+  }
+
+  /// §18 / PRD #155 (#173) — voids a mistyped customer credit top-up
+  /// (CEO/Manager only; gated at the UI on `customers.wallet.withdraw`).
+  /// Delegates to [CreditLedgerService.voidTopup], which appends the
+  /// compensating wallet debit AND the reversal payment row atomically so the
+  /// voided amount drops out of the reconciliation's "Debts collected".
+  /// Returns whether a void was posted (false = not a live top-up).
+  Future<bool> voidTopup({
+    required String walletTxnId,
+    required String staffId,
+    String? reason,
+  }) {
+    return CreditLedgerService(_db).voidTopup(
+      walletTxnId: walletTxnId,
+      staffId: staffId,
+      reason: reason,
     );
   }
 
@@ -201,53 +208,4 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     );
   }
 
-  Future<void> refundToWallet(
-    String customerId,
-    double amount,
-    String note,
-  ) async {
-    final customer = getById(customerId);
-    if (customer == null) return;
-
-    final amountKobo = (amount * 100).round();
-    await _db.customersDao.updateWalletBalance(
-      customerId: customerId,
-      amountKobo: amountKobo,
-      type: 'credit',
-      referenceType: 'refund',
-      note: note,
-      staffId: '',
-    );
-
-    await _log.logAction(
-      'Credit Balance Refunded',
-      'Refunded ${formatCurrency(amount)} to ${customer.name}\'s credit balance. Note: $note',
-      customerId: customer.id,
-    );
-  }
-
-  Future<void> updateWalletBalance(
-    String customerId,
-    double amount,
-    String note,
-  ) async {
-    final customer = getById(customerId);
-    if (customer == null) return;
-
-    final amountKobo = (amount * 100).round();
-    await _db.customersDao.updateWalletBalance(
-      customerId: customerId,
-      amountKobo: amountKobo,
-      type: 'credit',
-      referenceType: 'topup_cash',
-      note: note,
-      staffId: '',
-    );
-
-    await _log.logAction(
-      'Credit Balance Updated',
-      'Added ${formatCurrency(amount)} to ${customer.name}\'s credit balance. Note: $note',
-      customerId: customer.id,
-    );
-  }
 }

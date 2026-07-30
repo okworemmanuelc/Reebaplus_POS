@@ -56,6 +56,23 @@ void main() {
     'inventory',
     'cost_batches',
     'customers',
+    // #141 Van Sales: the trip, then its priced load lots, then the ledger rows
+    // that reference both (FK-safe among themselves; stores/users/products are
+    // pulled far earlier).
+    //
+    // #142 MOVED this block from after `daily_closings` to HERE, ahead of
+    // `orders` and `payment_transactions`. Both of those now carry a
+    // `van_trip_id` FK — payment_transactions since #144's remittance, orders
+    // since #142's trip tag — and both restore RESILIENTLY, so a trip arriving
+    // after its child would not raise: it would silently DROP a money row on
+    // every restore. Parents first.
+    // #143 inserted `van_return_events` between the lots and the ledger: its
+    // parent is `van_trips` (above it) and the ledger rows that reference a
+    // return event come after it.
+    'van_trips',
+    'van_trip_lots',
+    'van_return_events',
+    'driver_ledger_entries',
     'orders',
     'order_items',
     'order_crate_lines',
@@ -79,6 +96,15 @@ void main() {
     'wallet_transactions',
     'supplier_ledger_entries',
     'supplier_crate_ledger',
+    // #212 (PRD #203): the crate-deposit money approval queue and the
+    // append-only Placed Deposit ledger. The queue precedes the ledger, which
+    // FK-references it.
+    'supplier_crate_deposit_requests',
+    'supplier_crate_deposits',
+    // #216 (PRD #203): the Crate Shortfall write-off ledger — the deliberate,
+    // dated acceptance of a loss. Append-only, no void columns, so it restores
+    // INSERT-OR-IGNORE like the Placed Deposit ledger above it.
+    'crate_shortfall_writeoffs',
     'saved_carts',
     'pending_crate_returns',
     'manufacturer_crate_balances',
@@ -89,6 +115,8 @@ void main() {
     'price_lists',
     'payment_transactions',
     'stock_counts',
+    // #174: persisted day close — one snapshot per (business, calendar day).
+    'daily_closings',
     'sessions',
     'settings',
   ];
@@ -104,6 +132,11 @@ void main() {
     'suppliers',
     'supplier_ledger_entries',
     'supplier_crate_ledger',
+    // #212 (PRD #203): the crate-deposit money tables.
+    'supplier_crate_deposit_requests',
+    'supplier_crate_deposits',
+    // #216 (PRD #203): the Crate Shortfall write-off ledger.
+    'crate_shortfall_writeoffs',
     'products',
     'cost_batches',
     'price_lists',
@@ -127,6 +160,15 @@ void main() {
     'pending_crate_returns',
     'payment_transactions',
     'stock_counts',
+    // #174: persisted day close snapshot.
+    'daily_closings',
+    // #141 Van Sales: trip aggregate, priced load lots, consignment ledger.
+    // #143 added the dated return events (good = credit + re-batch, damaged =
+    // loss at snapshotted cost).
+    'van_trips',
+    'van_trip_lots',
+    'van_return_events',
+    'driver_ledger_entries',
     'expense_categories',
     'expenses',
     'expense_budgets',
@@ -155,6 +197,22 @@ void main() {
 
   // 4) The push-column whitelist — only the tables that diverge from cloud.
   const goldenPushColumns = <String, Set<String>>{
+    // #159: `empty_crate_stock` is DEMOTED off the push set — the physical
+    // empties pool is derived from the append-only `crate_ledger`, so the
+    // absolute scalar never crosses the wire. This whitelist is every
+    // manufacturers column EXCEPT `empty_crate_stock`.
+    // #211: `crate_money_arrangement` IS pushed — an owner-chosen money policy
+    // has to reach every other device, exactly like `deposit_amount_kobo`.
+    'manufacturers': {
+      'id',
+      'business_id',
+      'name',
+      'deposit_amount_kobo',
+      'crate_money_arrangement',
+      'is_deleted',
+      'created_at',
+      'last_updated_at',
+    },
     'profiles': {
       'id',
       'business_id',
@@ -203,11 +261,18 @@ void main() {
     },
   };
 
-  // 5) The append-only ledger created_at-scrub set.
+  // 5) The append-only ledger created_at-scrub set. #169 added the two crate
+  //    ledgers preemptively (close the void-push orphan trap before any void
+  //    feature ships).
   const goldenScrubCreatedAt = <String>{
     'payment_transactions',
     'wallet_transactions',
     'supplier_ledger_entries',
+    'crate_ledger',
+    'supplier_crate_ledger',
+    // #141: the driver consignment ledger — append-only, void by an
+    // opposite-sign compensating row, so the same created_at trap applies.
+    'driver_ledger_entries',
   };
 
   // 6) The hard-delete tables (the two former switches, one set now).

@@ -1,5 +1,26 @@
 part of 'daos.dart';
 
+/// The sync state of a v2 sale's `pos_record_sale_v2` envelope, derived from
+/// durable outbox state. Drives whether the order header ([OrdersDao] via
+/// `_enqueueFullOrder`) may push: on the guarded path the cloud order exists
+/// ONLY once the envelope confirms, so a header must never reach the cloud
+/// ahead of — or instead of — its sale (#149).
+enum SaleEnvelopeState {
+  /// The envelope is still un-synced in `sync_queue` (offline, retrying, or
+  /// mid-drain) — the cloud order does not exist yet, so the header must wait.
+  pending,
+
+  /// The envelope confirmed (synced-and-lingering, or already purged) OR the
+  /// order never had one (a v1 sale) — the cloud order exists (or the v1 path
+  /// owns its own header), so the header may push immediately.
+  confirmed,
+
+  /// The envelope was permanently REJECTED and lifted to `sync_queue_orphans`
+  /// (an oversell the cloud rolled back) — the header must never push, or it
+  /// resurrects a phantom order the cloud has already refused.
+  rejected,
+}
+
 @DriftAccessor(tables: [SyncQueue, SyncQueueOrphans])
 class SyncDao extends DatabaseAccessor<AppDatabase>
     with _$SyncDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -111,20 +132,10 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     var discarded = 0;
     for (final row in heldOrders) {
       final orderId = row.read<String>('oid');
-      final envelopePending = await customSelect(
-        "SELECT 1 FROM sync_queue "
-        "WHERE action_type = 'domain:pos_record_sale_v2' "
-        "AND json_extract(payload, '\$.p_order_id') = ?1 LIMIT 1",
-        variables: [Variable.withString(orderId)],
-      ).get();
-      if (envelopePending.isNotEmpty) continue; // still in flight
-      final envelopeOrphaned = await customSelect(
-        "SELECT 1 FROM sync_queue_orphans "
-        "WHERE action_type = 'domain:pos_record_sale_v2' "
-        "AND json_extract(payload, '\$.p_order_id') = ?1 LIMIT 1",
-        variables: [Variable.withString(orderId)],
-      ).get();
-      if (envelopeOrphaned.isNotEmpty) {
+      // Any queue row (synced-and-lingering or not) means the envelope hasn't
+      // left the queue yet — still in flight; keep waiting.
+      if (await _saleEnvelopeQueued(orderId)) continue;
+      if (await _saleEnvelopeOrphaned(orderId)) {
         discarded += await discardHeldByOrder(orderId);
       } else {
         await releaseHeldByOrder(orderId);
@@ -132,6 +143,58 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
       }
     }
     return (released: released, discarded: discarded);
+  }
+
+  /// Classifies [orderId]'s `pos_record_sale_v2` envelope (see
+  /// [SaleEnvelopeState]) using the same envelope lookups as [reconcileHeldRows],
+  /// but the queue check is restricted to UN-synced rows: a synced-but-lingering
+  /// envelope (markDone keeps the row until the 7-day purge) means the sale
+  /// CONFIRMED. A v1 order (no envelope) also resolves to
+  /// [SaleEnvelopeState.confirmed], so its header pushes exactly as before.
+  /// (No `business_id` filter — the order id is a globally-unique UUIDv7, the
+  /// same basis on which reconcileHeldRows matches an envelope per order.)
+  Future<SaleEnvelopeState> saleEnvelopeState(String orderId) async {
+    // An un-synced envelope still in the main queue → the cloud order isn't
+    // there yet. Checked first so that if a live retry ever coexisted with a
+    // stale orphan we hold (wait) rather than leak a phantom.
+    if (await _saleEnvelopeQueued(orderId, onlyUnsynced: true)) {
+      return SaleEnvelopeState.pending;
+    }
+    // Archived to orphans → permanently rejected (oversell rolled back).
+    if (await _saleEnvelopeOrphaned(orderId)) return SaleEnvelopeState.rejected;
+    // No un-synced envelope and not orphaned: confirmed (synced/purged) or v1.
+    return SaleEnvelopeState.confirmed;
+  }
+
+  /// Whether a `pos_record_sale_v2` envelope for [orderId] sits in `sync_queue`.
+  /// With [onlyUnsynced] the match is limited to not-yet-uploaded rows
+  /// (`is_synced = 0`) — a synced-but-lingering envelope then does NOT count (it
+  /// confirmed). Without it, any queue row counts (the "not gone" signal
+  /// [reconcileHeldRows] keeps waiting on).
+  Future<bool> _saleEnvelopeQueued(
+    String orderId, {
+    bool onlyUnsynced = false,
+  }) async {
+    final rows = await customSelect(
+      "SELECT 1 FROM sync_queue "
+      "WHERE action_type = 'domain:pos_record_sale_v2' "
+      "${onlyUnsynced ? 'AND is_synced = 0 ' : ''}"
+      "AND json_extract(payload, '\$.p_order_id') = ?1 LIMIT 1",
+      variables: [Variable.withString(orderId)],
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  /// Whether a `pos_record_sale_v2` envelope for [orderId] was archived to
+  /// `sync_queue_orphans` (a permanent rejection — e.g. an oversell).
+  Future<bool> _saleEnvelopeOrphaned(String orderId) async {
+    final rows = await customSelect(
+      "SELECT 1 FROM sync_queue_orphans "
+      "WHERE action_type = 'domain:pos_record_sale_v2' "
+      "AND json_extract(payload, '\$.p_order_id') = ?1 LIMIT 1",
+      variables: [Variable.withString(orderId)],
+    ).get();
+    return rows.isNotEmpty;
   }
 
   Future<void> markInProgress(String id) async {
@@ -737,7 +800,14 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     await (delete(syncQueueOrphans)..where((t) => t.id.equals(orphanId))).go();
   }
 
-  Future<void> enqueueUpsert(String tableName, Insertable row) async {
+  Future<void> enqueueUpsert(
+    String tableName,
+    Insertable row, {
+    // Oversell recovery (#149/#121): when set, the enqueued row is HELD by this
+    // order — invisible to the drain ([getPendingItems]) until the sale's
+    // `pos_record_sale_v2` envelope confirms (release) or is rejected (discard).
+    String? heldByOrderId,
+  }) async {
     // Sync safeguard (CLAUDE.md §5): fail fast on an unknown/typo'd table.
     // The pusher dispatches `<table>:upsert` to `_supabase.from(table)` with
     // no whitelist, so a bad name would silently stick as a failed queue row.
@@ -799,6 +869,12 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
             nextAttemptAt: const Value(null),
             errorMessage: const Value(null),
             authUserId: Value(db.currentAuthUserId),
+            // Apply the hold only when explicitly requested; leave it untouched
+            // otherwise so coalescing an unrelated re-upsert never releases an
+            // already-held (#121) child row early.
+            heldByOrderId: heldByOrderId == null
+                ? const Value.absent()
+                : Value(heldByOrderId),
           ),
         );
       } else {
@@ -809,6 +885,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
             actionType: actionType,
             payload: payloadJson,
             authUserId: Value(db.currentAuthUserId),
+            heldByOrderId: Value(heldByOrderId),
           ),
         );
       }

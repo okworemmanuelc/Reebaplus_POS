@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -60,7 +61,12 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final all = ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[];
+      // #140 — a van is loaded through the van dispatch flow (#141), never
+      // through the generic store-transfer path, so it is not offered as either
+      // endpoint here (van-sales spec §7.2).
+      final all = withoutVans(
+        ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[],
+      );
       final selectable = ref.read(selectableStoresProvider);
       StoreData? findIn(List<StoreData> list, String? id) =>
           id == null ? null : list.where((s) => s.id == id).firstOrNull;
@@ -200,8 +206,9 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final allStores =
-        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    final allStores = withoutVans(
+      ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[],
+    );
     final selectable = ref.watch(selectableStoresProvider);
     final sourceLocked = widget.fixedSourceStoreId != null;
     final destLocked = widget.fixedDestStoreId != null;

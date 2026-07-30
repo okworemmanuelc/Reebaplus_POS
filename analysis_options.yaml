@@ -9,6 +9,14 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  # Never analyze generated build output. Xcode/Swift Package Manager can drop
+  # stray Dart files (e.g. build/{ios,macos}/SourcePackages/firebase_messaging-*/
+  # lib/src/messaging.dart) into the build cache, which otherwise flood the IDE
+  # Problems panel with phantom errors and make `flutter analyze` fail.
+  exclude:
+    - build/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

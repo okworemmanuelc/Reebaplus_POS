@@ -88,6 +88,7 @@ void main() {
     String productId,
     int qty, {
     Map<String, int> deposits = const {},
+    String paymentMethod = 'cash',
   }) async {
     // New checkout convention (§13.4 Ring 3): the grand total the customer
     // settles = goods + the deposit held. amountPaid covers both; createOrder
@@ -105,7 +106,7 @@ void main() {
         totalAmountKobo: grandKobo,
         netAmountKobo: grandKobo,
         amountPaidKobo: Value(grandKobo),
-        paymentType: 'cash',
+        paymentType: paymentMethod,
         status: 'completed',
         staffId: Value(staffId),
         storeId: Value(storeId),
@@ -126,6 +127,7 @@ void main() {
       totalAmountKobo: grandKobo,
       staffId: staffId,
       storeId: storeId,
+      paymentMethod: paymentMethod,
       crateDepositPaidByManufacturer: deposits,
     );
   }
@@ -135,14 +137,14 @@ void main() {
       final (storeId, staffId, customerId) = await seedBase();
       final (mfrId, _) = await seedCrateProduct(storeId);
 
-      await db.crateLedgerDao.recordCrateIssueByCustomer(
+      await db.cratePoolDao.recordCrateIssueByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 10,
           performedBy: staffId);
       expect(await crateBalance(customerId, mfrId), 10, reason: '10 owed');
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 10,
@@ -155,12 +157,12 @@ void main() {
       final (storeId, staffId, customerId) = await seedBase();
       final (mfrId, _) = await seedCrateProduct(storeId);
 
-      await db.crateLedgerDao.recordCrateIssueByCustomer(
+      await db.cratePoolDao.recordCrateIssueByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 10,
           performedBy: staffId);
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 7,
@@ -190,7 +192,7 @@ void main() {
       expect(issued.first.manufacturerId, mfrId);
 
       // Returning all 5 nets to "not owing".
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 5,
@@ -513,7 +515,7 @@ void main() {
     });
 
     test('full deposit, full return → cash refund (held 0, spendable 0, '
-        'payment refund row)', () async {
+        'NEGATIVE crate_deposit payment row — #190)', () async {
       await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: false);
       final (storeId, staffId, customerId) = await seedBase();
       final (mfrId, productId) = await seedCrateProduct(storeId);
@@ -535,12 +537,58 @@ void main() {
       expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId), 0);
       expect(await db.walletTransactionsDao.getBalanceKobo(customerId), 0,
           reason: 'cash refund → no spendable wallet credit');
+
+      // #190 — releasing held money is an IN-FAMILY reversal, never a `refund`.
+      // A `refund` row lands in the Sales card's Refunds figure and is
+      // subtracted from the period net result, for money that was never
+      // revenue; the held-deposit line meanwhile never nets down.
       final refunds = await (db.select(db.paymentTransactions)
             ..where((t) => t.type.equals('refund')))
           .get();
-      expect(refunds, hasLength(1));
-      expect(refunds.first.amountKobo, 250000);
-      expect(refunds.first.method, 'cash');
+      expect(refunds, isEmpty,
+          reason: 'the deposit release is NOT a sales refund');
+
+      final deposits = await (db.select(db.paymentTransactions)
+            ..where((t) => t.type.equals('crate_deposit')))
+          .get();
+      expect(deposits, hasLength(2),
+          reason: 'the sale collected it, the settlement released it');
+      expect(deposits.fold<int>(0, (s, p) => s + p.amountKobo), 0,
+          reason: 'the held-deposit line nets to zero on release');
+      final release = deposits.singleWhere((p) => p.amountKobo < 0);
+      expect(release.amountKobo, -250000);
+      expect(release.method, 'cash');
+      expect(release.storeId, storeId);
+    });
+
+    test('the cash release takes its TENDER from the original deposit row — '
+        'a deposit collected by transfer does not leave the drawer (#190)',
+        () async {
+      await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: false);
+      final (storeId, staffId, customerId) = await seedBase();
+      final (mfrId, productId) = await seedCrateProduct(storeId);
+      final orderId = await sell(storeId, staffId, customerId, productId, 5,
+          deposits: {mfrId: 250000}, paymentMethod: 'transfer');
+
+      await db.ordersDao.settleCrateDepositReturn(
+        customerId: customerId,
+        manufacturerId: mfrId,
+        orderId: orderId,
+        takenCrates: 5,
+        returnedCrates: 5,
+        rateKobo: 50000,
+        paidKobo: 250000,
+        refundAsCash: true,
+        performedBy: staffId,
+      );
+
+      final release = await (db.select(db.paymentTransactions)
+            ..where((t) =>
+                t.type.equals('crate_deposit') &
+                t.amountKobo.isSmallerThanValue(0)))
+          .getSingle();
+      expect(release.method, 'transfer',
+          reason: 'the tender is copied from the collection, not hardcoded');
     });
 
     test('full deposit, partial return → forfeit kept + refund rest', () async {

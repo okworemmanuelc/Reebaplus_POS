@@ -96,6 +96,101 @@ a separate concern.
 _Avoid_: treating a Cart as a draft/pending Order; folding cart logic into the
 Order Module.
 
+### Money & Payments
+
+Vocabulary established by PRD #155 (ADR 0021). The governing idea: `payment_transactions`
+behaves like the wallet and supplier ledgers — **append-only in practice, corrections
+are new rows**.
+
+**Payment row**:
+One row in `payment_transactions` recording money actually moving. Typed
+`sale` | `expense` | `refund` | `wallet_topup` | `crate_deposit` |
+`van_remittance` — those six and no others. (A seventh, `purchase`, was carried
+in the CHECK from the 0001 schema and never written by anything; #202 dropped it
+from both the Drift and cloud constraints. A goods purchase is a **supplier
+invoice** plus an `expense` / supplier-ledger payment — do not resurrect the
+value for it.) Counted on its **own creation day**, which is what makes a
+reviewed day's cash figure stable.
+_Avoid_: editing a payment row; "voiding" one (the in-place void columns are
+legacy read-only).
+
+**Compensating row**:
+The correction mechanism — a new payment row that offsets an earlier one, dated
+the day the correction happens, rather than an edit to the original. Cancel posts
+a refund cash-out; expense reject/delete and top-up void post reversals. Written
+only through the reversal seam (`daos_payments.dart`), which copies the
+original's typed reference, store and tender so a cash tender yields a cash
+reversal. The cloud has ONE twin of that seam, `pos_cancel_order` (rewritten to
+this rule by #201 / `0170`); it is reached only when the v2 cancel flag is on,
+and it appends exactly as the client does.
+_Avoid_: reversal-in-place, void-and-rewrite, "adjusting" the original.
+
+**In-family reversal**:
+Releasing held money by posting a **negative row of the same type**, not a
+`refund` — so a crate deposit coming back nets the held-deposit line down instead
+of appearing as a sales refund (which would be subtracted from profit for money
+that was never revenue). `markCancelled` is the reference implementation; since
+#190 all three release paths follow it — Cancel, Confirm
+(`settleCrateDepositReturn`) and §18.3 Refund Cash (`CreditLedgerService`) — and
+since #201 so does the cloud cancel (`pos_cancel_order`, `0170`). A
+refund of spendable CREDIT is not in this category: that money was the
+customer's to spend, so it is a genuine `refund`.
+_Avoid_: typing any deposit or top-up release as `refund`.
+
+**Tender**:
+*How* the customer paid — the `method` on a payment row (`cash`, `transfer`, …),
+picked at checkout. Distinct from **payment type** (*what the money is for*). A
+reversal or release copies the ORIGINAL row's tender whenever there is one to
+copy — a deposit taken by transfer must not go back out of the drawer (#190).
+Where no single originating row exists (§18.3 releases a customer's whole held
+balance, which can span many orders and tenders) the user picks it instead.
+"Cash sales" means physical cash only, so the drawer can be counted against it.
+_Avoid_: conflating tender with payment type; assuming cash.
+
+**Crate deposit (money side)**:
+Refundable money held for a customer's crates. Its own payment type, deliberately
+outside "Cash sales" and headline "Total Sales", shown as its own held-money line
+and subtracted from Business worth as a liability. Forfeited deposits become
+income; see Crates for the physical side.
+_Avoid_: banking it as earnings; folding it into Total Sales.
+
+**Day close / as-reviewed**:
+The first time a permitted user opens a **finished** day's reconciliation, its
+figures freeze into a synced `daily_closings` row (one per business × day,
+first-writer-wins). The report thereafter shows *as reviewed* beside *current*
+with a per-card delta, so late syncs and backdated entries make history mutation
+**visible** rather than silent. Purely observational.
+_Avoid_: "closing the books" (nothing is locked); treating it as a cash-drawer
+close (Hard Rule #8 stands).
+
+**Total Sales (the one definition)**:
+Item-line gross minus discounts, deposit-exclusive — `computeTotalSalesKobo`,
+per ORDER `orderGoodsNetKobo`. The Home dashboard, Daily Reconciliation and
+Profit report all read this one helper, over the same period AND the same store
+predicate (`reconStoreFilter`), so a day has one answer at every scope (#195).
+Scoping is per ITEM LINE, with the order's own store carrying the discount.
+_Avoid_: `orders.totalAmountKobo` / `net_amount_kobo` for a "sales" figure (both
+are gross of discounts and deposit-inclusive); scoping a sales figure by the
+order header's store while another surface scopes by the line's.
+
+**Concession**:
+The gap between a product's catalogue (tier) price and what was actually charged,
+snapshotted per line as `order_items.catalogue_price_kobo` at checkout so
+under-the-counter discounting is derivable in margin review. NULL when the
+customer paid list price.
+_Avoid_: reconstructing it from the product's current price (products carry two
+tier prices; the tier deviated from is not recoverable later).
+
+**Valued loss**:
+A damage, expiry, theft or shortage that captured its cost **at the moment of
+loss** (`stock_adjustments.value_kobo`), so a later price edit cannot restate a
+past period. See Inventory & Costing for the batch mechanics.
+_Avoid_: valuing a past loss at today's cost.
+
+Retired vocabulary: the `refunded` **order status** — nothing writes it. Cancel is
+the single reversal state, and refund reporting derives from `refund` payment
+rows.
+
 ### Inventory & Costing
 
 **Add Product**:
@@ -157,6 +252,115 @@ silent rewrite and never a per-sale prompt.
 _Avoid_: server-arrival order as the FIFO key; prompting the user per corrected
 sale; treating an assignment as permanent (it is stable only until an earlier
 sale arrives).
+
+### Crates
+
+Beverage-only vocabulary — every term is gated by `isCrateBusiness` and never
+leaks to another trade (so these nouns stay out of the `Lexicon`, by design).
+See ADR 0020 and PRD #156.
+
+**Empties Pool**:
+The empty returnable crates a business physically holds, per manufacturer. The
+"empties on hand" figure. Its truth is `SUM(quantity_delta)` over the business-
+side [Crate Ledger] rows (per manufacturer, and per store when store-stamped) —
+the same number at every store-rollup level, so the All-Stores total always
+equals the sum of the store totals. Historically also mirrored in the
+`manufacturers.empty_crate_stock` scalar and the `*_crate_balances` caches; those
+are being demoted to derived/local projections (ADR 0020).
+_Avoid_: reading a stored total as authoritative; letting the business total and
+the per-store totals disagree; treating a customer's or supplier's owed crates as
+part of the pool (those are debts, not on-hand stock).
+
+**Crate Ledger**:
+The append-only record of every crate movement — `crate_ledger` (customer- and
+business-side) and `supplier_crate_ledger`. One signed, store-stamped row per
+movement (`issued` / `returned` / `damaged` / `adjusted` / `transferred_in` /
+`transferred_out`; supplier side: `received` / `returned` / `adjusted`). It is
+the single source of truth; every crate balance is derived from it, exactly as
+the wallet balance is derived from `wallet_transactions`. Corrections are new
+compensating rows, never edits. Every movement routes through the one Crate Pool
+seam (`CratePoolDao`).
+_Avoid_: updating or deleting a ledger row; writing a crate table outside the
+seam; shipping a balance as an absolute value (only ledger rows sync).
+
+**Crate Deposit**:
+The refundable money a returnable crate is worth — its per-crate **rate** is
+`manufacturers.deposit_amount_kobo`, snapshotted onto `order_crate_lines.
+deposit_rate_kobo` at sale time so a later rate edit never changes a historic
+settlement. A crate sale is either **Money-Track** or **Crate-Track** (below).
+_Avoid_: recomputing a historic deposit at today's rate; conflating the deposit
+*money* flow with the crate *count*, which #156 makes trustworthy. The inflow leg
+(money customers pay us) is [Held Deposit]; the outflow leg (money we pay a
+supplier) is [Placed Deposit] — see ADR 0023.
+
+**Held Deposit**:
+Deposit money the shop is currently holding for a customer against crates they
+took but haven't returned — the `crate_deposit`-family legs on the customer
+wallet ledger (net = paid-in − refunded − forfeited). It is a liability: money
+owed back. Net-position honesty (#163) subtracts it from business worth.
+_Avoid_: counting held deposits as income; leaving them inflated after a return
+or a cancel (the deposit legs must be reversed with a deposit-family reference
+type, not a generic `void`).
+
+**Money-Track vs Crate-Track**:
+The two ways a crate sale is settled. **Money-Track** = the customer paid a
+deposit for the crates (`deposit_paid_kobo > 0`); the crates are settled in
+*money* — the deposit is held on the wallet and later refunded / forfeited /
+shortfall-charged, and **no** crate balance is issued. **Crate-Track** = no
+deposit paid (`deposit_paid_kobo == 0`); the crates are tracked as a *count* — an
+`issued` ledger row raises the customer's crate debt, a later `returned` row nets
+it back toward zero. A walk-in (no registered customer) holds neither.
+_Avoid_: issuing a crate balance for a money-track sale (that double-counts the
+deposit as both money held and crates owed); netting a money-track return against
+the crate ledger.
+
+**Placed Deposit**:
+Refundable money the business has paid a supplier against crates it holds — the
+exact mirror of [Held Deposit], and an **asset**: cash left the drawer but the
+money is still ours, so business worth is unchanged. Held per
+`(supplier, manufacturer)` pair, because only the supplier you paid can pay you
+back; the per-crate rate is always the manufacturer's (ADR 0023).
+_Avoid_: booking it as an expense (it is refundable, so it must never cut
+profit); attributing it to a manufacturer rather than the supplier who holds it;
+reading `crate_size_groups.deposit_amount_kobo` as a rate (dead column, no
+readers).
+
+**Crate Money Arrangement**:
+The per-manufacturer setting deciding whether crate money moves at all and when —
+`none` (swap only, no money ever), `per_delivery` (deposit placed on each
+receipt, returned on each hand-back), or `standing_float` (a lump sum placed
+once, moved only on real top-ups and payouts). Every existing manufacturer
+defaults to `none`, so behaviour is unchanged until a brand is switched on.
+_Avoid_: assuming every beverage brand takes a deposit; inferring the arrangement
+from whether deposits happen to have been recorded before.
+
+**Float Top-up / Float Payout**:
+The only two events that move a `standing_float` brand's money — paying a
+supplier more to hold more crates, and winding down and getting the float back.
+Both are recorded as the payments they are, in the [Placed Deposit] family, and
+neither covers any particular crates. Everything else on a float brand —
+deliveries, hand-backs, and crates going missing — moves **no money at all**.
+_Avoid_: charging a loss when a crate on a float brand goes missing (the supplier
+has not deducted anything, so it would show money leaving that nobody took — it
+is a [Crate Shortfall]); moving the float on an ordinary delivery.
+
+**Crate Shortfall**:
+The gap between crates owed to suppliers and empties actually on hand, valued at
+the manufacturer rate — **brand-level and deliberately unattributed** to any one
+supplier, because nothing identifies which supplier's crate went missing. A
+warning, not a booked loss, until someone writes it off (which is when it hits
+profit).
+_Avoid_: allocating a shortfall to a supplier before settlement; writing it off
+on a timer; letting it sit unclearable (a warning nobody can clear is ignored).
+
+**Supplier Crate Debt**:
+The empty crates owed to one supplier for full crates they delivered —
+`SUM(quantity_delta)` over that supplier's [Crate Ledger] rows, per manufacturer.
+A *count*; its money value is a valuation at today's manufacturer rate, not a
+[Placed Deposit].
+_Avoid_: recording only the return leg (a debt that can only fall drifts negative
+and inflates business worth — the #203 drift bug); treating it as part of the
+[Empties Pool].
 
 ### Industry
 

@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -8,6 +7,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -57,44 +57,28 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         .first;
     final m = memberships.where((r) => r.id == widget.membershipId).firstOrNull;
     if (m == null) return;
-    
-    final salesResult = await db
-        .customSelect(
-          "SELECT COALESCE(SUM(net_amount_kobo), 0) AS total, COUNT(*) AS cnt "
-          "FROM orders WHERE staff_id = ?1 "
-          "AND status IN ('pending', 'completed')",
-          variables: [Variable<String>(m.userId)],
-        )
-        .getSingleOrNull();
 
-    final stockResult = await db
-        .customSelect(
-          "SELECT COUNT(*) AS cnt FROM stock_transactions WHERE performed_by = ?1",
-          variables: [Variable<String>(m.userId)],
-        )
-        .getSingleOrNull();
-
-    final quickSalesResult = await db
-        .customSelect(
-          "SELECT COUNT(*) AS cnt FROM quick_sale_requests WHERE requested_by = ?1",
-          variables: [Variable<String>(m.userId)],
-        )
-        .getSingleOrNull();
-
-    final expensesResult = await db
-        .customSelect(
-          "SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM expenses WHERE recorded_by = ?1 AND is_deleted = 0",
-          variables: [Variable<String>(m.userId)],
-        )
-        .getSingleOrNull();
+    // Every figure below is a tenant read, so each one goes through a
+    // business-scoped DAO method (#205). A screen may never raw-select a
+    // business-owned table (architecture.md invariant #5): these were four raw
+    // `customSelect`s keyed only on the member's user id, with no `business_id`
+    // predicate, so on a device holding two businesses' rows they reported both
+    // businesses' activity on one business's screen.
+    final sales = await db.ordersDao.getSalesTotalsForStaff(m.userId);
+    final stockCount = await db.stockLedgerDao.countPerformedByStaff(m.userId);
+    final quickSalesCount = await db.quickSaleRequestsDao
+        .countRequestedByStaff(m.userId);
+    final expensesTotalKobo = await db.expensesDao.getTotalRecordedByStaff(
+      m.userId,
+    );
 
     if (!mounted) return;
     setState(() {
-      _totalSalesKobo = salesResult?.read<int>('total') ?? 0;
-      _ordersCount = salesResult?.read<int>('cnt') ?? 0;
-      _stockTransactionsCount = stockResult?.read<int>('cnt') ?? 0;
-      _quickSalesCount = quickSalesResult?.read<int>('cnt') ?? 0;
-      _totalExpensesKobo = expensesResult?.read<int>('total') ?? 0;
+      _totalSalesKobo = sales.totalKobo;
+      _ordersCount = sales.orderCount;
+      _stockTransactionsCount = stockCount;
+      _quickSalesCount = quickSalesCount;
+      _totalExpensesKobo = expensesTotalKobo;
     });
   }
 
@@ -418,33 +402,145 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     );
     if (confirmed != true) return;
 
-    try {
-      await ref.read(authProvider).removeStaffMember(
-            businessId: membership.businessId,
-            userId: membership.userId,
-            membershipId: membership.id,
+    // §9.5 #20 (#146) — a driver may be holding the company's goods on a road,
+    // or owing for goods that already left. `removeStaffMember` runs the guard
+    // itself (it is the only path this button takes, so the rule cannot be
+    // walked around); this loop is what turns an overridable block into a
+    // deliberate, typed decision rather than a dead end.
+    var acknowledgedBalance = false;
+    while (true) {
+      try {
+        await ref
+            .read(authProvider)
+            .removeStaffMember(
+              businessId: membership.businessId,
+              userId: membership.userId,
+              membershipId: membership.id,
+              driverName: user.name,
+              acknowledgedDriverBalance: acknowledgedBalance,
+            );
+        break;
+      } on DriverOffboardingBlockedException catch (e) {
+        if (!mounted) return;
+        if (!e.canAcknowledge) {
+          // An open trip. Nothing to type — go and close it.
+          AppNotification.showError(context, e.message);
+          return;
+        }
+        final acked = await _acknowledgeDriverBalance(user, e);
+        if (acked != true) return;
+        acknowledgedBalance = true;
+        if (!mounted) return;
+        continue;
+      } on StaffRemoveException catch (e) {
+        if (mounted) AppNotification.showError(context, e.message);
+        return;
+      } catch (_) {
+        if (mounted) {
+          AppNotification.showError(
+            context,
+            'Could not remove this staff member. Please try again.',
           );
+        }
+        return;
+      }
+    }
+
+    // The removal is server-confirmed from here on. A failing audit log must
+    // not be reported as a failed removal.
+    try {
       final db = ref.read(databaseProvider);
       await db.activityLogDao.log(
         action: 'staff.remove',
-        description: 'Removed staff member ${user.name}',
+        description: acknowledgedBalance
+            ? 'Removed staff member ${user.name} with an unsettled driver '
+                  'balance (acknowledged)'
+            : 'Removed staff member ${user.name}',
         staffId: currentUser?.id,
       );
-      if (!mounted) return;
-      // The membership is now `removed` and drops out of the active staff list,
-      // so this detail screen would render "not found" — return to the list.
-      Navigator.of(context).pop();
-      AppNotification.showSuccess(context, '${user.name} removed.');
-    } on StaffRemoveException catch (e) {
-      if (mounted) AppNotification.showError(context, e.message);
     } catch (_) {
-      if (mounted) {
-        AppNotification.showError(
-          context,
-          'Could not remove this staff member. Please try again.',
-        );
-      }
+      // swallowed deliberately — see above
     }
+    if (!mounted) return;
+    // The membership is now `removed` and drops out of the active staff list,
+    // so this detail screen would render "not found" — return to the list.
+    Navigator.of(context).pop();
+    AppNotification.showSuccess(context, '${user.name} removed.');
+  }
+
+  /// §9.5 #20 (#146) — the typed acknowledgement that lets a manager remove a
+  /// driver who still has money on their account.
+  ///
+  /// Typed, not tapped, and it asks for the driver's own NAME: the point is to
+  /// make the decision impossible to make by accident, and to put the person it
+  /// is about in front of the manager while they make it. The dialog states the
+  /// exact figure and is explicit that removing them changes nothing about the
+  /// debt — the ledger keeps every row, and the Drivers list keeps showing them,
+  /// badged, until it is settled or written off (spec §9.5 #19).
+  Future<bool?> _acknowledgeDriverBalance(
+    UserData user,
+    DriverOffboardingBlockedException blocked,
+  ) {
+    final controller = TextEditingController();
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final matches =
+                controller.text.trim().toLowerCase() ==
+                user.name.trim().toLowerCase();
+            return AlertDialog(
+              backgroundColor: theme.colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text('Money still on this account'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(blocked.message, style: theme.textTheme.bodyMedium),
+                  SizedBox(height: context.getRSize(12)),
+                  Text(
+                    'Removing them does not clear it. Every entry stays on the '
+                    'record and they keep showing on the Drivers list, marked '
+                    'as removed, until it is settled or written off.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.hintColor,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(16)),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Type ${user.name} to confirm',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: matches ? () => Navigator.pop(ctx, true) : null,
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                  ),
+                  child: const Text('Remove anyway'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   /// One-line summary of the staff member's assigned stores for the header pill.
@@ -510,7 +606,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   ),
                   SizedBox(height: context.getRSize(4)),
                   Text(
-                    'Pick the store(s) ${user.name} works at.',
+                    'Pick the store(s) or van(s) ${user.name} works at.',
                     style: TextStyle(
                       fontSize: context.getRFontSize(13),
                       color: t.textTheme.bodySmall?.color,
@@ -522,12 +618,26 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // #140 — this list is deliberately the RAW store list
+                          // (vans included). Assigning a driver to a van is the
+                          // existing staff-to-store assignment; vans are hidden
+                          // from *pickers*, not from the place they are set up.
                           for (final s in allStores)
                             CheckboxListTile(
                               contentPadding: EdgeInsets.zero,
                               controlAffinity: ListTileControlAffinity.leading,
                               value: selected.contains(s.id),
                               title: Text(s.name),
+                              subtitle: isVanStore(s)
+                                  ? const Text('Van — sells on the road')
+                                  : null,
+                              secondary: isVanStore(s)
+                                  ? Icon(
+                                      Icons.local_shipping_rounded,
+                                      size: context.getRSize(18),
+                                      color: t.textTheme.bodySmall?.color,
+                                    )
+                                  : null,
                               onChanged: (v) => setSheet(() {
                                 if (v == true) {
                                   selected.add(s.id);

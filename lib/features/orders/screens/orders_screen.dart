@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
@@ -543,17 +544,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       data: (stats) {
         final statItems = [
           _StatItem(label: 'Cancelled', value: '${stats.count}', color: danger),
-          if (canSeeMoney)
+          // #196 — "Refunds Issued" now shows the MONEY handed back on these
+          // orders (un-voided `payment_transactions.type == 'refund'` rows,
+          // the same basis as the Daily Reconciliation), not a count of the
+          // retired `refunded` status that nothing writes — which is why it read
+          // 0 forever. Because it became a naira figure it moved inside the
+          // see-money gate, next to the other money tiles.
+          if (canSeeMoney) ...[
             _StatItem(
               label: 'Value Forfeited',
               value: formatCurrency(stats.totalAmountKobo / 100.0),
               color: danger,
             ),
-          _StatItem(
-            label: 'Refunds Issued',
-            value: '${stats.refundedCount}',
-            color: blueMain,
-          ),
+            _StatItem(
+              label: 'Refunds Issued',
+              value: formatCurrency(stats.refundsIssuedKobo / 100.0),
+              color: blueMain,
+            ),
+          ],
         ];
 
         if (stateAsync.isLoading) {
@@ -639,6 +647,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     }
 
     final canRefund = Gates.refundOrder.allows(ref);
+    // #171: Confirm is gated Cashier-tier and above (sales.confirm). Hide the
+    // Confirm button entirely without it (hide-don't-block, hard rule #7).
+    final canConfirm = Gates.confirmOrder.allows(ref);
 
     // We add 1 to the child count if we are loading more to render the spinner.
     final childCount = list.length + (isLoadingMore ? 1 : 0);
@@ -675,7 +686,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             return _OrderCard(
               orderWithItems: item,
               status: status,
-              onMarkAsDelivered: status == 'pending'
+              onMarkAsDelivered: (status == 'pending' && canConfirm)
                   ? () => _markAsDelivered(item)
                   : null,
               onRefund: (status == 'pending' && canRefund)
@@ -746,6 +757,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
     // §19.7: the Pending-tab Refund is gated to CEO + Manager (sales.cancel).
     final canRefund = Gates.refundOrder.allows(ref);
+    // #171: Confirm is gated Cashier-tier and above (sales.confirm).
+    final canConfirm = Gates.confirmOrder.allows(ref);
 
     return [
       SliverPadding(
@@ -761,7 +774,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             return _OrderCard(
               orderWithItems: item,
               status: status,
-              onMarkAsDelivered: status == 'pending'
+              onMarkAsDelivered: (status == 'pending' && canConfirm)
                   ? () => _markAsDelivered(item)
                   : null,
               // §19.7: Refund replaces the old Cancel button on the Pending
@@ -792,6 +805,18 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   void _executeMarkDelivered(OrderWithItems orderWithItems) async {
     final order = orderWithItems.order;
 
+    // ── Write-boundary gate (#171, ADR 0002) ────────────────────────────────
+    // Confirm runs the crate-deposit settlement (real money) before the status
+    // flip, so re-check the sales.confirm grant here with the throwing form. The
+    // Confirm button already hides without it, but a grant revoked mid-session —
+    // or a stale back-stack — must not reach the settlement.
+    try {
+      Gates.confirmOrder.require(ref);
+    } on GateDeniedError {
+      showGateDenied(context, Gates.confirmOrder);
+      return;
+    }
+
     if (!mounted) return;
     // The modal only COLLECTS the counted-back empties now (ADR 0004); the
     // settlement runs inside Confirm (markAsCompleted). null = cashier dismissed.
@@ -803,6 +828,18 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     if (crateResult == null) return;
 
     if (!mounted) return;
+
+    // #171: paying the deposit refund AS CASH out of the till additionally
+    // requires the wallet-withdraw permission on top of sales.confirm. The modal
+    // hides the Cash chip without it, but re-check at the write boundary.
+    if (crateResult.refundAsCash) {
+      try {
+        Gates.confirmOrderCashRefund.require(ref);
+      } on GateDeniedError {
+        showGateDenied(context, Gates.confirmOrderCashRefund);
+        return;
+      }
+    }
 
     try {
       await ref
@@ -980,6 +1017,15 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       backgroundColor: Colors.transparent,
       builder: (modalCtx) {
         final currentOrder = richOrder.order;
+        // #200 / US 33 — rebuild the ORIGINAL receipt's money block from the
+        // recorded order, so a reprint prints the same Subtotal / Discount /
+        // Total the customer first got. `totalKobo` returns
+        // `currentOrder.totalAmountKobo` by construction.
+        final totals = receiptTotalsFromOrder(
+          totalAmountKobo: currentOrder.totalAmountKobo,
+          crateDepositPaidKobo: currentOrder.crateDepositPaidKobo,
+          discountKobo: currentOrder.discountKobo,
+        );
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
@@ -1028,9 +1074,20 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                                 },
                               )
                               .toList(),
-                          subtotal: currentOrder.totalAmountKobo / 100.0,
-                          crateDeposit: 0,
-                          total: currentOrder.netAmountKobo / 100.0,
+                          // #176 — a reprint must show the SAME goods/deposit
+                          // split as the original: goods = grand total − deposit,
+                          // the deposit on its own line, grand total = the amount
+                          // owed (goods net + deposit). The old form
+                          // (subtotal: totalAmount, crateDeposit: 0) inflated the
+                          // printed Subtotal by the deposit and hid it entirely.
+                          // #200 — and the discount goes back INTO Subtotal with
+                          // its own line under it, so a discounted order's
+                          // reprint no longer reads a lower Subtotal than the
+                          // original (see [receiptTotalsFromOrder]).
+                          subtotal: totals.subtotalKobo / 100.0,
+                          discount: totals.discountKobo / 100.0,
+                          crateDeposit: totals.depositKobo / 100.0,
+                          total: totals.totalKobo / 100.0,
                           manufacturerNames: manufacturerNames,
                           paymentMethod: currentOrder.paymentType,
                           customerName:
@@ -1173,12 +1230,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       final manufacturerNames = {for (final m in mfrList) m.id: m.name};
 
       final paperSize = await printer.getPaperSize();
+      // #176 — real goods/deposit split on the thermal reprint (see the
+      // on-screen reprint above): goods = grand total − deposit, deposit on its
+      // own line, grand total = goods net + deposit. The old
+      // (subtotal: totalAmount, crateDeposit: 0) inflated the printed Subtotal
+      // by the deposit and hid it. #200 — plus the discount line, from the same
+      // shared derivation the on-screen copy uses.
+      final totals = receiptTotalsFromOrder(
+        totalAmountKobo: order.totalAmountKobo,
+        crateDepositPaidKobo: order.crateDepositPaidKobo,
+        discountKobo: order.discountKobo,
+      );
       final bytes = await ThermalReceiptService.buildReceipt(
         orderId: order.orderNumber,
         cart: receiptMapping,
-        subtotal: order.totalAmountKobo / 100.0,
-        crateDeposit: 0,
-        total: order.netAmountKobo / 100.0,
+        subtotal: totals.subtotalKobo / 100.0,
+        discount: totals.discountKobo / 100.0,
+        crateDeposit: totals.depositKobo / 100.0,
+        total: totals.totalKobo / 100.0,
         paymentMethod: order.paymentType,
         customerName: richOrder.customer?.name ?? 'Walk-in Customer',
         customerAddress: richOrder.customer?.addressText ?? 'N/A',
@@ -2034,6 +2103,11 @@ class _StatusBadge extends StatelessWidget {
         icon = FontAwesomeIcons.check.data;
         label = 'DONE';
         break;
+      // LEGACY ROWS ONLY (#196): `refunded` is a retired status — refunds have
+      // been `payment_transactions` rows since PRD #155 and nothing writes it
+      // any more. The branch stays because the Cancelled tab still LISTS
+      // historic orders that carry it (see the DAO's legacy tolerance), and
+      // badging one "CANCELLED" would misstate what happened to the money.
       case 'refunded':
         color = blueMain;
         icon = FontAwesomeIcons.rotateLeft.data;

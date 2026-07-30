@@ -103,6 +103,24 @@ class OrderService {
     return _commands.cancelRejectedSale(orderId, staffId);
   }
 
+  /// **Cancel a server-REJECTED sale from Sync Issues** (#150) — the fallback
+  /// route when the `sale_rejected` alert was swipe-dismissed. Runs the same
+  /// complete local reversal as [cancelRejectedSale] and then clears the
+  /// orphaned envelope ([orphanId]). Reverses BEFORE clearing — the reversal
+  /// reads the sold lines out of that orphan — so it is never discard-then-
+  /// recover. Idempotent.
+  Future<void> cancelRejectedSaleFromOrphan({
+    required String orderId,
+    required String orphanId,
+    required String staffId,
+  }) {
+    return _commands.cancelRejectedSaleFromOrphan(
+      orderId: orderId,
+      orphanId: orphanId,
+      staffId: staffId,
+    );
+  }
+
   Future<void> assignRider(String orderId, String riderName) {
     return _commands.assignRider(orderId, riderName);
   }
@@ -135,6 +153,7 @@ class OrderService {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
     ({DateTime createdAt, String id})? cursor,
     int limit = 30,
   }) {
@@ -144,6 +163,7 @@ class OrderService {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
       cursor: cursor,
       limit: limit,
     );
@@ -155,6 +175,7 @@ class OrderService {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
     int limit = 30,
   }) {
     return _queries.watchOrdersPage(
@@ -163,6 +184,7 @@ class OrderService {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
       limit: limit,
     );
   }
@@ -173,6 +195,7 @@ class OrderService {
     DateTime? from,
     DateTime? to,
     String? search,
+    Set<String> excludeStoreIds = const {},
   }) {
     return _queries.watchOrdersStats(
       status: status,
@@ -180,6 +203,7 @@ class OrderService {
       from: from,
       to: to,
       search: search,
+      excludeStoreIds: excludeStoreIds,
     );
   }
 

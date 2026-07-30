@@ -328,10 +328,17 @@ void main() {
       )..where((i) => i.storeId.equals(s.storeId))).getSingle();
       expect(inv.quantity, equals(10));
 
-      // Payment voided in place (not a new row)
+      // Payment: the ORIGINAL sale row is left intact (never voided) and a
+      // dated compensating refund cash-out row is appended for the goods paid
+      // (#172) — money leaves on the cancel day, the sale stays on its own day.
       final payments = await db.select(db.paymentTransactions).get();
-      expect(payments, hasLength(1));
-      expect(payments.first.voidedAt, isNotNull);
+      expect(payments, hasLength(2));
+      final saleRow = payments.firstWhere((p) => p.type == 'sale');
+      expect(saleRow.voidedAt, isNull, reason: 'sale row is never voided');
+      final refundRow = payments.firstWhere((p) => p.type == 'refund');
+      expect(refundRow.amountKobo, 200000);
+      expect(refundRow.orderId, orderId);
+      expect(refundRow.voidedAt, isNull);
     });
   });
 

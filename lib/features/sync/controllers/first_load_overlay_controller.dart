@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
+import 'package:reebaplus_pos/core/providers/mirror_notifier.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 
@@ -282,12 +282,10 @@ class FirstLoadOverlayController extends StateNotifier<FirstLoadOverlayState> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Lifts the sync service's `isOnline` ValueNotifier into Riverpod (mirrors
-/// [pullStatusProvider]).
-final isOnlineNotifierProvider = ChangeNotifierProvider<ValueNotifier<bool>>((
-  ref,
-) {
-  return ref.watch(supabaseSyncServiceProvider).isOnline;
-});
+/// [pullStatusProvider]). Non-owning (issue #153) — the service keeps ownership.
+final isOnlineNotifierProvider = mirrorNotifier<bool>(
+  (ref) => ref.watch(supabaseSyncServiceProvider).isOnline,
+);
 
 /// Online / offline, as a plain bool the controller consumes.
 final firstLoadOnlineProvider = Provider<bool>((ref) {

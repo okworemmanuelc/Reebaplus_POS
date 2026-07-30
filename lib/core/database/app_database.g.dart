@@ -1570,6 +1570,18 @@ class $ManufacturersTable extends Manufacturers
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _crateMoneyArrangementMeta =
+      const VerificationMeta('crateMoneyArrangement');
+  @override
+  late final GeneratedColumn<String> crateMoneyArrangement =
+      GeneratedColumn<String>(
+        'crate_money_arrangement',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(kCrateMoneyArrangementNone),
+      );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -1617,6 +1629,7 @@ class $ManufacturersTable extends Manufacturers
     name,
     emptyCrateStock,
     depositAmountKobo,
+    crateMoneyArrangement,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -1670,6 +1683,15 @@ class $ManufacturersTable extends Manufacturers
         ),
       );
     }
+    if (data.containsKey('crate_money_arrangement')) {
+      context.handle(
+        _crateMoneyArrangementMeta,
+        crateMoneyArrangement.isAcceptableOrUnknown(
+          data['crate_money_arrangement']!,
+          _crateMoneyArrangementMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_deleted')) {
       context.handle(
         _isDeletedMeta,
@@ -1720,6 +1742,10 @@ class $ManufacturersTable extends Manufacturers
         DriftSqlType.int,
         data['${effectivePrefix}deposit_amount_kobo'],
       )!,
+      crateMoneyArrangement: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crate_money_arrangement'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -1747,7 +1773,31 @@ class ManufacturerData extends DataClass
   final String businessId;
   final String name;
   final int emptyCrateStock;
+
+  /// The single canonical per-crate deposit rate (ADR 0023 rule 2). Both ends
+  /// of a crate deposit — what a customer leaves with us and what we leave with
+  /// a supplier — are valued from THIS column.
+  /// `crate_size_groups.deposit_amount_kobo` is a dead column with zero readers
+  /// and must never be revived as a second, per-size rate.
   final int depositAmountKobo;
+
+  /// Whether crate money moves for this brand at all, and when (#211, ADR 0023
+  /// rule 3). One of [kCrateMoneyArrangements]; see
+  /// `lib/core/crates/crate_money_arrangement.dart` for the owner-facing
+  /// meaning of each value and the ONLY place the strings are interpreted.
+  ///
+  /// NOT NULL with a `'none'` default, which is the release gate for PRD #203:
+  /// every existing manufacturer on every live tenant lands on `none` at
+  /// upgrade, so no figure anywhere in the app moves until an owner
+  /// deliberately switches a brand on. Nothing is ever backfilled.
+  ///
+  /// The value set is enforced by a cloud CHECK (0171) rather than a Drift
+  /// table-level CHECK, exactly as `stores.kind` is: SQLite cannot add a table
+  /// constraint without rebuilding the table, and rebuilding `manufacturers`
+  /// would rebuild an FK parent of most of the crate schema for no gain. The
+  /// client only ever writes the [kCrateMoneyArrangements] constants
+  /// (`CatalogDao.updateManufacturerCrateMoneyArrangement`).
+  final String crateMoneyArrangement;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -1757,6 +1807,7 @@ class ManufacturerData extends DataClass
     required this.name,
     required this.emptyCrateStock,
     required this.depositAmountKobo,
+    required this.crateMoneyArrangement,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -1769,6 +1820,7 @@ class ManufacturerData extends DataClass
     map['name'] = Variable<String>(name);
     map['empty_crate_stock'] = Variable<int>(emptyCrateStock);
     map['deposit_amount_kobo'] = Variable<int>(depositAmountKobo);
+    map['crate_money_arrangement'] = Variable<String>(crateMoneyArrangement);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -1782,6 +1834,7 @@ class ManufacturerData extends DataClass
       name: Value(name),
       emptyCrateStock: Value(emptyCrateStock),
       depositAmountKobo: Value(depositAmountKobo),
+      crateMoneyArrangement: Value(crateMoneyArrangement),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -1799,6 +1852,9 @@ class ManufacturerData extends DataClass
       name: serializer.fromJson<String>(json['name']),
       emptyCrateStock: serializer.fromJson<int>(json['emptyCrateStock']),
       depositAmountKobo: serializer.fromJson<int>(json['depositAmountKobo']),
+      crateMoneyArrangement: serializer.fromJson<String>(
+        json['crateMoneyArrangement'],
+      ),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -1813,6 +1869,7 @@ class ManufacturerData extends DataClass
       'name': serializer.toJson<String>(name),
       'emptyCrateStock': serializer.toJson<int>(emptyCrateStock),
       'depositAmountKobo': serializer.toJson<int>(depositAmountKobo),
+      'crateMoneyArrangement': serializer.toJson<String>(crateMoneyArrangement),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -1825,6 +1882,7 @@ class ManufacturerData extends DataClass
     String? name,
     int? emptyCrateStock,
     int? depositAmountKobo,
+    String? crateMoneyArrangement,
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -1834,6 +1892,7 @@ class ManufacturerData extends DataClass
     name: name ?? this.name,
     emptyCrateStock: emptyCrateStock ?? this.emptyCrateStock,
     depositAmountKobo: depositAmountKobo ?? this.depositAmountKobo,
+    crateMoneyArrangement: crateMoneyArrangement ?? this.crateMoneyArrangement,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -1851,6 +1910,9 @@ class ManufacturerData extends DataClass
       depositAmountKobo: data.depositAmountKobo.present
           ? data.depositAmountKobo.value
           : this.depositAmountKobo,
+      crateMoneyArrangement: data.crateMoneyArrangement.present
+          ? data.crateMoneyArrangement.value
+          : this.crateMoneyArrangement,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -1867,6 +1929,7 @@ class ManufacturerData extends DataClass
           ..write('name: $name, ')
           ..write('emptyCrateStock: $emptyCrateStock, ')
           ..write('depositAmountKobo: $depositAmountKobo, ')
+          ..write('crateMoneyArrangement: $crateMoneyArrangement, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -1881,6 +1944,7 @@ class ManufacturerData extends DataClass
     name,
     emptyCrateStock,
     depositAmountKobo,
+    crateMoneyArrangement,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -1894,6 +1958,7 @@ class ManufacturerData extends DataClass
           other.name == this.name &&
           other.emptyCrateStock == this.emptyCrateStock &&
           other.depositAmountKobo == this.depositAmountKobo &&
+          other.crateMoneyArrangement == this.crateMoneyArrangement &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -1905,6 +1970,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
   final Value<String> name;
   final Value<int> emptyCrateStock;
   final Value<int> depositAmountKobo;
+  final Value<String> crateMoneyArrangement;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -1915,6 +1981,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     this.name = const Value.absent(),
     this.emptyCrateStock = const Value.absent(),
     this.depositAmountKobo = const Value.absent(),
+    this.crateMoneyArrangement = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -1926,6 +1993,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     required String name,
     this.emptyCrateStock = const Value.absent(),
     this.depositAmountKobo = const Value.absent(),
+    this.crateMoneyArrangement = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -1938,6 +2006,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     Expression<String>? name,
     Expression<int>? emptyCrateStock,
     Expression<int>? depositAmountKobo,
+    Expression<String>? crateMoneyArrangement,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -1949,6 +2018,8 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
       if (name != null) 'name': name,
       if (emptyCrateStock != null) 'empty_crate_stock': emptyCrateStock,
       if (depositAmountKobo != null) 'deposit_amount_kobo': depositAmountKobo,
+      if (crateMoneyArrangement != null)
+        'crate_money_arrangement': crateMoneyArrangement,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -1962,6 +2033,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     Value<String>? name,
     Value<int>? emptyCrateStock,
     Value<int>? depositAmountKobo,
+    Value<String>? crateMoneyArrangement,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -1973,6 +2045,8 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
       name: name ?? this.name,
       emptyCrateStock: emptyCrateStock ?? this.emptyCrateStock,
       depositAmountKobo: depositAmountKobo ?? this.depositAmountKobo,
+      crateMoneyArrangement:
+          crateMoneyArrangement ?? this.crateMoneyArrangement,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -1998,6 +2072,11 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     if (depositAmountKobo.present) {
       map['deposit_amount_kobo'] = Variable<int>(depositAmountKobo.value);
     }
+    if (crateMoneyArrangement.present) {
+      map['crate_money_arrangement'] = Variable<String>(
+        crateMoneyArrangement.value,
+      );
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -2021,6 +2100,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
           ..write('name: $name, ')
           ..write('emptyCrateStock: $emptyCrateStock, ')
           ..write('depositAmountKobo: $depositAmountKobo, ')
+          ..write('crateMoneyArrangement: $crateMoneyArrangement, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -2079,6 +2159,16 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kStoreKindStore),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -2125,6 +2215,7 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     businessId,
     name,
     location,
+    kind,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2164,6 +2255,12 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
       context.handle(
         _locationMeta,
         location.isAcceptableOrUnknown(data['location']!, _locationMeta),
+      );
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
       );
     }
     if (data.containsKey('is_deleted')) {
@@ -2212,6 +2309,10 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
         DriftSqlType.string,
         data['${effectivePrefix}location'],
       ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -2238,6 +2339,15 @@ class StoreData extends DataClass implements Insertable<StoreData> {
   final String businessId;
   final String name;
   final String? location;
+
+  /// `'store'` (a normal location) or `'van'` (#140). NOT NULL with a `'store'`
+  /// default so every legacy row and every write that ignores the column lands
+  /// as a normal store. The value set is enforced by a cloud CHECK (0161); it
+  /// is deliberately NOT a Drift table-level CHECK because SQLite cannot add a
+  /// table constraint without rebuilding `stores`, and `stores` is the FK
+  /// parent of most of the schema. The client only ever writes the two
+  /// [kStoreKinds] constants (`StoresDao.createStore`).
+  final String kind;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -2246,6 +2356,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     required this.businessId,
     required this.name,
     this.location,
+    required this.kind,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -2259,6 +2370,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     if (!nullToAbsent || location != null) {
       map['location'] = Variable<String>(location);
     }
+    map['kind'] = Variable<String>(kind);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -2273,6 +2385,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       location: location == null && nullToAbsent
           ? const Value.absent()
           : Value(location),
+      kind: Value(kind),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -2289,6 +2402,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       businessId: serializer.fromJson<String>(json['businessId']),
       name: serializer.fromJson<String>(json['name']),
       location: serializer.fromJson<String?>(json['location']),
+      kind: serializer.fromJson<String>(json['kind']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -2302,6 +2416,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       'businessId': serializer.toJson<String>(businessId),
       'name': serializer.toJson<String>(name),
       'location': serializer.toJson<String?>(location),
+      'kind': serializer.toJson<String>(kind),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -2313,6 +2428,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     String? businessId,
     String? name,
     Value<String?> location = const Value.absent(),
+    String? kind,
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -2321,6 +2437,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     businessId: businessId ?? this.businessId,
     name: name ?? this.name,
     location: location.present ? location.value : this.location,
+    kind: kind ?? this.kind,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2333,6 +2450,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           : this.businessId,
       name: data.name.present ? data.name.value : this.name,
       location: data.location.present ? data.location.value : this.location,
+      kind: data.kind.present ? data.kind.value : this.kind,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -2348,6 +2466,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
           ..write('location: $location, ')
+          ..write('kind: $kind, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -2361,6 +2480,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     businessId,
     name,
     location,
+    kind,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2373,6 +2493,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           other.businessId == this.businessId &&
           other.name == this.name &&
           other.location == this.location &&
+          other.kind == this.kind &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -2383,6 +2504,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
   final Value<String> businessId;
   final Value<String> name;
   final Value<String?> location;
+  final Value<String> kind;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -2392,6 +2514,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     this.businessId = const Value.absent(),
     this.name = const Value.absent(),
     this.location = const Value.absent(),
+    this.kind = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2402,6 +2525,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     required String businessId,
     required String name,
     this.location = const Value.absent(),
+    this.kind = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2413,6 +2537,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Expression<String>? businessId,
     Expression<String>? name,
     Expression<String>? location,
+    Expression<String>? kind,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -2423,6 +2548,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       if (businessId != null) 'business_id': businessId,
       if (name != null) 'name': name,
       if (location != null) 'location': location,
+      if (kind != null) 'kind': kind,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -2435,6 +2561,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Value<String>? businessId,
     Value<String>? name,
     Value<String?>? location,
+    Value<String>? kind,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -2445,6 +2572,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       businessId: businessId ?? this.businessId,
       name: name ?? this.name,
       location: location ?? this.location,
+      kind: kind ?? this.kind,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2466,6 +2594,9 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     }
     if (location.present) {
       map['location'] = Variable<String>(location.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
     }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
@@ -2489,6 +2620,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
           ..write('location: $location, ')
+          ..write('kind: $kind, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -7245,6 +7377,2871 @@ class SupplierCrateBalancesCompanion
   }
 }
 
+class $SupplierCrateDepositRequestsTable extends SupplierCrateDepositRequests
+    with
+        TableInfo<
+          $SupplierCrateDepositRequestsTable,
+          SupplierCrateDepositRequestData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SupplierCrateDepositRequestsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _supplierIdMeta = const VerificationMeta(
+    'supplierId',
+  );
+  @override
+  late final GeneratedColumn<String> supplierId = GeneratedColumn<String>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES suppliers (id)',
+    ),
+  );
+  static const VerificationMeta _manufacturerIdMeta = const VerificationMeta(
+    'manufacturerId',
+  );
+  @override
+  late final GeneratedColumn<String> manufacturerId = GeneratedColumn<String>(
+    'manufacturer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturers (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _crateCountMeta = const VerificationMeta(
+    'crateCount',
+  );
+  @override
+  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+    'crate_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
+    'ratePerCrateKobo',
+  );
+  @override
+  late final GeneratedColumn<int> ratePerCrateKobo = GeneratedColumn<int>(
+    'rate_per_crate_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _requestedAmountKoboMeta =
+      const VerificationMeta('requestedAmountKobo');
+  @override
+  late final GeneratedColumn<int> requestedAmountKobo = GeneratedColumn<int>(
+    'requested_amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _settledAmountKoboMeta = const VerificationMeta(
+    'settledAmountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> settledAmountKobo = GeneratedColumn<int>(
+    'settled_amount_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paymentMethodMeta = const VerificationMeta(
+    'paymentMethod',
+  );
+  @override
+  late final GeneratedColumn<String> paymentMethod = GeneratedColumn<String>(
+    'payment_method',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _summaryMeta = const VerificationMeta(
+    'summary',
+  );
+  @override
+  late final GeneratedColumn<String> summary = GeneratedColumn<String>(
+    'summary',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _supplierCrateLedgerIdMeta =
+      const VerificationMeta('supplierCrateLedgerId');
+  @override
+  late final GeneratedColumn<String> supplierCrateLedgerId =
+      GeneratedColumn<String>(
+        'supplier_crate_ledger_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES supplier_crate_ledger (id)',
+        ),
+      );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _requestedByMeta = const VerificationMeta(
+    'requestedBy',
+  );
+  @override
+  late final GeneratedColumn<String> requestedBy = GeneratedColumn<String>(
+    'requested_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kCrateDepositRequestPending),
+  );
+  static const VerificationMeta _decidedByMeta = const VerificationMeta(
+    'decidedBy',
+  );
+  @override
+  late final GeneratedColumn<String> decidedBy = GeneratedColumn<String>(
+    'decided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _decidedAtMeta = const VerificationMeta(
+    'decidedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> decidedAt = GeneratedColumn<DateTime>(
+    'decided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _decisionNoteMeta = const VerificationMeta(
+    'decisionNote',
+  );
+  @override
+  late final GeneratedColumn<String> decisionNote = GeneratedColumn<String>(
+    'decision_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    supplierId,
+    manufacturerId,
+    storeId,
+    kind,
+    crateCount,
+    ratePerCrateKobo,
+    requestedAmountKobo,
+    settledAmountKobo,
+    paymentMethod,
+    summary,
+    supplierCrateLedgerId,
+    note,
+    requestedBy,
+    status,
+    decidedBy,
+    decidedAt,
+    decisionNote,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'supplier_crate_deposit_requests';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SupplierCrateDepositRequestData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('supplier_id')) {
+      context.handle(
+        _supplierIdMeta,
+        supplierId.isAcceptableOrUnknown(data['supplier_id']!, _supplierIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_supplierIdMeta);
+    }
+    if (data.containsKey('manufacturer_id')) {
+      context.handle(
+        _manufacturerIdMeta,
+        manufacturerId.isAcceptableOrUnknown(
+          data['manufacturer_id']!,
+          _manufacturerIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturerIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('crate_count')) {
+      context.handle(
+        _crateCountMeta,
+        crateCount.isAcceptableOrUnknown(data['crate_count']!, _crateCountMeta),
+      );
+    }
+    if (data.containsKey('rate_per_crate_kobo')) {
+      context.handle(
+        _ratePerCrateKoboMeta,
+        ratePerCrateKobo.isAcceptableOrUnknown(
+          data['rate_per_crate_kobo']!,
+          _ratePerCrateKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('requested_amount_kobo')) {
+      context.handle(
+        _requestedAmountKoboMeta,
+        requestedAmountKobo.isAcceptableOrUnknown(
+          data['requested_amount_kobo']!,
+          _requestedAmountKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('settled_amount_kobo')) {
+      context.handle(
+        _settledAmountKoboMeta,
+        settledAmountKobo.isAcceptableOrUnknown(
+          data['settled_amount_kobo']!,
+          _settledAmountKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payment_method')) {
+      context.handle(
+        _paymentMethodMeta,
+        paymentMethod.isAcceptableOrUnknown(
+          data['payment_method']!,
+          _paymentMethodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('summary')) {
+      context.handle(
+        _summaryMeta,
+        summary.isAcceptableOrUnknown(data['summary']!, _summaryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_summaryMeta);
+    }
+    if (data.containsKey('supplier_crate_ledger_id')) {
+      context.handle(
+        _supplierCrateLedgerIdMeta,
+        supplierCrateLedgerId.isAcceptableOrUnknown(
+          data['supplier_crate_ledger_id']!,
+          _supplierCrateLedgerIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('requested_by')) {
+      context.handle(
+        _requestedByMeta,
+        requestedBy.isAcceptableOrUnknown(
+          data['requested_by']!,
+          _requestedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('decided_by')) {
+      context.handle(
+        _decidedByMeta,
+        decidedBy.isAcceptableOrUnknown(data['decided_by']!, _decidedByMeta),
+      );
+    }
+    if (data.containsKey('decided_at')) {
+      context.handle(
+        _decidedAtMeta,
+        decidedAt.isAcceptableOrUnknown(data['decided_at']!, _decidedAtMeta),
+      );
+    }
+    if (data.containsKey('decision_note')) {
+      context.handle(
+        _decisionNoteMeta,
+        decisionNote.isAcceptableOrUnknown(
+          data['decision_note']!,
+          _decisionNoteMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SupplierCrateDepositRequestData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SupplierCrateDepositRequestData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      manufacturerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      crateCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}crate_count'],
+      )!,
+      ratePerCrateKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rate_per_crate_kobo'],
+      )!,
+      requestedAmountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}requested_amount_kobo'],
+      )!,
+      settledAmountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}settled_amount_kobo'],
+      ),
+      paymentMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_method'],
+      ),
+      summary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary'],
+      )!,
+      supplierCrateLedgerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}supplier_crate_ledger_id'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      requestedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}requested_by'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      decidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}decided_by'],
+      ),
+      decidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}decided_at'],
+      ),
+      decisionNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}decision_note'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SupplierCrateDepositRequestsTable createAlias(String alias) {
+    return $SupplierCrateDepositRequestsTable(attachedDatabase, alias);
+  }
+}
+
+class SupplierCrateDepositRequestData extends DataClass
+    implements Insertable<SupplierCrateDepositRequestData> {
+  final String id;
+  final String businessId;
+  final String supplierId;
+  final String manufacturerId;
+
+  /// The store the delivery landed in. NOT NULL, because it is the approver
+  /// scoping axis: a Manager sees their own stores' requests, the CEO sees all
+  /// — exactly how [StockAdjustmentRequests] scopes.
+  final String storeId;
+
+  /// One of [kCrateDepositRequestKinds].
+  final String kind;
+
+  /// Crates this money leg covers. Always >= 0; the direction is [kind]'s.
+  final int crateCount;
+
+  /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED when the request was
+  /// raised (ADR 0023 rule 2 — the single canonical rate). Snapshotted so a
+  /// rate edit next month cannot restate what a delivery last week asked for.
+  final int ratePerCrateKobo;
+
+  /// `crateCount × ratePerCrateKobo` — what the receipt implies is owed.
+  final int requestedAmountKobo;
+
+  /// What the approver ACTUALLY confirmed, which may be less (a part payment, a
+  /// waived deposit) or more. NULL until a decision is made, and NULL forever
+  /// on a rejected request — nothing moved, so there is no amount to record.
+  final int? settledAmountKobo;
+
+  /// How the money moved, chosen at confirmation. One of the
+  /// `payment_transactions.method` values. NULL until then.
+  final String? paymentMethod;
+
+  /// Denormalised human headline ("8 crates of Star from Ade Depot"), so the
+  /// approval card renders without cross-table joins — the
+  /// [StockAdjustmentRequests] pattern.
+  final String summary;
+
+  /// The crate-leg ledger row that raised this. The link is what makes the two
+  /// halves of ADR 0023 rule 6 auditable as one delivery.
+  final String? supplierCrateLedgerId;
+  final String? note;
+  final String? requestedBy;
+
+  /// One of [kCrateDepositRequestStatuses]. Monotonic: `pending` →
+  /// `confirmed`/`rejected`, never back (the sync registry's
+  /// `Restore.monotonicStatus` enforces it — issue #115).
+  final String status;
+  final String? decidedBy;
+  final DateTime? decidedAt;
+  final String? decisionNote;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const SupplierCrateDepositRequestData({
+    required this.id,
+    required this.businessId,
+    required this.supplierId,
+    required this.manufacturerId,
+    required this.storeId,
+    required this.kind,
+    required this.crateCount,
+    required this.ratePerCrateKobo,
+    required this.requestedAmountKobo,
+    this.settledAmountKobo,
+    this.paymentMethod,
+    required this.summary,
+    this.supplierCrateLedgerId,
+    this.note,
+    this.requestedBy,
+    required this.status,
+    this.decidedBy,
+    this.decidedAt,
+    this.decisionNote,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['supplier_id'] = Variable<String>(supplierId);
+    map['manufacturer_id'] = Variable<String>(manufacturerId);
+    map['store_id'] = Variable<String>(storeId);
+    map['kind'] = Variable<String>(kind);
+    map['crate_count'] = Variable<int>(crateCount);
+    map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
+    map['requested_amount_kobo'] = Variable<int>(requestedAmountKobo);
+    if (!nullToAbsent || settledAmountKobo != null) {
+      map['settled_amount_kobo'] = Variable<int>(settledAmountKobo);
+    }
+    if (!nullToAbsent || paymentMethod != null) {
+      map['payment_method'] = Variable<String>(paymentMethod);
+    }
+    map['summary'] = Variable<String>(summary);
+    if (!nullToAbsent || supplierCrateLedgerId != null) {
+      map['supplier_crate_ledger_id'] = Variable<String>(supplierCrateLedgerId);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || requestedBy != null) {
+      map['requested_by'] = Variable<String>(requestedBy);
+    }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || decidedBy != null) {
+      map['decided_by'] = Variable<String>(decidedBy);
+    }
+    if (!nullToAbsent || decidedAt != null) {
+      map['decided_at'] = Variable<DateTime>(decidedAt);
+    }
+    if (!nullToAbsent || decisionNote != null) {
+      map['decision_note'] = Variable<String>(decisionNote);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  SupplierCrateDepositRequestsCompanion toCompanion(bool nullToAbsent) {
+    return SupplierCrateDepositRequestsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      supplierId: Value(supplierId),
+      manufacturerId: Value(manufacturerId),
+      storeId: Value(storeId),
+      kind: Value(kind),
+      crateCount: Value(crateCount),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
+      requestedAmountKobo: Value(requestedAmountKobo),
+      settledAmountKobo: settledAmountKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledAmountKobo),
+      paymentMethod: paymentMethod == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethod),
+      summary: Value(summary),
+      supplierCrateLedgerId: supplierCrateLedgerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(supplierCrateLedgerId),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      requestedBy: requestedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(requestedBy),
+      status: Value(status),
+      decidedBy: decidedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decidedBy),
+      decidedAt: decidedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decidedAt),
+      decisionNote: decisionNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decisionNote),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory SupplierCrateDepositRequestData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SupplierCrateDepositRequestData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      supplierId: serializer.fromJson<String>(json['supplierId']),
+      manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      crateCount: serializer.fromJson<int>(json['crateCount']),
+      ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
+      requestedAmountKobo: serializer.fromJson<int>(
+        json['requestedAmountKobo'],
+      ),
+      settledAmountKobo: serializer.fromJson<int?>(json['settledAmountKobo']),
+      paymentMethod: serializer.fromJson<String?>(json['paymentMethod']),
+      summary: serializer.fromJson<String>(json['summary']),
+      supplierCrateLedgerId: serializer.fromJson<String?>(
+        json['supplierCrateLedgerId'],
+      ),
+      note: serializer.fromJson<String?>(json['note']),
+      requestedBy: serializer.fromJson<String?>(json['requestedBy']),
+      status: serializer.fromJson<String>(json['status']),
+      decidedBy: serializer.fromJson<String?>(json['decidedBy']),
+      decidedAt: serializer.fromJson<DateTime?>(json['decidedAt']),
+      decisionNote: serializer.fromJson<String?>(json['decisionNote']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'supplierId': serializer.toJson<String>(supplierId),
+      'manufacturerId': serializer.toJson<String>(manufacturerId),
+      'storeId': serializer.toJson<String>(storeId),
+      'kind': serializer.toJson<String>(kind),
+      'crateCount': serializer.toJson<int>(crateCount),
+      'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
+      'requestedAmountKobo': serializer.toJson<int>(requestedAmountKobo),
+      'settledAmountKobo': serializer.toJson<int?>(settledAmountKobo),
+      'paymentMethod': serializer.toJson<String?>(paymentMethod),
+      'summary': serializer.toJson<String>(summary),
+      'supplierCrateLedgerId': serializer.toJson<String?>(
+        supplierCrateLedgerId,
+      ),
+      'note': serializer.toJson<String?>(note),
+      'requestedBy': serializer.toJson<String?>(requestedBy),
+      'status': serializer.toJson<String>(status),
+      'decidedBy': serializer.toJson<String?>(decidedBy),
+      'decidedAt': serializer.toJson<DateTime?>(decidedAt),
+      'decisionNote': serializer.toJson<String?>(decisionNote),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  SupplierCrateDepositRequestData copyWith({
+    String? id,
+    String? businessId,
+    String? supplierId,
+    String? manufacturerId,
+    String? storeId,
+    String? kind,
+    int? crateCount,
+    int? ratePerCrateKobo,
+    int? requestedAmountKobo,
+    Value<int?> settledAmountKobo = const Value.absent(),
+    Value<String?> paymentMethod = const Value.absent(),
+    String? summary,
+    Value<String?> supplierCrateLedgerId = const Value.absent(),
+    Value<String?> note = const Value.absent(),
+    Value<String?> requestedBy = const Value.absent(),
+    String? status,
+    Value<String?> decidedBy = const Value.absent(),
+    Value<DateTime?> decidedAt = const Value.absent(),
+    Value<String?> decisionNote = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => SupplierCrateDepositRequestData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    supplierId: supplierId ?? this.supplierId,
+    manufacturerId: manufacturerId ?? this.manufacturerId,
+    storeId: storeId ?? this.storeId,
+    kind: kind ?? this.kind,
+    crateCount: crateCount ?? this.crateCount,
+    ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+    requestedAmountKobo: requestedAmountKobo ?? this.requestedAmountKobo,
+    settledAmountKobo: settledAmountKobo.present
+        ? settledAmountKobo.value
+        : this.settledAmountKobo,
+    paymentMethod: paymentMethod.present
+        ? paymentMethod.value
+        : this.paymentMethod,
+    summary: summary ?? this.summary,
+    supplierCrateLedgerId: supplierCrateLedgerId.present
+        ? supplierCrateLedgerId.value
+        : this.supplierCrateLedgerId,
+    note: note.present ? note.value : this.note,
+    requestedBy: requestedBy.present ? requestedBy.value : this.requestedBy,
+    status: status ?? this.status,
+    decidedBy: decidedBy.present ? decidedBy.value : this.decidedBy,
+    decidedAt: decidedAt.present ? decidedAt.value : this.decidedAt,
+    decisionNote: decisionNote.present ? decisionNote.value : this.decisionNote,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  SupplierCrateDepositRequestData copyWithCompanion(
+    SupplierCrateDepositRequestsCompanion data,
+  ) {
+    return SupplierCrateDepositRequestData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      supplierId: data.supplierId.present
+          ? data.supplierId.value
+          : this.supplierId,
+      manufacturerId: data.manufacturerId.present
+          ? data.manufacturerId.value
+          : this.manufacturerId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      crateCount: data.crateCount.present
+          ? data.crateCount.value
+          : this.crateCount,
+      ratePerCrateKobo: data.ratePerCrateKobo.present
+          ? data.ratePerCrateKobo.value
+          : this.ratePerCrateKobo,
+      requestedAmountKobo: data.requestedAmountKobo.present
+          ? data.requestedAmountKobo.value
+          : this.requestedAmountKobo,
+      settledAmountKobo: data.settledAmountKobo.present
+          ? data.settledAmountKobo.value
+          : this.settledAmountKobo,
+      paymentMethod: data.paymentMethod.present
+          ? data.paymentMethod.value
+          : this.paymentMethod,
+      summary: data.summary.present ? data.summary.value : this.summary,
+      supplierCrateLedgerId: data.supplierCrateLedgerId.present
+          ? data.supplierCrateLedgerId.value
+          : this.supplierCrateLedgerId,
+      note: data.note.present ? data.note.value : this.note,
+      requestedBy: data.requestedBy.present
+          ? data.requestedBy.value
+          : this.requestedBy,
+      status: data.status.present ? data.status.value : this.status,
+      decidedBy: data.decidedBy.present ? data.decidedBy.value : this.decidedBy,
+      decidedAt: data.decidedAt.present ? data.decidedAt.value : this.decidedAt,
+      decisionNote: data.decisionNote.present
+          ? data.decisionNote.value
+          : this.decisionNote,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SupplierCrateDepositRequestData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('kind: $kind, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('requestedAmountKobo: $requestedAmountKobo, ')
+          ..write('settledAmountKobo: $settledAmountKobo, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('summary: $summary, ')
+          ..write('supplierCrateLedgerId: $supplierCrateLedgerId, ')
+          ..write('note: $note, ')
+          ..write('requestedBy: $requestedBy, ')
+          ..write('status: $status, ')
+          ..write('decidedBy: $decidedBy, ')
+          ..write('decidedAt: $decidedAt, ')
+          ..write('decisionNote: $decisionNote, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    businessId,
+    supplierId,
+    manufacturerId,
+    storeId,
+    kind,
+    crateCount,
+    ratePerCrateKobo,
+    requestedAmountKobo,
+    settledAmountKobo,
+    paymentMethod,
+    summary,
+    supplierCrateLedgerId,
+    note,
+    requestedBy,
+    status,
+    decidedBy,
+    decidedAt,
+    decisionNote,
+    createdAt,
+    lastUpdatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SupplierCrateDepositRequestData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.supplierId == this.supplierId &&
+          other.manufacturerId == this.manufacturerId &&
+          other.storeId == this.storeId &&
+          other.kind == this.kind &&
+          other.crateCount == this.crateCount &&
+          other.ratePerCrateKobo == this.ratePerCrateKobo &&
+          other.requestedAmountKobo == this.requestedAmountKobo &&
+          other.settledAmountKobo == this.settledAmountKobo &&
+          other.paymentMethod == this.paymentMethod &&
+          other.summary == this.summary &&
+          other.supplierCrateLedgerId == this.supplierCrateLedgerId &&
+          other.note == this.note &&
+          other.requestedBy == this.requestedBy &&
+          other.status == this.status &&
+          other.decidedBy == this.decidedBy &&
+          other.decidedAt == this.decidedAt &&
+          other.decisionNote == this.decisionNote &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class SupplierCrateDepositRequestsCompanion
+    extends UpdateCompanion<SupplierCrateDepositRequestData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> supplierId;
+  final Value<String> manufacturerId;
+  final Value<String> storeId;
+  final Value<String> kind;
+  final Value<int> crateCount;
+  final Value<int> ratePerCrateKobo;
+  final Value<int> requestedAmountKobo;
+  final Value<int?> settledAmountKobo;
+  final Value<String?> paymentMethod;
+  final Value<String> summary;
+  final Value<String?> supplierCrateLedgerId;
+  final Value<String?> note;
+  final Value<String?> requestedBy;
+  final Value<String> status;
+  final Value<String?> decidedBy;
+  final Value<DateTime?> decidedAt;
+  final Value<String?> decisionNote;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const SupplierCrateDepositRequestsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.supplierId = const Value.absent(),
+    this.manufacturerId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.requestedAmountKobo = const Value.absent(),
+    this.settledAmountKobo = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.supplierCrateLedgerId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.requestedBy = const Value.absent(),
+    this.status = const Value.absent(),
+    this.decidedBy = const Value.absent(),
+    this.decidedAt = const Value.absent(),
+    this.decisionNote = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SupplierCrateDepositRequestsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String supplierId,
+    required String manufacturerId,
+    required String storeId,
+    required String kind,
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.requestedAmountKobo = const Value.absent(),
+    this.settledAmountKobo = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    required String summary,
+    this.supplierCrateLedgerId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.requestedBy = const Value.absent(),
+    this.status = const Value.absent(),
+    this.decidedBy = const Value.absent(),
+    this.decidedAt = const Value.absent(),
+    this.decisionNote = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       supplierId = Value(supplierId),
+       manufacturerId = Value(manufacturerId),
+       storeId = Value(storeId),
+       kind = Value(kind),
+       summary = Value(summary);
+  static Insertable<SupplierCrateDepositRequestData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? supplierId,
+    Expression<String>? manufacturerId,
+    Expression<String>? storeId,
+    Expression<String>? kind,
+    Expression<int>? crateCount,
+    Expression<int>? ratePerCrateKobo,
+    Expression<int>? requestedAmountKobo,
+    Expression<int>? settledAmountKobo,
+    Expression<String>? paymentMethod,
+    Expression<String>? summary,
+    Expression<String>? supplierCrateLedgerId,
+    Expression<String>? note,
+    Expression<String>? requestedBy,
+    Expression<String>? status,
+    Expression<String>? decidedBy,
+    Expression<DateTime>? decidedAt,
+    Expression<String>? decisionNote,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (supplierId != null) 'supplier_id': supplierId,
+      if (manufacturerId != null) 'manufacturer_id': manufacturerId,
+      if (storeId != null) 'store_id': storeId,
+      if (kind != null) 'kind': kind,
+      if (crateCount != null) 'crate_count': crateCount,
+      if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
+      if (requestedAmountKobo != null)
+        'requested_amount_kobo': requestedAmountKobo,
+      if (settledAmountKobo != null) 'settled_amount_kobo': settledAmountKobo,
+      if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (summary != null) 'summary': summary,
+      if (supplierCrateLedgerId != null)
+        'supplier_crate_ledger_id': supplierCrateLedgerId,
+      if (note != null) 'note': note,
+      if (requestedBy != null) 'requested_by': requestedBy,
+      if (status != null) 'status': status,
+      if (decidedBy != null) 'decided_by': decidedBy,
+      if (decidedAt != null) 'decided_at': decidedAt,
+      if (decisionNote != null) 'decision_note': decisionNote,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SupplierCrateDepositRequestsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? supplierId,
+    Value<String>? manufacturerId,
+    Value<String>? storeId,
+    Value<String>? kind,
+    Value<int>? crateCount,
+    Value<int>? ratePerCrateKobo,
+    Value<int>? requestedAmountKobo,
+    Value<int?>? settledAmountKobo,
+    Value<String?>? paymentMethod,
+    Value<String>? summary,
+    Value<String?>? supplierCrateLedgerId,
+    Value<String?>? note,
+    Value<String?>? requestedBy,
+    Value<String>? status,
+    Value<String?>? decidedBy,
+    Value<DateTime?>? decidedAt,
+    Value<String?>? decisionNote,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return SupplierCrateDepositRequestsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      supplierId: supplierId ?? this.supplierId,
+      manufacturerId: manufacturerId ?? this.manufacturerId,
+      storeId: storeId ?? this.storeId,
+      kind: kind ?? this.kind,
+      crateCount: crateCount ?? this.crateCount,
+      ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+      requestedAmountKobo: requestedAmountKobo ?? this.requestedAmountKobo,
+      settledAmountKobo: settledAmountKobo ?? this.settledAmountKobo,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      summary: summary ?? this.summary,
+      supplierCrateLedgerId:
+          supplierCrateLedgerId ?? this.supplierCrateLedgerId,
+      note: note ?? this.note,
+      requestedBy: requestedBy ?? this.requestedBy,
+      status: status ?? this.status,
+      decidedBy: decidedBy ?? this.decidedBy,
+      decidedAt: decidedAt ?? this.decidedAt,
+      decisionNote: decisionNote ?? this.decisionNote,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (supplierId.present) {
+      map['supplier_id'] = Variable<String>(supplierId.value);
+    }
+    if (manufacturerId.present) {
+      map['manufacturer_id'] = Variable<String>(manufacturerId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (crateCount.present) {
+      map['crate_count'] = Variable<int>(crateCount.value);
+    }
+    if (ratePerCrateKobo.present) {
+      map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
+    }
+    if (requestedAmountKobo.present) {
+      map['requested_amount_kobo'] = Variable<int>(requestedAmountKobo.value);
+    }
+    if (settledAmountKobo.present) {
+      map['settled_amount_kobo'] = Variable<int>(settledAmountKobo.value);
+    }
+    if (paymentMethod.present) {
+      map['payment_method'] = Variable<String>(paymentMethod.value);
+    }
+    if (summary.present) {
+      map['summary'] = Variable<String>(summary.value);
+    }
+    if (supplierCrateLedgerId.present) {
+      map['supplier_crate_ledger_id'] = Variable<String>(
+        supplierCrateLedgerId.value,
+      );
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (requestedBy.present) {
+      map['requested_by'] = Variable<String>(requestedBy.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (decidedBy.present) {
+      map['decided_by'] = Variable<String>(decidedBy.value);
+    }
+    if (decidedAt.present) {
+      map['decided_at'] = Variable<DateTime>(decidedAt.value);
+    }
+    if (decisionNote.present) {
+      map['decision_note'] = Variable<String>(decisionNote.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SupplierCrateDepositRequestsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('kind: $kind, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('requestedAmountKobo: $requestedAmountKobo, ')
+          ..write('settledAmountKobo: $settledAmountKobo, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('summary: $summary, ')
+          ..write('supplierCrateLedgerId: $supplierCrateLedgerId, ')
+          ..write('note: $note, ')
+          ..write('requestedBy: $requestedBy, ')
+          ..write('status: $status, ')
+          ..write('decidedBy: $decidedBy, ')
+          ..write('decidedAt: $decidedAt, ')
+          ..write('decisionNote: $decisionNote, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SupplierCrateDepositsTable extends SupplierCrateDeposits
+    with TableInfo<$SupplierCrateDepositsTable, SupplierCrateDepositData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SupplierCrateDepositsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _supplierIdMeta = const VerificationMeta(
+    'supplierId',
+  );
+  @override
+  late final GeneratedColumn<String> supplierId = GeneratedColumn<String>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES suppliers (id)',
+    ),
+  );
+  static const VerificationMeta _manufacturerIdMeta = const VerificationMeta(
+    'manufacturerId',
+  );
+  @override
+  late final GeneratedColumn<String> manufacturerId = GeneratedColumn<String>(
+    'manufacturer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturers (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _movementTypeMeta = const VerificationMeta(
+    'movementType',
+  );
+  @override
+  late final GeneratedColumn<String> movementType = GeneratedColumn<String>(
+    'movement_type',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 32,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signedAmountKoboMeta = const VerificationMeta(
+    'signedAmountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> signedAmountKobo = GeneratedColumn<int>(
+    'signed_amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _crateCountMeta = const VerificationMeta(
+    'crateCount',
+  );
+  @override
+  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+    'crate_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
+    'ratePerCrateKobo',
+  );
+  @override
+  late final GeneratedColumn<int> ratePerCrateKobo = GeneratedColumn<int>(
+    'rate_per_crate_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _requestIdMeta = const VerificationMeta(
+    'requestId',
+  );
+  @override
+  late final GeneratedColumn<String> requestId = GeneratedColumn<String>(
+    'request_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES supplier_crate_deposit_requests (id)',
+    ),
+  );
+  static const VerificationMeta _supplierCrateLedgerIdMeta =
+      const VerificationMeta('supplierCrateLedgerId');
+  @override
+  late final GeneratedColumn<String> supplierCrateLedgerId =
+      GeneratedColumn<String>(
+        'supplier_crate_ledger_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES supplier_crate_ledger (id)',
+        ),
+      );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _performedByMeta = const VerificationMeta(
+    'performedBy',
+  );
+  @override
+  late final GeneratedColumn<String> performedBy = GeneratedColumn<String>(
+    'performed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    supplierId,
+    manufacturerId,
+    storeId,
+    movementType,
+    signedAmountKobo,
+    crateCount,
+    ratePerCrateKobo,
+    requestId,
+    supplierCrateLedgerId,
+    note,
+    performedBy,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'supplier_crate_deposits';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SupplierCrateDepositData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('supplier_id')) {
+      context.handle(
+        _supplierIdMeta,
+        supplierId.isAcceptableOrUnknown(data['supplier_id']!, _supplierIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_supplierIdMeta);
+    }
+    if (data.containsKey('manufacturer_id')) {
+      context.handle(
+        _manufacturerIdMeta,
+        manufacturerId.isAcceptableOrUnknown(
+          data['manufacturer_id']!,
+          _manufacturerIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturerIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    }
+    if (data.containsKey('movement_type')) {
+      context.handle(
+        _movementTypeMeta,
+        movementType.isAcceptableOrUnknown(
+          data['movement_type']!,
+          _movementTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_movementTypeMeta);
+    }
+    if (data.containsKey('signed_amount_kobo')) {
+      context.handle(
+        _signedAmountKoboMeta,
+        signedAmountKobo.isAcceptableOrUnknown(
+          data['signed_amount_kobo']!,
+          _signedAmountKoboMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signedAmountKoboMeta);
+    }
+    if (data.containsKey('crate_count')) {
+      context.handle(
+        _crateCountMeta,
+        crateCount.isAcceptableOrUnknown(data['crate_count']!, _crateCountMeta),
+      );
+    }
+    if (data.containsKey('rate_per_crate_kobo')) {
+      context.handle(
+        _ratePerCrateKoboMeta,
+        ratePerCrateKobo.isAcceptableOrUnknown(
+          data['rate_per_crate_kobo']!,
+          _ratePerCrateKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('request_id')) {
+      context.handle(
+        _requestIdMeta,
+        requestId.isAcceptableOrUnknown(data['request_id']!, _requestIdMeta),
+      );
+    }
+    if (data.containsKey('supplier_crate_ledger_id')) {
+      context.handle(
+        _supplierCrateLedgerIdMeta,
+        supplierCrateLedgerId.isAcceptableOrUnknown(
+          data['supplier_crate_ledger_id']!,
+          _supplierCrateLedgerIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('performed_by')) {
+      context.handle(
+        _performedByMeta,
+        performedBy.isAcceptableOrUnknown(
+          data['performed_by']!,
+          _performedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SupplierCrateDepositData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SupplierCrateDepositData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      manufacturerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      ),
+      movementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}movement_type'],
+      )!,
+      signedAmountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_amount_kobo'],
+      )!,
+      crateCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}crate_count'],
+      )!,
+      ratePerCrateKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rate_per_crate_kobo'],
+      )!,
+      requestId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_id'],
+      ),
+      supplierCrateLedgerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}supplier_crate_ledger_id'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      performedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}performed_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SupplierCrateDepositsTable createAlias(String alias) {
+    return $SupplierCrateDepositsTable(attachedDatabase, alias);
+  }
+}
+
+class SupplierCrateDepositData extends DataClass
+    implements Insertable<SupplierCrateDepositData> {
+  final String id;
+  final String businessId;
+  final String supplierId;
+  final String manufacturerId;
+
+  /// The store the movement is attributed to. Nullable, matching
+  /// [SupplierCrateLedger]: a standing-float top-up (#214) belongs to the
+  /// business, not to a store.
+  final String? storeId;
+
+  /// One of [kCrateDepositMovementTypes].
+  final String movementType;
+
+  /// **+ = money placed with the supplier; − = money back to us.** The balance
+  /// is the signed sum of this column and nothing else.
+  final int signedAmountKobo;
+
+  /// Crates this movement covers, signed the same way. 0 on the standing-float
+  /// movements and on a standalone money settlement that carries no goods.
+  final int crateCount;
+
+  /// The per-crate rate this movement was valued at, snapshotted. A later rate
+  /// edit must not restate money that has already moved.
+  final int ratePerCrateKobo;
+
+  /// The approved request this came from, when there was one. NULL for a
+  /// movement a money-permitted role posted directly (they need no approval)
+  /// and for `adjustment` corrections.
+  final String? requestId;
+
+  /// The crate-count ledger row this money leg answers, when there is one.
+  final String? supplierCrateLedgerId;
+  final String? note;
+  final String? performedBy;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const SupplierCrateDepositData({
+    required this.id,
+    required this.businessId,
+    required this.supplierId,
+    required this.manufacturerId,
+    this.storeId,
+    required this.movementType,
+    required this.signedAmountKobo,
+    required this.crateCount,
+    required this.ratePerCrateKobo,
+    this.requestId,
+    this.supplierCrateLedgerId,
+    this.note,
+    this.performedBy,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['supplier_id'] = Variable<String>(supplierId);
+    map['manufacturer_id'] = Variable<String>(manufacturerId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
+    }
+    map['movement_type'] = Variable<String>(movementType);
+    map['signed_amount_kobo'] = Variable<int>(signedAmountKobo);
+    map['crate_count'] = Variable<int>(crateCount);
+    map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
+    if (!nullToAbsent || requestId != null) {
+      map['request_id'] = Variable<String>(requestId);
+    }
+    if (!nullToAbsent || supplierCrateLedgerId != null) {
+      map['supplier_crate_ledger_id'] = Variable<String>(supplierCrateLedgerId);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || performedBy != null) {
+      map['performed_by'] = Variable<String>(performedBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  SupplierCrateDepositsCompanion toCompanion(bool nullToAbsent) {
+    return SupplierCrateDepositsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      supplierId: Value(supplierId),
+      manufacturerId: Value(manufacturerId),
+      storeId: storeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeId),
+      movementType: Value(movementType),
+      signedAmountKobo: Value(signedAmountKobo),
+      crateCount: Value(crateCount),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
+      requestId: requestId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(requestId),
+      supplierCrateLedgerId: supplierCrateLedgerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(supplierCrateLedgerId),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      performedBy: performedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(performedBy),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory SupplierCrateDepositData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SupplierCrateDepositData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      supplierId: serializer.fromJson<String>(json['supplierId']),
+      manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
+      movementType: serializer.fromJson<String>(json['movementType']),
+      signedAmountKobo: serializer.fromJson<int>(json['signedAmountKobo']),
+      crateCount: serializer.fromJson<int>(json['crateCount']),
+      ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
+      requestId: serializer.fromJson<String?>(json['requestId']),
+      supplierCrateLedgerId: serializer.fromJson<String?>(
+        json['supplierCrateLedgerId'],
+      ),
+      note: serializer.fromJson<String?>(json['note']),
+      performedBy: serializer.fromJson<String?>(json['performedBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'supplierId': serializer.toJson<String>(supplierId),
+      'manufacturerId': serializer.toJson<String>(manufacturerId),
+      'storeId': serializer.toJson<String?>(storeId),
+      'movementType': serializer.toJson<String>(movementType),
+      'signedAmountKobo': serializer.toJson<int>(signedAmountKobo),
+      'crateCount': serializer.toJson<int>(crateCount),
+      'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
+      'requestId': serializer.toJson<String?>(requestId),
+      'supplierCrateLedgerId': serializer.toJson<String?>(
+        supplierCrateLedgerId,
+      ),
+      'note': serializer.toJson<String?>(note),
+      'performedBy': serializer.toJson<String?>(performedBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  SupplierCrateDepositData copyWith({
+    String? id,
+    String? businessId,
+    String? supplierId,
+    String? manufacturerId,
+    Value<String?> storeId = const Value.absent(),
+    String? movementType,
+    int? signedAmountKobo,
+    int? crateCount,
+    int? ratePerCrateKobo,
+    Value<String?> requestId = const Value.absent(),
+    Value<String?> supplierCrateLedgerId = const Value.absent(),
+    Value<String?> note = const Value.absent(),
+    Value<String?> performedBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => SupplierCrateDepositData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    supplierId: supplierId ?? this.supplierId,
+    manufacturerId: manufacturerId ?? this.manufacturerId,
+    storeId: storeId.present ? storeId.value : this.storeId,
+    movementType: movementType ?? this.movementType,
+    signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
+    crateCount: crateCount ?? this.crateCount,
+    ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+    requestId: requestId.present ? requestId.value : this.requestId,
+    supplierCrateLedgerId: supplierCrateLedgerId.present
+        ? supplierCrateLedgerId.value
+        : this.supplierCrateLedgerId,
+    note: note.present ? note.value : this.note,
+    performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  SupplierCrateDepositData copyWithCompanion(
+    SupplierCrateDepositsCompanion data,
+  ) {
+    return SupplierCrateDepositData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      supplierId: data.supplierId.present
+          ? data.supplierId.value
+          : this.supplierId,
+      manufacturerId: data.manufacturerId.present
+          ? data.manufacturerId.value
+          : this.manufacturerId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      movementType: data.movementType.present
+          ? data.movementType.value
+          : this.movementType,
+      signedAmountKobo: data.signedAmountKobo.present
+          ? data.signedAmountKobo.value
+          : this.signedAmountKobo,
+      crateCount: data.crateCount.present
+          ? data.crateCount.value
+          : this.crateCount,
+      ratePerCrateKobo: data.ratePerCrateKobo.present
+          ? data.ratePerCrateKobo.value
+          : this.ratePerCrateKobo,
+      requestId: data.requestId.present ? data.requestId.value : this.requestId,
+      supplierCrateLedgerId: data.supplierCrateLedgerId.present
+          ? data.supplierCrateLedgerId.value
+          : this.supplierCrateLedgerId,
+      note: data.note.present ? data.note.value : this.note,
+      performedBy: data.performedBy.present
+          ? data.performedBy.value
+          : this.performedBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SupplierCrateDepositData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('movementType: $movementType, ')
+          ..write('signedAmountKobo: $signedAmountKobo, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('requestId: $requestId, ')
+          ..write('supplierCrateLedgerId: $supplierCrateLedgerId, ')
+          ..write('note: $note, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    supplierId,
+    manufacturerId,
+    storeId,
+    movementType,
+    signedAmountKobo,
+    crateCount,
+    ratePerCrateKobo,
+    requestId,
+    supplierCrateLedgerId,
+    note,
+    performedBy,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SupplierCrateDepositData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.supplierId == this.supplierId &&
+          other.manufacturerId == this.manufacturerId &&
+          other.storeId == this.storeId &&
+          other.movementType == this.movementType &&
+          other.signedAmountKobo == this.signedAmountKobo &&
+          other.crateCount == this.crateCount &&
+          other.ratePerCrateKobo == this.ratePerCrateKobo &&
+          other.requestId == this.requestId &&
+          other.supplierCrateLedgerId == this.supplierCrateLedgerId &&
+          other.note == this.note &&
+          other.performedBy == this.performedBy &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class SupplierCrateDepositsCompanion
+    extends UpdateCompanion<SupplierCrateDepositData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> supplierId;
+  final Value<String> manufacturerId;
+  final Value<String?> storeId;
+  final Value<String> movementType;
+  final Value<int> signedAmountKobo;
+  final Value<int> crateCount;
+  final Value<int> ratePerCrateKobo;
+  final Value<String?> requestId;
+  final Value<String?> supplierCrateLedgerId;
+  final Value<String?> note;
+  final Value<String?> performedBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const SupplierCrateDepositsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.supplierId = const Value.absent(),
+    this.manufacturerId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.movementType = const Value.absent(),
+    this.signedAmountKobo = const Value.absent(),
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.requestId = const Value.absent(),
+    this.supplierCrateLedgerId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SupplierCrateDepositsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String supplierId,
+    required String manufacturerId,
+    this.storeId = const Value.absent(),
+    required String movementType,
+    required int signedAmountKobo,
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.requestId = const Value.absent(),
+    this.supplierCrateLedgerId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       supplierId = Value(supplierId),
+       manufacturerId = Value(manufacturerId),
+       movementType = Value(movementType),
+       signedAmountKobo = Value(signedAmountKobo);
+  static Insertable<SupplierCrateDepositData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? supplierId,
+    Expression<String>? manufacturerId,
+    Expression<String>? storeId,
+    Expression<String>? movementType,
+    Expression<int>? signedAmountKobo,
+    Expression<int>? crateCount,
+    Expression<int>? ratePerCrateKobo,
+    Expression<String>? requestId,
+    Expression<String>? supplierCrateLedgerId,
+    Expression<String>? note,
+    Expression<String>? performedBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (supplierId != null) 'supplier_id': supplierId,
+      if (manufacturerId != null) 'manufacturer_id': manufacturerId,
+      if (storeId != null) 'store_id': storeId,
+      if (movementType != null) 'movement_type': movementType,
+      if (signedAmountKobo != null) 'signed_amount_kobo': signedAmountKobo,
+      if (crateCount != null) 'crate_count': crateCount,
+      if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
+      if (requestId != null) 'request_id': requestId,
+      if (supplierCrateLedgerId != null)
+        'supplier_crate_ledger_id': supplierCrateLedgerId,
+      if (note != null) 'note': note,
+      if (performedBy != null) 'performed_by': performedBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SupplierCrateDepositsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? supplierId,
+    Value<String>? manufacturerId,
+    Value<String?>? storeId,
+    Value<String>? movementType,
+    Value<int>? signedAmountKobo,
+    Value<int>? crateCount,
+    Value<int>? ratePerCrateKobo,
+    Value<String?>? requestId,
+    Value<String?>? supplierCrateLedgerId,
+    Value<String?>? note,
+    Value<String?>? performedBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return SupplierCrateDepositsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      supplierId: supplierId ?? this.supplierId,
+      manufacturerId: manufacturerId ?? this.manufacturerId,
+      storeId: storeId ?? this.storeId,
+      movementType: movementType ?? this.movementType,
+      signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
+      crateCount: crateCount ?? this.crateCount,
+      ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+      requestId: requestId ?? this.requestId,
+      supplierCrateLedgerId:
+          supplierCrateLedgerId ?? this.supplierCrateLedgerId,
+      note: note ?? this.note,
+      performedBy: performedBy ?? this.performedBy,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (supplierId.present) {
+      map['supplier_id'] = Variable<String>(supplierId.value);
+    }
+    if (manufacturerId.present) {
+      map['manufacturer_id'] = Variable<String>(manufacturerId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (movementType.present) {
+      map['movement_type'] = Variable<String>(movementType.value);
+    }
+    if (signedAmountKobo.present) {
+      map['signed_amount_kobo'] = Variable<int>(signedAmountKobo.value);
+    }
+    if (crateCount.present) {
+      map['crate_count'] = Variable<int>(crateCount.value);
+    }
+    if (ratePerCrateKobo.present) {
+      map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
+    }
+    if (requestId.present) {
+      map['request_id'] = Variable<String>(requestId.value);
+    }
+    if (supplierCrateLedgerId.present) {
+      map['supplier_crate_ledger_id'] = Variable<String>(
+        supplierCrateLedgerId.value,
+      );
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (performedBy.present) {
+      map['performed_by'] = Variable<String>(performedBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SupplierCrateDepositsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('movementType: $movementType, ')
+          ..write('signedAmountKobo: $signedAmountKobo, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('requestId: $requestId, ')
+          ..write('supplierCrateLedgerId: $supplierCrateLedgerId, ')
+          ..write('note: $note, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CrateShortfallWriteoffsTable extends CrateShortfallWriteoffs
+    with TableInfo<$CrateShortfallWriteoffsTable, CrateShortfallWriteoffData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CrateShortfallWriteoffsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _manufacturerIdMeta = const VerificationMeta(
+    'manufacturerId',
+  );
+  @override
+  late final GeneratedColumn<String> manufacturerId = GeneratedColumn<String>(
+    'manufacturer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturers (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _crateCountMeta = const VerificationMeta(
+    'crateCount',
+  );
+  @override
+  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+    'crate_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
+    'ratePerCrateKobo',
+  );
+  @override
+  late final GeneratedColumn<int> ratePerCrateKobo = GeneratedColumn<int>(
+    'rate_per_crate_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _performedByMeta = const VerificationMeta(
+    'performedBy',
+  );
+  @override
+  late final GeneratedColumn<String> performedBy = GeneratedColumn<String>(
+    'performed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    manufacturerId,
+    storeId,
+    crateCount,
+    ratePerCrateKobo,
+    note,
+    performedBy,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'crate_shortfall_writeoffs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CrateShortfallWriteoffData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('manufacturer_id')) {
+      context.handle(
+        _manufacturerIdMeta,
+        manufacturerId.isAcceptableOrUnknown(
+          data['manufacturer_id']!,
+          _manufacturerIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturerIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    }
+    if (data.containsKey('crate_count')) {
+      context.handle(
+        _crateCountMeta,
+        crateCount.isAcceptableOrUnknown(data['crate_count']!, _crateCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_crateCountMeta);
+    }
+    if (data.containsKey('rate_per_crate_kobo')) {
+      context.handle(
+        _ratePerCrateKoboMeta,
+        ratePerCrateKobo.isAcceptableOrUnknown(
+          data['rate_per_crate_kobo']!,
+          _ratePerCrateKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('performed_by')) {
+      context.handle(
+        _performedByMeta,
+        performedBy.isAcceptableOrUnknown(
+          data['performed_by']!,
+          _performedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CrateShortfallWriteoffData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CrateShortfallWriteoffData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      manufacturerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      ),
+      crateCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}crate_count'],
+      )!,
+      ratePerCrateKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rate_per_crate_kobo'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      performedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}performed_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CrateShortfallWriteoffsTable createAlias(String alias) {
+    return $CrateShortfallWriteoffsTable(attachedDatabase, alias);
+  }
+}
+
+class CrateShortfallWriteoffData extends DataClass
+    implements Insertable<CrateShortfallWriteoffData> {
+  final String id;
+  final String businessId;
+
+  /// The brand. The ONLY axis a shortfall has — see the class doc.
+  final String manufacturerId;
+
+  /// The store whose device took the decision, for the audit trail only.
+  /// Nullable, and it never scopes the figure: a shortfall is business-wide
+  /// (`CRATE_TRACKING_AUDIT` C4), so splitting the loss per branch would let two
+  /// stores each believe the same crates were theirs to lose.
+  final String? storeId;
+
+  /// Crates accepted as lost. **Signed:** positive is a write-off, negative is
+  /// the compensating row for a reversal. A `<> 0` CHECK rather than `> 0` so a
+  /// future reversal path ships as code only — widening a CHECK on an
+  /// append-only money ledger costs a table rebuild on every device, and v71 /
+  /// #212 are the precedents for declaring the whole range up front.
+  final int crateCount;
+
+  /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED at the moment the decision
+  /// was taken. The loss booked is `crate_count × rate_per_crate_kobo` forever
+  /// after — never today's rate — so a rate edited next month cannot restate the
+  /// profit of a day already closed.
+  final int ratePerCrateKobo;
+  final String? note;
+
+  /// Who accepted the loss. Half of "who wrote off a shortage and when".
+  final String? performedBy;
+
+  /// **The day the loss hits profit.** The other half. Set explicitly by the
+  /// DAO, never left to the column default, so the decision date is a fact the
+  /// write path owns rather than a side effect of when a row reached SQLite.
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const CrateShortfallWriteoffData({
+    required this.id,
+    required this.businessId,
+    required this.manufacturerId,
+    this.storeId,
+    required this.crateCount,
+    required this.ratePerCrateKobo,
+    this.note,
+    this.performedBy,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['manufacturer_id'] = Variable<String>(manufacturerId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
+    }
+    map['crate_count'] = Variable<int>(crateCount);
+    map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || performedBy != null) {
+      map['performed_by'] = Variable<String>(performedBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  CrateShortfallWriteoffsCompanion toCompanion(bool nullToAbsent) {
+    return CrateShortfallWriteoffsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      manufacturerId: Value(manufacturerId),
+      storeId: storeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeId),
+      crateCount: Value(crateCount),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      performedBy: performedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(performedBy),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory CrateShortfallWriteoffData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CrateShortfallWriteoffData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
+      crateCount: serializer.fromJson<int>(json['crateCount']),
+      ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
+      note: serializer.fromJson<String?>(json['note']),
+      performedBy: serializer.fromJson<String?>(json['performedBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'manufacturerId': serializer.toJson<String>(manufacturerId),
+      'storeId': serializer.toJson<String?>(storeId),
+      'crateCount': serializer.toJson<int>(crateCount),
+      'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
+      'note': serializer.toJson<String?>(note),
+      'performedBy': serializer.toJson<String?>(performedBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  CrateShortfallWriteoffData copyWith({
+    String? id,
+    String? businessId,
+    String? manufacturerId,
+    Value<String?> storeId = const Value.absent(),
+    int? crateCount,
+    int? ratePerCrateKobo,
+    Value<String?> note = const Value.absent(),
+    Value<String?> performedBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => CrateShortfallWriteoffData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    manufacturerId: manufacturerId ?? this.manufacturerId,
+    storeId: storeId.present ? storeId.value : this.storeId,
+    crateCount: crateCount ?? this.crateCount,
+    ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+    note: note.present ? note.value : this.note,
+    performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  CrateShortfallWriteoffData copyWithCompanion(
+    CrateShortfallWriteoffsCompanion data,
+  ) {
+    return CrateShortfallWriteoffData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      manufacturerId: data.manufacturerId.present
+          ? data.manufacturerId.value
+          : this.manufacturerId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      crateCount: data.crateCount.present
+          ? data.crateCount.value
+          : this.crateCount,
+      ratePerCrateKobo: data.ratePerCrateKobo.present
+          ? data.ratePerCrateKobo.value
+          : this.ratePerCrateKobo,
+      note: data.note.present ? data.note.value : this.note,
+      performedBy: data.performedBy.present
+          ? data.performedBy.value
+          : this.performedBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CrateShortfallWriteoffData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('note: $note, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    manufacturerId,
+    storeId,
+    crateCount,
+    ratePerCrateKobo,
+    note,
+    performedBy,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CrateShortfallWriteoffData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.manufacturerId == this.manufacturerId &&
+          other.storeId == this.storeId &&
+          other.crateCount == this.crateCount &&
+          other.ratePerCrateKobo == this.ratePerCrateKobo &&
+          other.note == this.note &&
+          other.performedBy == this.performedBy &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class CrateShortfallWriteoffsCompanion
+    extends UpdateCompanion<CrateShortfallWriteoffData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> manufacturerId;
+  final Value<String?> storeId;
+  final Value<int> crateCount;
+  final Value<int> ratePerCrateKobo;
+  final Value<String?> note;
+  final Value<String?> performedBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const CrateShortfallWriteoffsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.manufacturerId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.note = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CrateShortfallWriteoffsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String manufacturerId,
+    this.storeId = const Value.absent(),
+    required int crateCount,
+    this.ratePerCrateKobo = const Value.absent(),
+    this.note = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       manufacturerId = Value(manufacturerId),
+       crateCount = Value(crateCount);
+  static Insertable<CrateShortfallWriteoffData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? manufacturerId,
+    Expression<String>? storeId,
+    Expression<int>? crateCount,
+    Expression<int>? ratePerCrateKobo,
+    Expression<String>? note,
+    Expression<String>? performedBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (manufacturerId != null) 'manufacturer_id': manufacturerId,
+      if (storeId != null) 'store_id': storeId,
+      if (crateCount != null) 'crate_count': crateCount,
+      if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
+      if (note != null) 'note': note,
+      if (performedBy != null) 'performed_by': performedBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CrateShortfallWriteoffsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? manufacturerId,
+    Value<String?>? storeId,
+    Value<int>? crateCount,
+    Value<int>? ratePerCrateKobo,
+    Value<String?>? note,
+    Value<String?>? performedBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return CrateShortfallWriteoffsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      manufacturerId: manufacturerId ?? this.manufacturerId,
+      storeId: storeId ?? this.storeId,
+      crateCount: crateCount ?? this.crateCount,
+      ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+      note: note ?? this.note,
+      performedBy: performedBy ?? this.performedBy,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (manufacturerId.present) {
+      map['manufacturer_id'] = Variable<String>(manufacturerId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (crateCount.present) {
+      map['crate_count'] = Variable<int>(crateCount.value);
+    }
+    if (ratePerCrateKobo.present) {
+      map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (performedBy.present) {
+      map['performed_by'] = Variable<String>(performedBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CrateShortfallWriteoffsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('note: $note, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ProductsTable extends Products
     with TableInfo<$ProductsTable, ProductData> {
   @override
@@ -10918,6 +13915,1419 @@ class CustomerWalletsCompanion extends UpdateCompanion<CustomerWalletData> {
   }
 }
 
+class $VanTripsTable extends VanTrips
+    with TableInfo<$VanTripsTable, VanTripData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VanTripsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _vanStoreIdMeta = const VerificationMeta(
+    'vanStoreId',
+  );
+  @override
+  late final GeneratedColumn<String> vanStoreId = GeneratedColumn<String>(
+    'van_store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _driverUserIdMeta = const VerificationMeta(
+    'driverUserId',
+  );
+  @override
+  late final GeneratedColumn<String> driverUserId = GeneratedColumn<String>(
+    'driver_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _sourceStoreIdMeta = const VerificationMeta(
+    'sourceStoreId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceStoreId = GeneratedColumn<String>(
+    'source_store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kVanTripStatusOpen),
+  );
+  static const VerificationMeta _openedAtMeta = const VerificationMeta(
+    'openedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
+    'opened_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _openedByMeta = const VerificationMeta(
+    'openedBy',
+  );
+  @override
+  late final GeneratedColumn<String> openedBy = GeneratedColumn<String>(
+    'opened_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _closedByMeta = const VerificationMeta(
+    'closedBy',
+  );
+  @override
+  late final GeneratedColumn<String> closedBy = GeneratedColumn<String>(
+    'closed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _closedWithBalanceMeta = const VerificationMeta(
+    'closedWithBalance',
+  );
+  @override
+  late final GeneratedColumn<bool> closedWithBalance = GeneratedColumn<bool>(
+    'closed_with_balance',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("closed_with_balance" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _shellsOutMeta = const VerificationMeta(
+    'shellsOut',
+  );
+  @override
+  late final GeneratedColumn<int> shellsOut = GeneratedColumn<int>(
+    'shells_out',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shellsBackMeta = const VerificationMeta(
+    'shellsBack',
+  );
+  @override
+  late final GeneratedColumn<int> shellsBack = GeneratedColumn<int>(
+    'shells_back',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _restatedAtMeta = const VerificationMeta(
+    'restatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> restatedAt = GeneratedColumn<DateTime>(
+    'restated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _restatedReasonMeta = const VerificationMeta(
+    'restatedReason',
+  );
+  @override
+  late final GeneratedColumn<String> restatedReason = GeneratedColumn<String>(
+    'restated_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cogsKoboMeta = const VerificationMeta(
+    'cogsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cogsKobo = GeneratedColumn<int>(
+    'cogs_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _recoveredKoboMeta = const VerificationMeta(
+    'recoveredKobo',
+  );
+  @override
+  late final GeneratedColumn<int> recoveredKobo = GeneratedColumn<int>(
+    'recovered_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _unremittedKoboMeta = const VerificationMeta(
+    'unremittedKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unremittedKobo = GeneratedColumn<int>(
+    'unremitted_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shortageWriteoffKoboMeta =
+      const VerificationMeta('shortageWriteoffKobo');
+  @override
+  late final GeneratedColumn<int> shortageWriteoffKobo = GeneratedColumn<int>(
+    'shortage_writeoff_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _damageWriteoffKoboMeta =
+      const VerificationMeta('damageWriteoffKobo');
+  @override
+  late final GeneratedColumn<int> damageWriteoffKobo = GeneratedColumn<int>(
+    'damage_writeoff_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shortageLossKoboMeta = const VerificationMeta(
+    'shortageLossKobo',
+  );
+  @override
+  late final GeneratedColumn<int> shortageLossKobo = GeneratedColumn<int>(
+    'shortage_loss_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _damageLossKoboMeta = const VerificationMeta(
+    'damageLossKobo',
+  );
+  @override
+  late final GeneratedColumn<int> damageLossKobo = GeneratedColumn<int>(
+    'damage_loss_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _profitKoboMeta = const VerificationMeta(
+    'profitKobo',
+  );
+  @override
+  late final GeneratedColumn<int> profitKobo = GeneratedColumn<int>(
+    'profit_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    vanStoreId,
+    driverUserId,
+    sourceStoreId,
+    status,
+    openedAt,
+    openedBy,
+    closedAt,
+    closedBy,
+    closedWithBalance,
+    shellsOut,
+    shellsBack,
+    restatedAt,
+    restatedReason,
+    cogsKobo,
+    recoveredKobo,
+    unremittedKobo,
+    shortageWriteoffKobo,
+    damageWriteoffKobo,
+    shortageLossKobo,
+    damageLossKobo,
+    profitKobo,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'van_trips';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VanTripData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('van_store_id')) {
+      context.handle(
+        _vanStoreIdMeta,
+        vanStoreId.isAcceptableOrUnknown(
+          data['van_store_id']!,
+          _vanStoreIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_vanStoreIdMeta);
+    }
+    if (data.containsKey('driver_user_id')) {
+      context.handle(
+        _driverUserIdMeta,
+        driverUserId.isAcceptableOrUnknown(
+          data['driver_user_id']!,
+          _driverUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_driverUserIdMeta);
+    }
+    if (data.containsKey('source_store_id')) {
+      context.handle(
+        _sourceStoreIdMeta,
+        sourceStoreId.isAcceptableOrUnknown(
+          data['source_store_id']!,
+          _sourceStoreIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceStoreIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('opened_at')) {
+      context.handle(
+        _openedAtMeta,
+        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
+      );
+    }
+    if (data.containsKey('opened_by')) {
+      context.handle(
+        _openedByMeta,
+        openedBy.isAcceptableOrUnknown(data['opened_by']!, _openedByMeta),
+      );
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
+    if (data.containsKey('closed_by')) {
+      context.handle(
+        _closedByMeta,
+        closedBy.isAcceptableOrUnknown(data['closed_by']!, _closedByMeta),
+      );
+    }
+    if (data.containsKey('closed_with_balance')) {
+      context.handle(
+        _closedWithBalanceMeta,
+        closedWithBalance.isAcceptableOrUnknown(
+          data['closed_with_balance']!,
+          _closedWithBalanceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shells_out')) {
+      context.handle(
+        _shellsOutMeta,
+        shellsOut.isAcceptableOrUnknown(data['shells_out']!, _shellsOutMeta),
+      );
+    }
+    if (data.containsKey('shells_back')) {
+      context.handle(
+        _shellsBackMeta,
+        shellsBack.isAcceptableOrUnknown(data['shells_back']!, _shellsBackMeta),
+      );
+    }
+    if (data.containsKey('restated_at')) {
+      context.handle(
+        _restatedAtMeta,
+        restatedAt.isAcceptableOrUnknown(data['restated_at']!, _restatedAtMeta),
+      );
+    }
+    if (data.containsKey('restated_reason')) {
+      context.handle(
+        _restatedReasonMeta,
+        restatedReason.isAcceptableOrUnknown(
+          data['restated_reason']!,
+          _restatedReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cogs_kobo')) {
+      context.handle(
+        _cogsKoboMeta,
+        cogsKobo.isAcceptableOrUnknown(data['cogs_kobo']!, _cogsKoboMeta),
+      );
+    }
+    if (data.containsKey('recovered_kobo')) {
+      context.handle(
+        _recoveredKoboMeta,
+        recoveredKobo.isAcceptableOrUnknown(
+          data['recovered_kobo']!,
+          _recoveredKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('unremitted_kobo')) {
+      context.handle(
+        _unremittedKoboMeta,
+        unremittedKobo.isAcceptableOrUnknown(
+          data['unremitted_kobo']!,
+          _unremittedKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shortage_writeoff_kobo')) {
+      context.handle(
+        _shortageWriteoffKoboMeta,
+        shortageWriteoffKobo.isAcceptableOrUnknown(
+          data['shortage_writeoff_kobo']!,
+          _shortageWriteoffKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('damage_writeoff_kobo')) {
+      context.handle(
+        _damageWriteoffKoboMeta,
+        damageWriteoffKobo.isAcceptableOrUnknown(
+          data['damage_writeoff_kobo']!,
+          _damageWriteoffKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shortage_loss_kobo')) {
+      context.handle(
+        _shortageLossKoboMeta,
+        shortageLossKobo.isAcceptableOrUnknown(
+          data['shortage_loss_kobo']!,
+          _shortageLossKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('damage_loss_kobo')) {
+      context.handle(
+        _damageLossKoboMeta,
+        damageLossKobo.isAcceptableOrUnknown(
+          data['damage_loss_kobo']!,
+          _damageLossKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('profit_kobo')) {
+      context.handle(
+        _profitKoboMeta,
+        profitKobo.isAcceptableOrUnknown(data['profit_kobo']!, _profitKoboMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VanTripData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VanTripData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      vanStoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_store_id'],
+      )!,
+      driverUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}driver_user_id'],
+      )!,
+      sourceStoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_store_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      openedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}opened_at'],
+      )!,
+      openedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opened_by'],
+      ),
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
+      closedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}closed_by'],
+      ),
+      closedWithBalance: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}closed_with_balance'],
+      )!,
+      shellsOut: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shells_out'],
+      )!,
+      shellsBack: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shells_back'],
+      )!,
+      restatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}restated_at'],
+      ),
+      restatedReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}restated_reason'],
+      ),
+      cogsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cogs_kobo'],
+      )!,
+      recoveredKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}recovered_kobo'],
+      )!,
+      unremittedKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unremitted_kobo'],
+      )!,
+      shortageWriteoffKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shortage_writeoff_kobo'],
+      )!,
+      damageWriteoffKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}damage_writeoff_kobo'],
+      )!,
+      shortageLossKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shortage_loss_kobo'],
+      )!,
+      damageLossKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}damage_loss_kobo'],
+      )!,
+      profitKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}profit_kobo'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VanTripsTable createAlias(String alias) {
+    return $VanTripsTable(attachedDatabase, alias);
+  }
+}
+
+class VanTripData extends DataClass implements Insertable<VanTripData> {
+  final String id;
+  final String businessId;
+
+  /// The van. A `stores` row with `kind = 'van'` (#140).
+  final String vanStoreId;
+
+  /// The driver — a `users` row holding the seeded Driver role. Deliberately
+  /// NOT the dormant legacy `drivers` table, which is a different axis and is
+  /// left untouched (spec §14).
+  final String driverUserId;
+
+  /// The warehouse this trip loads from. One warehouse per trip in v1, so the
+  /// remittance (#144) and the good-return re-batch (#143) both know where the
+  /// money and the goods belong without a per-lot lookup.
+  final String sourceStoreId;
+  final String status;
+  final DateTime openedAt;
+  final String? openedBy;
+  final DateTime? closedAt;
+  final String? closedBy;
+
+  /// True when the trip closed with a residual the driver still owes (spec
+  /// §9.4 #14) — the residual carries forward on their cross-trip balance.
+  final bool closedWithBalance;
+
+  /// Empty-crate shell memo counts (spec §11). COUNTING ONLY in v1 — no money,
+  /// no `crate_ledger` writes, no crate-pool balance change. They exist so the
+  /// later crate pass inherits history instead of starting blind.
+  final int shellsOut;
+  final int shellsBack;
+
+  /// Set when a late-syncing road sale forces a post-close restatement (spec
+  /// §9.4 #15). Written by #145.
+  final DateTime? restatedAt;
+  final String? restatedReason;
+  final int cogsKobo;
+  final int recoveredKobo;
+  final int unremittedKobo;
+  final int shortageWriteoffKobo;
+  final int damageWriteoffKobo;
+  final int shortageLossKobo;
+  final int damageLossKobo;
+  final int profitKobo;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const VanTripData({
+    required this.id,
+    required this.businessId,
+    required this.vanStoreId,
+    required this.driverUserId,
+    required this.sourceStoreId,
+    required this.status,
+    required this.openedAt,
+    this.openedBy,
+    this.closedAt,
+    this.closedBy,
+    required this.closedWithBalance,
+    required this.shellsOut,
+    required this.shellsBack,
+    this.restatedAt,
+    this.restatedReason,
+    required this.cogsKobo,
+    required this.recoveredKobo,
+    required this.unremittedKobo,
+    required this.shortageWriteoffKobo,
+    required this.damageWriteoffKobo,
+    required this.shortageLossKobo,
+    required this.damageLossKobo,
+    required this.profitKobo,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['van_store_id'] = Variable<String>(vanStoreId);
+    map['driver_user_id'] = Variable<String>(driverUserId);
+    map['source_store_id'] = Variable<String>(sourceStoreId);
+    map['status'] = Variable<String>(status);
+    map['opened_at'] = Variable<DateTime>(openedAt);
+    if (!nullToAbsent || openedBy != null) {
+      map['opened_by'] = Variable<String>(openedBy);
+    }
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    if (!nullToAbsent || closedBy != null) {
+      map['closed_by'] = Variable<String>(closedBy);
+    }
+    map['closed_with_balance'] = Variable<bool>(closedWithBalance);
+    map['shells_out'] = Variable<int>(shellsOut);
+    map['shells_back'] = Variable<int>(shellsBack);
+    if (!nullToAbsent || restatedAt != null) {
+      map['restated_at'] = Variable<DateTime>(restatedAt);
+    }
+    if (!nullToAbsent || restatedReason != null) {
+      map['restated_reason'] = Variable<String>(restatedReason);
+    }
+    map['cogs_kobo'] = Variable<int>(cogsKobo);
+    map['recovered_kobo'] = Variable<int>(recoveredKobo);
+    map['unremitted_kobo'] = Variable<int>(unremittedKobo);
+    map['shortage_writeoff_kobo'] = Variable<int>(shortageWriteoffKobo);
+    map['damage_writeoff_kobo'] = Variable<int>(damageWriteoffKobo);
+    map['shortage_loss_kobo'] = Variable<int>(shortageLossKobo);
+    map['damage_loss_kobo'] = Variable<int>(damageLossKobo);
+    map['profit_kobo'] = Variable<int>(profitKobo);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  VanTripsCompanion toCompanion(bool nullToAbsent) {
+    return VanTripsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      vanStoreId: Value(vanStoreId),
+      driverUserId: Value(driverUserId),
+      sourceStoreId: Value(sourceStoreId),
+      status: Value(status),
+      openedAt: Value(openedAt),
+      openedBy: openedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(openedBy),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      closedBy: closedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedBy),
+      closedWithBalance: Value(closedWithBalance),
+      shellsOut: Value(shellsOut),
+      shellsBack: Value(shellsBack),
+      restatedAt: restatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(restatedAt),
+      restatedReason: restatedReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(restatedReason),
+      cogsKobo: Value(cogsKobo),
+      recoveredKobo: Value(recoveredKobo),
+      unremittedKobo: Value(unremittedKobo),
+      shortageWriteoffKobo: Value(shortageWriteoffKobo),
+      damageWriteoffKobo: Value(damageWriteoffKobo),
+      shortageLossKobo: Value(shortageLossKobo),
+      damageLossKobo: Value(damageLossKobo),
+      profitKobo: Value(profitKobo),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory VanTripData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VanTripData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      vanStoreId: serializer.fromJson<String>(json['vanStoreId']),
+      driverUserId: serializer.fromJson<String>(json['driverUserId']),
+      sourceStoreId: serializer.fromJson<String>(json['sourceStoreId']),
+      status: serializer.fromJson<String>(json['status']),
+      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
+      openedBy: serializer.fromJson<String?>(json['openedBy']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      closedBy: serializer.fromJson<String?>(json['closedBy']),
+      closedWithBalance: serializer.fromJson<bool>(json['closedWithBalance']),
+      shellsOut: serializer.fromJson<int>(json['shellsOut']),
+      shellsBack: serializer.fromJson<int>(json['shellsBack']),
+      restatedAt: serializer.fromJson<DateTime?>(json['restatedAt']),
+      restatedReason: serializer.fromJson<String?>(json['restatedReason']),
+      cogsKobo: serializer.fromJson<int>(json['cogsKobo']),
+      recoveredKobo: serializer.fromJson<int>(json['recoveredKobo']),
+      unremittedKobo: serializer.fromJson<int>(json['unremittedKobo']),
+      shortageWriteoffKobo: serializer.fromJson<int>(
+        json['shortageWriteoffKobo'],
+      ),
+      damageWriteoffKobo: serializer.fromJson<int>(json['damageWriteoffKobo']),
+      shortageLossKobo: serializer.fromJson<int>(json['shortageLossKobo']),
+      damageLossKobo: serializer.fromJson<int>(json['damageLossKobo']),
+      profitKobo: serializer.fromJson<int>(json['profitKobo']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'vanStoreId': serializer.toJson<String>(vanStoreId),
+      'driverUserId': serializer.toJson<String>(driverUserId),
+      'sourceStoreId': serializer.toJson<String>(sourceStoreId),
+      'status': serializer.toJson<String>(status),
+      'openedAt': serializer.toJson<DateTime>(openedAt),
+      'openedBy': serializer.toJson<String?>(openedBy),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'closedBy': serializer.toJson<String?>(closedBy),
+      'closedWithBalance': serializer.toJson<bool>(closedWithBalance),
+      'shellsOut': serializer.toJson<int>(shellsOut),
+      'shellsBack': serializer.toJson<int>(shellsBack),
+      'restatedAt': serializer.toJson<DateTime?>(restatedAt),
+      'restatedReason': serializer.toJson<String?>(restatedReason),
+      'cogsKobo': serializer.toJson<int>(cogsKobo),
+      'recoveredKobo': serializer.toJson<int>(recoveredKobo),
+      'unremittedKobo': serializer.toJson<int>(unremittedKobo),
+      'shortageWriteoffKobo': serializer.toJson<int>(shortageWriteoffKobo),
+      'damageWriteoffKobo': serializer.toJson<int>(damageWriteoffKobo),
+      'shortageLossKobo': serializer.toJson<int>(shortageLossKobo),
+      'damageLossKobo': serializer.toJson<int>(damageLossKobo),
+      'profitKobo': serializer.toJson<int>(profitKobo),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  VanTripData copyWith({
+    String? id,
+    String? businessId,
+    String? vanStoreId,
+    String? driverUserId,
+    String? sourceStoreId,
+    String? status,
+    DateTime? openedAt,
+    Value<String?> openedBy = const Value.absent(),
+    Value<DateTime?> closedAt = const Value.absent(),
+    Value<String?> closedBy = const Value.absent(),
+    bool? closedWithBalance,
+    int? shellsOut,
+    int? shellsBack,
+    Value<DateTime?> restatedAt = const Value.absent(),
+    Value<String?> restatedReason = const Value.absent(),
+    int? cogsKobo,
+    int? recoveredKobo,
+    int? unremittedKobo,
+    int? shortageWriteoffKobo,
+    int? damageWriteoffKobo,
+    int? shortageLossKobo,
+    int? damageLossKobo,
+    int? profitKobo,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => VanTripData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    vanStoreId: vanStoreId ?? this.vanStoreId,
+    driverUserId: driverUserId ?? this.driverUserId,
+    sourceStoreId: sourceStoreId ?? this.sourceStoreId,
+    status: status ?? this.status,
+    openedAt: openedAt ?? this.openedAt,
+    openedBy: openedBy.present ? openedBy.value : this.openedBy,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    closedBy: closedBy.present ? closedBy.value : this.closedBy,
+    closedWithBalance: closedWithBalance ?? this.closedWithBalance,
+    shellsOut: shellsOut ?? this.shellsOut,
+    shellsBack: shellsBack ?? this.shellsBack,
+    restatedAt: restatedAt.present ? restatedAt.value : this.restatedAt,
+    restatedReason: restatedReason.present
+        ? restatedReason.value
+        : this.restatedReason,
+    cogsKobo: cogsKobo ?? this.cogsKobo,
+    recoveredKobo: recoveredKobo ?? this.recoveredKobo,
+    unremittedKobo: unremittedKobo ?? this.unremittedKobo,
+    shortageWriteoffKobo: shortageWriteoffKobo ?? this.shortageWriteoffKobo,
+    damageWriteoffKobo: damageWriteoffKobo ?? this.damageWriteoffKobo,
+    shortageLossKobo: shortageLossKobo ?? this.shortageLossKobo,
+    damageLossKobo: damageLossKobo ?? this.damageLossKobo,
+    profitKobo: profitKobo ?? this.profitKobo,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  VanTripData copyWithCompanion(VanTripsCompanion data) {
+    return VanTripData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      vanStoreId: data.vanStoreId.present
+          ? data.vanStoreId.value
+          : this.vanStoreId,
+      driverUserId: data.driverUserId.present
+          ? data.driverUserId.value
+          : this.driverUserId,
+      sourceStoreId: data.sourceStoreId.present
+          ? data.sourceStoreId.value
+          : this.sourceStoreId,
+      status: data.status.present ? data.status.value : this.status,
+      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
+      openedBy: data.openedBy.present ? data.openedBy.value : this.openedBy,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      closedBy: data.closedBy.present ? data.closedBy.value : this.closedBy,
+      closedWithBalance: data.closedWithBalance.present
+          ? data.closedWithBalance.value
+          : this.closedWithBalance,
+      shellsOut: data.shellsOut.present ? data.shellsOut.value : this.shellsOut,
+      shellsBack: data.shellsBack.present
+          ? data.shellsBack.value
+          : this.shellsBack,
+      restatedAt: data.restatedAt.present
+          ? data.restatedAt.value
+          : this.restatedAt,
+      restatedReason: data.restatedReason.present
+          ? data.restatedReason.value
+          : this.restatedReason,
+      cogsKobo: data.cogsKobo.present ? data.cogsKobo.value : this.cogsKobo,
+      recoveredKobo: data.recoveredKobo.present
+          ? data.recoveredKobo.value
+          : this.recoveredKobo,
+      unremittedKobo: data.unremittedKobo.present
+          ? data.unremittedKobo.value
+          : this.unremittedKobo,
+      shortageWriteoffKobo: data.shortageWriteoffKobo.present
+          ? data.shortageWriteoffKobo.value
+          : this.shortageWriteoffKobo,
+      damageWriteoffKobo: data.damageWriteoffKobo.present
+          ? data.damageWriteoffKobo.value
+          : this.damageWriteoffKobo,
+      shortageLossKobo: data.shortageLossKobo.present
+          ? data.shortageLossKobo.value
+          : this.shortageLossKobo,
+      damageLossKobo: data.damageLossKobo.present
+          ? data.damageLossKobo.value
+          : this.damageLossKobo,
+      profitKobo: data.profitKobo.present
+          ? data.profitKobo.value
+          : this.profitKobo,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanTripData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('vanStoreId: $vanStoreId, ')
+          ..write('driverUserId: $driverUserId, ')
+          ..write('sourceStoreId: $sourceStoreId, ')
+          ..write('status: $status, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('openedBy: $openedBy, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('closedWithBalance: $closedWithBalance, ')
+          ..write('shellsOut: $shellsOut, ')
+          ..write('shellsBack: $shellsBack, ')
+          ..write('restatedAt: $restatedAt, ')
+          ..write('restatedReason: $restatedReason, ')
+          ..write('cogsKobo: $cogsKobo, ')
+          ..write('recoveredKobo: $recoveredKobo, ')
+          ..write('unremittedKobo: $unremittedKobo, ')
+          ..write('shortageWriteoffKobo: $shortageWriteoffKobo, ')
+          ..write('damageWriteoffKobo: $damageWriteoffKobo, ')
+          ..write('shortageLossKobo: $shortageLossKobo, ')
+          ..write('damageLossKobo: $damageLossKobo, ')
+          ..write('profitKobo: $profitKobo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    businessId,
+    vanStoreId,
+    driverUserId,
+    sourceStoreId,
+    status,
+    openedAt,
+    openedBy,
+    closedAt,
+    closedBy,
+    closedWithBalance,
+    shellsOut,
+    shellsBack,
+    restatedAt,
+    restatedReason,
+    cogsKobo,
+    recoveredKobo,
+    unremittedKobo,
+    shortageWriteoffKobo,
+    damageWriteoffKobo,
+    shortageLossKobo,
+    damageLossKobo,
+    profitKobo,
+    createdAt,
+    lastUpdatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VanTripData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.vanStoreId == this.vanStoreId &&
+          other.driverUserId == this.driverUserId &&
+          other.sourceStoreId == this.sourceStoreId &&
+          other.status == this.status &&
+          other.openedAt == this.openedAt &&
+          other.openedBy == this.openedBy &&
+          other.closedAt == this.closedAt &&
+          other.closedBy == this.closedBy &&
+          other.closedWithBalance == this.closedWithBalance &&
+          other.shellsOut == this.shellsOut &&
+          other.shellsBack == this.shellsBack &&
+          other.restatedAt == this.restatedAt &&
+          other.restatedReason == this.restatedReason &&
+          other.cogsKobo == this.cogsKobo &&
+          other.recoveredKobo == this.recoveredKobo &&
+          other.unremittedKobo == this.unremittedKobo &&
+          other.shortageWriteoffKobo == this.shortageWriteoffKobo &&
+          other.damageWriteoffKobo == this.damageWriteoffKobo &&
+          other.shortageLossKobo == this.shortageLossKobo &&
+          other.damageLossKobo == this.damageLossKobo &&
+          other.profitKobo == this.profitKobo &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class VanTripsCompanion extends UpdateCompanion<VanTripData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> vanStoreId;
+  final Value<String> driverUserId;
+  final Value<String> sourceStoreId;
+  final Value<String> status;
+  final Value<DateTime> openedAt;
+  final Value<String?> openedBy;
+  final Value<DateTime?> closedAt;
+  final Value<String?> closedBy;
+  final Value<bool> closedWithBalance;
+  final Value<int> shellsOut;
+  final Value<int> shellsBack;
+  final Value<DateTime?> restatedAt;
+  final Value<String?> restatedReason;
+  final Value<int> cogsKobo;
+  final Value<int> recoveredKobo;
+  final Value<int> unremittedKobo;
+  final Value<int> shortageWriteoffKobo;
+  final Value<int> damageWriteoffKobo;
+  final Value<int> shortageLossKobo;
+  final Value<int> damageLossKobo;
+  final Value<int> profitKobo;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const VanTripsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.vanStoreId = const Value.absent(),
+    this.driverUserId = const Value.absent(),
+    this.sourceStoreId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.openedBy = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.closedBy = const Value.absent(),
+    this.closedWithBalance = const Value.absent(),
+    this.shellsOut = const Value.absent(),
+    this.shellsBack = const Value.absent(),
+    this.restatedAt = const Value.absent(),
+    this.restatedReason = const Value.absent(),
+    this.cogsKobo = const Value.absent(),
+    this.recoveredKobo = const Value.absent(),
+    this.unremittedKobo = const Value.absent(),
+    this.shortageWriteoffKobo = const Value.absent(),
+    this.damageWriteoffKobo = const Value.absent(),
+    this.shortageLossKobo = const Value.absent(),
+    this.damageLossKobo = const Value.absent(),
+    this.profitKobo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VanTripsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String vanStoreId,
+    required String driverUserId,
+    required String sourceStoreId,
+    this.status = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.openedBy = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.closedBy = const Value.absent(),
+    this.closedWithBalance = const Value.absent(),
+    this.shellsOut = const Value.absent(),
+    this.shellsBack = const Value.absent(),
+    this.restatedAt = const Value.absent(),
+    this.restatedReason = const Value.absent(),
+    this.cogsKobo = const Value.absent(),
+    this.recoveredKobo = const Value.absent(),
+    this.unremittedKobo = const Value.absent(),
+    this.shortageWriteoffKobo = const Value.absent(),
+    this.damageWriteoffKobo = const Value.absent(),
+    this.shortageLossKobo = const Value.absent(),
+    this.damageLossKobo = const Value.absent(),
+    this.profitKobo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       vanStoreId = Value(vanStoreId),
+       driverUserId = Value(driverUserId),
+       sourceStoreId = Value(sourceStoreId);
+  static Insertable<VanTripData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? vanStoreId,
+    Expression<String>? driverUserId,
+    Expression<String>? sourceStoreId,
+    Expression<String>? status,
+    Expression<DateTime>? openedAt,
+    Expression<String>? openedBy,
+    Expression<DateTime>? closedAt,
+    Expression<String>? closedBy,
+    Expression<bool>? closedWithBalance,
+    Expression<int>? shellsOut,
+    Expression<int>? shellsBack,
+    Expression<DateTime>? restatedAt,
+    Expression<String>? restatedReason,
+    Expression<int>? cogsKobo,
+    Expression<int>? recoveredKobo,
+    Expression<int>? unremittedKobo,
+    Expression<int>? shortageWriteoffKobo,
+    Expression<int>? damageWriteoffKobo,
+    Expression<int>? shortageLossKobo,
+    Expression<int>? damageLossKobo,
+    Expression<int>? profitKobo,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (vanStoreId != null) 'van_store_id': vanStoreId,
+      if (driverUserId != null) 'driver_user_id': driverUserId,
+      if (sourceStoreId != null) 'source_store_id': sourceStoreId,
+      if (status != null) 'status': status,
+      if (openedAt != null) 'opened_at': openedAt,
+      if (openedBy != null) 'opened_by': openedBy,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (closedBy != null) 'closed_by': closedBy,
+      if (closedWithBalance != null) 'closed_with_balance': closedWithBalance,
+      if (shellsOut != null) 'shells_out': shellsOut,
+      if (shellsBack != null) 'shells_back': shellsBack,
+      if (restatedAt != null) 'restated_at': restatedAt,
+      if (restatedReason != null) 'restated_reason': restatedReason,
+      if (cogsKobo != null) 'cogs_kobo': cogsKobo,
+      if (recoveredKobo != null) 'recovered_kobo': recoveredKobo,
+      if (unremittedKobo != null) 'unremitted_kobo': unremittedKobo,
+      if (shortageWriteoffKobo != null)
+        'shortage_writeoff_kobo': shortageWriteoffKobo,
+      if (damageWriteoffKobo != null)
+        'damage_writeoff_kobo': damageWriteoffKobo,
+      if (shortageLossKobo != null) 'shortage_loss_kobo': shortageLossKobo,
+      if (damageLossKobo != null) 'damage_loss_kobo': damageLossKobo,
+      if (profitKobo != null) 'profit_kobo': profitKobo,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VanTripsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? vanStoreId,
+    Value<String>? driverUserId,
+    Value<String>? sourceStoreId,
+    Value<String>? status,
+    Value<DateTime>? openedAt,
+    Value<String?>? openedBy,
+    Value<DateTime?>? closedAt,
+    Value<String?>? closedBy,
+    Value<bool>? closedWithBalance,
+    Value<int>? shellsOut,
+    Value<int>? shellsBack,
+    Value<DateTime?>? restatedAt,
+    Value<String?>? restatedReason,
+    Value<int>? cogsKobo,
+    Value<int>? recoveredKobo,
+    Value<int>? unremittedKobo,
+    Value<int>? shortageWriteoffKobo,
+    Value<int>? damageWriteoffKobo,
+    Value<int>? shortageLossKobo,
+    Value<int>? damageLossKobo,
+    Value<int>? profitKobo,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return VanTripsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      vanStoreId: vanStoreId ?? this.vanStoreId,
+      driverUserId: driverUserId ?? this.driverUserId,
+      sourceStoreId: sourceStoreId ?? this.sourceStoreId,
+      status: status ?? this.status,
+      openedAt: openedAt ?? this.openedAt,
+      openedBy: openedBy ?? this.openedBy,
+      closedAt: closedAt ?? this.closedAt,
+      closedBy: closedBy ?? this.closedBy,
+      closedWithBalance: closedWithBalance ?? this.closedWithBalance,
+      shellsOut: shellsOut ?? this.shellsOut,
+      shellsBack: shellsBack ?? this.shellsBack,
+      restatedAt: restatedAt ?? this.restatedAt,
+      restatedReason: restatedReason ?? this.restatedReason,
+      cogsKobo: cogsKobo ?? this.cogsKobo,
+      recoveredKobo: recoveredKobo ?? this.recoveredKobo,
+      unremittedKobo: unremittedKobo ?? this.unremittedKobo,
+      shortageWriteoffKobo: shortageWriteoffKobo ?? this.shortageWriteoffKobo,
+      damageWriteoffKobo: damageWriteoffKobo ?? this.damageWriteoffKobo,
+      shortageLossKobo: shortageLossKobo ?? this.shortageLossKobo,
+      damageLossKobo: damageLossKobo ?? this.damageLossKobo,
+      profitKobo: profitKobo ?? this.profitKobo,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (vanStoreId.present) {
+      map['van_store_id'] = Variable<String>(vanStoreId.value);
+    }
+    if (driverUserId.present) {
+      map['driver_user_id'] = Variable<String>(driverUserId.value);
+    }
+    if (sourceStoreId.present) {
+      map['source_store_id'] = Variable<String>(sourceStoreId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (openedAt.present) {
+      map['opened_at'] = Variable<DateTime>(openedAt.value);
+    }
+    if (openedBy.present) {
+      map['opened_by'] = Variable<String>(openedBy.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (closedBy.present) {
+      map['closed_by'] = Variable<String>(closedBy.value);
+    }
+    if (closedWithBalance.present) {
+      map['closed_with_balance'] = Variable<bool>(closedWithBalance.value);
+    }
+    if (shellsOut.present) {
+      map['shells_out'] = Variable<int>(shellsOut.value);
+    }
+    if (shellsBack.present) {
+      map['shells_back'] = Variable<int>(shellsBack.value);
+    }
+    if (restatedAt.present) {
+      map['restated_at'] = Variable<DateTime>(restatedAt.value);
+    }
+    if (restatedReason.present) {
+      map['restated_reason'] = Variable<String>(restatedReason.value);
+    }
+    if (cogsKobo.present) {
+      map['cogs_kobo'] = Variable<int>(cogsKobo.value);
+    }
+    if (recoveredKobo.present) {
+      map['recovered_kobo'] = Variable<int>(recoveredKobo.value);
+    }
+    if (unremittedKobo.present) {
+      map['unremitted_kobo'] = Variable<int>(unremittedKobo.value);
+    }
+    if (shortageWriteoffKobo.present) {
+      map['shortage_writeoff_kobo'] = Variable<int>(shortageWriteoffKobo.value);
+    }
+    if (damageWriteoffKobo.present) {
+      map['damage_writeoff_kobo'] = Variable<int>(damageWriteoffKobo.value);
+    }
+    if (shortageLossKobo.present) {
+      map['shortage_loss_kobo'] = Variable<int>(shortageLossKobo.value);
+    }
+    if (damageLossKobo.present) {
+      map['damage_loss_kobo'] = Variable<int>(damageLossKobo.value);
+    }
+    if (profitKobo.present) {
+      map['profit_kobo'] = Variable<int>(profitKobo.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanTripsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('vanStoreId: $vanStoreId, ')
+          ..write('driverUserId: $driverUserId, ')
+          ..write('sourceStoreId: $sourceStoreId, ')
+          ..write('status: $status, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('openedBy: $openedBy, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('closedWithBalance: $closedWithBalance, ')
+          ..write('shellsOut: $shellsOut, ')
+          ..write('shellsBack: $shellsBack, ')
+          ..write('restatedAt: $restatedAt, ')
+          ..write('restatedReason: $restatedReason, ')
+          ..write('cogsKobo: $cogsKobo, ')
+          ..write('recoveredKobo: $recoveredKobo, ')
+          ..write('unremittedKobo: $unremittedKobo, ')
+          ..write('shortageWriteoffKobo: $shortageWriteoffKobo, ')
+          ..write('damageWriteoffKobo: $damageWriteoffKobo, ')
+          ..write('shortageLossKobo: $shortageLossKobo, ')
+          ..write('damageLossKobo: $damageLossKobo, ')
+          ..write('profitKobo: $profitKobo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -11100,6 +15510,20 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
       'REFERENCES stores (id)',
     ),
   );
+  static const VerificationMeta _confirmedByMeta = const VerificationMeta(
+    'confirmedBy',
+  );
+  @override
+  late final GeneratedColumn<String> confirmedBy = GeneratedColumn<String>(
+    'confirmed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
   static const VerificationMeta _crateDepositPaidKoboMeta =
       const VerificationMeta('crateDepositPaidKobo');
   @override
@@ -11110,6 +15534,20 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _vanTripIdMeta = const VerificationMeta(
+    'vanTripId',
+  );
+  @override
+  late final GeneratedColumn<String> vanTripId = GeneratedColumn<String>(
+    'van_trip_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_trips (id)',
+    ),
   );
   static const VerificationMeta _completedAtMeta = const VerificationMeta(
     'completedAt',
@@ -11175,7 +15613,9 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
     barcode,
     staffId,
     storeId,
+    confirmedBy,
     crateDepositPaidKobo,
+    vanTripId,
     completedAt,
     cancelledAt,
     createdAt,
@@ -11313,6 +15753,15 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
         storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     }
+    if (data.containsKey('confirmed_by')) {
+      context.handle(
+        _confirmedByMeta,
+        confirmedBy.isAcceptableOrUnknown(
+          data['confirmed_by']!,
+          _confirmedByMeta,
+        ),
+      );
+    }
     if (data.containsKey('crate_deposit_paid_kobo')) {
       context.handle(
         _crateDepositPaidKoboMeta,
@@ -11320,6 +15769,12 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
           data['crate_deposit_paid_kobo']!,
           _crateDepositPaidKoboMeta,
         ),
+      );
+    }
+    if (data.containsKey('van_trip_id')) {
+      context.handle(
+        _vanTripIdMeta,
+        vanTripId.isAcceptableOrUnknown(data['van_trip_id']!, _vanTripIdMeta),
       );
     }
     if (data.containsKey('completed_at')) {
@@ -11424,10 +15879,18 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
         DriftSqlType.string,
         data['${effectivePrefix}store_id'],
       ),
+      confirmedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}confirmed_by'],
+      ),
       crateDepositPaidKobo: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}crate_deposit_paid_kobo'],
       )!,
+      vanTripId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_trip_id'],
+      ),
       completedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}completed_at'],
@@ -11469,7 +15932,27 @@ class OrderData extends DataClass implements Insertable<OrderData> {
   final String? barcode;
   final String? staffId;
   final String? storeId;
+  final String? confirmedBy;
   final int crateDepositPaidKobo;
+
+  /// The van trip this order was rung on (#142, van-sales spec §4.6).
+  ///
+  /// NULL on every ordinary store sale — which is the overwhelming majority of
+  /// rows and the reason this is a nullable tag rather than a join table. It is
+  /// set by [OrdersDao.createOrder] itself, derived from the sale's store, so a
+  /// road sale cannot be written untagged by a caller that forgot.
+  ///
+  /// The tag is what makes van revenue *attributable* — #145's close artifact
+  /// and #147's aggregated "Van Sales" line both scan it. The **exclusion** of
+  /// van orders from per-store figures deliberately does NOT key on it: that
+  /// keys on the store being a van (`VanStores`, #140), because the store is
+  /// the physical fact and the tag is bookkeeping. A report that filtered on
+  /// the tag alone would leak any sale whose tag failed to be written.
+  ///
+  /// `VanTrips` is declared after this table, but drift topologically sorts
+  /// `allSchemaEntities` by FK dependency so `createAll()` emits `van_trips`
+  /// first (the same note `PaymentTransactions.vanTripId` carries).
+  final String? vanTripId;
   final DateTime? completedAt;
   final DateTime? cancelledAt;
   final DateTime createdAt;
@@ -11490,7 +15973,9 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     this.barcode,
     this.staffId,
     this.storeId,
+    this.confirmedBy,
     required this.crateDepositPaidKobo,
+    this.vanTripId,
     this.completedAt,
     this.cancelledAt,
     required this.createdAt,
@@ -11524,7 +16009,13 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     if (!nullToAbsent || storeId != null) {
       map['store_id'] = Variable<String>(storeId);
     }
+    if (!nullToAbsent || confirmedBy != null) {
+      map['confirmed_by'] = Variable<String>(confirmedBy);
+    }
     map['crate_deposit_paid_kobo'] = Variable<int>(crateDepositPaidKobo);
+    if (!nullToAbsent || vanTripId != null) {
+      map['van_trip_id'] = Variable<String>(vanTripId);
+    }
     if (!nullToAbsent || completedAt != null) {
       map['completed_at'] = Variable<DateTime>(completedAt);
     }
@@ -11563,7 +16054,13 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       storeId: storeId == null && nullToAbsent
           ? const Value.absent()
           : Value(storeId),
+      confirmedBy: confirmedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(confirmedBy),
       crateDepositPaidKobo: Value(crateDepositPaidKobo),
+      vanTripId: vanTripId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vanTripId),
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(completedAt),
@@ -11598,9 +16095,11 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       barcode: serializer.fromJson<String?>(json['barcode']),
       staffId: serializer.fromJson<String?>(json['staffId']),
       storeId: serializer.fromJson<String?>(json['storeId']),
+      confirmedBy: serializer.fromJson<String?>(json['confirmedBy']),
       crateDepositPaidKobo: serializer.fromJson<int>(
         json['crateDepositPaidKobo'],
       ),
+      vanTripId: serializer.fromJson<String?>(json['vanTripId']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       cancelledAt: serializer.fromJson<DateTime?>(json['cancelledAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -11626,7 +16125,9 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       'barcode': serializer.toJson<String?>(barcode),
       'staffId': serializer.toJson<String?>(staffId),
       'storeId': serializer.toJson<String?>(storeId),
+      'confirmedBy': serializer.toJson<String?>(confirmedBy),
       'crateDepositPaidKobo': serializer.toJson<int>(crateDepositPaidKobo),
+      'vanTripId': serializer.toJson<String?>(vanTripId),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
       'cancelledAt': serializer.toJson<DateTime?>(cancelledAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -11650,7 +16151,9 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     Value<String?> barcode = const Value.absent(),
     Value<String?> staffId = const Value.absent(),
     Value<String?> storeId = const Value.absent(),
+    Value<String?> confirmedBy = const Value.absent(),
     int? crateDepositPaidKobo,
+    Value<String?> vanTripId = const Value.absent(),
     Value<DateTime?> completedAt = const Value.absent(),
     Value<DateTime?> cancelledAt = const Value.absent(),
     DateTime? createdAt,
@@ -11673,7 +16176,9 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     barcode: barcode.present ? barcode.value : this.barcode,
     staffId: staffId.present ? staffId.value : this.staffId,
     storeId: storeId.present ? storeId.value : this.storeId,
+    confirmedBy: confirmedBy.present ? confirmedBy.value : this.confirmedBy,
     crateDepositPaidKobo: crateDepositPaidKobo ?? this.crateDepositPaidKobo,
+    vanTripId: vanTripId.present ? vanTripId.value : this.vanTripId,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
     cancelledAt: cancelledAt.present ? cancelledAt.value : this.cancelledAt,
     createdAt: createdAt ?? this.createdAt,
@@ -11714,9 +16219,13 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       barcode: data.barcode.present ? data.barcode.value : this.barcode,
       staffId: data.staffId.present ? data.staffId.value : this.staffId,
       storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      confirmedBy: data.confirmedBy.present
+          ? data.confirmedBy.value
+          : this.confirmedBy,
       crateDepositPaidKobo: data.crateDepositPaidKobo.present
           ? data.crateDepositPaidKobo.value
           : this.crateDepositPaidKobo,
+      vanTripId: data.vanTripId.present ? data.vanTripId.value : this.vanTripId,
       completedAt: data.completedAt.present
           ? data.completedAt.value
           : this.completedAt,
@@ -11748,7 +16257,9 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           ..write('barcode: $barcode, ')
           ..write('staffId: $staffId, ')
           ..write('storeId: $storeId, ')
+          ..write('confirmedBy: $confirmedBy, ')
           ..write('crateDepositPaidKobo: $crateDepositPaidKobo, ')
+          ..write('vanTripId: $vanTripId, ')
           ..write('completedAt: $completedAt, ')
           ..write('cancelledAt: $cancelledAt, ')
           ..write('createdAt: $createdAt, ')
@@ -11758,7 +16269,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     businessId,
     orderNumber,
@@ -11774,12 +16285,14 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     barcode,
     staffId,
     storeId,
+    confirmedBy,
     crateDepositPaidKobo,
+    vanTripId,
     completedAt,
     cancelledAt,
     createdAt,
     lastUpdatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -11799,7 +16312,9 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           other.barcode == this.barcode &&
           other.staffId == this.staffId &&
           other.storeId == this.storeId &&
+          other.confirmedBy == this.confirmedBy &&
           other.crateDepositPaidKobo == this.crateDepositPaidKobo &&
+          other.vanTripId == this.vanTripId &&
           other.completedAt == this.completedAt &&
           other.cancelledAt == this.cancelledAt &&
           other.createdAt == this.createdAt &&
@@ -11822,7 +16337,9 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
   final Value<String?> barcode;
   final Value<String?> staffId;
   final Value<String?> storeId;
+  final Value<String?> confirmedBy;
   final Value<int> crateDepositPaidKobo;
+  final Value<String?> vanTripId;
   final Value<DateTime?> completedAt;
   final Value<DateTime?> cancelledAt;
   final Value<DateTime> createdAt;
@@ -11844,7 +16361,9 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     this.barcode = const Value.absent(),
     this.staffId = const Value.absent(),
     this.storeId = const Value.absent(),
+    this.confirmedBy = const Value.absent(),
     this.crateDepositPaidKobo = const Value.absent(),
+    this.vanTripId = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.cancelledAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -11867,7 +16386,9 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     this.barcode = const Value.absent(),
     this.staffId = const Value.absent(),
     this.storeId = const Value.absent(),
+    this.confirmedBy = const Value.absent(),
     this.crateDepositPaidKobo = const Value.absent(),
+    this.vanTripId = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.cancelledAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -11895,7 +16416,9 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     Expression<String>? barcode,
     Expression<String>? staffId,
     Expression<String>? storeId,
+    Expression<String>? confirmedBy,
     Expression<int>? crateDepositPaidKobo,
+    Expression<String>? vanTripId,
     Expression<DateTime>? completedAt,
     Expression<DateTime>? cancelledAt,
     Expression<DateTime>? createdAt,
@@ -11918,8 +16441,10 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
       if (barcode != null) 'barcode': barcode,
       if (staffId != null) 'staff_id': staffId,
       if (storeId != null) 'store_id': storeId,
+      if (confirmedBy != null) 'confirmed_by': confirmedBy,
       if (crateDepositPaidKobo != null)
         'crate_deposit_paid_kobo': crateDepositPaidKobo,
+      if (vanTripId != null) 'van_trip_id': vanTripId,
       if (completedAt != null) 'completed_at': completedAt,
       if (cancelledAt != null) 'cancelled_at': cancelledAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -11944,7 +16469,9 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     Value<String?>? barcode,
     Value<String?>? staffId,
     Value<String?>? storeId,
+    Value<String?>? confirmedBy,
     Value<int>? crateDepositPaidKobo,
+    Value<String?>? vanTripId,
     Value<DateTime?>? completedAt,
     Value<DateTime?>? cancelledAt,
     Value<DateTime>? createdAt,
@@ -11967,7 +16494,9 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
       barcode: barcode ?? this.barcode,
       staffId: staffId ?? this.staffId,
       storeId: storeId ?? this.storeId,
+      confirmedBy: confirmedBy ?? this.confirmedBy,
       crateDepositPaidKobo: crateDepositPaidKobo ?? this.crateDepositPaidKobo,
+      vanTripId: vanTripId ?? this.vanTripId,
       completedAt: completedAt ?? this.completedAt,
       cancelledAt: cancelledAt ?? this.cancelledAt,
       createdAt: createdAt ?? this.createdAt,
@@ -12024,10 +16553,16 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     if (storeId.present) {
       map['store_id'] = Variable<String>(storeId.value);
     }
+    if (confirmedBy.present) {
+      map['confirmed_by'] = Variable<String>(confirmedBy.value);
+    }
     if (crateDepositPaidKobo.present) {
       map['crate_deposit_paid_kobo'] = Variable<int>(
         crateDepositPaidKobo.value,
       );
+    }
+    if (vanTripId.present) {
+      map['van_trip_id'] = Variable<String>(vanTripId.value);
     }
     if (completedAt.present) {
       map['completed_at'] = Variable<DateTime>(completedAt.value);
@@ -12065,7 +16600,9 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
           ..write('barcode: $barcode, ')
           ..write('staffId: $staffId, ')
           ..write('storeId: $storeId, ')
+          ..write('confirmedBy: $confirmedBy, ')
           ..write('crateDepositPaidKobo: $crateDepositPaidKobo, ')
+          ..write('vanTripId: $vanTripId, ')
           ..write('completedAt: $completedAt, ')
           ..write('cancelledAt: $cancelledAt, ')
           ..write('createdAt: $createdAt, ')
@@ -17478,6 +22015,17 @@ class $StockTransfersTable extends StockTransfers
       'REFERENCES users (id)',
     ),
   );
+  static const VerificationMeta _costKoboMeta = const VerificationMeta(
+    'costKobo',
+  );
+  @override
+  late final GeneratedColumn<int> costKobo = GeneratedColumn<int>(
+    'cost_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _initiatedAtMeta = const VerificationMeta(
     'initiatedAt',
   );
@@ -17537,6 +22085,7 @@ class $StockTransfersTable extends StockTransfers
     status,
     initiatedBy,
     receivedBy,
+    costKobo,
     initiatedAt,
     receivedAt,
     createdAt,
@@ -17626,6 +22175,12 @@ class $StockTransfersTable extends StockTransfers
         receivedBy.isAcceptableOrUnknown(data['received_by']!, _receivedByMeta),
       );
     }
+    if (data.containsKey('cost_kobo')) {
+      context.handle(
+        _costKoboMeta,
+        costKobo.isAcceptableOrUnknown(data['cost_kobo']!, _costKoboMeta),
+      );
+    }
     if (data.containsKey('initiated_at')) {
       context.handle(
         _initiatedAtMeta,
@@ -17701,6 +22256,10 @@ class $StockTransfersTable extends StockTransfers
         DriftSqlType.string,
         data['${effectivePrefix}received_by'],
       ),
+      costKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cost_kobo'],
+      ),
       initiatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}initiated_at'],
@@ -17737,6 +22296,7 @@ class StockTransferData extends DataClass
   final String status;
   final String initiatedBy;
   final String? receivedBy;
+  final int? costKobo;
   final DateTime initiatedAt;
   final DateTime? receivedAt;
   final DateTime createdAt;
@@ -17751,6 +22311,7 @@ class StockTransferData extends DataClass
     required this.status,
     required this.initiatedBy,
     this.receivedBy,
+    this.costKobo,
     required this.initiatedAt,
     this.receivedAt,
     required this.createdAt,
@@ -17769,6 +22330,9 @@ class StockTransferData extends DataClass
     map['initiated_by'] = Variable<String>(initiatedBy);
     if (!nullToAbsent || receivedBy != null) {
       map['received_by'] = Variable<String>(receivedBy);
+    }
+    if (!nullToAbsent || costKobo != null) {
+      map['cost_kobo'] = Variable<int>(costKobo);
     }
     map['initiated_at'] = Variable<DateTime>(initiatedAt);
     if (!nullToAbsent || receivedAt != null) {
@@ -17792,6 +22356,9 @@ class StockTransferData extends DataClass
       receivedBy: receivedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(receivedBy),
+      costKobo: costKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(costKobo),
       initiatedAt: Value(initiatedAt),
       receivedAt: receivedAt == null && nullToAbsent
           ? const Value.absent()
@@ -17816,6 +22383,7 @@ class StockTransferData extends DataClass
       status: serializer.fromJson<String>(json['status']),
       initiatedBy: serializer.fromJson<String>(json['initiatedBy']),
       receivedBy: serializer.fromJson<String?>(json['receivedBy']),
+      costKobo: serializer.fromJson<int?>(json['costKobo']),
       initiatedAt: serializer.fromJson<DateTime>(json['initiatedAt']),
       receivedAt: serializer.fromJson<DateTime?>(json['receivedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -17835,6 +22403,7 @@ class StockTransferData extends DataClass
       'status': serializer.toJson<String>(status),
       'initiatedBy': serializer.toJson<String>(initiatedBy),
       'receivedBy': serializer.toJson<String?>(receivedBy),
+      'costKobo': serializer.toJson<int?>(costKobo),
       'initiatedAt': serializer.toJson<DateTime>(initiatedAt),
       'receivedAt': serializer.toJson<DateTime?>(receivedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -17852,6 +22421,7 @@ class StockTransferData extends DataClass
     String? status,
     String? initiatedBy,
     Value<String?> receivedBy = const Value.absent(),
+    Value<int?> costKobo = const Value.absent(),
     DateTime? initiatedAt,
     Value<DateTime?> receivedAt = const Value.absent(),
     DateTime? createdAt,
@@ -17866,6 +22436,7 @@ class StockTransferData extends DataClass
     status: status ?? this.status,
     initiatedBy: initiatedBy ?? this.initiatedBy,
     receivedBy: receivedBy.present ? receivedBy.value : this.receivedBy,
+    costKobo: costKobo.present ? costKobo.value : this.costKobo,
     initiatedAt: initiatedAt ?? this.initiatedAt,
     receivedAt: receivedAt.present ? receivedAt.value : this.receivedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -17892,6 +22463,7 @@ class StockTransferData extends DataClass
       receivedBy: data.receivedBy.present
           ? data.receivedBy.value
           : this.receivedBy,
+      costKobo: data.costKobo.present ? data.costKobo.value : this.costKobo,
       initiatedAt: data.initiatedAt.present
           ? data.initiatedAt.value
           : this.initiatedAt,
@@ -17917,6 +22489,7 @@ class StockTransferData extends DataClass
           ..write('status: $status, ')
           ..write('initiatedBy: $initiatedBy, ')
           ..write('receivedBy: $receivedBy, ')
+          ..write('costKobo: $costKobo, ')
           ..write('initiatedAt: $initiatedAt, ')
           ..write('receivedAt: $receivedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -17936,6 +22509,7 @@ class StockTransferData extends DataClass
     status,
     initiatedBy,
     receivedBy,
+    costKobo,
     initiatedAt,
     receivedAt,
     createdAt,
@@ -17954,6 +22528,7 @@ class StockTransferData extends DataClass
           other.status == this.status &&
           other.initiatedBy == this.initiatedBy &&
           other.receivedBy == this.receivedBy &&
+          other.costKobo == this.costKobo &&
           other.initiatedAt == this.initiatedAt &&
           other.receivedAt == this.receivedAt &&
           other.createdAt == this.createdAt &&
@@ -17970,6 +22545,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
   final Value<String> status;
   final Value<String> initiatedBy;
   final Value<String?> receivedBy;
+  final Value<int?> costKobo;
   final Value<DateTime> initiatedAt;
   final Value<DateTime?> receivedAt;
   final Value<DateTime> createdAt;
@@ -17985,6 +22561,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     this.status = const Value.absent(),
     this.initiatedBy = const Value.absent(),
     this.receivedBy = const Value.absent(),
+    this.costKobo = const Value.absent(),
     this.initiatedAt = const Value.absent(),
     this.receivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -18001,6 +22578,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     this.status = const Value.absent(),
     required String initiatedBy,
     this.receivedBy = const Value.absent(),
+    this.costKobo = const Value.absent(),
     this.initiatedAt = const Value.absent(),
     this.receivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -18022,6 +22600,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     Expression<String>? status,
     Expression<String>? initiatedBy,
     Expression<String>? receivedBy,
+    Expression<int>? costKobo,
     Expression<DateTime>? initiatedAt,
     Expression<DateTime>? receivedAt,
     Expression<DateTime>? createdAt,
@@ -18038,6 +22617,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
       if (status != null) 'status': status,
       if (initiatedBy != null) 'initiated_by': initiatedBy,
       if (receivedBy != null) 'received_by': receivedBy,
+      if (costKobo != null) 'cost_kobo': costKobo,
       if (initiatedAt != null) 'initiated_at': initiatedAt,
       if (receivedAt != null) 'received_at': receivedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -18056,6 +22636,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     Value<String>? status,
     Value<String>? initiatedBy,
     Value<String?>? receivedBy,
+    Value<int?>? costKobo,
     Value<DateTime>? initiatedAt,
     Value<DateTime?>? receivedAt,
     Value<DateTime>? createdAt,
@@ -18072,6 +22653,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
       status: status ?? this.status,
       initiatedBy: initiatedBy ?? this.initiatedBy,
       receivedBy: receivedBy ?? this.receivedBy,
+      costKobo: costKobo ?? this.costKobo,
       initiatedAt: initiatedAt ?? this.initiatedAt,
       receivedAt: receivedAt ?? this.receivedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -18110,6 +22692,9 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     if (receivedBy.present) {
       map['received_by'] = Variable<String>(receivedBy.value);
     }
+    if (costKobo.present) {
+      map['cost_kobo'] = Variable<int>(costKobo.value);
+    }
     if (initiatedAt.present) {
       map['initiated_at'] = Variable<DateTime>(initiatedAt.value);
     }
@@ -18140,6 +22725,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
           ..write('status: $status, ')
           ..write('initiatedBy: $initiatedBy, ')
           ..write('receivedBy: $receivedBy, ')
+          ..write('costKobo: $costKobo, ')
           ..write('initiatedAt: $initiatedAt, ')
           ..write('receivedAt: $receivedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -18242,6 +22828,28 @@ class $StockAdjustmentsTable extends StockAdjustments
       'REFERENCES users (id)',
     ),
   );
+  static const VerificationMeta _unitCostKoboMeta = const VerificationMeta(
+    'unitCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unitCostKobo = GeneratedColumn<int>(
+    'unit_cost_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _valueKoboMeta = const VerificationMeta(
+    'valueKobo',
+  );
+  @override
+  late final GeneratedColumn<int> valueKobo = GeneratedColumn<int>(
+    'value_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -18276,6 +22884,8 @@ class $StockAdjustmentsTable extends StockAdjustments
     quantityDiff,
     reason,
     performedBy,
+    unitCostKobo,
+    valueKobo,
     createdAt,
     lastUpdatedAt,
   ];
@@ -18346,6 +22956,21 @@ class $StockAdjustmentsTable extends StockAdjustments
         ),
       );
     }
+    if (data.containsKey('unit_cost_kobo')) {
+      context.handle(
+        _unitCostKoboMeta,
+        unitCostKobo.isAcceptableOrUnknown(
+          data['unit_cost_kobo']!,
+          _unitCostKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('value_kobo')) {
+      context.handle(
+        _valueKoboMeta,
+        valueKobo.isAcceptableOrUnknown(data['value_kobo']!, _valueKoboMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -18398,6 +23023,14 @@ class $StockAdjustmentsTable extends StockAdjustments
         DriftSqlType.string,
         data['${effectivePrefix}performed_by'],
       ),
+      unitCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_kobo'],
+      ),
+      valueKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}value_kobo'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -18424,6 +23057,8 @@ class StockAdjustmentData extends DataClass
   final int quantityDiff;
   final String reason;
   final String? performedBy;
+  final int? unitCostKobo;
+  final int? valueKobo;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const StockAdjustmentData({
@@ -18434,6 +23069,8 @@ class StockAdjustmentData extends DataClass
     required this.quantityDiff,
     required this.reason,
     this.performedBy,
+    this.unitCostKobo,
+    this.valueKobo,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -18448,6 +23085,12 @@ class StockAdjustmentData extends DataClass
     map['reason'] = Variable<String>(reason);
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
+    }
+    if (!nullToAbsent || unitCostKobo != null) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo);
+    }
+    if (!nullToAbsent || valueKobo != null) {
+      map['value_kobo'] = Variable<int>(valueKobo);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -18465,6 +23108,12 @@ class StockAdjustmentData extends DataClass
       performedBy: performedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(performedBy),
+      unitCostKobo: unitCostKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitCostKobo),
+      valueKobo: valueKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(valueKobo),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -18483,6 +23132,8 @@ class StockAdjustmentData extends DataClass
       quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
       reason: serializer.fromJson<String>(json['reason']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
+      unitCostKobo: serializer.fromJson<int?>(json['unitCostKobo']),
+      valueKobo: serializer.fromJson<int?>(json['valueKobo']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -18498,6 +23149,8 @@ class StockAdjustmentData extends DataClass
       'quantityDiff': serializer.toJson<int>(quantityDiff),
       'reason': serializer.toJson<String>(reason),
       'performedBy': serializer.toJson<String?>(performedBy),
+      'unitCostKobo': serializer.toJson<int?>(unitCostKobo),
+      'valueKobo': serializer.toJson<int?>(valueKobo),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -18511,6 +23164,8 @@ class StockAdjustmentData extends DataClass
     int? quantityDiff,
     String? reason,
     Value<String?> performedBy = const Value.absent(),
+    Value<int?> unitCostKobo = const Value.absent(),
+    Value<int?> valueKobo = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => StockAdjustmentData(
@@ -18521,6 +23176,8 @@ class StockAdjustmentData extends DataClass
     quantityDiff: quantityDiff ?? this.quantityDiff,
     reason: reason ?? this.reason,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    unitCostKobo: unitCostKobo.present ? unitCostKobo.value : this.unitCostKobo,
+    valueKobo: valueKobo.present ? valueKobo.value : this.valueKobo,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -18539,6 +23196,10 @@ class StockAdjustmentData extends DataClass
       performedBy: data.performedBy.present
           ? data.performedBy.value
           : this.performedBy,
+      unitCostKobo: data.unitCostKobo.present
+          ? data.unitCostKobo.value
+          : this.unitCostKobo,
+      valueKobo: data.valueKobo.present ? data.valueKobo.value : this.valueKobo,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -18556,6 +23217,8 @@ class StockAdjustmentData extends DataClass
           ..write('quantityDiff: $quantityDiff, ')
           ..write('reason: $reason, ')
           ..write('performedBy: $performedBy, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
+          ..write('valueKobo: $valueKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -18571,6 +23234,8 @@ class StockAdjustmentData extends DataClass
     quantityDiff,
     reason,
     performedBy,
+    unitCostKobo,
+    valueKobo,
     createdAt,
     lastUpdatedAt,
   );
@@ -18585,6 +23250,8 @@ class StockAdjustmentData extends DataClass
           other.quantityDiff == this.quantityDiff &&
           other.reason == this.reason &&
           other.performedBy == this.performedBy &&
+          other.unitCostKobo == this.unitCostKobo &&
+          other.valueKobo == this.valueKobo &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -18597,6 +23264,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
   final Value<int> quantityDiff;
   final Value<String> reason;
   final Value<String?> performedBy;
+  final Value<int?> unitCostKobo;
+  final Value<int?> valueKobo;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -18608,6 +23277,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     this.quantityDiff = const Value.absent(),
     this.reason = const Value.absent(),
     this.performedBy = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
+    this.valueKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -18620,6 +23291,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     required int quantityDiff,
     required String reason,
     this.performedBy = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
+    this.valueKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -18636,6 +23309,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     Expression<int>? quantityDiff,
     Expression<String>? reason,
     Expression<String>? performedBy,
+    Expression<int>? unitCostKobo,
+    Expression<int>? valueKobo,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -18648,6 +23323,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
       if (quantityDiff != null) 'quantity_diff': quantityDiff,
       if (reason != null) 'reason': reason,
       if (performedBy != null) 'performed_by': performedBy,
+      if (unitCostKobo != null) 'unit_cost_kobo': unitCostKobo,
+      if (valueKobo != null) 'value_kobo': valueKobo,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -18662,6 +23339,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     Value<int>? quantityDiff,
     Value<String>? reason,
     Value<String?>? performedBy,
+    Value<int?>? unitCostKobo,
+    Value<int?>? valueKobo,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -18674,6 +23353,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
       quantityDiff: quantityDiff ?? this.quantityDiff,
       reason: reason ?? this.reason,
       performedBy: performedBy ?? this.performedBy,
+      unitCostKobo: unitCostKobo ?? this.unitCostKobo,
+      valueKobo: valueKobo ?? this.valueKobo,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -18704,6 +23385,12 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     if (performedBy.present) {
       map['performed_by'] = Variable<String>(performedBy.value);
     }
+    if (unitCostKobo.present) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo.value);
+    }
+    if (valueKobo.present) {
+      map['value_kobo'] = Variable<int>(valueKobo.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -18726,6 +23413,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
           ..write('quantityDiff: $quantityDiff, ')
           ..write('reason: $reason, ')
           ..write('performedBy: $performedBy, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
+          ..write('valueKobo: $valueKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -20242,6 +24931,17 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _unitCostKoboMeta = const VerificationMeta(
+    'unitCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unitCostKobo = GeneratedColumn<int>(
+    'unit_cost_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
   @override
   late final GeneratedColumn<String> reason = GeneratedColumn<String>(
@@ -20343,6 +25043,7 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
     productId,
     storeId,
     quantityDiff,
+    unitCostKobo,
     reason,
     summary,
     requestedBy,
@@ -20401,6 +25102,15 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
       );
     } else if (isInserting) {
       context.missing(_quantityDiffMeta);
+    }
+    if (data.containsKey('unit_cost_kobo')) {
+      context.handle(
+        _unitCostKoboMeta,
+        unitCostKobo.isAcceptableOrUnknown(
+          data['unit_cost_kobo']!,
+          _unitCostKoboMeta,
+        ),
+      );
     }
     if (data.containsKey('reason')) {
       context.handle(
@@ -20492,6 +25202,10 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
         DriftSqlType.int,
         data['${effectivePrefix}quantity_diff'],
       )!,
+      unitCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_kobo'],
+      ),
       reason: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}reason'],
@@ -20540,6 +25254,22 @@ class StockAdjustmentRequestData extends DataClass
   final String productId;
   final String storeId;
   final int quantityDiff;
+
+  /// What the goods cost, **per unit, in kobo** — captured on the request
+  /// itself (#197, PRD #155 US 22) so the FIFO batch the approval mints carries
+  /// REAL cost instead of a guess.
+  ///
+  /// Nullable on purpose: a request legitimately may not know the cost (a
+  /// recount that simply found more units on the shelf has no invoice behind
+  /// it). NULL is handed to `InventoryDao.adjustStock` as an omitted
+  /// `inflowUnitCostKobo`, which falls back to the product's recorded scalar
+  /// price (#189) — so the fallback is what runs when nobody stated a cost, and
+  /// a stated cost always wins.
+  ///
+  /// Only meaningful on an INCREASE. A decrease values itself by drawing this
+  /// store's FIFO queue (#7a) and snapshotting what it drew, so the column is
+  /// left NULL there — the requester is not the authority on what a loss cost.
+  final int? unitCostKobo;
   final String reason;
   final String summary;
   final String? requestedBy;
@@ -20554,6 +25284,7 @@ class StockAdjustmentRequestData extends DataClass
     required this.productId,
     required this.storeId,
     required this.quantityDiff,
+    this.unitCostKobo,
     required this.reason,
     required this.summary,
     this.requestedBy,
@@ -20571,6 +25302,9 @@ class StockAdjustmentRequestData extends DataClass
     map['product_id'] = Variable<String>(productId);
     map['store_id'] = Variable<String>(storeId);
     map['quantity_diff'] = Variable<int>(quantityDiff);
+    if (!nullToAbsent || unitCostKobo != null) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo);
+    }
     map['reason'] = Variable<String>(reason);
     map['summary'] = Variable<String>(summary);
     if (!nullToAbsent || requestedBy != null) {
@@ -20595,6 +25329,9 @@ class StockAdjustmentRequestData extends DataClass
       productId: Value(productId),
       storeId: Value(storeId),
       quantityDiff: Value(quantityDiff),
+      unitCostKobo: unitCostKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitCostKobo),
       reason: Value(reason),
       summary: Value(summary),
       requestedBy: requestedBy == null && nullToAbsent
@@ -20623,6 +25360,7 @@ class StockAdjustmentRequestData extends DataClass
       productId: serializer.fromJson<String>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
       quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
+      unitCostKobo: serializer.fromJson<int?>(json['unitCostKobo']),
       reason: serializer.fromJson<String>(json['reason']),
       summary: serializer.fromJson<String>(json['summary']),
       requestedBy: serializer.fromJson<String?>(json['requestedBy']),
@@ -20642,6 +25380,7 @@ class StockAdjustmentRequestData extends DataClass
       'productId': serializer.toJson<String>(productId),
       'storeId': serializer.toJson<String>(storeId),
       'quantityDiff': serializer.toJson<int>(quantityDiff),
+      'unitCostKobo': serializer.toJson<int?>(unitCostKobo),
       'reason': serializer.toJson<String>(reason),
       'summary': serializer.toJson<String>(summary),
       'requestedBy': serializer.toJson<String?>(requestedBy),
@@ -20659,6 +25398,7 @@ class StockAdjustmentRequestData extends DataClass
     String? productId,
     String? storeId,
     int? quantityDiff,
+    Value<int?> unitCostKobo = const Value.absent(),
     String? reason,
     String? summary,
     Value<String?> requestedBy = const Value.absent(),
@@ -20673,6 +25413,7 @@ class StockAdjustmentRequestData extends DataClass
     productId: productId ?? this.productId,
     storeId: storeId ?? this.storeId,
     quantityDiff: quantityDiff ?? this.quantityDiff,
+    unitCostKobo: unitCostKobo.present ? unitCostKobo.value : this.unitCostKobo,
     reason: reason ?? this.reason,
     summary: summary ?? this.summary,
     requestedBy: requestedBy.present ? requestedBy.value : this.requestedBy,
@@ -20695,6 +25436,9 @@ class StockAdjustmentRequestData extends DataClass
       quantityDiff: data.quantityDiff.present
           ? data.quantityDiff.value
           : this.quantityDiff,
+      unitCostKobo: data.unitCostKobo.present
+          ? data.unitCostKobo.value
+          : this.unitCostKobo,
       reason: data.reason.present ? data.reason.value : this.reason,
       summary: data.summary.present ? data.summary.value : this.summary,
       requestedBy: data.requestedBy.present
@@ -20722,6 +25466,7 @@ class StockAdjustmentRequestData extends DataClass
           ..write('productId: $productId, ')
           ..write('storeId: $storeId, ')
           ..write('quantityDiff: $quantityDiff, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
           ..write('reason: $reason, ')
           ..write('summary: $summary, ')
           ..write('requestedBy: $requestedBy, ')
@@ -20741,6 +25486,7 @@ class StockAdjustmentRequestData extends DataClass
     productId,
     storeId,
     quantityDiff,
+    unitCostKobo,
     reason,
     summary,
     requestedBy,
@@ -20759,6 +25505,7 @@ class StockAdjustmentRequestData extends DataClass
           other.productId == this.productId &&
           other.storeId == this.storeId &&
           other.quantityDiff == this.quantityDiff &&
+          other.unitCostKobo == this.unitCostKobo &&
           other.reason == this.reason &&
           other.summary == this.summary &&
           other.requestedBy == this.requestedBy &&
@@ -20776,6 +25523,7 @@ class StockAdjustmentRequestsCompanion
   final Value<String> productId;
   final Value<String> storeId;
   final Value<int> quantityDiff;
+  final Value<int?> unitCostKobo;
   final Value<String> reason;
   final Value<String> summary;
   final Value<String?> requestedBy;
@@ -20791,6 +25539,7 @@ class StockAdjustmentRequestsCompanion
     this.productId = const Value.absent(),
     this.storeId = const Value.absent(),
     this.quantityDiff = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
     this.reason = const Value.absent(),
     this.summary = const Value.absent(),
     this.requestedBy = const Value.absent(),
@@ -20807,6 +25556,7 @@ class StockAdjustmentRequestsCompanion
     required String productId,
     required String storeId,
     required int quantityDiff,
+    this.unitCostKobo = const Value.absent(),
     required String reason,
     required String summary,
     this.requestedBy = const Value.absent(),
@@ -20828,6 +25578,7 @@ class StockAdjustmentRequestsCompanion
     Expression<String>? productId,
     Expression<String>? storeId,
     Expression<int>? quantityDiff,
+    Expression<int>? unitCostKobo,
     Expression<String>? reason,
     Expression<String>? summary,
     Expression<String>? requestedBy,
@@ -20844,6 +25595,7 @@ class StockAdjustmentRequestsCompanion
       if (productId != null) 'product_id': productId,
       if (storeId != null) 'store_id': storeId,
       if (quantityDiff != null) 'quantity_diff': quantityDiff,
+      if (unitCostKobo != null) 'unit_cost_kobo': unitCostKobo,
       if (reason != null) 'reason': reason,
       if (summary != null) 'summary': summary,
       if (requestedBy != null) 'requested_by': requestedBy,
@@ -20862,6 +25614,7 @@ class StockAdjustmentRequestsCompanion
     Value<String>? productId,
     Value<String>? storeId,
     Value<int>? quantityDiff,
+    Value<int?>? unitCostKobo,
     Value<String>? reason,
     Value<String>? summary,
     Value<String?>? requestedBy,
@@ -20878,6 +25631,7 @@ class StockAdjustmentRequestsCompanion
       productId: productId ?? this.productId,
       storeId: storeId ?? this.storeId,
       quantityDiff: quantityDiff ?? this.quantityDiff,
+      unitCostKobo: unitCostKobo ?? this.unitCostKobo,
       reason: reason ?? this.reason,
       summary: summary ?? this.summary,
       requestedBy: requestedBy ?? this.requestedBy,
@@ -20907,6 +25661,9 @@ class StockAdjustmentRequestsCompanion
     }
     if (quantityDiff.present) {
       map['quantity_diff'] = Variable<int>(quantityDiff.value);
+    }
+    if (unitCostKobo.present) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo.value);
     }
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
@@ -20946,6 +25703,7 @@ class StockAdjustmentRequestsCompanion
           ..write('productId: $productId, ')
           ..write('storeId: $storeId, ')
           ..write('quantityDiff: $quantityDiff, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
           ..write('reason: $reason, ')
           ..write('summary: $summary, ')
           ..write('requestedBy: $requestedBy, ')
@@ -21857,6 +26615,16 @@ class $OrderItemsTable extends OrderItems
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _cataloguePriceKoboMeta =
+      const VerificationMeta('cataloguePriceKobo');
+  @override
+  late final GeneratedColumn<int> cataloguePriceKobo = GeneratedColumn<int>(
+    'catalogue_price_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _priceSnapshotMeta = const VerificationMeta(
     'priceSnapshot',
   );
@@ -21904,6 +26672,7 @@ class $OrderItemsTable extends OrderItems
     unitPriceKobo,
     buyingPriceKobo,
     totalKobo,
+    cataloguePriceKobo,
     priceSnapshot,
     createdAt,
     lastUpdatedAt,
@@ -21989,6 +26758,15 @@ class $OrderItemsTable extends OrderItems
     } else if (isInserting) {
       context.missing(_totalKoboMeta);
     }
+    if (data.containsKey('catalogue_price_kobo')) {
+      context.handle(
+        _cataloguePriceKoboMeta,
+        cataloguePriceKobo.isAcceptableOrUnknown(
+          data['catalogue_price_kobo']!,
+          _cataloguePriceKoboMeta,
+        ),
+      );
+    }
     if (data.containsKey('price_snapshot')) {
       context.handle(
         _priceSnapshotMeta,
@@ -22058,6 +26836,10 @@ class $OrderItemsTable extends OrderItems
         DriftSqlType.int,
         data['${effectivePrefix}total_kobo'],
       )!,
+      cataloguePriceKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}catalogue_price_kobo'],
+      ),
       priceSnapshot: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}price_snapshot'],
@@ -22089,6 +26871,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
   final int unitPriceKobo;
   final int buyingPriceKobo;
   final int totalKobo;
+  final int? cataloguePriceKobo;
   final String? priceSnapshot;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -22102,6 +26885,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     required this.unitPriceKobo,
     required this.buyingPriceKobo,
     required this.totalKobo,
+    this.cataloguePriceKobo,
     this.priceSnapshot,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -22120,6 +26904,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     map['unit_price_kobo'] = Variable<int>(unitPriceKobo);
     map['buying_price_kobo'] = Variable<int>(buyingPriceKobo);
     map['total_kobo'] = Variable<int>(totalKobo);
+    if (!nullToAbsent || cataloguePriceKobo != null) {
+      map['catalogue_price_kobo'] = Variable<int>(cataloguePriceKobo);
+    }
     if (!nullToAbsent || priceSnapshot != null) {
       map['price_snapshot'] = Variable<String>(priceSnapshot);
     }
@@ -22141,6 +26928,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       unitPriceKobo: Value(unitPriceKobo),
       buyingPriceKobo: Value(buyingPriceKobo),
       totalKobo: Value(totalKobo),
+      cataloguePriceKobo: cataloguePriceKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cataloguePriceKobo),
       priceSnapshot: priceSnapshot == null && nullToAbsent
           ? const Value.absent()
           : Value(priceSnapshot),
@@ -22164,6 +26954,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       unitPriceKobo: serializer.fromJson<int>(json['unitPriceKobo']),
       buyingPriceKobo: serializer.fromJson<int>(json['buyingPriceKobo']),
       totalKobo: serializer.fromJson<int>(json['totalKobo']),
+      cataloguePriceKobo: serializer.fromJson<int?>(json['cataloguePriceKobo']),
       priceSnapshot: serializer.fromJson<String?>(json['priceSnapshot']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -22182,6 +26973,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       'unitPriceKobo': serializer.toJson<int>(unitPriceKobo),
       'buyingPriceKobo': serializer.toJson<int>(buyingPriceKobo),
       'totalKobo': serializer.toJson<int>(totalKobo),
+      'cataloguePriceKobo': serializer.toJson<int?>(cataloguePriceKobo),
       'priceSnapshot': serializer.toJson<String?>(priceSnapshot),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -22198,6 +26990,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     int? unitPriceKobo,
     int? buyingPriceKobo,
     int? totalKobo,
+    Value<int?> cataloguePriceKobo = const Value.absent(),
     Value<String?> priceSnapshot = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -22211,6 +27004,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
     buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
     totalKobo: totalKobo ?? this.totalKobo,
+    cataloguePriceKobo: cataloguePriceKobo.present
+        ? cataloguePriceKobo.value
+        : this.cataloguePriceKobo,
     priceSnapshot: priceSnapshot.present
         ? priceSnapshot.value
         : this.priceSnapshot,
@@ -22234,6 +27030,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           ? data.buyingPriceKobo.value
           : this.buyingPriceKobo,
       totalKobo: data.totalKobo.present ? data.totalKobo.value : this.totalKobo,
+      cataloguePriceKobo: data.cataloguePriceKobo.present
+          ? data.cataloguePriceKobo.value
+          : this.cataloguePriceKobo,
       priceSnapshot: data.priceSnapshot.present
           ? data.priceSnapshot.value
           : this.priceSnapshot,
@@ -22256,6 +27055,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           ..write('unitPriceKobo: $unitPriceKobo, ')
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
           ..write('totalKobo: $totalKobo, ')
+          ..write('cataloguePriceKobo: $cataloguePriceKobo, ')
           ..write('priceSnapshot: $priceSnapshot, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -22274,6 +27074,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     unitPriceKobo,
     buyingPriceKobo,
     totalKobo,
+    cataloguePriceKobo,
     priceSnapshot,
     createdAt,
     lastUpdatedAt,
@@ -22291,6 +27092,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           other.unitPriceKobo == this.unitPriceKobo &&
           other.buyingPriceKobo == this.buyingPriceKobo &&
           other.totalKobo == this.totalKobo &&
+          other.cataloguePriceKobo == this.cataloguePriceKobo &&
           other.priceSnapshot == this.priceSnapshot &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -22306,6 +27108,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
   final Value<int> unitPriceKobo;
   final Value<int> buyingPriceKobo;
   final Value<int> totalKobo;
+  final Value<int?> cataloguePriceKobo;
   final Value<String?> priceSnapshot;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -22320,6 +27123,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     this.unitPriceKobo = const Value.absent(),
     this.buyingPriceKobo = const Value.absent(),
     this.totalKobo = const Value.absent(),
+    this.cataloguePriceKobo = const Value.absent(),
     this.priceSnapshot = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -22335,6 +27139,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     required int unitPriceKobo,
     this.buyingPriceKobo = const Value.absent(),
     required int totalKobo,
+    this.cataloguePriceKobo = const Value.absent(),
     this.priceSnapshot = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -22355,6 +27160,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Expression<int>? unitPriceKobo,
     Expression<int>? buyingPriceKobo,
     Expression<int>? totalKobo,
+    Expression<int>? cataloguePriceKobo,
     Expression<String>? priceSnapshot,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -22370,6 +27176,8 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       if (unitPriceKobo != null) 'unit_price_kobo': unitPriceKobo,
       if (buyingPriceKobo != null) 'buying_price_kobo': buyingPriceKobo,
       if (totalKobo != null) 'total_kobo': totalKobo,
+      if (cataloguePriceKobo != null)
+        'catalogue_price_kobo': cataloguePriceKobo,
       if (priceSnapshot != null) 'price_snapshot': priceSnapshot,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -22387,6 +27195,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Value<int>? unitPriceKobo,
     Value<int>? buyingPriceKobo,
     Value<int>? totalKobo,
+    Value<int?>? cataloguePriceKobo,
     Value<String?>? priceSnapshot,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -22402,6 +27211,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
       buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
       totalKobo: totalKobo ?? this.totalKobo,
+      cataloguePriceKobo: cataloguePriceKobo ?? this.cataloguePriceKobo,
       priceSnapshot: priceSnapshot ?? this.priceSnapshot,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -22439,6 +27249,9 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     if (totalKobo.present) {
       map['total_kobo'] = Variable<int>(totalKobo.value);
     }
+    if (cataloguePriceKobo.present) {
+      map['catalogue_price_kobo'] = Variable<int>(cataloguePriceKobo.value);
+    }
     if (priceSnapshot.present) {
       map['price_snapshot'] = Variable<String>(priceSnapshot.value);
     }
@@ -22466,6 +27279,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
           ..write('unitPriceKobo: $unitPriceKobo, ')
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
           ..write('totalKobo: $totalKobo, ')
+          ..write('cataloguePriceKobo: $cataloguePriceKobo, ')
           ..write('priceSnapshot: $priceSnapshot, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -22593,6 +27407,31 @@ class $OrderCrateLinesTable extends OrderCrateLines
         requiredDuringInsert: false,
         defaultValue: currentDateAndTime,
       );
+  static const VerificationMeta _settledAtMeta = const VerificationMeta(
+    'settledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> settledAt = GeneratedColumn<DateTime>(
+    'settled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _settledByMeta = const VerificationMeta(
+    'settledBy',
+  );
+  @override
+  late final GeneratedColumn<String> settledBy = GeneratedColumn<String>(
+    'settled_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -22604,6 +27443,8 @@ class $OrderCrateLinesTable extends OrderCrateLines
     depositPaidKobo,
     createdAt,
     lastUpdatedAt,
+    settledAt,
+    settledBy,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -22691,6 +27532,18 @@ class $OrderCrateLinesTable extends OrderCrateLines
         ),
       );
     }
+    if (data.containsKey('settled_at')) {
+      context.handle(
+        _settledAtMeta,
+        settledAt.isAcceptableOrUnknown(data['settled_at']!, _settledAtMeta),
+      );
+    }
+    if (data.containsKey('settled_by')) {
+      context.handle(
+        _settledByMeta,
+        settledBy.isAcceptableOrUnknown(data['settled_by']!, _settledByMeta),
+      );
+    }
     return context;
   }
 
@@ -22736,6 +27589,14 @@ class $OrderCrateLinesTable extends OrderCrateLines
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_updated_at'],
       )!,
+      settledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}settled_at'],
+      ),
+      settledBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settled_by'],
+      ),
     );
   }
 
@@ -22756,6 +27617,26 @@ class OrderCrateLineData extends DataClass
   final int depositPaidKobo;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
+
+  /// **The settlement claim (#188, PRD #155 US 14).** Stamped — inside the ONE
+  /// Confirm transaction — the moment this `(order, manufacturer)` pair's crate
+  /// returns are settled (physical empties, crate-track netting, AND the
+  /// money-track deposit). A stamped line is SKIPPED by a later Confirm, so the
+  /// deposit can never be refunded twice and the empties pool can never be
+  /// credited twice for the same pair.
+  ///
+  /// The status re-read on `orders` alone could not close this: it only catches
+  /// the CONVERGED case (the second device has already pulled `completed`). Two
+  /// devices both offline each read `pending`, so the per-pair claim — which
+  /// rides the same natural-key row both devices already share, and therefore
+  /// converges through the `order_crate_lines` dedup restore — is what makes the
+  /// settlement idempotent ACROSS devices. Nullable: every pre-v75 row, and
+  /// every still-unsettled line, is NULL.
+  final DateTime? settledAt;
+
+  /// Who won the settlement claim (the confirmer). Recorded alongside
+  /// [settledAt] for audit; never used to gate anything.
+  final String? settledBy;
   const OrderCrateLineData({
     required this.id,
     required this.businessId,
@@ -22766,6 +27647,8 @@ class OrderCrateLineData extends DataClass
     required this.depositPaidKobo,
     required this.createdAt,
     required this.lastUpdatedAt,
+    this.settledAt,
+    this.settledBy,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -22779,6 +27662,12 @@ class OrderCrateLineData extends DataClass
     map['deposit_paid_kobo'] = Variable<int>(depositPaidKobo);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    if (!nullToAbsent || settledAt != null) {
+      map['settled_at'] = Variable<DateTime>(settledAt);
+    }
+    if (!nullToAbsent || settledBy != null) {
+      map['settled_by'] = Variable<String>(settledBy);
+    }
     return map;
   }
 
@@ -22793,6 +27682,12 @@ class OrderCrateLineData extends DataClass
       depositPaidKobo: Value(depositPaidKobo),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
+      settledAt: settledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledAt),
+      settledBy: settledBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledBy),
     );
   }
 
@@ -22811,6 +27706,8 @@ class OrderCrateLineData extends DataClass
       depositPaidKobo: serializer.fromJson<int>(json['depositPaidKobo']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+      settledAt: serializer.fromJson<DateTime?>(json['settledAt']),
+      settledBy: serializer.fromJson<String?>(json['settledBy']),
     );
   }
   @override
@@ -22826,6 +27723,8 @@ class OrderCrateLineData extends DataClass
       'depositPaidKobo': serializer.toJson<int>(depositPaidKobo),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+      'settledAt': serializer.toJson<DateTime?>(settledAt),
+      'settledBy': serializer.toJson<String?>(settledBy),
     };
   }
 
@@ -22839,6 +27738,8 @@ class OrderCrateLineData extends DataClass
     int? depositPaidKobo,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
+    Value<DateTime?> settledAt = const Value.absent(),
+    Value<String?> settledBy = const Value.absent(),
   }) => OrderCrateLineData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
@@ -22849,6 +27750,8 @@ class OrderCrateLineData extends DataClass
     depositPaidKobo: depositPaidKobo ?? this.depositPaidKobo,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+    settledAt: settledAt.present ? settledAt.value : this.settledAt,
+    settledBy: settledBy.present ? settledBy.value : this.settledBy,
   );
   OrderCrateLineData copyWithCompanion(OrderCrateLinesCompanion data) {
     return OrderCrateLineData(
@@ -22873,6 +27776,8 @@ class OrderCrateLineData extends DataClass
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
           : this.lastUpdatedAt,
+      settledAt: data.settledAt.present ? data.settledAt.value : this.settledAt,
+      settledBy: data.settledBy.present ? data.settledBy.value : this.settledBy,
     );
   }
 
@@ -22887,7 +27792,9 @@ class OrderCrateLineData extends DataClass
           ..write('depositRateKobo: $depositRateKobo, ')
           ..write('depositPaidKobo: $depositPaidKobo, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('settledAt: $settledAt, ')
+          ..write('settledBy: $settledBy')
           ..write(')'))
         .toString();
   }
@@ -22903,6 +27810,8 @@ class OrderCrateLineData extends DataClass
     depositPaidKobo,
     createdAt,
     lastUpdatedAt,
+    settledAt,
+    settledBy,
   );
   @override
   bool operator ==(Object other) =>
@@ -22916,7 +27825,9 @@ class OrderCrateLineData extends DataClass
           other.depositRateKobo == this.depositRateKobo &&
           other.depositPaidKobo == this.depositPaidKobo &&
           other.createdAt == this.createdAt &&
-          other.lastUpdatedAt == this.lastUpdatedAt);
+          other.lastUpdatedAt == this.lastUpdatedAt &&
+          other.settledAt == this.settledAt &&
+          other.settledBy == this.settledBy);
 }
 
 class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
@@ -22929,6 +27840,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
   final Value<int> depositPaidKobo;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
+  final Value<DateTime?> settledAt;
+  final Value<String?> settledBy;
   final Value<int> rowid;
   const OrderCrateLinesCompanion({
     this.id = const Value.absent(),
@@ -22940,6 +27853,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     this.depositPaidKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.settledAt = const Value.absent(),
+    this.settledBy = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OrderCrateLinesCompanion.insert({
@@ -22952,6 +27867,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     this.depositPaidKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.settledAt = const Value.absent(),
+    this.settledBy = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        orderId = Value(orderId),
@@ -22967,6 +27884,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     Expression<int>? depositPaidKobo,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
+    Expression<DateTime>? settledAt,
+    Expression<String>? settledBy,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -22979,6 +27898,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
       if (depositPaidKobo != null) 'deposit_paid_kobo': depositPaidKobo,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (settledAt != null) 'settled_at': settledAt,
+      if (settledBy != null) 'settled_by': settledBy,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -22993,6 +27914,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     Value<int>? depositPaidKobo,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
+    Value<DateTime?>? settledAt,
+    Value<String?>? settledBy,
     Value<int>? rowid,
   }) {
     return OrderCrateLinesCompanion(
@@ -23005,6 +27928,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
       depositPaidKobo: depositPaidKobo ?? this.depositPaidKobo,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      settledAt: settledAt ?? this.settledAt,
+      settledBy: settledBy ?? this.settledBy,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -23039,6 +27964,12 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     if (lastUpdatedAt.present) {
       map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
     }
+    if (settledAt.present) {
+      map['settled_at'] = Variable<DateTime>(settledAt.value);
+    }
+    if (settledBy.present) {
+      map['settled_by'] = Variable<String>(settledBy.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -23057,6 +27988,8 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
           ..write('depositPaidKobo: $depositPaidKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('settledAt: $settledAt, ')
+          ..write('settledBy: $settledBy, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -27290,6 +32223,20 @@ class $PaymentTransactionsTable extends PaymentTransactions
       'REFERENCES businesses (id)',
     ),
   );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
   static const VerificationMeta _amountKoboMeta = const VerificationMeta(
     'amountKobo',
   );
@@ -27389,6 +32336,34 @@ class $PaymentTransactionsTable extends PaymentTransactions
       'REFERENCES delivery_receipts (id)',
     ),
   );
+  static const VerificationMeta _vanTripIdMeta = const VerificationMeta(
+    'vanTripId',
+  );
+  @override
+  late final GeneratedColumn<String> vanTripId = GeneratedColumn<String>(
+    'van_trip_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_trips (id)',
+    ),
+  );
+  static const VerificationMeta _crateDepositIdMeta = const VerificationMeta(
+    'crateDepositId',
+  );
+  @override
+  late final GeneratedColumn<String> crateDepositId = GeneratedColumn<String>(
+    'crate_deposit_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES supplier_crate_deposits (id)',
+    ),
+  );
   static const VerificationMeta _performedByMeta = const VerificationMeta(
     'performedBy',
   );
@@ -27468,6 +32443,7 @@ class $PaymentTransactionsTable extends PaymentTransactions
   List<GeneratedColumn> get $columns => [
     id,
     businessId,
+    storeId,
     amountKobo,
     method,
     type,
@@ -27476,6 +32452,8 @@ class $PaymentTransactionsTable extends PaymentTransactions
     expenseId,
     walletTxnId,
     deliveryId,
+    vanTripId,
+    crateDepositId,
     performedBy,
     voidedAt,
     voidedBy,
@@ -27505,6 +32483,12 @@ class $PaymentTransactionsTable extends PaymentTransactions
       );
     } else if (isInserting) {
       context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
     }
     if (data.containsKey('amount_kobo')) {
       context.handle(
@@ -27561,6 +32545,21 @@ class $PaymentTransactionsTable extends PaymentTransactions
       context.handle(
         _deliveryIdMeta,
         deliveryId.isAcceptableOrUnknown(data['delivery_id']!, _deliveryIdMeta),
+      );
+    }
+    if (data.containsKey('van_trip_id')) {
+      context.handle(
+        _vanTripIdMeta,
+        vanTripId.isAcceptableOrUnknown(data['van_trip_id']!, _vanTripIdMeta),
+      );
+    }
+    if (data.containsKey('crate_deposit_id')) {
+      context.handle(
+        _crateDepositIdMeta,
+        crateDepositId.isAcceptableOrUnknown(
+          data['crate_deposit_id']!,
+          _crateDepositIdMeta,
+        ),
       );
     }
     if (data.containsKey('performed_by')) {
@@ -27622,6 +32621,10 @@ class $PaymentTransactionsTable extends PaymentTransactions
         DriftSqlType.string,
         data['${effectivePrefix}business_id'],
       )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      ),
       amountKobo: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}amount_kobo'],
@@ -27653,6 +32656,14 @@ class $PaymentTransactionsTable extends PaymentTransactions
       deliveryId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}delivery_id'],
+      ),
+      vanTripId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_trip_id'],
+      ),
+      crateDepositId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crate_deposit_id'],
       ),
       performedBy: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -27691,6 +32702,7 @@ class PaymentTransactionData extends DataClass
     implements Insertable<PaymentTransactionData> {
   final String id;
   final String businessId;
+  final String? storeId;
   final int amountKobo;
   final String method;
   final String type;
@@ -27699,6 +32711,33 @@ class PaymentTransactionData extends DataClass
   final String? expenseId;
   final String? walletTxnId;
   final String? deliveryId;
+
+  /// The SIXTH parent (#144, van-sales spec §4.7): the trip a driver remittance
+  /// was recorded against. A remittance has no order, no shipment, no expense
+  /// and no wallet transaction — the trip IS its cause — so the exactly-one-
+  /// parent CHECK had to grow rather than the row being left parentless.
+  ///
+  /// Set on `van_remittance` rows only; null on every other type.
+  ///
+  /// `VanTrips` is listed AFTER this table in the `@DriftDatabase` table list,
+  /// but drift topologically sorts `allSchemaEntities` by FK dependency, so the
+  /// generated `createAll()` now emits `van_trips` first and the parent always
+  /// exists. (That re-sort is why adding this one column produced a large
+  /// generated-file diff: the `$PaymentTransactionsTable` class moved.)
+  final String? vanTripId;
+
+  /// The SEVENTH parent (#212, PRD #203, ADR 0023 rule 1): the Placed Deposit
+  /// ledger row this cash movement is the other leg of.
+  ///
+  /// A supplier crate deposit has no order, no shipment, no expense, no wallet
+  /// transaction, no delivery and no trip — the deposit IS its cause, and it
+  /// must not be forced under any of the other six, least of all `expense_id`
+  /// (the money is refundable; calling it a cost is the exact mistake ADR 0023
+  /// rejects). So the exactly-one-parent CHECK grows rather than the row being
+  /// left parentless.
+  ///
+  /// Set on [kPaymentTypeCrateDepositOut] rows only; null on every other type.
+  final String? crateDepositId;
   final String? performedBy;
   final DateTime? voidedAt;
   final String? voidedBy;
@@ -27708,6 +32747,7 @@ class PaymentTransactionData extends DataClass
   const PaymentTransactionData({
     required this.id,
     required this.businessId,
+    this.storeId,
     required this.amountKobo,
     required this.method,
     required this.type,
@@ -27716,6 +32756,8 @@ class PaymentTransactionData extends DataClass
     this.expenseId,
     this.walletTxnId,
     this.deliveryId,
+    this.vanTripId,
+    this.crateDepositId,
     this.performedBy,
     this.voidedAt,
     this.voidedBy,
@@ -27728,6 +32770,9 @@ class PaymentTransactionData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
+    }
     map['amount_kobo'] = Variable<int>(amountKobo);
     map['method'] = Variable<String>(method);
     map['type'] = Variable<String>(type);
@@ -27745,6 +32790,12 @@ class PaymentTransactionData extends DataClass
     }
     if (!nullToAbsent || deliveryId != null) {
       map['delivery_id'] = Variable<String>(deliveryId);
+    }
+    if (!nullToAbsent || vanTripId != null) {
+      map['van_trip_id'] = Variable<String>(vanTripId);
+    }
+    if (!nullToAbsent || crateDepositId != null) {
+      map['crate_deposit_id'] = Variable<String>(crateDepositId);
     }
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
@@ -27767,6 +32818,9 @@ class PaymentTransactionData extends DataClass
     return PaymentTransactionsCompanion(
       id: Value(id),
       businessId: Value(businessId),
+      storeId: storeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeId),
       amountKobo: Value(amountKobo),
       method: Value(method),
       type: Value(type),
@@ -27785,6 +32839,12 @@ class PaymentTransactionData extends DataClass
       deliveryId: deliveryId == null && nullToAbsent
           ? const Value.absent()
           : Value(deliveryId),
+      vanTripId: vanTripId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vanTripId),
+      crateDepositId: crateDepositId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(crateDepositId),
       performedBy: performedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(performedBy),
@@ -27810,6 +32870,7 @@ class PaymentTransactionData extends DataClass
     return PaymentTransactionData(
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
       amountKobo: serializer.fromJson<int>(json['amountKobo']),
       method: serializer.fromJson<String>(json['method']),
       type: serializer.fromJson<String>(json['type']),
@@ -27818,6 +32879,8 @@ class PaymentTransactionData extends DataClass
       expenseId: serializer.fromJson<String?>(json['expenseId']),
       walletTxnId: serializer.fromJson<String?>(json['walletTxnId']),
       deliveryId: serializer.fromJson<String?>(json['deliveryId']),
+      vanTripId: serializer.fromJson<String?>(json['vanTripId']),
+      crateDepositId: serializer.fromJson<String?>(json['crateDepositId']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
       voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
       voidedBy: serializer.fromJson<String?>(json['voidedBy']),
@@ -27832,6 +32895,7 @@ class PaymentTransactionData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
+      'storeId': serializer.toJson<String?>(storeId),
       'amountKobo': serializer.toJson<int>(amountKobo),
       'method': serializer.toJson<String>(method),
       'type': serializer.toJson<String>(type),
@@ -27840,6 +32904,8 @@ class PaymentTransactionData extends DataClass
       'expenseId': serializer.toJson<String?>(expenseId),
       'walletTxnId': serializer.toJson<String?>(walletTxnId),
       'deliveryId': serializer.toJson<String?>(deliveryId),
+      'vanTripId': serializer.toJson<String?>(vanTripId),
+      'crateDepositId': serializer.toJson<String?>(crateDepositId),
       'performedBy': serializer.toJson<String?>(performedBy),
       'voidedAt': serializer.toJson<DateTime?>(voidedAt),
       'voidedBy': serializer.toJson<String?>(voidedBy),
@@ -27852,6 +32918,7 @@ class PaymentTransactionData extends DataClass
   PaymentTransactionData copyWith({
     String? id,
     String? businessId,
+    Value<String?> storeId = const Value.absent(),
     int? amountKobo,
     String? method,
     String? type,
@@ -27860,6 +32927,8 @@ class PaymentTransactionData extends DataClass
     Value<String?> expenseId = const Value.absent(),
     Value<String?> walletTxnId = const Value.absent(),
     Value<String?> deliveryId = const Value.absent(),
+    Value<String?> vanTripId = const Value.absent(),
+    Value<String?> crateDepositId = const Value.absent(),
     Value<String?> performedBy = const Value.absent(),
     Value<DateTime?> voidedAt = const Value.absent(),
     Value<String?> voidedBy = const Value.absent(),
@@ -27869,6 +32938,7 @@ class PaymentTransactionData extends DataClass
   }) => PaymentTransactionData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
+    storeId: storeId.present ? storeId.value : this.storeId,
     amountKobo: amountKobo ?? this.amountKobo,
     method: method ?? this.method,
     type: type ?? this.type,
@@ -27877,6 +32947,10 @@ class PaymentTransactionData extends DataClass
     expenseId: expenseId.present ? expenseId.value : this.expenseId,
     walletTxnId: walletTxnId.present ? walletTxnId.value : this.walletTxnId,
     deliveryId: deliveryId.present ? deliveryId.value : this.deliveryId,
+    vanTripId: vanTripId.present ? vanTripId.value : this.vanTripId,
+    crateDepositId: crateDepositId.present
+        ? crateDepositId.value
+        : this.crateDepositId,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
     voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
     voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
@@ -27890,6 +32964,7 @@ class PaymentTransactionData extends DataClass
       businessId: data.businessId.present
           ? data.businessId.value
           : this.businessId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       amountKobo: data.amountKobo.present
           ? data.amountKobo.value
           : this.amountKobo,
@@ -27906,6 +32981,10 @@ class PaymentTransactionData extends DataClass
       deliveryId: data.deliveryId.present
           ? data.deliveryId.value
           : this.deliveryId,
+      vanTripId: data.vanTripId.present ? data.vanTripId.value : this.vanTripId,
+      crateDepositId: data.crateDepositId.present
+          ? data.crateDepositId.value
+          : this.crateDepositId,
       performedBy: data.performedBy.present
           ? data.performedBy.value
           : this.performedBy,
@@ -27926,6 +33005,7 @@ class PaymentTransactionData extends DataClass
     return (StringBuffer('PaymentTransactionData(')
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
           ..write('amountKobo: $amountKobo, ')
           ..write('method: $method, ')
           ..write('type: $type, ')
@@ -27934,6 +33014,8 @@ class PaymentTransactionData extends DataClass
           ..write('expenseId: $expenseId, ')
           ..write('walletTxnId: $walletTxnId, ')
           ..write('deliveryId: $deliveryId, ')
+          ..write('vanTripId: $vanTripId, ')
+          ..write('crateDepositId: $crateDepositId, ')
           ..write('performedBy: $performedBy, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
@@ -27948,6 +33030,7 @@ class PaymentTransactionData extends DataClass
   int get hashCode => Object.hash(
     id,
     businessId,
+    storeId,
     amountKobo,
     method,
     type,
@@ -27956,6 +33039,8 @@ class PaymentTransactionData extends DataClass
     expenseId,
     walletTxnId,
     deliveryId,
+    vanTripId,
+    crateDepositId,
     performedBy,
     voidedAt,
     voidedBy,
@@ -27969,6 +33054,7 @@ class PaymentTransactionData extends DataClass
       (other is PaymentTransactionData &&
           other.id == this.id &&
           other.businessId == this.businessId &&
+          other.storeId == this.storeId &&
           other.amountKobo == this.amountKobo &&
           other.method == this.method &&
           other.type == this.type &&
@@ -27977,6 +33063,8 @@ class PaymentTransactionData extends DataClass
           other.expenseId == this.expenseId &&
           other.walletTxnId == this.walletTxnId &&
           other.deliveryId == this.deliveryId &&
+          other.vanTripId == this.vanTripId &&
+          other.crateDepositId == this.crateDepositId &&
           other.performedBy == this.performedBy &&
           other.voidedAt == this.voidedAt &&
           other.voidedBy == this.voidedBy &&
@@ -27989,6 +33077,7 @@ class PaymentTransactionsCompanion
     extends UpdateCompanion<PaymentTransactionData> {
   final Value<String> id;
   final Value<String> businessId;
+  final Value<String?> storeId;
   final Value<int> amountKobo;
   final Value<String> method;
   final Value<String> type;
@@ -27997,6 +33086,8 @@ class PaymentTransactionsCompanion
   final Value<String?> expenseId;
   final Value<String?> walletTxnId;
   final Value<String?> deliveryId;
+  final Value<String?> vanTripId;
+  final Value<String?> crateDepositId;
   final Value<String?> performedBy;
   final Value<DateTime?> voidedAt;
   final Value<String?> voidedBy;
@@ -28007,6 +33098,7 @@ class PaymentTransactionsCompanion
   const PaymentTransactionsCompanion({
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.amountKobo = const Value.absent(),
     this.method = const Value.absent(),
     this.type = const Value.absent(),
@@ -28015,6 +33107,8 @@ class PaymentTransactionsCompanion
     this.expenseId = const Value.absent(),
     this.walletTxnId = const Value.absent(),
     this.deliveryId = const Value.absent(),
+    this.vanTripId = const Value.absent(),
+    this.crateDepositId = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
@@ -28026,6 +33120,7 @@ class PaymentTransactionsCompanion
   PaymentTransactionsCompanion.insert({
     this.id = const Value.absent(),
     required String businessId,
+    this.storeId = const Value.absent(),
     required int amountKobo,
     required String method,
     required String type,
@@ -28034,6 +33129,8 @@ class PaymentTransactionsCompanion
     this.expenseId = const Value.absent(),
     this.walletTxnId = const Value.absent(),
     this.deliveryId = const Value.absent(),
+    this.vanTripId = const Value.absent(),
+    this.crateDepositId = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
@@ -28048,6 +33145,7 @@ class PaymentTransactionsCompanion
   static Insertable<PaymentTransactionData> custom({
     Expression<String>? id,
     Expression<String>? businessId,
+    Expression<String>? storeId,
     Expression<int>? amountKobo,
     Expression<String>? method,
     Expression<String>? type,
@@ -28056,6 +33154,8 @@ class PaymentTransactionsCompanion
     Expression<String>? expenseId,
     Expression<String>? walletTxnId,
     Expression<String>? deliveryId,
+    Expression<String>? vanTripId,
+    Expression<String>? crateDepositId,
     Expression<String>? performedBy,
     Expression<DateTime>? voidedAt,
     Expression<String>? voidedBy,
@@ -28067,6 +33167,7 @@ class PaymentTransactionsCompanion
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
+      if (storeId != null) 'store_id': storeId,
       if (amountKobo != null) 'amount_kobo': amountKobo,
       if (method != null) 'method': method,
       if (type != null) 'type': type,
@@ -28075,6 +33176,8 @@ class PaymentTransactionsCompanion
       if (expenseId != null) 'expense_id': expenseId,
       if (walletTxnId != null) 'wallet_txn_id': walletTxnId,
       if (deliveryId != null) 'delivery_id': deliveryId,
+      if (vanTripId != null) 'van_trip_id': vanTripId,
+      if (crateDepositId != null) 'crate_deposit_id': crateDepositId,
       if (performedBy != null) 'performed_by': performedBy,
       if (voidedAt != null) 'voided_at': voidedAt,
       if (voidedBy != null) 'voided_by': voidedBy,
@@ -28088,6 +33191,7 @@ class PaymentTransactionsCompanion
   PaymentTransactionsCompanion copyWith({
     Value<String>? id,
     Value<String>? businessId,
+    Value<String?>? storeId,
     Value<int>? amountKobo,
     Value<String>? method,
     Value<String>? type,
@@ -28096,6 +33200,8 @@ class PaymentTransactionsCompanion
     Value<String?>? expenseId,
     Value<String?>? walletTxnId,
     Value<String?>? deliveryId,
+    Value<String?>? vanTripId,
+    Value<String?>? crateDepositId,
     Value<String?>? performedBy,
     Value<DateTime?>? voidedAt,
     Value<String?>? voidedBy,
@@ -28107,6 +33213,7 @@ class PaymentTransactionsCompanion
     return PaymentTransactionsCompanion(
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
+      storeId: storeId ?? this.storeId,
       amountKobo: amountKobo ?? this.amountKobo,
       method: method ?? this.method,
       type: type ?? this.type,
@@ -28115,6 +33222,8 @@ class PaymentTransactionsCompanion
       expenseId: expenseId ?? this.expenseId,
       walletTxnId: walletTxnId ?? this.walletTxnId,
       deliveryId: deliveryId ?? this.deliveryId,
+      vanTripId: vanTripId ?? this.vanTripId,
+      crateDepositId: crateDepositId ?? this.crateDepositId,
       performedBy: performedBy ?? this.performedBy,
       voidedAt: voidedAt ?? this.voidedAt,
       voidedBy: voidedBy ?? this.voidedBy,
@@ -28133,6 +33242,9 @@ class PaymentTransactionsCompanion
     }
     if (businessId.present) {
       map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (amountKobo.present) {
       map['amount_kobo'] = Variable<int>(amountKobo.value);
@@ -28157,6 +33269,12 @@ class PaymentTransactionsCompanion
     }
     if (deliveryId.present) {
       map['delivery_id'] = Variable<String>(deliveryId.value);
+    }
+    if (vanTripId.present) {
+      map['van_trip_id'] = Variable<String>(vanTripId.value);
+    }
+    if (crateDepositId.present) {
+      map['crate_deposit_id'] = Variable<String>(crateDepositId.value);
     }
     if (performedBy.present) {
       map['performed_by'] = Variable<String>(performedBy.value);
@@ -28187,6 +33305,7 @@ class PaymentTransactionsCompanion
     return (StringBuffer('PaymentTransactionsCompanion(')
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
           ..write('amountKobo: $amountKobo, ')
           ..write('method: $method, ')
           ..write('type: $type, ')
@@ -28195,6 +33314,8 @@ class PaymentTransactionsCompanion
           ..write('expenseId: $expenseId, ')
           ..write('walletTxnId: $walletTxnId, ')
           ..write('deliveryId: $deliveryId, ')
+          ..write('vanTripId: $vanTripId, ')
+          ..write('crateDepositId: $crateDepositId, ')
           ..write('performedBy: $performedBy, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
@@ -28994,6 +34115,4147 @@ class StockCountsCompanion extends UpdateCompanion<StockCountData> {
           ..write('surplusUnits: $surplusUnits, ')
           ..write('linesJson: $linesJson, ')
           ..write('countedBy: $countedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DailyClosingsTable extends DailyClosings
+    with TableInfo<$DailyClosingsTable, DailyClosingData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DailyClosingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _businessDateMeta = const VerificationMeta(
+    'businessDate',
+  );
+  @override
+  late final GeneratedColumn<String> businessDate = GeneratedColumn<String>(
+    'business_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _storeScopeIdMeta = const VerificationMeta(
+    'storeScopeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeScopeId = GeneratedColumn<String>(
+    'store_scope_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _totalSalesKoboMeta = const VerificationMeta(
+    'totalSalesKobo',
+  );
+  @override
+  late final GeneratedColumn<int> totalSalesKobo = GeneratedColumn<int>(
+    'total_sales_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _refundsKoboMeta = const VerificationMeta(
+    'refundsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> refundsKobo = GeneratedColumn<int>(
+    'refunds_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _discountsKoboMeta = const VerificationMeta(
+    'discountsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> discountsKobo = GeneratedColumn<int>(
+    'discounts_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cogsKoboMeta = const VerificationMeta(
+    'cogsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cogsKobo = GeneratedColumn<int>(
+    'cogs_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _grossProfitKoboMeta = const VerificationMeta(
+    'grossProfitKobo',
+  );
+  @override
+  late final GeneratedColumn<int> grossProfitKobo = GeneratedColumn<int>(
+    'gross_profit_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _netProfitKoboMeta = const VerificationMeta(
+    'netProfitKobo',
+  );
+  @override
+  late final GeneratedColumn<int> netProfitKobo = GeneratedColumn<int>(
+    'net_profit_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _expensesKoboMeta = const VerificationMeta(
+    'expensesKobo',
+  );
+  @override
+  late final GeneratedColumn<int> expensesKobo = GeneratedColumn<int>(
+    'expenses_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _damagesCostKoboMeta = const VerificationMeta(
+    'damagesCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> damagesCostKobo = GeneratedColumn<int>(
+    'damages_cost_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cashSalesKoboMeta = const VerificationMeta(
+    'cashSalesKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cashSalesKobo = GeneratedColumn<int>(
+    'cash_sales_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cashInKoboMeta = const VerificationMeta(
+    'cashInKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cashInKobo = GeneratedColumn<int>(
+    'cash_in_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cashOutKoboMeta = const VerificationMeta(
+    'cashOutKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cashOutKobo = GeneratedColumn<int>(
+    'cash_out_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _netCashMovementKoboMeta =
+      const VerificationMeta('netCashMovementKobo');
+  @override
+  late final GeneratedColumn<int> netCashMovementKobo = GeneratedColumn<int>(
+    'net_cash_movement_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _stockCogsKoboMeta = const VerificationMeta(
+    'stockCogsKobo',
+  );
+  @override
+  late final GeneratedColumn<int> stockCogsKobo = GeneratedColumn<int>(
+    'stock_cogs_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _stockExpectedClosingKoboMeta =
+      const VerificationMeta('stockExpectedClosingKobo');
+  @override
+  late final GeneratedColumn<int> stockExpectedClosingKobo =
+      GeneratedColumn<int>(
+        'stock_expected_closing_kobo',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      );
+  static const VerificationMeta _itemsSoldMeta = const VerificationMeta(
+    'itemsSold',
+  );
+  @override
+  late final GeneratedColumn<int> itemsSold = GeneratedColumn<int>(
+    'items_sold',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shortageUnitsMeta = const VerificationMeta(
+    'shortageUnits',
+  );
+  @override
+  late final GeneratedColumn<int> shortageUnits = GeneratedColumn<int>(
+    'shortage_units',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _reviewedByMeta = const VerificationMeta(
+    'reviewedBy',
+  );
+  @override
+  late final GeneratedColumn<String> reviewedBy = GeneratedColumn<String>(
+    'reviewed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _reviewedAtMeta = const VerificationMeta(
+    'reviewedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reviewedAt = GeneratedColumn<DateTime>(
+    'reviewed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    businessDate,
+    storeScopeId,
+    totalSalesKobo,
+    refundsKobo,
+    discountsKobo,
+    cogsKobo,
+    grossProfitKobo,
+    netProfitKobo,
+    expensesKobo,
+    damagesCostKobo,
+    cashSalesKobo,
+    cashInKobo,
+    cashOutKobo,
+    netCashMovementKobo,
+    stockCogsKobo,
+    stockExpectedClosingKobo,
+    itemsSold,
+    shortageUnits,
+    reviewedBy,
+    reviewedAt,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'daily_closings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DailyClosingData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('business_date')) {
+      context.handle(
+        _businessDateMeta,
+        businessDate.isAcceptableOrUnknown(
+          data['business_date']!,
+          _businessDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_businessDateMeta);
+    }
+    if (data.containsKey('store_scope_id')) {
+      context.handle(
+        _storeScopeIdMeta,
+        storeScopeId.isAcceptableOrUnknown(
+          data['store_scope_id']!,
+          _storeScopeIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('total_sales_kobo')) {
+      context.handle(
+        _totalSalesKoboMeta,
+        totalSalesKobo.isAcceptableOrUnknown(
+          data['total_sales_kobo']!,
+          _totalSalesKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('refunds_kobo')) {
+      context.handle(
+        _refundsKoboMeta,
+        refundsKobo.isAcceptableOrUnknown(
+          data['refunds_kobo']!,
+          _refundsKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('discounts_kobo')) {
+      context.handle(
+        _discountsKoboMeta,
+        discountsKobo.isAcceptableOrUnknown(
+          data['discounts_kobo']!,
+          _discountsKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cogs_kobo')) {
+      context.handle(
+        _cogsKoboMeta,
+        cogsKobo.isAcceptableOrUnknown(data['cogs_kobo']!, _cogsKoboMeta),
+      );
+    }
+    if (data.containsKey('gross_profit_kobo')) {
+      context.handle(
+        _grossProfitKoboMeta,
+        grossProfitKobo.isAcceptableOrUnknown(
+          data['gross_profit_kobo']!,
+          _grossProfitKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('net_profit_kobo')) {
+      context.handle(
+        _netProfitKoboMeta,
+        netProfitKobo.isAcceptableOrUnknown(
+          data['net_profit_kobo']!,
+          _netProfitKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expenses_kobo')) {
+      context.handle(
+        _expensesKoboMeta,
+        expensesKobo.isAcceptableOrUnknown(
+          data['expenses_kobo']!,
+          _expensesKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('damages_cost_kobo')) {
+      context.handle(
+        _damagesCostKoboMeta,
+        damagesCostKobo.isAcceptableOrUnknown(
+          data['damages_cost_kobo']!,
+          _damagesCostKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cash_sales_kobo')) {
+      context.handle(
+        _cashSalesKoboMeta,
+        cashSalesKobo.isAcceptableOrUnknown(
+          data['cash_sales_kobo']!,
+          _cashSalesKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cash_in_kobo')) {
+      context.handle(
+        _cashInKoboMeta,
+        cashInKobo.isAcceptableOrUnknown(
+          data['cash_in_kobo']!,
+          _cashInKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cash_out_kobo')) {
+      context.handle(
+        _cashOutKoboMeta,
+        cashOutKobo.isAcceptableOrUnknown(
+          data['cash_out_kobo']!,
+          _cashOutKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('net_cash_movement_kobo')) {
+      context.handle(
+        _netCashMovementKoboMeta,
+        netCashMovementKobo.isAcceptableOrUnknown(
+          data['net_cash_movement_kobo']!,
+          _netCashMovementKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('stock_cogs_kobo')) {
+      context.handle(
+        _stockCogsKoboMeta,
+        stockCogsKobo.isAcceptableOrUnknown(
+          data['stock_cogs_kobo']!,
+          _stockCogsKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('stock_expected_closing_kobo')) {
+      context.handle(
+        _stockExpectedClosingKoboMeta,
+        stockExpectedClosingKobo.isAcceptableOrUnknown(
+          data['stock_expected_closing_kobo']!,
+          _stockExpectedClosingKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('items_sold')) {
+      context.handle(
+        _itemsSoldMeta,
+        itemsSold.isAcceptableOrUnknown(data['items_sold']!, _itemsSoldMeta),
+      );
+    }
+    if (data.containsKey('shortage_units')) {
+      context.handle(
+        _shortageUnitsMeta,
+        shortageUnits.isAcceptableOrUnknown(
+          data['shortage_units']!,
+          _shortageUnitsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reviewed_by')) {
+      context.handle(
+        _reviewedByMeta,
+        reviewedBy.isAcceptableOrUnknown(data['reviewed_by']!, _reviewedByMeta),
+      );
+    }
+    if (data.containsKey('reviewed_at')) {
+      context.handle(
+        _reviewedAtMeta,
+        reviewedAt.isAcceptableOrUnknown(data['reviewed_at']!, _reviewedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DailyClosingData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DailyClosingData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      businessDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_date'],
+      )!,
+      storeScopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_scope_id'],
+      ),
+      totalSalesKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_sales_kobo'],
+      )!,
+      refundsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}refunds_kobo'],
+      )!,
+      discountsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}discounts_kobo'],
+      )!,
+      cogsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cogs_kobo'],
+      )!,
+      grossProfitKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}gross_profit_kobo'],
+      )!,
+      netProfitKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}net_profit_kobo'],
+      )!,
+      expensesKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expenses_kobo'],
+      )!,
+      damagesCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}damages_cost_kobo'],
+      )!,
+      cashSalesKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cash_sales_kobo'],
+      )!,
+      cashInKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cash_in_kobo'],
+      )!,
+      cashOutKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cash_out_kobo'],
+      )!,
+      netCashMovementKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}net_cash_movement_kobo'],
+      )!,
+      stockCogsKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stock_cogs_kobo'],
+      )!,
+      stockExpectedClosingKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stock_expected_closing_kobo'],
+      )!,
+      itemsSold: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}items_sold'],
+      )!,
+      shortageUnits: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shortage_units'],
+      )!,
+      reviewedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reviewed_by'],
+      ),
+      reviewedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reviewed_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DailyClosingsTable createAlias(String alias) {
+    return $DailyClosingsTable(attachedDatabase, alias);
+  }
+}
+
+class DailyClosingData extends DataClass
+    implements Insertable<DailyClosingData> {
+  final String id;
+  final String businessId;
+  final String businessDate;
+  final String? storeScopeId;
+  final int totalSalesKobo;
+  final int refundsKobo;
+  final int discountsKobo;
+  final int cogsKobo;
+  final int grossProfitKobo;
+  final int netProfitKobo;
+  final int expensesKobo;
+  final int damagesCostKobo;
+  final int cashSalesKobo;
+  final int cashInKobo;
+  final int cashOutKobo;
+  final int netCashMovementKobo;
+  final int stockCogsKobo;
+  final int stockExpectedClosingKobo;
+  final int itemsSold;
+  final int shortageUnits;
+  final String? reviewedBy;
+  final DateTime reviewedAt;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const DailyClosingData({
+    required this.id,
+    required this.businessId,
+    required this.businessDate,
+    this.storeScopeId,
+    required this.totalSalesKobo,
+    required this.refundsKobo,
+    required this.discountsKobo,
+    required this.cogsKobo,
+    required this.grossProfitKobo,
+    required this.netProfitKobo,
+    required this.expensesKobo,
+    required this.damagesCostKobo,
+    required this.cashSalesKobo,
+    required this.cashInKobo,
+    required this.cashOutKobo,
+    required this.netCashMovementKobo,
+    required this.stockCogsKobo,
+    required this.stockExpectedClosingKobo,
+    required this.itemsSold,
+    required this.shortageUnits,
+    this.reviewedBy,
+    required this.reviewedAt,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['business_date'] = Variable<String>(businessDate);
+    if (!nullToAbsent || storeScopeId != null) {
+      map['store_scope_id'] = Variable<String>(storeScopeId);
+    }
+    map['total_sales_kobo'] = Variable<int>(totalSalesKobo);
+    map['refunds_kobo'] = Variable<int>(refundsKobo);
+    map['discounts_kobo'] = Variable<int>(discountsKobo);
+    map['cogs_kobo'] = Variable<int>(cogsKobo);
+    map['gross_profit_kobo'] = Variable<int>(grossProfitKobo);
+    map['net_profit_kobo'] = Variable<int>(netProfitKobo);
+    map['expenses_kobo'] = Variable<int>(expensesKobo);
+    map['damages_cost_kobo'] = Variable<int>(damagesCostKobo);
+    map['cash_sales_kobo'] = Variable<int>(cashSalesKobo);
+    map['cash_in_kobo'] = Variable<int>(cashInKobo);
+    map['cash_out_kobo'] = Variable<int>(cashOutKobo);
+    map['net_cash_movement_kobo'] = Variable<int>(netCashMovementKobo);
+    map['stock_cogs_kobo'] = Variable<int>(stockCogsKobo);
+    map['stock_expected_closing_kobo'] = Variable<int>(
+      stockExpectedClosingKobo,
+    );
+    map['items_sold'] = Variable<int>(itemsSold);
+    map['shortage_units'] = Variable<int>(shortageUnits);
+    if (!nullToAbsent || reviewedBy != null) {
+      map['reviewed_by'] = Variable<String>(reviewedBy);
+    }
+    map['reviewed_at'] = Variable<DateTime>(reviewedAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  DailyClosingsCompanion toCompanion(bool nullToAbsent) {
+    return DailyClosingsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      businessDate: Value(businessDate),
+      storeScopeId: storeScopeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeScopeId),
+      totalSalesKobo: Value(totalSalesKobo),
+      refundsKobo: Value(refundsKobo),
+      discountsKobo: Value(discountsKobo),
+      cogsKobo: Value(cogsKobo),
+      grossProfitKobo: Value(grossProfitKobo),
+      netProfitKobo: Value(netProfitKobo),
+      expensesKobo: Value(expensesKobo),
+      damagesCostKobo: Value(damagesCostKobo),
+      cashSalesKobo: Value(cashSalesKobo),
+      cashInKobo: Value(cashInKobo),
+      cashOutKobo: Value(cashOutKobo),
+      netCashMovementKobo: Value(netCashMovementKobo),
+      stockCogsKobo: Value(stockCogsKobo),
+      stockExpectedClosingKobo: Value(stockExpectedClosingKobo),
+      itemsSold: Value(itemsSold),
+      shortageUnits: Value(shortageUnits),
+      reviewedBy: reviewedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reviewedBy),
+      reviewedAt: Value(reviewedAt),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory DailyClosingData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DailyClosingData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      businessDate: serializer.fromJson<String>(json['businessDate']),
+      storeScopeId: serializer.fromJson<String?>(json['storeScopeId']),
+      totalSalesKobo: serializer.fromJson<int>(json['totalSalesKobo']),
+      refundsKobo: serializer.fromJson<int>(json['refundsKobo']),
+      discountsKobo: serializer.fromJson<int>(json['discountsKobo']),
+      cogsKobo: serializer.fromJson<int>(json['cogsKobo']),
+      grossProfitKobo: serializer.fromJson<int>(json['grossProfitKobo']),
+      netProfitKobo: serializer.fromJson<int>(json['netProfitKobo']),
+      expensesKobo: serializer.fromJson<int>(json['expensesKobo']),
+      damagesCostKobo: serializer.fromJson<int>(json['damagesCostKobo']),
+      cashSalesKobo: serializer.fromJson<int>(json['cashSalesKobo']),
+      cashInKobo: serializer.fromJson<int>(json['cashInKobo']),
+      cashOutKobo: serializer.fromJson<int>(json['cashOutKobo']),
+      netCashMovementKobo: serializer.fromJson<int>(
+        json['netCashMovementKobo'],
+      ),
+      stockCogsKobo: serializer.fromJson<int>(json['stockCogsKobo']),
+      stockExpectedClosingKobo: serializer.fromJson<int>(
+        json['stockExpectedClosingKobo'],
+      ),
+      itemsSold: serializer.fromJson<int>(json['itemsSold']),
+      shortageUnits: serializer.fromJson<int>(json['shortageUnits']),
+      reviewedBy: serializer.fromJson<String?>(json['reviewedBy']),
+      reviewedAt: serializer.fromJson<DateTime>(json['reviewedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'businessDate': serializer.toJson<String>(businessDate),
+      'storeScopeId': serializer.toJson<String?>(storeScopeId),
+      'totalSalesKobo': serializer.toJson<int>(totalSalesKobo),
+      'refundsKobo': serializer.toJson<int>(refundsKobo),
+      'discountsKobo': serializer.toJson<int>(discountsKobo),
+      'cogsKobo': serializer.toJson<int>(cogsKobo),
+      'grossProfitKobo': serializer.toJson<int>(grossProfitKobo),
+      'netProfitKobo': serializer.toJson<int>(netProfitKobo),
+      'expensesKobo': serializer.toJson<int>(expensesKobo),
+      'damagesCostKobo': serializer.toJson<int>(damagesCostKobo),
+      'cashSalesKobo': serializer.toJson<int>(cashSalesKobo),
+      'cashInKobo': serializer.toJson<int>(cashInKobo),
+      'cashOutKobo': serializer.toJson<int>(cashOutKobo),
+      'netCashMovementKobo': serializer.toJson<int>(netCashMovementKobo),
+      'stockCogsKobo': serializer.toJson<int>(stockCogsKobo),
+      'stockExpectedClosingKobo': serializer.toJson<int>(
+        stockExpectedClosingKobo,
+      ),
+      'itemsSold': serializer.toJson<int>(itemsSold),
+      'shortageUnits': serializer.toJson<int>(shortageUnits),
+      'reviewedBy': serializer.toJson<String?>(reviewedBy),
+      'reviewedAt': serializer.toJson<DateTime>(reviewedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  DailyClosingData copyWith({
+    String? id,
+    String? businessId,
+    String? businessDate,
+    Value<String?> storeScopeId = const Value.absent(),
+    int? totalSalesKobo,
+    int? refundsKobo,
+    int? discountsKobo,
+    int? cogsKobo,
+    int? grossProfitKobo,
+    int? netProfitKobo,
+    int? expensesKobo,
+    int? damagesCostKobo,
+    int? cashSalesKobo,
+    int? cashInKobo,
+    int? cashOutKobo,
+    int? netCashMovementKobo,
+    int? stockCogsKobo,
+    int? stockExpectedClosingKobo,
+    int? itemsSold,
+    int? shortageUnits,
+    Value<String?> reviewedBy = const Value.absent(),
+    DateTime? reviewedAt,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => DailyClosingData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    businessDate: businessDate ?? this.businessDate,
+    storeScopeId: storeScopeId.present ? storeScopeId.value : this.storeScopeId,
+    totalSalesKobo: totalSalesKobo ?? this.totalSalesKobo,
+    refundsKobo: refundsKobo ?? this.refundsKobo,
+    discountsKobo: discountsKobo ?? this.discountsKobo,
+    cogsKobo: cogsKobo ?? this.cogsKobo,
+    grossProfitKobo: grossProfitKobo ?? this.grossProfitKobo,
+    netProfitKobo: netProfitKobo ?? this.netProfitKobo,
+    expensesKobo: expensesKobo ?? this.expensesKobo,
+    damagesCostKobo: damagesCostKobo ?? this.damagesCostKobo,
+    cashSalesKobo: cashSalesKobo ?? this.cashSalesKobo,
+    cashInKobo: cashInKobo ?? this.cashInKobo,
+    cashOutKobo: cashOutKobo ?? this.cashOutKobo,
+    netCashMovementKobo: netCashMovementKobo ?? this.netCashMovementKobo,
+    stockCogsKobo: stockCogsKobo ?? this.stockCogsKobo,
+    stockExpectedClosingKobo:
+        stockExpectedClosingKobo ?? this.stockExpectedClosingKobo,
+    itemsSold: itemsSold ?? this.itemsSold,
+    shortageUnits: shortageUnits ?? this.shortageUnits,
+    reviewedBy: reviewedBy.present ? reviewedBy.value : this.reviewedBy,
+    reviewedAt: reviewedAt ?? this.reviewedAt,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  DailyClosingData copyWithCompanion(DailyClosingsCompanion data) {
+    return DailyClosingData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      businessDate: data.businessDate.present
+          ? data.businessDate.value
+          : this.businessDate,
+      storeScopeId: data.storeScopeId.present
+          ? data.storeScopeId.value
+          : this.storeScopeId,
+      totalSalesKobo: data.totalSalesKobo.present
+          ? data.totalSalesKobo.value
+          : this.totalSalesKobo,
+      refundsKobo: data.refundsKobo.present
+          ? data.refundsKobo.value
+          : this.refundsKobo,
+      discountsKobo: data.discountsKobo.present
+          ? data.discountsKobo.value
+          : this.discountsKobo,
+      cogsKobo: data.cogsKobo.present ? data.cogsKobo.value : this.cogsKobo,
+      grossProfitKobo: data.grossProfitKobo.present
+          ? data.grossProfitKobo.value
+          : this.grossProfitKobo,
+      netProfitKobo: data.netProfitKobo.present
+          ? data.netProfitKobo.value
+          : this.netProfitKobo,
+      expensesKobo: data.expensesKobo.present
+          ? data.expensesKobo.value
+          : this.expensesKobo,
+      damagesCostKobo: data.damagesCostKobo.present
+          ? data.damagesCostKobo.value
+          : this.damagesCostKobo,
+      cashSalesKobo: data.cashSalesKobo.present
+          ? data.cashSalesKobo.value
+          : this.cashSalesKobo,
+      cashInKobo: data.cashInKobo.present
+          ? data.cashInKobo.value
+          : this.cashInKobo,
+      cashOutKobo: data.cashOutKobo.present
+          ? data.cashOutKobo.value
+          : this.cashOutKobo,
+      netCashMovementKobo: data.netCashMovementKobo.present
+          ? data.netCashMovementKobo.value
+          : this.netCashMovementKobo,
+      stockCogsKobo: data.stockCogsKobo.present
+          ? data.stockCogsKobo.value
+          : this.stockCogsKobo,
+      stockExpectedClosingKobo: data.stockExpectedClosingKobo.present
+          ? data.stockExpectedClosingKobo.value
+          : this.stockExpectedClosingKobo,
+      itemsSold: data.itemsSold.present ? data.itemsSold.value : this.itemsSold,
+      shortageUnits: data.shortageUnits.present
+          ? data.shortageUnits.value
+          : this.shortageUnits,
+      reviewedBy: data.reviewedBy.present
+          ? data.reviewedBy.value
+          : this.reviewedBy,
+      reviewedAt: data.reviewedAt.present
+          ? data.reviewedAt.value
+          : this.reviewedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DailyClosingData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('businessDate: $businessDate, ')
+          ..write('storeScopeId: $storeScopeId, ')
+          ..write('totalSalesKobo: $totalSalesKobo, ')
+          ..write('refundsKobo: $refundsKobo, ')
+          ..write('discountsKobo: $discountsKobo, ')
+          ..write('cogsKobo: $cogsKobo, ')
+          ..write('grossProfitKobo: $grossProfitKobo, ')
+          ..write('netProfitKobo: $netProfitKobo, ')
+          ..write('expensesKobo: $expensesKobo, ')
+          ..write('damagesCostKobo: $damagesCostKobo, ')
+          ..write('cashSalesKobo: $cashSalesKobo, ')
+          ..write('cashInKobo: $cashInKobo, ')
+          ..write('cashOutKobo: $cashOutKobo, ')
+          ..write('netCashMovementKobo: $netCashMovementKobo, ')
+          ..write('stockCogsKobo: $stockCogsKobo, ')
+          ..write('stockExpectedClosingKobo: $stockExpectedClosingKobo, ')
+          ..write('itemsSold: $itemsSold, ')
+          ..write('shortageUnits: $shortageUnits, ')
+          ..write('reviewedBy: $reviewedBy, ')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    businessId,
+    businessDate,
+    storeScopeId,
+    totalSalesKobo,
+    refundsKobo,
+    discountsKobo,
+    cogsKobo,
+    grossProfitKobo,
+    netProfitKobo,
+    expensesKobo,
+    damagesCostKobo,
+    cashSalesKobo,
+    cashInKobo,
+    cashOutKobo,
+    netCashMovementKobo,
+    stockCogsKobo,
+    stockExpectedClosingKobo,
+    itemsSold,
+    shortageUnits,
+    reviewedBy,
+    reviewedAt,
+    createdAt,
+    lastUpdatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DailyClosingData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.businessDate == this.businessDate &&
+          other.storeScopeId == this.storeScopeId &&
+          other.totalSalesKobo == this.totalSalesKobo &&
+          other.refundsKobo == this.refundsKobo &&
+          other.discountsKobo == this.discountsKobo &&
+          other.cogsKobo == this.cogsKobo &&
+          other.grossProfitKobo == this.grossProfitKobo &&
+          other.netProfitKobo == this.netProfitKobo &&
+          other.expensesKobo == this.expensesKobo &&
+          other.damagesCostKobo == this.damagesCostKobo &&
+          other.cashSalesKobo == this.cashSalesKobo &&
+          other.cashInKobo == this.cashInKobo &&
+          other.cashOutKobo == this.cashOutKobo &&
+          other.netCashMovementKobo == this.netCashMovementKobo &&
+          other.stockCogsKobo == this.stockCogsKobo &&
+          other.stockExpectedClosingKobo == this.stockExpectedClosingKobo &&
+          other.itemsSold == this.itemsSold &&
+          other.shortageUnits == this.shortageUnits &&
+          other.reviewedBy == this.reviewedBy &&
+          other.reviewedAt == this.reviewedAt &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> businessDate;
+  final Value<String?> storeScopeId;
+  final Value<int> totalSalesKobo;
+  final Value<int> refundsKobo;
+  final Value<int> discountsKobo;
+  final Value<int> cogsKobo;
+  final Value<int> grossProfitKobo;
+  final Value<int> netProfitKobo;
+  final Value<int> expensesKobo;
+  final Value<int> damagesCostKobo;
+  final Value<int> cashSalesKobo;
+  final Value<int> cashInKobo;
+  final Value<int> cashOutKobo;
+  final Value<int> netCashMovementKobo;
+  final Value<int> stockCogsKobo;
+  final Value<int> stockExpectedClosingKobo;
+  final Value<int> itemsSold;
+  final Value<int> shortageUnits;
+  final Value<String?> reviewedBy;
+  final Value<DateTime> reviewedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const DailyClosingsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.businessDate = const Value.absent(),
+    this.storeScopeId = const Value.absent(),
+    this.totalSalesKobo = const Value.absent(),
+    this.refundsKobo = const Value.absent(),
+    this.discountsKobo = const Value.absent(),
+    this.cogsKobo = const Value.absent(),
+    this.grossProfitKobo = const Value.absent(),
+    this.netProfitKobo = const Value.absent(),
+    this.expensesKobo = const Value.absent(),
+    this.damagesCostKobo = const Value.absent(),
+    this.cashSalesKobo = const Value.absent(),
+    this.cashInKobo = const Value.absent(),
+    this.cashOutKobo = const Value.absent(),
+    this.netCashMovementKobo = const Value.absent(),
+    this.stockCogsKobo = const Value.absent(),
+    this.stockExpectedClosingKobo = const Value.absent(),
+    this.itemsSold = const Value.absent(),
+    this.shortageUnits = const Value.absent(),
+    this.reviewedBy = const Value.absent(),
+    this.reviewedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DailyClosingsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String businessDate,
+    this.storeScopeId = const Value.absent(),
+    this.totalSalesKobo = const Value.absent(),
+    this.refundsKobo = const Value.absent(),
+    this.discountsKobo = const Value.absent(),
+    this.cogsKobo = const Value.absent(),
+    this.grossProfitKobo = const Value.absent(),
+    this.netProfitKobo = const Value.absent(),
+    this.expensesKobo = const Value.absent(),
+    this.damagesCostKobo = const Value.absent(),
+    this.cashSalesKobo = const Value.absent(),
+    this.cashInKobo = const Value.absent(),
+    this.cashOutKobo = const Value.absent(),
+    this.netCashMovementKobo = const Value.absent(),
+    this.stockCogsKobo = const Value.absent(),
+    this.stockExpectedClosingKobo = const Value.absent(),
+    this.itemsSold = const Value.absent(),
+    this.shortageUnits = const Value.absent(),
+    this.reviewedBy = const Value.absent(),
+    this.reviewedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       businessDate = Value(businessDate);
+  static Insertable<DailyClosingData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? businessDate,
+    Expression<String>? storeScopeId,
+    Expression<int>? totalSalesKobo,
+    Expression<int>? refundsKobo,
+    Expression<int>? discountsKobo,
+    Expression<int>? cogsKobo,
+    Expression<int>? grossProfitKobo,
+    Expression<int>? netProfitKobo,
+    Expression<int>? expensesKobo,
+    Expression<int>? damagesCostKobo,
+    Expression<int>? cashSalesKobo,
+    Expression<int>? cashInKobo,
+    Expression<int>? cashOutKobo,
+    Expression<int>? netCashMovementKobo,
+    Expression<int>? stockCogsKobo,
+    Expression<int>? stockExpectedClosingKobo,
+    Expression<int>? itemsSold,
+    Expression<int>? shortageUnits,
+    Expression<String>? reviewedBy,
+    Expression<DateTime>? reviewedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (businessDate != null) 'business_date': businessDate,
+      if (storeScopeId != null) 'store_scope_id': storeScopeId,
+      if (totalSalesKobo != null) 'total_sales_kobo': totalSalesKobo,
+      if (refundsKobo != null) 'refunds_kobo': refundsKobo,
+      if (discountsKobo != null) 'discounts_kobo': discountsKobo,
+      if (cogsKobo != null) 'cogs_kobo': cogsKobo,
+      if (grossProfitKobo != null) 'gross_profit_kobo': grossProfitKobo,
+      if (netProfitKobo != null) 'net_profit_kobo': netProfitKobo,
+      if (expensesKobo != null) 'expenses_kobo': expensesKobo,
+      if (damagesCostKobo != null) 'damages_cost_kobo': damagesCostKobo,
+      if (cashSalesKobo != null) 'cash_sales_kobo': cashSalesKobo,
+      if (cashInKobo != null) 'cash_in_kobo': cashInKobo,
+      if (cashOutKobo != null) 'cash_out_kobo': cashOutKobo,
+      if (netCashMovementKobo != null)
+        'net_cash_movement_kobo': netCashMovementKobo,
+      if (stockCogsKobo != null) 'stock_cogs_kobo': stockCogsKobo,
+      if (stockExpectedClosingKobo != null)
+        'stock_expected_closing_kobo': stockExpectedClosingKobo,
+      if (itemsSold != null) 'items_sold': itemsSold,
+      if (shortageUnits != null) 'shortage_units': shortageUnits,
+      if (reviewedBy != null) 'reviewed_by': reviewedBy,
+      if (reviewedAt != null) 'reviewed_at': reviewedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DailyClosingsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? businessDate,
+    Value<String?>? storeScopeId,
+    Value<int>? totalSalesKobo,
+    Value<int>? refundsKobo,
+    Value<int>? discountsKobo,
+    Value<int>? cogsKobo,
+    Value<int>? grossProfitKobo,
+    Value<int>? netProfitKobo,
+    Value<int>? expensesKobo,
+    Value<int>? damagesCostKobo,
+    Value<int>? cashSalesKobo,
+    Value<int>? cashInKobo,
+    Value<int>? cashOutKobo,
+    Value<int>? netCashMovementKobo,
+    Value<int>? stockCogsKobo,
+    Value<int>? stockExpectedClosingKobo,
+    Value<int>? itemsSold,
+    Value<int>? shortageUnits,
+    Value<String?>? reviewedBy,
+    Value<DateTime>? reviewedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return DailyClosingsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      businessDate: businessDate ?? this.businessDate,
+      storeScopeId: storeScopeId ?? this.storeScopeId,
+      totalSalesKobo: totalSalesKobo ?? this.totalSalesKobo,
+      refundsKobo: refundsKobo ?? this.refundsKobo,
+      discountsKobo: discountsKobo ?? this.discountsKobo,
+      cogsKobo: cogsKobo ?? this.cogsKobo,
+      grossProfitKobo: grossProfitKobo ?? this.grossProfitKobo,
+      netProfitKobo: netProfitKobo ?? this.netProfitKobo,
+      expensesKobo: expensesKobo ?? this.expensesKobo,
+      damagesCostKobo: damagesCostKobo ?? this.damagesCostKobo,
+      cashSalesKobo: cashSalesKobo ?? this.cashSalesKobo,
+      cashInKobo: cashInKobo ?? this.cashInKobo,
+      cashOutKobo: cashOutKobo ?? this.cashOutKobo,
+      netCashMovementKobo: netCashMovementKobo ?? this.netCashMovementKobo,
+      stockCogsKobo: stockCogsKobo ?? this.stockCogsKobo,
+      stockExpectedClosingKobo:
+          stockExpectedClosingKobo ?? this.stockExpectedClosingKobo,
+      itemsSold: itemsSold ?? this.itemsSold,
+      shortageUnits: shortageUnits ?? this.shortageUnits,
+      reviewedBy: reviewedBy ?? this.reviewedBy,
+      reviewedAt: reviewedAt ?? this.reviewedAt,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (businessDate.present) {
+      map['business_date'] = Variable<String>(businessDate.value);
+    }
+    if (storeScopeId.present) {
+      map['store_scope_id'] = Variable<String>(storeScopeId.value);
+    }
+    if (totalSalesKobo.present) {
+      map['total_sales_kobo'] = Variable<int>(totalSalesKobo.value);
+    }
+    if (refundsKobo.present) {
+      map['refunds_kobo'] = Variable<int>(refundsKobo.value);
+    }
+    if (discountsKobo.present) {
+      map['discounts_kobo'] = Variable<int>(discountsKobo.value);
+    }
+    if (cogsKobo.present) {
+      map['cogs_kobo'] = Variable<int>(cogsKobo.value);
+    }
+    if (grossProfitKobo.present) {
+      map['gross_profit_kobo'] = Variable<int>(grossProfitKobo.value);
+    }
+    if (netProfitKobo.present) {
+      map['net_profit_kobo'] = Variable<int>(netProfitKobo.value);
+    }
+    if (expensesKobo.present) {
+      map['expenses_kobo'] = Variable<int>(expensesKobo.value);
+    }
+    if (damagesCostKobo.present) {
+      map['damages_cost_kobo'] = Variable<int>(damagesCostKobo.value);
+    }
+    if (cashSalesKobo.present) {
+      map['cash_sales_kobo'] = Variable<int>(cashSalesKobo.value);
+    }
+    if (cashInKobo.present) {
+      map['cash_in_kobo'] = Variable<int>(cashInKobo.value);
+    }
+    if (cashOutKobo.present) {
+      map['cash_out_kobo'] = Variable<int>(cashOutKobo.value);
+    }
+    if (netCashMovementKobo.present) {
+      map['net_cash_movement_kobo'] = Variable<int>(netCashMovementKobo.value);
+    }
+    if (stockCogsKobo.present) {
+      map['stock_cogs_kobo'] = Variable<int>(stockCogsKobo.value);
+    }
+    if (stockExpectedClosingKobo.present) {
+      map['stock_expected_closing_kobo'] = Variable<int>(
+        stockExpectedClosingKobo.value,
+      );
+    }
+    if (itemsSold.present) {
+      map['items_sold'] = Variable<int>(itemsSold.value);
+    }
+    if (shortageUnits.present) {
+      map['shortage_units'] = Variable<int>(shortageUnits.value);
+    }
+    if (reviewedBy.present) {
+      map['reviewed_by'] = Variable<String>(reviewedBy.value);
+    }
+    if (reviewedAt.present) {
+      map['reviewed_at'] = Variable<DateTime>(reviewedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DailyClosingsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('businessDate: $businessDate, ')
+          ..write('storeScopeId: $storeScopeId, ')
+          ..write('totalSalesKobo: $totalSalesKobo, ')
+          ..write('refundsKobo: $refundsKobo, ')
+          ..write('discountsKobo: $discountsKobo, ')
+          ..write('cogsKobo: $cogsKobo, ')
+          ..write('grossProfitKobo: $grossProfitKobo, ')
+          ..write('netProfitKobo: $netProfitKobo, ')
+          ..write('expensesKobo: $expensesKobo, ')
+          ..write('damagesCostKobo: $damagesCostKobo, ')
+          ..write('cashSalesKobo: $cashSalesKobo, ')
+          ..write('cashInKobo: $cashInKobo, ')
+          ..write('cashOutKobo: $cashOutKobo, ')
+          ..write('netCashMovementKobo: $netCashMovementKobo, ')
+          ..write('stockCogsKobo: $stockCogsKobo, ')
+          ..write('stockExpectedClosingKobo: $stockExpectedClosingKobo, ')
+          ..write('itemsSold: $itemsSold, ')
+          ..write('shortageUnits: $shortageUnits, ')
+          ..write('reviewedBy: $reviewedBy, ')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $VanTripLotsTable extends VanTripLots
+    with TableInfo<$VanTripLotsTable, VanTripLotData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VanTripLotsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _tripIdMeta = const VerificationMeta('tripId');
+  @override
+  late final GeneratedColumn<String> tripId = GeneratedColumn<String>(
+    'trip_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_trips (id)',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _quantityMeta = const VerificationMeta(
+    'quantity',
+  );
+  @override
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _qtyRemainingMeta = const VerificationMeta(
+    'qtyRemaining',
+  );
+  @override
+  late final GeneratedColumn<int> qtyRemaining = GeneratedColumn<int>(
+    'qty_remaining',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _loadPriceKoboMeta = const VerificationMeta(
+    'loadPriceKobo',
+  );
+  @override
+  late final GeneratedColumn<int> loadPriceKobo = GeneratedColumn<int>(
+    'load_price_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _unitCostKoboMeta = const VerificationMeta(
+    'unitCostKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unitCostKobo = GeneratedColumn<int>(
+    'unit_cost_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _dispatchedAtMeta = const VerificationMeta(
+    'dispatchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dispatchedAt = GeneratedColumn<DateTime>(
+    'dispatched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _dispatchEventIdMeta = const VerificationMeta(
+    'dispatchEventId',
+  );
+  @override
+  late final GeneratedColumn<String> dispatchEventId = GeneratedColumn<String>(
+    'dispatch_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _shellsOutMeta = const VerificationMeta(
+    'shellsOut',
+  );
+  @override
+  late final GeneratedColumn<int> shellsOut = GeneratedColumn<int>(
+    'shells_out',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    tripId,
+    productId,
+    quantity,
+    qtyRemaining,
+    loadPriceKobo,
+    unitCostKobo,
+    dispatchedAt,
+    dispatchEventId,
+    shellsOut,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'van_trip_lots';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VanTripLotData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('trip_id')) {
+      context.handle(
+        _tripIdMeta,
+        tripId.isAcceptableOrUnknown(data['trip_id']!, _tripIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tripIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('quantity')) {
+      context.handle(
+        _quantityMeta,
+        quantity.isAcceptableOrUnknown(data['quantity']!, _quantityMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_quantityMeta);
+    }
+    if (data.containsKey('qty_remaining')) {
+      context.handle(
+        _qtyRemainingMeta,
+        qtyRemaining.isAcceptableOrUnknown(
+          data['qty_remaining']!,
+          _qtyRemainingMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_qtyRemainingMeta);
+    }
+    if (data.containsKey('load_price_kobo')) {
+      context.handle(
+        _loadPriceKoboMeta,
+        loadPriceKobo.isAcceptableOrUnknown(
+          data['load_price_kobo']!,
+          _loadPriceKoboMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_loadPriceKoboMeta);
+    }
+    if (data.containsKey('unit_cost_kobo')) {
+      context.handle(
+        _unitCostKoboMeta,
+        unitCostKobo.isAcceptableOrUnknown(
+          data['unit_cost_kobo']!,
+          _unitCostKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dispatched_at')) {
+      context.handle(
+        _dispatchedAtMeta,
+        dispatchedAt.isAcceptableOrUnknown(
+          data['dispatched_at']!,
+          _dispatchedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dispatch_event_id')) {
+      context.handle(
+        _dispatchEventIdMeta,
+        dispatchEventId.isAcceptableOrUnknown(
+          data['dispatch_event_id']!,
+          _dispatchEventIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_dispatchEventIdMeta);
+    }
+    if (data.containsKey('shells_out')) {
+      context.handle(
+        _shellsOutMeta,
+        shellsOut.isAcceptableOrUnknown(data['shells_out']!, _shellsOutMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VanTripLotData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VanTripLotData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      tripId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}trip_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      qtyRemaining: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}qty_remaining'],
+      )!,
+      loadPriceKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}load_price_kobo'],
+      )!,
+      unitCostKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_kobo'],
+      )!,
+      dispatchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}dispatched_at'],
+      )!,
+      dispatchEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dispatch_event_id'],
+      )!,
+      shellsOut: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shells_out'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VanTripLotsTable createAlias(String alias) {
+    return $VanTripLotsTable(attachedDatabase, alias);
+  }
+}
+
+class VanTripLotData extends DataClass implements Insertable<VanTripLotData> {
+  final String id;
+  final String businessId;
+  final String tripId;
+  final String productId;
+
+  /// Units dispatched on this line. Immutable.
+  final int quantity;
+
+  /// The FIFO draw-down cursor for return credits (#143): a good return credits
+  /// at the OLDEST remaining lot's price first and decrements this.
+  final int qtyRemaining;
+
+  /// Per unit — what the driver is accountable for. Defaults to the retail tier
+  /// at the picker and is editable per line before dispatch. The single
+  /// valuation for the whole reconciliation.
+  final int loadPriceKobo;
+
+  /// Per unit, **snapshotted at dispatch** from the warehouse's FIFO draw-down.
+  /// `0` ONLY when the source batches were genuinely uncosted — such a lot is
+  /// flagged and flows into the app's existing Uncosted transparency bucket; it
+  /// must never silently become free goods (spec §9.1 #2).
+  final int unitCostKobo;
+  final DateTime dispatchedAt;
+
+  /// The **client idempotency key** for the dispatch event that created this
+  /// lot (spec §7.1). One dispatch = one id across all its lines; a retry after
+  /// a timeout or a double-tap re-uses it and the whole write is a no-op —
+  /// never a second ledger debit. The `UNIQUE (dispatch_event_id, product_id)`
+  /// below makes that contract enforceable rather than merely intended.
+  final String dispatchEventId;
+
+  /// Empty-crate shell memo count for this line (spec §11). Counting only.
+  final int shellsOut;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const VanTripLotData({
+    required this.id,
+    required this.businessId,
+    required this.tripId,
+    required this.productId,
+    required this.quantity,
+    required this.qtyRemaining,
+    required this.loadPriceKobo,
+    required this.unitCostKobo,
+    required this.dispatchedAt,
+    required this.dispatchEventId,
+    required this.shellsOut,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['trip_id'] = Variable<String>(tripId);
+    map['product_id'] = Variable<String>(productId);
+    map['quantity'] = Variable<int>(quantity);
+    map['qty_remaining'] = Variable<int>(qtyRemaining);
+    map['load_price_kobo'] = Variable<int>(loadPriceKobo);
+    map['unit_cost_kobo'] = Variable<int>(unitCostKobo);
+    map['dispatched_at'] = Variable<DateTime>(dispatchedAt);
+    map['dispatch_event_id'] = Variable<String>(dispatchEventId);
+    map['shells_out'] = Variable<int>(shellsOut);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  VanTripLotsCompanion toCompanion(bool nullToAbsent) {
+    return VanTripLotsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      tripId: Value(tripId),
+      productId: Value(productId),
+      quantity: Value(quantity),
+      qtyRemaining: Value(qtyRemaining),
+      loadPriceKobo: Value(loadPriceKobo),
+      unitCostKobo: Value(unitCostKobo),
+      dispatchedAt: Value(dispatchedAt),
+      dispatchEventId: Value(dispatchEventId),
+      shellsOut: Value(shellsOut),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory VanTripLotData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VanTripLotData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      tripId: serializer.fromJson<String>(json['tripId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      qtyRemaining: serializer.fromJson<int>(json['qtyRemaining']),
+      loadPriceKobo: serializer.fromJson<int>(json['loadPriceKobo']),
+      unitCostKobo: serializer.fromJson<int>(json['unitCostKobo']),
+      dispatchedAt: serializer.fromJson<DateTime>(json['dispatchedAt']),
+      dispatchEventId: serializer.fromJson<String>(json['dispatchEventId']),
+      shellsOut: serializer.fromJson<int>(json['shellsOut']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'tripId': serializer.toJson<String>(tripId),
+      'productId': serializer.toJson<String>(productId),
+      'quantity': serializer.toJson<int>(quantity),
+      'qtyRemaining': serializer.toJson<int>(qtyRemaining),
+      'loadPriceKobo': serializer.toJson<int>(loadPriceKobo),
+      'unitCostKobo': serializer.toJson<int>(unitCostKobo),
+      'dispatchedAt': serializer.toJson<DateTime>(dispatchedAt),
+      'dispatchEventId': serializer.toJson<String>(dispatchEventId),
+      'shellsOut': serializer.toJson<int>(shellsOut),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  VanTripLotData copyWith({
+    String? id,
+    String? businessId,
+    String? tripId,
+    String? productId,
+    int? quantity,
+    int? qtyRemaining,
+    int? loadPriceKobo,
+    int? unitCostKobo,
+    DateTime? dispatchedAt,
+    String? dispatchEventId,
+    int? shellsOut,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => VanTripLotData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    tripId: tripId ?? this.tripId,
+    productId: productId ?? this.productId,
+    quantity: quantity ?? this.quantity,
+    qtyRemaining: qtyRemaining ?? this.qtyRemaining,
+    loadPriceKobo: loadPriceKobo ?? this.loadPriceKobo,
+    unitCostKobo: unitCostKobo ?? this.unitCostKobo,
+    dispatchedAt: dispatchedAt ?? this.dispatchedAt,
+    dispatchEventId: dispatchEventId ?? this.dispatchEventId,
+    shellsOut: shellsOut ?? this.shellsOut,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  VanTripLotData copyWithCompanion(VanTripLotsCompanion data) {
+    return VanTripLotData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      tripId: data.tripId.present ? data.tripId.value : this.tripId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      qtyRemaining: data.qtyRemaining.present
+          ? data.qtyRemaining.value
+          : this.qtyRemaining,
+      loadPriceKobo: data.loadPriceKobo.present
+          ? data.loadPriceKobo.value
+          : this.loadPriceKobo,
+      unitCostKobo: data.unitCostKobo.present
+          ? data.unitCostKobo.value
+          : this.unitCostKobo,
+      dispatchedAt: data.dispatchedAt.present
+          ? data.dispatchedAt.value
+          : this.dispatchedAt,
+      dispatchEventId: data.dispatchEventId.present
+          ? data.dispatchEventId.value
+          : this.dispatchEventId,
+      shellsOut: data.shellsOut.present ? data.shellsOut.value : this.shellsOut,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanTripLotData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('tripId: $tripId, ')
+          ..write('productId: $productId, ')
+          ..write('quantity: $quantity, ')
+          ..write('qtyRemaining: $qtyRemaining, ')
+          ..write('loadPriceKobo: $loadPriceKobo, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
+          ..write('dispatchedAt: $dispatchedAt, ')
+          ..write('dispatchEventId: $dispatchEventId, ')
+          ..write('shellsOut: $shellsOut, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    tripId,
+    productId,
+    quantity,
+    qtyRemaining,
+    loadPriceKobo,
+    unitCostKobo,
+    dispatchedAt,
+    dispatchEventId,
+    shellsOut,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VanTripLotData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.tripId == this.tripId &&
+          other.productId == this.productId &&
+          other.quantity == this.quantity &&
+          other.qtyRemaining == this.qtyRemaining &&
+          other.loadPriceKobo == this.loadPriceKobo &&
+          other.unitCostKobo == this.unitCostKobo &&
+          other.dispatchedAt == this.dispatchedAt &&
+          other.dispatchEventId == this.dispatchEventId &&
+          other.shellsOut == this.shellsOut &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class VanTripLotsCompanion extends UpdateCompanion<VanTripLotData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> tripId;
+  final Value<String> productId;
+  final Value<int> quantity;
+  final Value<int> qtyRemaining;
+  final Value<int> loadPriceKobo;
+  final Value<int> unitCostKobo;
+  final Value<DateTime> dispatchedAt;
+  final Value<String> dispatchEventId;
+  final Value<int> shellsOut;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const VanTripLotsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.tripId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.quantity = const Value.absent(),
+    this.qtyRemaining = const Value.absent(),
+    this.loadPriceKobo = const Value.absent(),
+    this.unitCostKobo = const Value.absent(),
+    this.dispatchedAt = const Value.absent(),
+    this.dispatchEventId = const Value.absent(),
+    this.shellsOut = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VanTripLotsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String tripId,
+    required String productId,
+    required int quantity,
+    required int qtyRemaining,
+    required int loadPriceKobo,
+    this.unitCostKobo = const Value.absent(),
+    this.dispatchedAt = const Value.absent(),
+    required String dispatchEventId,
+    this.shellsOut = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       tripId = Value(tripId),
+       productId = Value(productId),
+       quantity = Value(quantity),
+       qtyRemaining = Value(qtyRemaining),
+       loadPriceKobo = Value(loadPriceKobo),
+       dispatchEventId = Value(dispatchEventId);
+  static Insertable<VanTripLotData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? tripId,
+    Expression<String>? productId,
+    Expression<int>? quantity,
+    Expression<int>? qtyRemaining,
+    Expression<int>? loadPriceKobo,
+    Expression<int>? unitCostKobo,
+    Expression<DateTime>? dispatchedAt,
+    Expression<String>? dispatchEventId,
+    Expression<int>? shellsOut,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (tripId != null) 'trip_id': tripId,
+      if (productId != null) 'product_id': productId,
+      if (quantity != null) 'quantity': quantity,
+      if (qtyRemaining != null) 'qty_remaining': qtyRemaining,
+      if (loadPriceKobo != null) 'load_price_kobo': loadPriceKobo,
+      if (unitCostKobo != null) 'unit_cost_kobo': unitCostKobo,
+      if (dispatchedAt != null) 'dispatched_at': dispatchedAt,
+      if (dispatchEventId != null) 'dispatch_event_id': dispatchEventId,
+      if (shellsOut != null) 'shells_out': shellsOut,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VanTripLotsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? tripId,
+    Value<String>? productId,
+    Value<int>? quantity,
+    Value<int>? qtyRemaining,
+    Value<int>? loadPriceKobo,
+    Value<int>? unitCostKobo,
+    Value<DateTime>? dispatchedAt,
+    Value<String>? dispatchEventId,
+    Value<int>? shellsOut,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return VanTripLotsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      tripId: tripId ?? this.tripId,
+      productId: productId ?? this.productId,
+      quantity: quantity ?? this.quantity,
+      qtyRemaining: qtyRemaining ?? this.qtyRemaining,
+      loadPriceKobo: loadPriceKobo ?? this.loadPriceKobo,
+      unitCostKobo: unitCostKobo ?? this.unitCostKobo,
+      dispatchedAt: dispatchedAt ?? this.dispatchedAt,
+      dispatchEventId: dispatchEventId ?? this.dispatchEventId,
+      shellsOut: shellsOut ?? this.shellsOut,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (tripId.present) {
+      map['trip_id'] = Variable<String>(tripId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (quantity.present) {
+      map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (qtyRemaining.present) {
+      map['qty_remaining'] = Variable<int>(qtyRemaining.value);
+    }
+    if (loadPriceKobo.present) {
+      map['load_price_kobo'] = Variable<int>(loadPriceKobo.value);
+    }
+    if (unitCostKobo.present) {
+      map['unit_cost_kobo'] = Variable<int>(unitCostKobo.value);
+    }
+    if (dispatchedAt.present) {
+      map['dispatched_at'] = Variable<DateTime>(dispatchedAt.value);
+    }
+    if (dispatchEventId.present) {
+      map['dispatch_event_id'] = Variable<String>(dispatchEventId.value);
+    }
+    if (shellsOut.present) {
+      map['shells_out'] = Variable<int>(shellsOut.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanTripLotsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('tripId: $tripId, ')
+          ..write('productId: $productId, ')
+          ..write('quantity: $quantity, ')
+          ..write('qtyRemaining: $qtyRemaining, ')
+          ..write('loadPriceKobo: $loadPriceKobo, ')
+          ..write('unitCostKobo: $unitCostKobo, ')
+          ..write('dispatchedAt: $dispatchedAt, ')
+          ..write('dispatchEventId: $dispatchEventId, ')
+          ..write('shellsOut: $shellsOut, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $VanReturnEventsTable extends VanReturnEvents
+    with TableInfo<$VanReturnEventsTable, VanReturnEventData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VanReturnEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _tripIdMeta = const VerificationMeta('tripId');
+  @override
+  late final GeneratedColumn<String> tripId = GeneratedColumn<String>(
+    'trip_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_trips (id)',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _quantityMeta = const VerificationMeta(
+    'quantity',
+  );
+  @override
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _conditionMeta = const VerificationMeta(
+    'condition',
+  );
+  @override
+  late final GeneratedColumn<String> condition = GeneratedColumn<String>(
+    'condition',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _creditKoboMeta = const VerificationMeta(
+    'creditKobo',
+  );
+  @override
+  late final GeneratedColumn<int> creditKobo = GeneratedColumn<int>(
+    'credit_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _costKoboMeta = const VerificationMeta(
+    'costKobo',
+  );
+  @override
+  late final GeneratedColumn<int> costKobo = GeneratedColumn<int>(
+    'cost_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shellsBackMeta = const VerificationMeta(
+    'shellsBack',
+  );
+  @override
+  late final GeneratedColumn<int> shellsBack = GeneratedColumn<int>(
+    'shells_back',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _crateShellsMeta = const VerificationMeta(
+    'crateShells',
+  );
+  @override
+  late final GeneratedColumn<int> crateShells = GeneratedColumn<int>(
+    'crate_shells',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _recordedAtMeta = const VerificationMeta(
+    'recordedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> recordedAt = GeneratedColumn<DateTime>(
+    'recorded_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _recordedByMeta = const VerificationMeta(
+    'recordedBy',
+  );
+  @override
+  late final GeneratedColumn<String> recordedBy = GeneratedColumn<String>(
+    'recorded_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    tripId,
+    productId,
+    quantity,
+    condition,
+    creditKobo,
+    costKobo,
+    shellsBack,
+    crateShells,
+    recordedAt,
+    recordedBy,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'van_return_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VanReturnEventData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('trip_id')) {
+      context.handle(
+        _tripIdMeta,
+        tripId.isAcceptableOrUnknown(data['trip_id']!, _tripIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tripIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('quantity')) {
+      context.handle(
+        _quantityMeta,
+        quantity.isAcceptableOrUnknown(data['quantity']!, _quantityMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_quantityMeta);
+    }
+    if (data.containsKey('condition')) {
+      context.handle(
+        _conditionMeta,
+        condition.isAcceptableOrUnknown(data['condition']!, _conditionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_conditionMeta);
+    }
+    if (data.containsKey('credit_kobo')) {
+      context.handle(
+        _creditKoboMeta,
+        creditKobo.isAcceptableOrUnknown(data['credit_kobo']!, _creditKoboMeta),
+      );
+    }
+    if (data.containsKey('cost_kobo')) {
+      context.handle(
+        _costKoboMeta,
+        costKobo.isAcceptableOrUnknown(data['cost_kobo']!, _costKoboMeta),
+      );
+    }
+    if (data.containsKey('shells_back')) {
+      context.handle(
+        _shellsBackMeta,
+        shellsBack.isAcceptableOrUnknown(data['shells_back']!, _shellsBackMeta),
+      );
+    }
+    if (data.containsKey('crate_shells')) {
+      context.handle(
+        _crateShellsMeta,
+        crateShells.isAcceptableOrUnknown(
+          data['crate_shells']!,
+          _crateShellsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('recorded_at')) {
+      context.handle(
+        _recordedAtMeta,
+        recordedAt.isAcceptableOrUnknown(data['recorded_at']!, _recordedAtMeta),
+      );
+    }
+    if (data.containsKey('recorded_by')) {
+      context.handle(
+        _recordedByMeta,
+        recordedBy.isAcceptableOrUnknown(data['recorded_by']!, _recordedByMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VanReturnEventData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VanReturnEventData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      tripId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}trip_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      condition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}condition'],
+      )!,
+      creditKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}credit_kobo'],
+      )!,
+      costKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cost_kobo'],
+      )!,
+      shellsBack: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shells_back'],
+      )!,
+      crateShells: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}crate_shells'],
+      ),
+      recordedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}recorded_at'],
+      )!,
+      recordedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recorded_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VanReturnEventsTable createAlias(String alias) {
+    return $VanReturnEventsTable(attachedDatabase, alias);
+  }
+}
+
+class VanReturnEventData extends DataClass
+    implements Insertable<VanReturnEventData> {
+  final String id;
+  final String businessId;
+  final String tripId;
+  final String productId;
+
+  /// Units coming back, as the manager PHYSICALLY COUNTED them. The return form
+  /// never pre-fills a system-derived figure (spec §7.3): with unsynced driver
+  /// sales in flight, "everything the system thinks is left" turns those sales
+  /// into over-returns and misstates the shortage.
+  final int quantity;
+
+  /// One of [kVanReturnConditions].
+  final String condition;
+
+  /// The load-price value credited to the driver — the FIFO sum over the lot
+  /// segments this return consumed (`Σ segment units × that lot's load price`).
+  /// **Always 0 for a damaged return**, enforced by the CHECK below.
+  final int creditKobo;
+
+  /// The SNAPSHOTTED cost basis drawn from the same lot segments
+  /// (`Σ segment units × that lot's unit_cost_kobo`). For a good return it is
+  /// what the warehouse re-batches at; for a damaged one it is the company loss.
+  /// 0 only when the consumed lots were themselves uncosted.
+  final int costKobo;
+
+  /// Empty-crate shells coming back with this line (spec §11). COUNTING ONLY —
+  /// no deposit money, no crate-pool write.
+  final int shellsBack;
+
+  /// Write-only seam for the later crate pass (#207 / Van Sales v2): the crate
+  /// cargo count that carries deposit liability, as distinct from the swap-only
+  /// shell memo above. **No UI writes it in v1** — it exists so the crate pass
+  /// can backfill liability from real history instead of starting blind. Null
+  /// means "never captured", which is deliberately different from 0.
+  final int? crateShells;
+  final DateTime recordedAt;
+  final String? recordedBy;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const VanReturnEventData({
+    required this.id,
+    required this.businessId,
+    required this.tripId,
+    required this.productId,
+    required this.quantity,
+    required this.condition,
+    required this.creditKobo,
+    required this.costKobo,
+    required this.shellsBack,
+    this.crateShells,
+    required this.recordedAt,
+    this.recordedBy,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['trip_id'] = Variable<String>(tripId);
+    map['product_id'] = Variable<String>(productId);
+    map['quantity'] = Variable<int>(quantity);
+    map['condition'] = Variable<String>(condition);
+    map['credit_kobo'] = Variable<int>(creditKobo);
+    map['cost_kobo'] = Variable<int>(costKobo);
+    map['shells_back'] = Variable<int>(shellsBack);
+    if (!nullToAbsent || crateShells != null) {
+      map['crate_shells'] = Variable<int>(crateShells);
+    }
+    map['recorded_at'] = Variable<DateTime>(recordedAt);
+    if (!nullToAbsent || recordedBy != null) {
+      map['recorded_by'] = Variable<String>(recordedBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  VanReturnEventsCompanion toCompanion(bool nullToAbsent) {
+    return VanReturnEventsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      tripId: Value(tripId),
+      productId: Value(productId),
+      quantity: Value(quantity),
+      condition: Value(condition),
+      creditKobo: Value(creditKobo),
+      costKobo: Value(costKobo),
+      shellsBack: Value(shellsBack),
+      crateShells: crateShells == null && nullToAbsent
+          ? const Value.absent()
+          : Value(crateShells),
+      recordedAt: Value(recordedAt),
+      recordedBy: recordedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recordedBy),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory VanReturnEventData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VanReturnEventData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      tripId: serializer.fromJson<String>(json['tripId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      condition: serializer.fromJson<String>(json['condition']),
+      creditKobo: serializer.fromJson<int>(json['creditKobo']),
+      costKobo: serializer.fromJson<int>(json['costKobo']),
+      shellsBack: serializer.fromJson<int>(json['shellsBack']),
+      crateShells: serializer.fromJson<int?>(json['crateShells']),
+      recordedAt: serializer.fromJson<DateTime>(json['recordedAt']),
+      recordedBy: serializer.fromJson<String?>(json['recordedBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'tripId': serializer.toJson<String>(tripId),
+      'productId': serializer.toJson<String>(productId),
+      'quantity': serializer.toJson<int>(quantity),
+      'condition': serializer.toJson<String>(condition),
+      'creditKobo': serializer.toJson<int>(creditKobo),
+      'costKobo': serializer.toJson<int>(costKobo),
+      'shellsBack': serializer.toJson<int>(shellsBack),
+      'crateShells': serializer.toJson<int?>(crateShells),
+      'recordedAt': serializer.toJson<DateTime>(recordedAt),
+      'recordedBy': serializer.toJson<String?>(recordedBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  VanReturnEventData copyWith({
+    String? id,
+    String? businessId,
+    String? tripId,
+    String? productId,
+    int? quantity,
+    String? condition,
+    int? creditKobo,
+    int? costKobo,
+    int? shellsBack,
+    Value<int?> crateShells = const Value.absent(),
+    DateTime? recordedAt,
+    Value<String?> recordedBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => VanReturnEventData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    tripId: tripId ?? this.tripId,
+    productId: productId ?? this.productId,
+    quantity: quantity ?? this.quantity,
+    condition: condition ?? this.condition,
+    creditKobo: creditKobo ?? this.creditKobo,
+    costKobo: costKobo ?? this.costKobo,
+    shellsBack: shellsBack ?? this.shellsBack,
+    crateShells: crateShells.present ? crateShells.value : this.crateShells,
+    recordedAt: recordedAt ?? this.recordedAt,
+    recordedBy: recordedBy.present ? recordedBy.value : this.recordedBy,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  VanReturnEventData copyWithCompanion(VanReturnEventsCompanion data) {
+    return VanReturnEventData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      tripId: data.tripId.present ? data.tripId.value : this.tripId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      condition: data.condition.present ? data.condition.value : this.condition,
+      creditKobo: data.creditKobo.present
+          ? data.creditKobo.value
+          : this.creditKobo,
+      costKobo: data.costKobo.present ? data.costKobo.value : this.costKobo,
+      shellsBack: data.shellsBack.present
+          ? data.shellsBack.value
+          : this.shellsBack,
+      crateShells: data.crateShells.present
+          ? data.crateShells.value
+          : this.crateShells,
+      recordedAt: data.recordedAt.present
+          ? data.recordedAt.value
+          : this.recordedAt,
+      recordedBy: data.recordedBy.present
+          ? data.recordedBy.value
+          : this.recordedBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanReturnEventData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('tripId: $tripId, ')
+          ..write('productId: $productId, ')
+          ..write('quantity: $quantity, ')
+          ..write('condition: $condition, ')
+          ..write('creditKobo: $creditKobo, ')
+          ..write('costKobo: $costKobo, ')
+          ..write('shellsBack: $shellsBack, ')
+          ..write('crateShells: $crateShells, ')
+          ..write('recordedAt: $recordedAt, ')
+          ..write('recordedBy: $recordedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    tripId,
+    productId,
+    quantity,
+    condition,
+    creditKobo,
+    costKobo,
+    shellsBack,
+    crateShells,
+    recordedAt,
+    recordedBy,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VanReturnEventData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.tripId == this.tripId &&
+          other.productId == this.productId &&
+          other.quantity == this.quantity &&
+          other.condition == this.condition &&
+          other.creditKobo == this.creditKobo &&
+          other.costKobo == this.costKobo &&
+          other.shellsBack == this.shellsBack &&
+          other.crateShells == this.crateShells &&
+          other.recordedAt == this.recordedAt &&
+          other.recordedBy == this.recordedBy &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class VanReturnEventsCompanion extends UpdateCompanion<VanReturnEventData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> tripId;
+  final Value<String> productId;
+  final Value<int> quantity;
+  final Value<String> condition;
+  final Value<int> creditKobo;
+  final Value<int> costKobo;
+  final Value<int> shellsBack;
+  final Value<int?> crateShells;
+  final Value<DateTime> recordedAt;
+  final Value<String?> recordedBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const VanReturnEventsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.tripId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.quantity = const Value.absent(),
+    this.condition = const Value.absent(),
+    this.creditKobo = const Value.absent(),
+    this.costKobo = const Value.absent(),
+    this.shellsBack = const Value.absent(),
+    this.crateShells = const Value.absent(),
+    this.recordedAt = const Value.absent(),
+    this.recordedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VanReturnEventsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String tripId,
+    required String productId,
+    required int quantity,
+    required String condition,
+    this.creditKobo = const Value.absent(),
+    this.costKobo = const Value.absent(),
+    this.shellsBack = const Value.absent(),
+    this.crateShells = const Value.absent(),
+    this.recordedAt = const Value.absent(),
+    this.recordedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       tripId = Value(tripId),
+       productId = Value(productId),
+       quantity = Value(quantity),
+       condition = Value(condition);
+  static Insertable<VanReturnEventData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? tripId,
+    Expression<String>? productId,
+    Expression<int>? quantity,
+    Expression<String>? condition,
+    Expression<int>? creditKobo,
+    Expression<int>? costKobo,
+    Expression<int>? shellsBack,
+    Expression<int>? crateShells,
+    Expression<DateTime>? recordedAt,
+    Expression<String>? recordedBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (tripId != null) 'trip_id': tripId,
+      if (productId != null) 'product_id': productId,
+      if (quantity != null) 'quantity': quantity,
+      if (condition != null) 'condition': condition,
+      if (creditKobo != null) 'credit_kobo': creditKobo,
+      if (costKobo != null) 'cost_kobo': costKobo,
+      if (shellsBack != null) 'shells_back': shellsBack,
+      if (crateShells != null) 'crate_shells': crateShells,
+      if (recordedAt != null) 'recorded_at': recordedAt,
+      if (recordedBy != null) 'recorded_by': recordedBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VanReturnEventsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? tripId,
+    Value<String>? productId,
+    Value<int>? quantity,
+    Value<String>? condition,
+    Value<int>? creditKobo,
+    Value<int>? costKobo,
+    Value<int>? shellsBack,
+    Value<int?>? crateShells,
+    Value<DateTime>? recordedAt,
+    Value<String?>? recordedBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return VanReturnEventsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      tripId: tripId ?? this.tripId,
+      productId: productId ?? this.productId,
+      quantity: quantity ?? this.quantity,
+      condition: condition ?? this.condition,
+      creditKobo: creditKobo ?? this.creditKobo,
+      costKobo: costKobo ?? this.costKobo,
+      shellsBack: shellsBack ?? this.shellsBack,
+      crateShells: crateShells ?? this.crateShells,
+      recordedAt: recordedAt ?? this.recordedAt,
+      recordedBy: recordedBy ?? this.recordedBy,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (tripId.present) {
+      map['trip_id'] = Variable<String>(tripId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (quantity.present) {
+      map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (condition.present) {
+      map['condition'] = Variable<String>(condition.value);
+    }
+    if (creditKobo.present) {
+      map['credit_kobo'] = Variable<int>(creditKobo.value);
+    }
+    if (costKobo.present) {
+      map['cost_kobo'] = Variable<int>(costKobo.value);
+    }
+    if (shellsBack.present) {
+      map['shells_back'] = Variable<int>(shellsBack.value);
+    }
+    if (crateShells.present) {
+      map['crate_shells'] = Variable<int>(crateShells.value);
+    }
+    if (recordedAt.present) {
+      map['recorded_at'] = Variable<DateTime>(recordedAt.value);
+    }
+    if (recordedBy.present) {
+      map['recorded_by'] = Variable<String>(recordedBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanReturnEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('tripId: $tripId, ')
+          ..write('productId: $productId, ')
+          ..write('quantity: $quantity, ')
+          ..write('condition: $condition, ')
+          ..write('creditKobo: $creditKobo, ')
+          ..write('costKobo: $costKobo, ')
+          ..write('shellsBack: $shellsBack, ')
+          ..write('crateShells: $crateShells, ')
+          ..write('recordedAt: $recordedAt, ')
+          ..write('recordedBy: $recordedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DriverLedgerEntriesTable extends DriverLedgerEntries
+    with TableInfo<$DriverLedgerEntriesTable, DriverLedgerEntryData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DriverLedgerEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _driverUserIdMeta = const VerificationMeta(
+    'driverUserId',
+  );
+  @override
+  late final GeneratedColumn<String> driverUserId = GeneratedColumn<String>(
+    'driver_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _tripIdMeta = const VerificationMeta('tripId');
+  @override
+  late final GeneratedColumn<String> tripId = GeneratedColumn<String>(
+    'trip_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_trips (id)',
+    ),
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountKoboMeta = const VerificationMeta(
+    'amountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> amountKobo = GeneratedColumn<int>(
+    'amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signedAmountKoboMeta = const VerificationMeta(
+    'signedAmountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> signedAmountKobo = GeneratedColumn<int>(
+    'signed_amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _referenceTypeMeta = const VerificationMeta(
+    'referenceType',
+  );
+  @override
+  late final GeneratedColumn<String> referenceType = GeneratedColumn<String>(
+    'reference_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _referenceIdMeta = const VerificationMeta(
+    'referenceId',
+  );
+  @override
+  late final GeneratedColumn<String> referenceId = GeneratedColumn<String>(
+    'reference_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paymentMethodMeta = const VerificationMeta(
+    'paymentMethod',
+  );
+  @override
+  late final GeneratedColumn<String> paymentMethod = GeneratedColumn<String>(
+    'payment_method',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _receiptPathMeta = const VerificationMeta(
+    'receiptPath',
+  );
+  @override
+  late final GeneratedColumn<String> receiptPath = GeneratedColumn<String>(
+    'receipt_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _referenceNoteMeta = const VerificationMeta(
+    'referenceNote',
+  );
+  @override
+  late final GeneratedColumn<String> referenceNote = GeneratedColumn<String>(
+    'reference_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _activityDateMeta = const VerificationMeta(
+    'activityDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> activityDate = GeneratedColumn<DateTime>(
+    'activity_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _performedByMeta = const VerificationMeta(
+    'performedBy',
+  );
+  @override
+  late final GeneratedColumn<String> performedBy = GeneratedColumn<String>(
+    'performed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _voidedAtMeta = const VerificationMeta(
+    'voidedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> voidedAt = GeneratedColumn<DateTime>(
+    'voided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _voidedByMeta = const VerificationMeta(
+    'voidedBy',
+  );
+  @override
+  late final GeneratedColumn<String> voidedBy = GeneratedColumn<String>(
+    'voided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _voidReasonMeta = const VerificationMeta(
+    'voidReason',
+  );
+  @override
+  late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
+    'void_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    driverUserId,
+    tripId,
+    type,
+    amountKobo,
+    signedAmountKobo,
+    referenceType,
+    referenceId,
+    paymentMethod,
+    receiptPath,
+    referenceNote,
+    activityDate,
+    performedBy,
+    voidedAt,
+    voidedBy,
+    voidReason,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'driver_ledger_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DriverLedgerEntryData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('driver_user_id')) {
+      context.handle(
+        _driverUserIdMeta,
+        driverUserId.isAcceptableOrUnknown(
+          data['driver_user_id']!,
+          _driverUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_driverUserIdMeta);
+    }
+    if (data.containsKey('trip_id')) {
+      context.handle(
+        _tripIdMeta,
+        tripId.isAcceptableOrUnknown(data['trip_id']!, _tripIdMeta),
+      );
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('amount_kobo')) {
+      context.handle(
+        _amountKoboMeta,
+        amountKobo.isAcceptableOrUnknown(data['amount_kobo']!, _amountKoboMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountKoboMeta);
+    }
+    if (data.containsKey('signed_amount_kobo')) {
+      context.handle(
+        _signedAmountKoboMeta,
+        signedAmountKobo.isAcceptableOrUnknown(
+          data['signed_amount_kobo']!,
+          _signedAmountKoboMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signedAmountKoboMeta);
+    }
+    if (data.containsKey('reference_type')) {
+      context.handle(
+        _referenceTypeMeta,
+        referenceType.isAcceptableOrUnknown(
+          data['reference_type']!,
+          _referenceTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_referenceTypeMeta);
+    }
+    if (data.containsKey('reference_id')) {
+      context.handle(
+        _referenceIdMeta,
+        referenceId.isAcceptableOrUnknown(
+          data['reference_id']!,
+          _referenceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payment_method')) {
+      context.handle(
+        _paymentMethodMeta,
+        paymentMethod.isAcceptableOrUnknown(
+          data['payment_method']!,
+          _paymentMethodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('receipt_path')) {
+      context.handle(
+        _receiptPathMeta,
+        receiptPath.isAcceptableOrUnknown(
+          data['receipt_path']!,
+          _receiptPathMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reference_note')) {
+      context.handle(
+        _referenceNoteMeta,
+        referenceNote.isAcceptableOrUnknown(
+          data['reference_note']!,
+          _referenceNoteMeta,
+        ),
+      );
+    }
+    if (data.containsKey('activity_date')) {
+      context.handle(
+        _activityDateMeta,
+        activityDate.isAcceptableOrUnknown(
+          data['activity_date']!,
+          _activityDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_activityDateMeta);
+    }
+    if (data.containsKey('performed_by')) {
+      context.handle(
+        _performedByMeta,
+        performedBy.isAcceptableOrUnknown(
+          data['performed_by']!,
+          _performedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('voided_at')) {
+      context.handle(
+        _voidedAtMeta,
+        voidedAt.isAcceptableOrUnknown(data['voided_at']!, _voidedAtMeta),
+      );
+    }
+    if (data.containsKey('voided_by')) {
+      context.handle(
+        _voidedByMeta,
+        voidedBy.isAcceptableOrUnknown(data['voided_by']!, _voidedByMeta),
+      );
+    }
+    if (data.containsKey('void_reason')) {
+      context.handle(
+        _voidReasonMeta,
+        voidReason.isAcceptableOrUnknown(data['void_reason']!, _voidReasonMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DriverLedgerEntryData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DriverLedgerEntryData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      driverUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}driver_user_id'],
+      )!,
+      tripId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}trip_id'],
+      ),
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      amountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_kobo'],
+      )!,
+      signedAmountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_amount_kobo'],
+      )!,
+      referenceType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_type'],
+      )!,
+      referenceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_id'],
+      ),
+      paymentMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_method'],
+      ),
+      receiptPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}receipt_path'],
+      ),
+      referenceNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_note'],
+      ),
+      activityDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}activity_date'],
+      )!,
+      performedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}performed_by'],
+      ),
+      voidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}voided_at'],
+      ),
+      voidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}voided_by'],
+      ),
+      voidReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_reason'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DriverLedgerEntriesTable createAlias(String alias) {
+    return $DriverLedgerEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class DriverLedgerEntryData extends DataClass
+    implements Insertable<DriverLedgerEntryData> {
+  final String id;
+  final String businessId;
+
+  /// The balance axis — a driver's balance is CROSS-TRIP, so a residual from a
+  /// closed trip follows them onto the next one.
+  final String driverUserId;
+
+  /// Nullable only for a cross-trip correction; normally set.
+  final String? tripId;
+
+  /// One of [kDriverLedgerTypes] — the EVENT, not the sign.
+  final String type;
+
+  /// Always >= 0. The sign lives in [signedAmountKobo].
+  final int amountKobo;
+
+  /// Debits negative, credits positive. Balance = SUM of this column.
+  final int signedAmountKobo;
+
+  /// One of [kDriverLedgerRefTypes] + the causing row's id, so a balance line
+  /// traces back to the lot / return / payment that moved it.
+  final String referenceType;
+  final String? referenceId;
+
+  /// Remittance proof (#144), mirroring the supplier payment flow.
+  /// [receiptPath] is a DEVICE-LOCAL file path — the string syncs, the image
+  /// does not.
+  final String? paymentMethod;
+  final String? receiptPath;
+  final String? referenceNote;
+
+  /// Dispatch date (load) | paid-on date (remittance) | recorded date (return).
+  final DateTime activityDate;
+  final String? performedBy;
+  final DateTime? voidedAt;
+  final String? voidedBy;
+  final String? voidReason;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const DriverLedgerEntryData({
+    required this.id,
+    required this.businessId,
+    required this.driverUserId,
+    this.tripId,
+    required this.type,
+    required this.amountKobo,
+    required this.signedAmountKobo,
+    required this.referenceType,
+    this.referenceId,
+    this.paymentMethod,
+    this.receiptPath,
+    this.referenceNote,
+    required this.activityDate,
+    this.performedBy,
+    this.voidedAt,
+    this.voidedBy,
+    this.voidReason,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['driver_user_id'] = Variable<String>(driverUserId);
+    if (!nullToAbsent || tripId != null) {
+      map['trip_id'] = Variable<String>(tripId);
+    }
+    map['type'] = Variable<String>(type);
+    map['amount_kobo'] = Variable<int>(amountKobo);
+    map['signed_amount_kobo'] = Variable<int>(signedAmountKobo);
+    map['reference_type'] = Variable<String>(referenceType);
+    if (!nullToAbsent || referenceId != null) {
+      map['reference_id'] = Variable<String>(referenceId);
+    }
+    if (!nullToAbsent || paymentMethod != null) {
+      map['payment_method'] = Variable<String>(paymentMethod);
+    }
+    if (!nullToAbsent || receiptPath != null) {
+      map['receipt_path'] = Variable<String>(receiptPath);
+    }
+    if (!nullToAbsent || referenceNote != null) {
+      map['reference_note'] = Variable<String>(referenceNote);
+    }
+    map['activity_date'] = Variable<DateTime>(activityDate);
+    if (!nullToAbsent || performedBy != null) {
+      map['performed_by'] = Variable<String>(performedBy);
+    }
+    if (!nullToAbsent || voidedAt != null) {
+      map['voided_at'] = Variable<DateTime>(voidedAt);
+    }
+    if (!nullToAbsent || voidedBy != null) {
+      map['voided_by'] = Variable<String>(voidedBy);
+    }
+    if (!nullToAbsent || voidReason != null) {
+      map['void_reason'] = Variable<String>(voidReason);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  DriverLedgerEntriesCompanion toCompanion(bool nullToAbsent) {
+    return DriverLedgerEntriesCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      driverUserId: Value(driverUserId),
+      tripId: tripId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tripId),
+      type: Value(type),
+      amountKobo: Value(amountKobo),
+      signedAmountKobo: Value(signedAmountKobo),
+      referenceType: Value(referenceType),
+      referenceId: referenceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceId),
+      paymentMethod: paymentMethod == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethod),
+      receiptPath: receiptPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(receiptPath),
+      referenceNote: referenceNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceNote),
+      activityDate: Value(activityDate),
+      performedBy: performedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(performedBy),
+      voidedAt: voidedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidedAt),
+      voidedBy: voidedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidedBy),
+      voidReason: voidReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidReason),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory DriverLedgerEntryData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DriverLedgerEntryData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      driverUserId: serializer.fromJson<String>(json['driverUserId']),
+      tripId: serializer.fromJson<String?>(json['tripId']),
+      type: serializer.fromJson<String>(json['type']),
+      amountKobo: serializer.fromJson<int>(json['amountKobo']),
+      signedAmountKobo: serializer.fromJson<int>(json['signedAmountKobo']),
+      referenceType: serializer.fromJson<String>(json['referenceType']),
+      referenceId: serializer.fromJson<String?>(json['referenceId']),
+      paymentMethod: serializer.fromJson<String?>(json['paymentMethod']),
+      receiptPath: serializer.fromJson<String?>(json['receiptPath']),
+      referenceNote: serializer.fromJson<String?>(json['referenceNote']),
+      activityDate: serializer.fromJson<DateTime>(json['activityDate']),
+      performedBy: serializer.fromJson<String?>(json['performedBy']),
+      voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
+      voidedBy: serializer.fromJson<String?>(json['voidedBy']),
+      voidReason: serializer.fromJson<String?>(json['voidReason']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'driverUserId': serializer.toJson<String>(driverUserId),
+      'tripId': serializer.toJson<String?>(tripId),
+      'type': serializer.toJson<String>(type),
+      'amountKobo': serializer.toJson<int>(amountKobo),
+      'signedAmountKobo': serializer.toJson<int>(signedAmountKobo),
+      'referenceType': serializer.toJson<String>(referenceType),
+      'referenceId': serializer.toJson<String?>(referenceId),
+      'paymentMethod': serializer.toJson<String?>(paymentMethod),
+      'receiptPath': serializer.toJson<String?>(receiptPath),
+      'referenceNote': serializer.toJson<String?>(referenceNote),
+      'activityDate': serializer.toJson<DateTime>(activityDate),
+      'performedBy': serializer.toJson<String?>(performedBy),
+      'voidedAt': serializer.toJson<DateTime?>(voidedAt),
+      'voidedBy': serializer.toJson<String?>(voidedBy),
+      'voidReason': serializer.toJson<String?>(voidReason),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  DriverLedgerEntryData copyWith({
+    String? id,
+    String? businessId,
+    String? driverUserId,
+    Value<String?> tripId = const Value.absent(),
+    String? type,
+    int? amountKobo,
+    int? signedAmountKobo,
+    String? referenceType,
+    Value<String?> referenceId = const Value.absent(),
+    Value<String?> paymentMethod = const Value.absent(),
+    Value<String?> receiptPath = const Value.absent(),
+    Value<String?> referenceNote = const Value.absent(),
+    DateTime? activityDate,
+    Value<String?> performedBy = const Value.absent(),
+    Value<DateTime?> voidedAt = const Value.absent(),
+    Value<String?> voidedBy = const Value.absent(),
+    Value<String?> voidReason = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => DriverLedgerEntryData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    driverUserId: driverUserId ?? this.driverUserId,
+    tripId: tripId.present ? tripId.value : this.tripId,
+    type: type ?? this.type,
+    amountKobo: amountKobo ?? this.amountKobo,
+    signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
+    referenceType: referenceType ?? this.referenceType,
+    referenceId: referenceId.present ? referenceId.value : this.referenceId,
+    paymentMethod: paymentMethod.present
+        ? paymentMethod.value
+        : this.paymentMethod,
+    receiptPath: receiptPath.present ? receiptPath.value : this.receiptPath,
+    referenceNote: referenceNote.present
+        ? referenceNote.value
+        : this.referenceNote,
+    activityDate: activityDate ?? this.activityDate,
+    performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
+    voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
+    voidReason: voidReason.present ? voidReason.value : this.voidReason,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  DriverLedgerEntryData copyWithCompanion(DriverLedgerEntriesCompanion data) {
+    return DriverLedgerEntryData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      driverUserId: data.driverUserId.present
+          ? data.driverUserId.value
+          : this.driverUserId,
+      tripId: data.tripId.present ? data.tripId.value : this.tripId,
+      type: data.type.present ? data.type.value : this.type,
+      amountKobo: data.amountKobo.present
+          ? data.amountKobo.value
+          : this.amountKobo,
+      signedAmountKobo: data.signedAmountKobo.present
+          ? data.signedAmountKobo.value
+          : this.signedAmountKobo,
+      referenceType: data.referenceType.present
+          ? data.referenceType.value
+          : this.referenceType,
+      referenceId: data.referenceId.present
+          ? data.referenceId.value
+          : this.referenceId,
+      paymentMethod: data.paymentMethod.present
+          ? data.paymentMethod.value
+          : this.paymentMethod,
+      receiptPath: data.receiptPath.present
+          ? data.receiptPath.value
+          : this.receiptPath,
+      referenceNote: data.referenceNote.present
+          ? data.referenceNote.value
+          : this.referenceNote,
+      activityDate: data.activityDate.present
+          ? data.activityDate.value
+          : this.activityDate,
+      performedBy: data.performedBy.present
+          ? data.performedBy.value
+          : this.performedBy,
+      voidedAt: data.voidedAt.present ? data.voidedAt.value : this.voidedAt,
+      voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
+      voidReason: data.voidReason.present
+          ? data.voidReason.value
+          : this.voidReason,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DriverLedgerEntryData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('driverUserId: $driverUserId, ')
+          ..write('tripId: $tripId, ')
+          ..write('type: $type, ')
+          ..write('amountKobo: $amountKobo, ')
+          ..write('signedAmountKobo: $signedAmountKobo, ')
+          ..write('referenceType: $referenceType, ')
+          ..write('referenceId: $referenceId, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('receiptPath: $receiptPath, ')
+          ..write('referenceNote: $referenceNote, ')
+          ..write('activityDate: $activityDate, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    driverUserId,
+    tripId,
+    type,
+    amountKobo,
+    signedAmountKobo,
+    referenceType,
+    referenceId,
+    paymentMethod,
+    receiptPath,
+    referenceNote,
+    activityDate,
+    performedBy,
+    voidedAt,
+    voidedBy,
+    voidReason,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DriverLedgerEntryData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.driverUserId == this.driverUserId &&
+          other.tripId == this.tripId &&
+          other.type == this.type &&
+          other.amountKobo == this.amountKobo &&
+          other.signedAmountKobo == this.signedAmountKobo &&
+          other.referenceType == this.referenceType &&
+          other.referenceId == this.referenceId &&
+          other.paymentMethod == this.paymentMethod &&
+          other.receiptPath == this.receiptPath &&
+          other.referenceNote == this.referenceNote &&
+          other.activityDate == this.activityDate &&
+          other.performedBy == this.performedBy &&
+          other.voidedAt == this.voidedAt &&
+          other.voidedBy == this.voidedBy &&
+          other.voidReason == this.voidReason &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class DriverLedgerEntriesCompanion
+    extends UpdateCompanion<DriverLedgerEntryData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> driverUserId;
+  final Value<String?> tripId;
+  final Value<String> type;
+  final Value<int> amountKobo;
+  final Value<int> signedAmountKobo;
+  final Value<String> referenceType;
+  final Value<String?> referenceId;
+  final Value<String?> paymentMethod;
+  final Value<String?> receiptPath;
+  final Value<String?> referenceNote;
+  final Value<DateTime> activityDate;
+  final Value<String?> performedBy;
+  final Value<DateTime?> voidedAt;
+  final Value<String?> voidedBy;
+  final Value<String?> voidReason;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const DriverLedgerEntriesCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.driverUserId = const Value.absent(),
+    this.tripId = const Value.absent(),
+    this.type = const Value.absent(),
+    this.amountKobo = const Value.absent(),
+    this.signedAmountKobo = const Value.absent(),
+    this.referenceType = const Value.absent(),
+    this.referenceId = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    this.receiptPath = const Value.absent(),
+    this.referenceNote = const Value.absent(),
+    this.activityDate = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.voidedAt = const Value.absent(),
+    this.voidedBy = const Value.absent(),
+    this.voidReason = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DriverLedgerEntriesCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String driverUserId,
+    this.tripId = const Value.absent(),
+    required String type,
+    required int amountKobo,
+    required int signedAmountKobo,
+    required String referenceType,
+    this.referenceId = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
+    this.receiptPath = const Value.absent(),
+    this.referenceNote = const Value.absent(),
+    required DateTime activityDate,
+    this.performedBy = const Value.absent(),
+    this.voidedAt = const Value.absent(),
+    this.voidedBy = const Value.absent(),
+    this.voidReason = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       driverUserId = Value(driverUserId),
+       type = Value(type),
+       amountKobo = Value(amountKobo),
+       signedAmountKobo = Value(signedAmountKobo),
+       referenceType = Value(referenceType),
+       activityDate = Value(activityDate);
+  static Insertable<DriverLedgerEntryData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? driverUserId,
+    Expression<String>? tripId,
+    Expression<String>? type,
+    Expression<int>? amountKobo,
+    Expression<int>? signedAmountKobo,
+    Expression<String>? referenceType,
+    Expression<String>? referenceId,
+    Expression<String>? paymentMethod,
+    Expression<String>? receiptPath,
+    Expression<String>? referenceNote,
+    Expression<DateTime>? activityDate,
+    Expression<String>? performedBy,
+    Expression<DateTime>? voidedAt,
+    Expression<String>? voidedBy,
+    Expression<String>? voidReason,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (driverUserId != null) 'driver_user_id': driverUserId,
+      if (tripId != null) 'trip_id': tripId,
+      if (type != null) 'type': type,
+      if (amountKobo != null) 'amount_kobo': amountKobo,
+      if (signedAmountKobo != null) 'signed_amount_kobo': signedAmountKobo,
+      if (referenceType != null) 'reference_type': referenceType,
+      if (referenceId != null) 'reference_id': referenceId,
+      if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (receiptPath != null) 'receipt_path': receiptPath,
+      if (referenceNote != null) 'reference_note': referenceNote,
+      if (activityDate != null) 'activity_date': activityDate,
+      if (performedBy != null) 'performed_by': performedBy,
+      if (voidedAt != null) 'voided_at': voidedAt,
+      if (voidedBy != null) 'voided_by': voidedBy,
+      if (voidReason != null) 'void_reason': voidReason,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DriverLedgerEntriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? driverUserId,
+    Value<String?>? tripId,
+    Value<String>? type,
+    Value<int>? amountKobo,
+    Value<int>? signedAmountKobo,
+    Value<String>? referenceType,
+    Value<String?>? referenceId,
+    Value<String?>? paymentMethod,
+    Value<String?>? receiptPath,
+    Value<String?>? referenceNote,
+    Value<DateTime>? activityDate,
+    Value<String?>? performedBy,
+    Value<DateTime?>? voidedAt,
+    Value<String?>? voidedBy,
+    Value<String?>? voidReason,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return DriverLedgerEntriesCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      driverUserId: driverUserId ?? this.driverUserId,
+      tripId: tripId ?? this.tripId,
+      type: type ?? this.type,
+      amountKobo: amountKobo ?? this.amountKobo,
+      signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
+      referenceType: referenceType ?? this.referenceType,
+      referenceId: referenceId ?? this.referenceId,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      receiptPath: receiptPath ?? this.receiptPath,
+      referenceNote: referenceNote ?? this.referenceNote,
+      activityDate: activityDate ?? this.activityDate,
+      performedBy: performedBy ?? this.performedBy,
+      voidedAt: voidedAt ?? this.voidedAt,
+      voidedBy: voidedBy ?? this.voidedBy,
+      voidReason: voidReason ?? this.voidReason,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (driverUserId.present) {
+      map['driver_user_id'] = Variable<String>(driverUserId.value);
+    }
+    if (tripId.present) {
+      map['trip_id'] = Variable<String>(tripId.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (amountKobo.present) {
+      map['amount_kobo'] = Variable<int>(amountKobo.value);
+    }
+    if (signedAmountKobo.present) {
+      map['signed_amount_kobo'] = Variable<int>(signedAmountKobo.value);
+    }
+    if (referenceType.present) {
+      map['reference_type'] = Variable<String>(referenceType.value);
+    }
+    if (referenceId.present) {
+      map['reference_id'] = Variable<String>(referenceId.value);
+    }
+    if (paymentMethod.present) {
+      map['payment_method'] = Variable<String>(paymentMethod.value);
+    }
+    if (receiptPath.present) {
+      map['receipt_path'] = Variable<String>(receiptPath.value);
+    }
+    if (referenceNote.present) {
+      map['reference_note'] = Variable<String>(referenceNote.value);
+    }
+    if (activityDate.present) {
+      map['activity_date'] = Variable<DateTime>(activityDate.value);
+    }
+    if (performedBy.present) {
+      map['performed_by'] = Variable<String>(performedBy.value);
+    }
+    if (voidedAt.present) {
+      map['voided_at'] = Variable<DateTime>(voidedAt.value);
+    }
+    if (voidedBy.present) {
+      map['voided_by'] = Variable<String>(voidedBy.value);
+    }
+    if (voidReason.present) {
+      map['void_reason'] = Variable<String>(voidReason.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DriverLedgerEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('driverUserId: $driverUserId, ')
+          ..write('tripId: $tripId, ')
+          ..write('type: $type, ')
+          ..write('amountKobo: $amountKobo, ')
+          ..write('signedAmountKobo: $signedAmountKobo, ')
+          ..write('referenceType: $referenceType, ')
+          ..write('referenceId: $referenceId, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('receiptPath: $receiptPath, ')
+          ..write('referenceNote: $referenceNote, ')
+          ..write('activityDate: $activityDate, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidReason: $voidReason, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -38980,12 +48242,19 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SupplierCrateLedgerTable(this);
   late final $SupplierCrateBalancesTable supplierCrateBalances =
       $SupplierCrateBalancesTable(this);
+  late final $SupplierCrateDepositRequestsTable supplierCrateDepositRequests =
+      $SupplierCrateDepositRequestsTable(this);
+  late final $SupplierCrateDepositsTable supplierCrateDeposits =
+      $SupplierCrateDepositsTable(this);
+  late final $CrateShortfallWriteoffsTable crateShortfallWriteoffs =
+      $CrateShortfallWriteoffsTable(this);
   late final $ProductsTable products = $ProductsTable(this);
   late final $PriceListsTable priceLists = $PriceListsTable(this);
   late final $CustomersTable customers = $CustomersTable(this);
   late final $CustomerWalletsTable customerWallets = $CustomerWalletsTable(
     this,
   );
+  late final $VanTripsTable vanTrips = $VanTripsTable(this);
   late final $OrdersTable orders = $OrdersTable(this);
   late final $WalletTransactionsTable walletTransactions =
       $WalletTransactionsTable(this);
@@ -39028,6 +48297,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PaymentTransactionsTable paymentTransactions =
       $PaymentTransactionsTable(this);
   late final $StockCountsTable stockCounts = $StockCountsTable(this);
+  late final $DailyClosingsTable dailyClosings = $DailyClosingsTable(this);
+  late final $VanTripLotsTable vanTripLots = $VanTripLotsTable(this);
+  late final $VanReturnEventsTable vanReturnEvents = $VanReturnEventsTable(
+    this,
+  );
+  late final $DriverLedgerEntriesTable driverLedgerEntries =
+      $DriverLedgerEntriesTable(this);
   late final $ActivityLogsTable activityLogs = $ActivityLogsTable(this);
   late final $ErrorLogsTable errorLogs = $ErrorLogsTable(this);
   late final $NotificationsTable notifications = $NotificationsTable(this);
@@ -39060,10 +48336,19 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final OrdersDao ordersDao = OrdersDao(this as AppDatabase);
+  late final PaymentTransactionsDao paymentTransactionsDao =
+      PaymentTransactionsDao(this as AppDatabase);
   late final CustomersDao customersDao = CustomersDao(this as AppDatabase);
   late final ShipmentsDao shipmentsDao = ShipmentsDao(this as AppDatabase);
   late final ExpensesDao expensesDao = ExpensesDao(this as AppDatabase);
   late final ExpenseBudgetsDao expenseBudgetsDao = ExpenseBudgetsDao(
+    this as AppDatabase,
+  );
+  late final DailyClosingsDao dailyClosingsDao = DailyClosingsDao(
+    this as AppDatabase,
+  );
+  late final VanTripsDao vanTripsDao = VanTripsDao(this as AppDatabase);
+  late final DriverLedgerDao driverLedgerDao = DriverLedgerDao(
     this as AppDatabase,
   );
   late final SyncDao syncDao = SyncDao(this as AppDatabase);
@@ -39116,9 +48401,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final OrderCrateLinesDao orderCrateLinesDao = OrderCrateLinesDao(
     this as AppDatabase,
   );
-  late final CrateLedgerDao crateLedgerDao = CrateLedgerDao(
-    this as AppDatabase,
-  );
+  late final CratePoolDao cratePoolDao = CratePoolDao(this as AppDatabase);
   late final SettingsDao settingsDao = SettingsDao(this as AppDatabase);
   late final BusinessesDao businessesDao = BusinessesDao(this as AppDatabase);
   late final SystemConfigDao systemConfigDao = SystemConfigDao(
@@ -39160,10 +48443,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     supplierLedgerEntries,
     supplierCrateLedger,
     supplierCrateBalances,
+    supplierCrateDepositRequests,
+    supplierCrateDeposits,
+    crateShortfallWriteoffs,
     products,
     priceLists,
     customers,
     customerWallets,
+    vanTrips,
     orders,
     walletTransactions,
     customerCrateBalances,
@@ -39190,6 +48477,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     savedCarts,
     paymentTransactions,
     stockCounts,
+    dailyClosings,
+    vanTripLots,
+    vanReturnEvents,
+    driverLedgerEntries,
     activityLogs,
     errorLogs,
     notifications,
@@ -39457,6 +48748,90 @@ final class $$BusinessesTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.supplierCrateDepositRequests.businessId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.supplierCrateDeposits.businessId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CrateShortfallWriteoffsTable,
+    List<CrateShortfallWriteoffData>
+  >
+  _crateShortfallWriteoffsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.crateShortfallWriteoffs,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.crateShortfallWriteoffs.businessId,
+        ),
+      );
+
+  $$CrateShortfallWriteoffsTableProcessedTableManager
+  get crateShortfallWriteoffsRefs {
+    final manager = $$CrateShortfallWriteoffsTableTableManager(
+      $_db,
+      $_db.crateShortfallWriteoffs,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _crateShortfallWriteoffsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$ProductsTable, List<ProductData>>
   _productsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.products,
@@ -39529,6 +48904,24 @@ final class $$BusinessesTableReferences
     final cache = $_typedResult.readTableOrNull(
       _customerWalletsRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanTripsTable, List<VanTripData>>
+  _vanTripsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTrips,
+    aliasName: $_aliasNameGenerator(db.businesses.id, db.vanTrips.businessId),
+  );
+
+  $$VanTripsTableProcessedTableManager get vanTripsRefs {
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -40122,6 +49515,98 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_stockCountsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$DailyClosingsTable, List<DailyClosingData>>
+  _dailyClosingsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.dailyClosings,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.dailyClosings.businessId,
+    ),
+  );
+
+  $$DailyClosingsTableProcessedTableManager get dailyClosingsRefs {
+    final manager = $$DailyClosingsTableTableManager(
+      $_db,
+      $_db.dailyClosings,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dailyClosingsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanTripLotsTable, List<VanTripLotData>>
+  _vanTripLotsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTripLots,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.vanTripLots.businessId,
+    ),
+  );
+
+  $$VanTripLotsTableProcessedTableManager get vanTripLotsRefs {
+    final manager = $$VanTripLotsTableTableManager(
+      $_db,
+      $_db.vanTripLots,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripLotsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanReturnEventsTable, List<VanReturnEventData>>
+  _vanReturnEventsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanReturnEvents,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.vanReturnEvents.businessId,
+    ),
+  );
+
+  $$VanReturnEventsTableProcessedTableManager get vanReturnEventsRefs {
+    final manager = $$VanReturnEventsTableTableManager(
+      $_db,
+      $_db.vanReturnEvents,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _vanReturnEventsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $DriverLedgerEntriesTable,
+    List<DriverLedgerEntryData>
+  >
+  _driverLedgerEntriesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.driverLedgerEntries,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.driverLedgerEntries.businessId,
+        ),
+      );
+
+  $$DriverLedgerEntriesTableProcessedTableManager get driverLedgerEntriesRefs {
+    final manager = $$DriverLedgerEntriesTableTableManager(
+      $_db,
+      $_db.driverLedgerEntries,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _driverLedgerEntriesRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -40737,6 +50222,87 @@ class $$BusinessesTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> crateShortfallWriteoffsRefs(
+    Expression<bool> Function($$CrateShortfallWriteoffsTableFilterComposer f) f,
+  ) {
+    final $$CrateShortfallWriteoffsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<bool> productsRefs(
     Expression<bool> Function($$ProductsTableFilterComposer f) f,
   ) {
@@ -40828,6 +50394,31 @@ class $$BusinessesTableFilterComposer
           }) => $$CustomerWalletsTableFilterComposer(
             $db: $db,
             $table: $db.customerWallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanTripsRefs(
+    Expression<bool> Function($$VanTripsTableFilterComposer f) f,
+  ) {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -41482,6 +51073,106 @@ class $$BusinessesTableFilterComposer
           }) => $$StockCountsTableFilterComposer(
             $db: $db,
             $table: $db.stockCounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dailyClosingsRefs(
+    Expression<bool> Function($$DailyClosingsTableFilterComposer f) f,
+  ) {
+    final $$DailyClosingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableFilterComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanTripLotsRefs(
+    Expression<bool> Function($$VanTripLotsTableFilterComposer f) f,
+  ) {
+    final $$VanTripLotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanReturnEventsRefs(
+    Expression<bool> Function($$VanReturnEventsTableFilterComposer f) f,
+  ) {
+    final $$VanReturnEventsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanReturnEvents,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanReturnEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanReturnEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> driverLedgerEntriesRefs(
+    Expression<bool> Function($$DriverLedgerEntriesTableFilterComposer f) f,
+  ) {
+    final $$DriverLedgerEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.driverLedgerEntries,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DriverLedgerEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.driverLedgerEntries,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -42232,6 +51923,88 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> crateShortfallWriteoffsRefs<T extends Object>(
+    Expression<T> Function($$CrateShortfallWriteoffsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CrateShortfallWriteoffsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> productsRefs<T extends Object>(
     Expression<T> Function($$ProductsTableAnnotationComposer a) f,
   ) {
@@ -42323,6 +52096,31 @@ class $$BusinessesTableAnnotationComposer
           }) => $$CustomerWalletsTableAnnotationComposer(
             $db: $db,
             $table: $db.customerWallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> vanTripsRefs<T extends Object>(
+    Expression<T> Function($$VanTripsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -42994,6 +52792,107 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> dailyClosingsRefs<T extends Object>(
+    Expression<T> Function($$DailyClosingsTableAnnotationComposer a) f,
+  ) {
+    final $$DailyClosingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> vanTripLotsRefs<T extends Object>(
+    Expression<T> Function($$VanTripLotsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripLotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> vanReturnEventsRefs<T extends Object>(
+    Expression<T> Function($$VanReturnEventsTableAnnotationComposer a) f,
+  ) {
+    final $$VanReturnEventsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanReturnEvents,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanReturnEventsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanReturnEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> driverLedgerEntriesRefs<T extends Object>(
+    Expression<T> Function($$DriverLedgerEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$DriverLedgerEntriesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.driverLedgerEntries,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DriverLedgerEntriesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.driverLedgerEntries,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> activityLogsRefs<T extends Object>(
     Expression<T> Function($$ActivityLogsTableAnnotationComposer a) f,
   ) {
@@ -43371,10 +53270,14 @@ class $$BusinessesTableTableManager
             bool supplierLedgerEntriesRefs,
             bool supplierCrateLedgerRefs,
             bool supplierCrateBalancesRefs,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
+            bool crateShortfallWriteoffsRefs,
             bool productsRefs,
             bool priceListsRefs,
             bool customersRefs,
             bool customerWalletsRefs,
+            bool vanTripsRefs,
             bool ordersRefs,
             bool walletTransactionsRefs,
             bool customerCrateBalancesRefs,
@@ -43401,6 +53304,10 @@ class $$BusinessesTableTableManager
             bool savedCartsRefs,
             bool paymentTransactionsRefs,
             bool stockCountsRefs,
+            bool dailyClosingsRefs,
+            bool vanTripLotsRefs,
+            bool vanReturnEventsRefs,
+            bool driverLedgerEntriesRefs,
             bool activityLogsRefs,
             bool errorLogsRefs,
             bool notificationsRefs,
@@ -43523,10 +53430,14 @@ class $$BusinessesTableTableManager
                 supplierLedgerEntriesRefs = false,
                 supplierCrateLedgerRefs = false,
                 supplierCrateBalancesRefs = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
+                crateShortfallWriteoffsRefs = false,
                 productsRefs = false,
                 priceListsRefs = false,
                 customersRefs = false,
                 customerWalletsRefs = false,
+                vanTripsRefs = false,
                 ordersRefs = false,
                 walletTransactionsRefs = false,
                 customerCrateBalancesRefs = false,
@@ -43553,6 +53464,10 @@ class $$BusinessesTableTableManager
                 savedCartsRefs = false,
                 paymentTransactionsRefs = false,
                 stockCountsRefs = false,
+                dailyClosingsRefs = false,
+                vanTripLotsRefs = false,
+                vanReturnEventsRefs = false,
+                driverLedgerEntriesRefs = false,
                 activityLogsRefs = false,
                 errorLogsRefs = false,
                 notificationsRefs = false,
@@ -43580,10 +53495,15 @@ class $$BusinessesTableTableManager
                     if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
                     if (supplierCrateBalancesRefs) db.supplierCrateBalances,
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                    if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (productsRefs) db.products,
                     if (priceListsRefs) db.priceLists,
                     if (customersRefs) db.customers,
                     if (customerWalletsRefs) db.customerWallets,
+                    if (vanTripsRefs) db.vanTrips,
                     if (ordersRefs) db.orders,
                     if (walletTransactionsRefs) db.walletTransactions,
                     if (customerCrateBalancesRefs) db.customerCrateBalances,
@@ -43611,6 +53531,10 @@ class $$BusinessesTableTableManager
                     if (savedCartsRefs) db.savedCarts,
                     if (paymentTransactionsRefs) db.paymentTransactions,
                     if (stockCountsRefs) db.stockCounts,
+                    if (dailyClosingsRefs) db.dailyClosings,
+                    if (vanTripLotsRefs) db.vanTripLots,
+                    if (vanReturnEventsRefs) db.vanReturnEvents,
+                    if (driverLedgerEntriesRefs) db.driverLedgerEntries,
                     if (activityLogsRefs) db.activityLogs,
                     if (errorLogsRefs) db.errorLogs,
                     if (notificationsRefs) db.notifications,
@@ -43818,6 +53742,69 @@ class $$BusinessesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateShortfallWriteoffsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          CrateShortfallWriteoffData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._crateShortfallWriteoffsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateShortfallWriteoffsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (productsRefs)
                         await $_getPrefetchedData<
                           BusinessData,
@@ -43896,6 +53883,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).customerWalletsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanTripsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          VanTripData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._vanTripsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -44448,6 +54456,90 @@ class $$BusinessesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (dailyClosingsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          DailyClosingData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._dailyClosingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dailyClosingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanTripLotsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          VanTripLotData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._vanTripLotsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripLotsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanReturnEventsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          VanReturnEventData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._vanReturnEventsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanReturnEventsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (driverLedgerEntriesRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          DriverLedgerEntryData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._driverLedgerEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).driverLedgerEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (activityLogsRefs)
                         await $_getPrefetchedData<
                           BusinessData,
@@ -44772,10 +54864,14 @@ typedef $$BusinessesTableProcessedTableManager =
         bool supplierLedgerEntriesRefs,
         bool supplierCrateLedgerRefs,
         bool supplierCrateBalancesRefs,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
+        bool crateShortfallWriteoffsRefs,
         bool productsRefs,
         bool priceListsRefs,
         bool customersRefs,
         bool customerWalletsRefs,
+        bool vanTripsRefs,
         bool ordersRefs,
         bool walletTransactionsRefs,
         bool customerCrateBalancesRefs,
@@ -44802,6 +54898,10 @@ typedef $$BusinessesTableProcessedTableManager =
         bool savedCartsRefs,
         bool paymentTransactionsRefs,
         bool stockCountsRefs,
+        bool dailyClosingsRefs,
+        bool vanTripLotsRefs,
+        bool vanReturnEventsRefs,
+        bool driverLedgerEntriesRefs,
         bool activityLogsRefs,
         bool errorLogsRefs,
         bool notificationsRefs,
@@ -45536,6 +55636,7 @@ typedef $$ManufacturersTableCreateCompanionBuilder =
       required String name,
       Value<int> emptyCrateStock,
       Value<int> depositAmountKobo,
+      Value<String> crateMoneyArrangement,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -45548,6 +55649,7 @@ typedef $$ManufacturersTableUpdateCompanionBuilder =
       Value<String> name,
       Value<int> emptyCrateStock,
       Value<int> depositAmountKobo,
+      Value<String> crateMoneyArrangement,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -45631,6 +55733,90 @@ final class $$ManufacturersTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _supplierCrateBalancesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturers.id,
+          db.supplierCrateDepositRequests.manufacturerId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.manufacturerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturers.id,
+          db.supplierCrateDeposits.manufacturerId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.manufacturerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CrateShortfallWriteoffsTable,
+    List<CrateShortfallWriteoffData>
+  >
+  _crateShortfallWriteoffsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.crateShortfallWriteoffs,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturers.id,
+          db.crateShortfallWriteoffs.manufacturerId,
+        ),
+      );
+
+  $$CrateShortfallWriteoffsTableProcessedTableManager
+  get crateShortfallWriteoffsRefs {
+    final manager = $$CrateShortfallWriteoffsTableTableManager(
+      $_db,
+      $_db.crateShortfallWriteoffs,
+    ).filter((f) => f.manufacturerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _crateShortfallWriteoffsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -45842,6 +56028,11 @@ class $$ManufacturersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get crateMoneyArrangement => $composableBuilder(
+    column: $table.crateMoneyArrangement,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnFilters(column),
@@ -45922,6 +56113,87 @@ class $$ManufacturersTableFilterComposer
               }) => $$SupplierCrateBalancesTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> crateShortfallWriteoffsRefs(
+    Expression<bool> Function($$CrateShortfallWriteoffsTableFilterComposer f) f,
+  ) {
+    final $$CrateShortfallWriteoffsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -46139,6 +56411,11 @@ class $$ManufacturersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get crateMoneyArrangement => $composableBuilder(
+    column: $table.crateMoneyArrangement,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -46200,6 +56477,11 @@ class $$ManufacturersTableAnnotationComposer
 
   GeneratedColumn<int> get depositAmountKobo => $composableBuilder(
     column: $table.depositAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get crateMoneyArrangement => $composableBuilder(
+    column: $table.crateMoneyArrangement,
     builder: (column) => column,
   );
 
@@ -46280,6 +56562,88 @@ class $$ManufacturersTableAnnotationComposer
               }) => $$SupplierCrateBalancesTableAnnotationComposer(
                 $db: $db,
                 $table: $db.supplierCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> crateShortfallWriteoffsRefs<T extends Object>(
+    Expression<T> Function($$CrateShortfallWriteoffsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CrateShortfallWriteoffsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -46487,6 +56851,9 @@ class $$ManufacturersTableTableManager
             bool businessId,
             bool supplierCrateLedgerRefs,
             bool supplierCrateBalancesRefs,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
+            bool crateShortfallWriteoffsRefs,
             bool productsRefs,
             bool customerCrateBalancesRefs,
             bool manufacturerCrateBalancesRefs,
@@ -46514,6 +56881,7 @@ class $$ManufacturersTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<int> emptyCrateStock = const Value.absent(),
                 Value<int> depositAmountKobo = const Value.absent(),
+                Value<String> crateMoneyArrangement = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -46524,6 +56892,7 @@ class $$ManufacturersTableTableManager
                 name: name,
                 emptyCrateStock: emptyCrateStock,
                 depositAmountKobo: depositAmountKobo,
+                crateMoneyArrangement: crateMoneyArrangement,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -46536,6 +56905,7 @@ class $$ManufacturersTableTableManager
                 required String name,
                 Value<int> emptyCrateStock = const Value.absent(),
                 Value<int> depositAmountKobo = const Value.absent(),
+                Value<String> crateMoneyArrangement = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -46546,6 +56916,7 @@ class $$ManufacturersTableTableManager
                 name: name,
                 emptyCrateStock: emptyCrateStock,
                 depositAmountKobo: depositAmountKobo,
+                crateMoneyArrangement: crateMoneyArrangement,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -46564,6 +56935,9 @@ class $$ManufacturersTableTableManager
                 businessId = false,
                 supplierCrateLedgerRefs = false,
                 supplierCrateBalancesRefs = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
+                crateShortfallWriteoffsRefs = false,
                 productsRefs = false,
                 customerCrateBalancesRefs = false,
                 manufacturerCrateBalancesRefs = false,
@@ -46577,6 +56951,10 @@ class $$ManufacturersTableTableManager
                   explicitlyWatchedTables: [
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
                     if (supplierCrateBalancesRefs) db.supplierCrateBalances,
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                    if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (productsRefs) db.products,
                     if (customerCrateBalancesRefs) db.customerCrateBalances,
                     if (manufacturerCrateBalancesRefs)
@@ -46658,6 +57036,69 @@ class $$ManufacturersTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateBalancesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturerData,
+                          $ManufacturersTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturersTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturerData,
+                          $ManufacturersTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturersTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateShortfallWriteoffsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturerData,
+                          $ManufacturersTable,
+                          CrateShortfallWriteoffData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturersTableReferences
+                              ._crateShortfallWriteoffsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateShortfallWriteoffsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.manufacturerId == item.id,
@@ -46835,6 +57276,9 @@ typedef $$ManufacturersTableProcessedTableManager =
         bool businessId,
         bool supplierCrateLedgerRefs,
         bool supplierCrateBalancesRefs,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
+        bool crateShortfallWriteoffsRefs,
         bool productsRefs,
         bool customerCrateBalancesRefs,
         bool manufacturerCrateBalancesRefs,
@@ -46850,6 +57294,7 @@ typedef $$StoresTableCreateCompanionBuilder =
       required String businessId,
       required String name,
       Value<String?> location,
+      Value<String> kind,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -46861,6 +57306,7 @@ typedef $$StoresTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> name,
       Value<String?> location,
+      Value<String> kind,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -46958,6 +57404,90 @@ final class $$StoresTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _supplierCrateLedgerRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.supplierCrateDepositRequests.storeId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.supplierCrateDeposits.storeId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CrateShortfallWriteoffsTable,
+    List<CrateShortfallWriteoffData>
+  >
+  _crateShortfallWriteoffsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.crateShortfallWriteoffs,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.crateShortfallWriteoffs.storeId,
+        ),
+      );
+
+  $$CrateShortfallWriteoffsTableProcessedTableManager
+  get crateShortfallWriteoffsRefs {
+    final manager = $$CrateShortfallWriteoffsTableTableManager(
+      $_db,
+      $_db.crateShortfallWriteoffs,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _crateShortfallWriteoffsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -47256,6 +57786,33 @@ final class $$StoresTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $PaymentTransactionsTable,
+    List<PaymentTransactionData>
+  >
+  _paymentTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.paymentTransactions,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.paymentTransactions.storeId,
+        ),
+      );
+
+  $$PaymentTransactionsTableProcessedTableManager get paymentTransactionsRefs {
+    final manager = $$PaymentTransactionsTableTableManager(
+      $_db,
+      $_db.paymentTransactions,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _paymentTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$StockCountsTable, List<StockCountData>>
   _stockCountsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.stockCounts,
@@ -47269,6 +57826,27 @@ final class $$StoresTableReferences
     ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_stockCountsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$DailyClosingsTable, List<DailyClosingData>>
+  _dailyClosingsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.dailyClosings,
+    aliasName: $_aliasNameGenerator(
+      db.stores.id,
+      db.dailyClosings.storeScopeId,
+    ),
+  );
+
+  $$DailyClosingsTableProcessedTableManager get dailyClosingsRefs {
+    final manager = $$DailyClosingsTableTableManager(
+      $_db,
+      $_db.dailyClosings,
+    ).filter((f) => f.storeScopeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dailyClosingsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -47378,6 +57956,11 @@ class $$StoresTableFilterComposer
 
   ColumnFilters<String> get location => $composableBuilder(
     column: $table.location,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -47492,6 +58075,87 @@ class $$StoresTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> crateShortfallWriteoffsRefs(
+    Expression<bool> Function($$CrateShortfallWriteoffsTableFilterComposer f) f,
+  ) {
+    final $$CrateShortfallWriteoffsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -47846,6 +58510,31 @@ class $$StoresTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> paymentTransactionsRefs(
+    Expression<bool> Function($$PaymentTransactionsTableFilterComposer f) f,
+  ) {
+    final $$PaymentTransactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.paymentTransactions,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentTransactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.paymentTransactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> stockCountsRefs(
     Expression<bool> Function($$StockCountsTableFilterComposer f) f,
   ) {
@@ -47862,6 +58551,31 @@ class $$StoresTableFilterComposer
           }) => $$StockCountsTableFilterComposer(
             $db: $db,
             $table: $db.stockCounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dailyClosingsRefs(
+    Expression<bool> Function($$DailyClosingsTableFilterComposer f) f,
+  ) {
+    final $$DailyClosingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.storeScopeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableFilterComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -47996,6 +58710,11 @@ class $$StoresTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -48052,6 +58771,9 @@ class $$StoresTableAnnotationComposer
 
   GeneratedColumn<String> get location =>
       $composableBuilder(column: $table.location, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
@@ -48155,6 +58877,88 @@ class $$StoresTableAnnotationComposer
               }) => $$SupplierCrateLedgerTableAnnotationComposer(
                 $db: $db,
                 $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> crateShortfallWriteoffsRefs<T extends Object>(
+    Expression<T> Function($$CrateShortfallWriteoffsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CrateShortfallWriteoffsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -48519,6 +59323,32 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> paymentTransactionsRefs<T extends Object>(
+    Expression<T> Function($$PaymentTransactionsTableAnnotationComposer a) f,
+  ) {
+    final $$PaymentTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.paymentTransactions,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PaymentTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.paymentTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> stockCountsRefs<T extends Object>(
     Expression<T> Function($$StockCountsTableAnnotationComposer a) f,
   ) {
@@ -48535,6 +59365,31 @@ class $$StoresTableAnnotationComposer
           }) => $$StockCountsTableAnnotationComposer(
             $db: $db,
             $table: $db.stockCounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> dailyClosingsRefs<T extends Object>(
+    Expression<T> Function($$DailyClosingsTableAnnotationComposer a) f,
+  ) {
+    final $$DailyClosingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.storeScopeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -48664,6 +59519,9 @@ class $$StoresTableTableManager
             bool usersRefs,
             bool supplierLedgerEntriesRefs,
             bool supplierCrateLedgerRefs,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
+            bool crateShortfallWriteoffsRefs,
             bool customersRefs,
             bool ordersRefs,
             bool storeCrateBalancesRefs,
@@ -48678,7 +59536,9 @@ class $$StoresTableTableManager
             bool expensesRefs,
             bool expenseBudgetsRefs,
             bool savedCartsRefs,
+            bool paymentTransactionsRefs,
             bool stockCountsRefs,
+            bool dailyClosingsRefs,
             bool activityLogsRefs,
             bool storeRolePermissionsRefs,
             bool inviteCodesRefs,
@@ -48702,6 +59562,7 @@ class $$StoresTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> location = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -48711,6 +59572,7 @@ class $$StoresTableTableManager
                 businessId: businessId,
                 name: name,
                 location: location,
+                kind: kind,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -48722,6 +59584,7 @@ class $$StoresTableTableManager
                 required String businessId,
                 required String name,
                 Value<String?> location = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -48731,6 +59594,7 @@ class $$StoresTableTableManager
                 businessId: businessId,
                 name: name,
                 location: location,
+                kind: kind,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -48748,6 +59612,9 @@ class $$StoresTableTableManager
                 usersRefs = false,
                 supplierLedgerEntriesRefs = false,
                 supplierCrateLedgerRefs = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
+                crateShortfallWriteoffsRefs = false,
                 customersRefs = false,
                 ordersRefs = false,
                 storeCrateBalancesRefs = false,
@@ -48762,7 +59629,9 @@ class $$StoresTableTableManager
                 expensesRefs = false,
                 expenseBudgetsRefs = false,
                 savedCartsRefs = false,
+                paymentTransactionsRefs = false,
                 stockCountsRefs = false,
+                dailyClosingsRefs = false,
                 activityLogsRefs = false,
                 storeRolePermissionsRefs = false,
                 inviteCodesRefs = false,
@@ -48774,6 +59643,10 @@ class $$StoresTableTableManager
                     if (usersRefs) db.users,
                     if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                    if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (customersRefs) db.customers,
                     if (ordersRefs) db.orders,
                     if (storeCrateBalancesRefs) db.storeCrateBalances,
@@ -48788,7 +59661,9 @@ class $$StoresTableTableManager
                     if (expensesRefs) db.expenses,
                     if (expenseBudgetsRefs) db.expenseBudgets,
                     if (savedCartsRefs) db.savedCarts,
+                    if (paymentTransactionsRefs) db.paymentTransactions,
                     if (stockCountsRefs) db.stockCounts,
+                    if (dailyClosingsRefs) db.dailyClosings,
                     if (activityLogsRefs) db.activityLogs,
                     if (storeRolePermissionsRefs) db.storeRolePermissions,
                     if (inviteCodesRefs) db.inviteCodes,
@@ -48881,6 +59756,69 @@ class $$StoresTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateLedgerRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateShortfallWriteoffsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          CrateShortfallWriteoffData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._crateShortfallWriteoffsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateShortfallWriteoffsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.storeId == item.id,
@@ -49177,6 +60115,27 @@ class $$StoresTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (paymentTransactionsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          PaymentTransactionData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._paymentTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).paymentTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (stockCountsRefs)
                         await $_getPrefetchedData<
                           StoreData,
@@ -49195,6 +60154,27 @@ class $$StoresTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (dailyClosingsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          DailyClosingData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._dailyClosingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dailyClosingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeScopeId == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -49307,6 +60287,9 @@ typedef $$StoresTableProcessedTableManager =
         bool usersRefs,
         bool supplierLedgerEntriesRefs,
         bool supplierCrateLedgerRefs,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
+        bool crateShortfallWriteoffsRefs,
         bool customersRefs,
         bool ordersRefs,
         bool storeCrateBalancesRefs,
@@ -49321,7 +60304,9 @@ typedef $$StoresTableProcessedTableManager =
         bool expensesRefs,
         bool expenseBudgetsRefs,
         bool savedCartsRefs,
+        bool paymentTransactionsRefs,
         bool stockCountsRefs,
+        bool dailyClosingsRefs,
         bool activityLogsRefs,
         bool storeRolePermissionsRefs,
         bool inviteCodesRefs,
@@ -49410,20 +60395,57 @@ final class $$UsersTableReferences
     );
   }
 
-  static MultiTypedResultKey<$OrdersTable, List<OrderData>> _ordersRefsTable(
-    _$AppDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.orders,
-    aliasName: $_aliasNameGenerator(db.users.id, db.orders.staffId),
-  );
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.users.id,
+          db.supplierCrateDeposits.performedBy,
+        ),
+      );
 
-  $$OrdersTableProcessedTableManager get ordersRefs {
-    final manager = $$OrdersTableTableManager(
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
       $_db,
-      $_db.orders,
-    ).filter((f) => f.staffId.id.sqlEquals($_itemColumn<String>('id')!));
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.performedBy.id.sqlEquals($_itemColumn<String>('id')!));
 
-    final cache = $_typedResult.readTableOrNull(_ordersRefsTable($_db));
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CrateShortfallWriteoffsTable,
+    List<CrateShortfallWriteoffData>
+  >
+  _crateShortfallWriteoffsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.crateShortfallWriteoffs,
+        aliasName: $_aliasNameGenerator(
+          db.users.id,
+          db.crateShortfallWriteoffs.performedBy,
+        ),
+      );
+
+  $$CrateShortfallWriteoffsTableProcessedTableManager
+  get crateShortfallWriteoffsRefs {
+    final manager = $$CrateShortfallWriteoffsTableTableManager(
+      $_db,
+      $_db.crateShortfallWriteoffs,
+    ).filter((f) => f.performedBy.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _crateShortfallWriteoffsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -49452,6 +60474,26 @@ final class $$UsersTableReferences
     );
   }
 
+  static MultiTypedResultKey<$OrderCrateLinesTable, List<OrderCrateLineData>>
+  _orderCrateLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.orderCrateLines,
+    aliasName: $_aliasNameGenerator(db.users.id, db.orderCrateLines.settledBy),
+  );
+
+  $$OrderCrateLinesTableProcessedTableManager get orderCrateLinesRefs {
+    final manager = $$OrderCrateLinesTableTableManager(
+      $_db,
+      $_db.orderCrateLines,
+    ).filter((f) => f.settledBy.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _orderCrateLinesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$StockCountsTable, List<StockCountData>>
   _stockCountsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.stockCounts,
@@ -49465,6 +60507,44 @@ final class $$UsersTableReferences
     ).filter((f) => f.countedBy.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_stockCountsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$DailyClosingsTable, List<DailyClosingData>>
+  _dailyClosingsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.dailyClosings,
+    aliasName: $_aliasNameGenerator(db.users.id, db.dailyClosings.reviewedBy),
+  );
+
+  $$DailyClosingsTableProcessedTableManager get dailyClosingsRefs {
+    final manager = $$DailyClosingsTableTableManager(
+      $_db,
+      $_db.dailyClosings,
+    ).filter((f) => f.reviewedBy.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dailyClosingsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanReturnEventsTable, List<VanReturnEventData>>
+  _vanReturnEventsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanReturnEvents,
+    aliasName: $_aliasNameGenerator(db.users.id, db.vanReturnEvents.recordedBy),
+  );
+
+  $$VanReturnEventsTableProcessedTableManager get vanReturnEventsRefs {
+    final manager = $$VanReturnEventsTableTableManager(
+      $_db,
+      $_db.vanReturnEvents,
+    ).filter((f) => f.recordedBy.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _vanReturnEventsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -49721,28 +60801,55 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
     return composer;
   }
 
-  Expression<bool> ordersRefs(
-    Expression<bool> Function($$OrdersTableFilterComposer f) f,
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
   ) {
-    final $$OrdersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.orders,
-      getReferencedColumn: (t) => t.staffId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$OrdersTableFilterComposer(
-            $db: $db,
-            $table: $db.orders,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.performedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
                 $removeJoinBuilderFromRootComposer,
-          ),
-    );
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> crateShortfallWriteoffsRefs(
+    Expression<bool> Function($$CrateShortfallWriteoffsTableFilterComposer f) f,
+  ) {
+    final $$CrateShortfallWriteoffsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.performedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -49771,6 +60878,31 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
     return f(composer);
   }
 
+  Expression<bool> orderCrateLinesRefs(
+    Expression<bool> Function($$OrderCrateLinesTableFilterComposer f) f,
+  ) {
+    final $$OrderCrateLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.orderCrateLines,
+      getReferencedColumn: (t) => t.settledBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrderCrateLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.orderCrateLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> stockCountsRefs(
     Expression<bool> Function($$StockCountsTableFilterComposer f) f,
   ) {
@@ -49787,6 +60919,56 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
           }) => $$StockCountsTableFilterComposer(
             $db: $db,
             $table: $db.stockCounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dailyClosingsRefs(
+    Expression<bool> Function($$DailyClosingsTableFilterComposer f) f,
+  ) {
+    final $$DailyClosingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.reviewedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableFilterComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanReturnEventsRefs(
+    Expression<bool> Function($$VanReturnEventsTableFilterComposer f) f,
+  ) {
+    final $$VanReturnEventsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanReturnEvents,
+      getReferencedColumn: (t) => t.recordedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanReturnEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanReturnEvents,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50191,28 +61373,56 @@ class $$UsersTableAnnotationComposer
     return composer;
   }
 
-  Expression<T> ordersRefs<T extends Object>(
-    Expression<T> Function($$OrdersTableAnnotationComposer a) f,
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
   ) {
-    final $$OrdersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.orders,
-      getReferencedColumn: (t) => t.staffId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$OrdersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.orders,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.performedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
                 $removeJoinBuilderFromRootComposer,
-          ),
-    );
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> crateShortfallWriteoffsRefs<T extends Object>(
+    Expression<T> Function($$CrateShortfallWriteoffsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CrateShortfallWriteoffsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.performedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -50241,6 +61451,31 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> orderCrateLinesRefs<T extends Object>(
+    Expression<T> Function($$OrderCrateLinesTableAnnotationComposer a) f,
+  ) {
+    final $$OrderCrateLinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.orderCrateLines,
+      getReferencedColumn: (t) => t.settledBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrderCrateLinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.orderCrateLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> stockCountsRefs<T extends Object>(
     Expression<T> Function($$StockCountsTableAnnotationComposer a) f,
   ) {
@@ -50257,6 +61492,56 @@ class $$UsersTableAnnotationComposer
           }) => $$StockCountsTableAnnotationComposer(
             $db: $db,
             $table: $db.stockCounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> dailyClosingsRefs<T extends Object>(
+    Expression<T> Function($$DailyClosingsTableAnnotationComposer a) f,
+  ) {
+    final $$DailyClosingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dailyClosings,
+      getReferencedColumn: (t) => t.reviewedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DailyClosingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.dailyClosings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> vanReturnEventsRefs<T extends Object>(
+    Expression<T> Function($$VanReturnEventsTableAnnotationComposer a) f,
+  ) {
+    final $$VanReturnEventsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanReturnEvents,
+      getReferencedColumn: (t) => t.recordedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanReturnEventsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanReturnEvents,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50435,9 +61720,13 @@ class $$UsersTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool storeId,
-            bool ordersRefs,
+            bool supplierCrateDepositsRefs,
+            bool crateShortfallWriteoffsRefs,
             bool stockAdjustmentsRefs,
+            bool orderCrateLinesRefs,
             bool stockCountsRefs,
+            bool dailyClosingsRefs,
+            bool vanReturnEventsRefs,
             bool errorLogsRefs,
             bool notificationsRefs,
             bool sessionsRefs,
@@ -50547,9 +61836,13 @@ class $$UsersTableTableManager
               ({
                 businessId = false,
                 storeId = false,
-                ordersRefs = false,
+                supplierCrateDepositsRefs = false,
+                crateShortfallWriteoffsRefs = false,
                 stockAdjustmentsRefs = false,
+                orderCrateLinesRefs = false,
                 stockCountsRefs = false,
+                dailyClosingsRefs = false,
+                vanReturnEventsRefs = false,
                 errorLogsRefs = false,
                 notificationsRefs = false,
                 sessionsRefs = false,
@@ -50560,9 +61853,13 @@ class $$UsersTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
-                    if (ordersRefs) db.orders,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                    if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
+                    if (orderCrateLinesRefs) db.orderCrateLines,
                     if (stockCountsRefs) db.stockCounts,
+                    if (dailyClosingsRefs) db.dailyClosings,
+                    if (vanReturnEventsRefs) db.vanReturnEvents,
                     if (errorLogsRefs) db.errorLogs,
                     if (notificationsRefs) db.notifications,
                     if (sessionsRefs) db.sessions,
@@ -50617,20 +61914,45 @@ class $$UsersTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
-                      if (ordersRefs)
+                      if (supplierCrateDepositsRefs)
                         await $_getPrefetchedData<
                           UserData,
                           $UsersTable,
-                          OrderData
+                          SupplierCrateDepositData
                         >(
                           currentTable: table,
                           referencedTable: $$UsersTableReferences
-                              ._ordersRefsTable(db),
+                              ._supplierCrateDepositsRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$UsersTableReferences(db, table, p0).ordersRefs,
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.staffId == item.id,
+                                (e) => e.performedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateShortfallWriteoffsRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          CrateShortfallWriteoffData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._crateShortfallWriteoffsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateShortfallWriteoffsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.performedBy == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -50655,6 +61977,27 @@ class $$UsersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (orderCrateLinesRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          OrderCrateLineData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._orderCrateLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).orderCrateLinesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.settledBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (stockCountsRefs)
                         await $_getPrefetchedData<
                           UserData,
@@ -50673,6 +62016,48 @@ class $$UsersTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.countedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (dailyClosingsRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          DailyClosingData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._dailyClosingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dailyClosingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.reviewedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanReturnEventsRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          VanReturnEventData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._vanReturnEventsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanReturnEventsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.recordedBy == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -50825,9 +62210,13 @@ typedef $$UsersTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool storeId,
-        bool ordersRefs,
+        bool supplierCrateDepositsRefs,
+        bool crateShortfallWriteoffsRefs,
         bool stockAdjustmentsRefs,
+        bool orderCrateLinesRefs,
         bool stockCountsRefs,
+        bool dailyClosingsRefs,
+        bool vanReturnEventsRefs,
         bool errorLogsRefs,
         bool notificationsRefs,
         bool sessionsRefs,
@@ -51450,6 +62839,62 @@ final class $$SuppliersTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.suppliers.id,
+          db.supplierCrateDepositRequests.supplierId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.supplierId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.suppliers.id,
+          db.supplierCrateDeposits.supplierId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.supplierId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$ProductsTable, List<ProductData>>
   _productsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.products,
@@ -51670,6 +63115,61 @@ class $$SuppliersTableFilterComposer
               }) => $$SupplierCrateBalancesTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.supplierId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.supplierId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -52021,6 +63521,61 @@ class $$SuppliersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.supplierId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.supplierId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> productsRefs<T extends Object>(
     Expression<T> Function($$ProductsTableAnnotationComposer a) f,
   ) {
@@ -52091,6 +63646,8 @@ class $$SuppliersTableTableManager
             bool supplierLedgerEntriesRefs,
             bool supplierCrateLedgerRefs,
             bool supplierCrateBalancesRefs,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
             bool productsRefs,
             bool shipmentsRefs,
           })
@@ -52189,6 +63746,8 @@ class $$SuppliersTableTableManager
                 supplierLedgerEntriesRefs = false,
                 supplierCrateLedgerRefs = false,
                 supplierCrateBalancesRefs = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
                 productsRefs = false,
                 shipmentsRefs = false,
               }) {
@@ -52198,6 +63757,9 @@ class $$SuppliersTableTableManager
                     if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
                     if (supplierCrateBalancesRefs) db.supplierCrateBalances,
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (productsRefs) db.products,
                     if (shipmentsRefs) db.shipments,
                   ],
@@ -52311,6 +63873,48 @@ class $$SuppliersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          SupplierData,
+                          $SuppliersTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SuppliersTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SuppliersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.supplierId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          SupplierData,
+                          $SuppliersTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SuppliersTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SuppliersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.supplierId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (productsRefs)
                         await $_getPrefetchedData<
                           SupplierData,
@@ -52379,6 +63983,8 @@ typedef $$SuppliersTableProcessedTableManager =
         bool supplierLedgerEntriesRefs,
         bool supplierCrateLedgerRefs,
         bool supplierCrateBalancesRefs,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
         bool productsRefs,
         bool shipmentsRefs,
       })
@@ -53544,6 +65150,70 @@ final class $$SupplierCrateLedgerTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositRequestsTable,
+    List<SupplierCrateDepositRequestData>
+  >
+  _supplierCrateDepositRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDepositRequests,
+        aliasName: $_aliasNameGenerator(
+          db.supplierCrateLedger.id,
+          db.supplierCrateDepositRequests.supplierCrateLedgerId,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager
+  get supplierCrateDepositRequestsRefs {
+    final manager =
+        $$SupplierCrateDepositRequestsTableTableManager(
+          $_db,
+          $_db.supplierCrateDepositRequests,
+        ).filter(
+          (f) =>
+              f.supplierCrateLedgerId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.supplierCrateLedger.id,
+          db.supplierCrateDeposits.supplierCrateLedgerId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager =
+        $$SupplierCrateDepositsTableTableManager(
+          $_db,
+          $_db.supplierCrateDeposits,
+        ).filter(
+          (f) =>
+              f.supplierCrateLedgerId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$SupplierCrateLedgerTableFilterComposer
@@ -53736,6 +65406,61 @@ class $$SupplierCrateLedgerTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> supplierCrateDepositRequestsRefs(
+    Expression<bool> Function(
+      $$SupplierCrateDepositRequestsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.supplierCrateLedgerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.supplierCrateLedgerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
   }
 }
 
@@ -54115,6 +65840,61 @@ class $$SupplierCrateLedgerTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> supplierCrateDepositRequestsRefs<T extends Object>(
+    Expression<T> Function(
+      $$SupplierCrateDepositRequestsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.supplierCrateLedgerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.supplierCrateLedgerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$SupplierCrateLedgerTableTableManager
@@ -54137,6 +65917,8 @@ class $$SupplierCrateLedgerTableTableManager
             bool storeId,
             bool performedBy,
             bool voidedBy,
+            bool supplierCrateDepositRequestsRefs,
+            bool supplierCrateDepositsRefs,
           })
         > {
   $$SupplierCrateLedgerTableTableManager(
@@ -54246,10 +66028,16 @@ class $$SupplierCrateLedgerTableTableManager
                 storeId = false,
                 performedBy = false,
                 voidedBy = false,
+                supplierCrateDepositRequestsRefs = false,
+                supplierCrateDepositsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [],
+                  explicitlyWatchedTables: [
+                    if (supplierCrateDepositRequestsRefs)
+                      db.supplierCrateDepositRequests,
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -54360,7 +66148,50 @@ class $$SupplierCrateLedgerTableTableManager
                         return state;
                       },
                   getPrefetchedDataCallback: (items) async {
-                    return [];
+                    return [
+                      if (supplierCrateDepositRequestsRefs)
+                        await $_getPrefetchedData<
+                          SupplierCrateLedgerEntryData,
+                          $SupplierCrateLedgerTable,
+                          SupplierCrateDepositRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SupplierCrateLedgerTableReferences
+                              ._supplierCrateDepositRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SupplierCrateLedgerTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.supplierCrateLedgerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          SupplierCrateLedgerEntryData,
+                          $SupplierCrateLedgerTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SupplierCrateLedgerTableReferences
+                              ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SupplierCrateLedgerTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.supplierCrateLedgerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
                 );
               },
@@ -54387,6 +66218,8 @@ typedef $$SupplierCrateLedgerTableProcessedTableManager =
         bool storeId,
         bool performedBy,
         bool voidedBy,
+        bool supplierCrateDepositRequestsRefs,
+        bool supplierCrateDepositsRefs,
       })
     >;
 typedef $$SupplierCrateBalancesTableCreateCompanionBuilder =
@@ -54972,6 +66805,3338 @@ typedef $$SupplierCrateBalancesTableProcessedTableManager =
         bool manufacturerId,
       })
     >;
+typedef $$SupplierCrateDepositRequestsTableCreateCompanionBuilder =
+    SupplierCrateDepositRequestsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String supplierId,
+      required String manufacturerId,
+      required String storeId,
+      required String kind,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<int> requestedAmountKobo,
+      Value<int?> settledAmountKobo,
+      Value<String?> paymentMethod,
+      required String summary,
+      Value<String?> supplierCrateLedgerId,
+      Value<String?> note,
+      Value<String?> requestedBy,
+      Value<String> status,
+      Value<String?> decidedBy,
+      Value<DateTime?> decidedAt,
+      Value<String?> decisionNote,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$SupplierCrateDepositRequestsTableUpdateCompanionBuilder =
+    SupplierCrateDepositRequestsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> supplierId,
+      Value<String> manufacturerId,
+      Value<String> storeId,
+      Value<String> kind,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<int> requestedAmountKobo,
+      Value<int?> settledAmountKobo,
+      Value<String?> paymentMethod,
+      Value<String> summary,
+      Value<String?> supplierCrateLedgerId,
+      Value<String?> note,
+      Value<String?> requestedBy,
+      Value<String> status,
+      Value<String?> decidedBy,
+      Value<DateTime?> decidedAt,
+      Value<String?> decisionNote,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$SupplierCrateDepositRequestsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $SupplierCrateDepositRequestsTable,
+          SupplierCrateDepositRequestData
+        > {
+  $$SupplierCrateDepositRequestsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
+      db.suppliers.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.supplierId,
+          db.suppliers.id,
+        ),
+      );
+
+  $$SuppliersTableProcessedTableManager get supplierId {
+    final $_column = $_itemColumn<String>('supplier_id')!;
+
+    final manager = $$SuppliersTableTableManager(
+      $_db,
+      $_db.suppliers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_supplierIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ManufacturersTable _manufacturerIdTable(_$AppDatabase db) =>
+      db.manufacturers.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.manufacturerId,
+          db.manufacturers.id,
+        ),
+      );
+
+  $$ManufacturersTableProcessedTableManager get manufacturerId {
+    final $_column = $_itemColumn<String>('manufacturer_id')!;
+
+    final manager = $$ManufacturersTableTableManager(
+      $_db,
+      $_db.manufacturers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.supplierCrateDepositRequests.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SupplierCrateLedgerTable _supplierCrateLedgerIdTable(
+    _$AppDatabase db,
+  ) => db.supplierCrateLedger.createAlias(
+    $_aliasNameGenerator(
+      db.supplierCrateDepositRequests.supplierCrateLedgerId,
+      db.supplierCrateLedger.id,
+    ),
+  );
+
+  $$SupplierCrateLedgerTableProcessedTableManager? get supplierCrateLedgerId {
+    final $_column = $_itemColumn<String>('supplier_crate_ledger_id');
+    if ($_column == null) return null;
+    final manager = $$SupplierCrateLedgerTableTableManager(
+      $_db,
+      $_db.supplierCrateLedger,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _supplierCrateLedgerIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _requestedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.requestedBy,
+          db.users.id,
+        ),
+      );
+
+  $$UsersTableProcessedTableManager? get requestedBy {
+    final $_column = $_itemColumn<String>('requested_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_requestedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _decidedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(
+      db.supplierCrateDepositRequests.decidedBy,
+      db.users.id,
+    ),
+  );
+
+  $$UsersTableProcessedTableManager? get decidedBy {
+    final $_column = $_itemColumn<String>('decided_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_decidedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SupplierCrateDepositsTable,
+    List<SupplierCrateDepositData>
+  >
+  _supplierCrateDepositsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierCrateDeposits,
+        aliasName: $_aliasNameGenerator(
+          db.supplierCrateDepositRequests.id,
+          db.supplierCrateDeposits.requestId,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager
+  get supplierCrateDepositsRefs {
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.requestId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SupplierCrateDepositRequestsTableFilterComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositRequestsTable> {
+  $$SupplierCrateDepositRequestsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get requestedAmountKobo => $composableBuilder(
+    column: $table.requestedAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get settledAmountKobo => $composableBuilder(
+    column: $table.settledAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get decidedAt => $composableBuilder(
+    column: $table.decidedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get decisionNote => $composableBuilder(
+    column: $table.decisionNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableFilterComposer get supplierId {
+    final $$SuppliersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableFilterComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableFilterComposer get manufacturerId {
+    final $$ManufacturersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableFilterComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierCrateLedgerId,
+      referencedTable: $db.supplierCrateLedger,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SupplierCrateLedgerTableFilterComposer(
+            $db: $db,
+            $table: $db.supplierCrateLedger,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get requestedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get decidedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.decidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> supplierCrateDepositsRefs(
+    Expression<bool> Function($$SupplierCrateDepositsTableFilterComposer f) f,
+  ) {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.requestId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$SupplierCrateDepositRequestsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositRequestsTable> {
+  $$SupplierCrateDepositRequestsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get requestedAmountKobo => $composableBuilder(
+    column: $table.requestedAmountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get settledAmountKobo => $composableBuilder(
+    column: $table.settledAmountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get decidedAt => $composableBuilder(
+    column: $table.decidedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get decisionNote => $composableBuilder(
+    column: $table.decisionNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableOrderingComposer get supplierId {
+    final $$SuppliersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableOrderingComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableOrderingComposer get manufacturerId {
+    final $$ManufacturersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableOrderingComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableOrderingComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.supplierCrateLedgerId,
+          referencedTable: $db.supplierCrateLedger,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateLedgerTableOrderingComposer(
+                $db: $db,
+                $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get requestedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get decidedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.decidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SupplierCrateDepositRequestsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositRequestsTable> {
+  $$SupplierCrateDepositRequestsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get requestedAmountKobo => $composableBuilder(
+    column: $table.requestedAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get settledAmountKobo => $composableBuilder(
+    column: $table.settledAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get summary =>
+      $composableBuilder(column: $table.summary, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get decidedAt =>
+      $composableBuilder(column: $table.decidedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get decisionNote => $composableBuilder(
+    column: $table.decisionNote,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableAnnotationComposer get supplierId {
+    final $$SuppliersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableAnnotationComposer get manufacturerId {
+    final $$ManufacturersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableAnnotationComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.supplierCrateLedgerId,
+          referencedTable: $db.supplierCrateLedger,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateLedgerTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get requestedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get decidedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.decidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> supplierCrateDepositsRefs<T extends Object>(
+    Expression<T> Function($$SupplierCrateDepositsTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.requestId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$SupplierCrateDepositRequestsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SupplierCrateDepositRequestsTable,
+          SupplierCrateDepositRequestData,
+          $$SupplierCrateDepositRequestsTableFilterComposer,
+          $$SupplierCrateDepositRequestsTableOrderingComposer,
+          $$SupplierCrateDepositRequestsTableAnnotationComposer,
+          $$SupplierCrateDepositRequestsTableCreateCompanionBuilder,
+          $$SupplierCrateDepositRequestsTableUpdateCompanionBuilder,
+          (
+            SupplierCrateDepositRequestData,
+            $$SupplierCrateDepositRequestsTableReferences,
+          ),
+          SupplierCrateDepositRequestData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool supplierId,
+            bool manufacturerId,
+            bool storeId,
+            bool supplierCrateLedgerId,
+            bool requestedBy,
+            bool decidedBy,
+            bool supplierCrateDepositsRefs,
+          })
+        > {
+  $$SupplierCrateDepositRequestsTableTableManager(
+    _$AppDatabase db,
+    $SupplierCrateDepositRequestsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$SupplierCrateDepositRequestsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> supplierId = const Value.absent(),
+                Value<String> manufacturerId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<int> requestedAmountKobo = const Value.absent(),
+                Value<int?> settledAmountKobo = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                Value<String> summary = const Value.absent(),
+                Value<String?> supplierCrateLedgerId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> requestedBy = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> decidedBy = const Value.absent(),
+                Value<DateTime?> decidedAt = const Value.absent(),
+                Value<String?> decisionNote = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SupplierCrateDepositRequestsCompanion(
+                id: id,
+                businessId: businessId,
+                supplierId: supplierId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                kind: kind,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                requestedAmountKobo: requestedAmountKobo,
+                settledAmountKobo: settledAmountKobo,
+                paymentMethod: paymentMethod,
+                summary: summary,
+                supplierCrateLedgerId: supplierCrateLedgerId,
+                note: note,
+                requestedBy: requestedBy,
+                status: status,
+                decidedBy: decidedBy,
+                decidedAt: decidedAt,
+                decisionNote: decisionNote,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String supplierId,
+                required String manufacturerId,
+                required String storeId,
+                required String kind,
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<int> requestedAmountKobo = const Value.absent(),
+                Value<int?> settledAmountKobo = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                required String summary,
+                Value<String?> supplierCrateLedgerId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> requestedBy = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> decidedBy = const Value.absent(),
+                Value<DateTime?> decidedAt = const Value.absent(),
+                Value<String?> decisionNote = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SupplierCrateDepositRequestsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                supplierId: supplierId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                kind: kind,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                requestedAmountKobo: requestedAmountKobo,
+                settledAmountKobo: settledAmountKobo,
+                paymentMethod: paymentMethod,
+                summary: summary,
+                supplierCrateLedgerId: supplierCrateLedgerId,
+                note: note,
+                requestedBy: requestedBy,
+                status: status,
+                decidedBy: decidedBy,
+                decidedAt: decidedAt,
+                decisionNote: decisionNote,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SupplierCrateDepositRequestsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                supplierId = false,
+                manufacturerId = false,
+                storeId = false,
+                supplierCrateLedgerId = false,
+                requestedBy = false,
+                decidedBy = false,
+                supplierCrateDepositsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (supplierId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.supplierId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._supplierIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._supplierIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (manufacturerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturerId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._manufacturerIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._manufacturerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (supplierCrateLedgerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.supplierCrateLedgerId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._supplierCrateLedgerIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._supplierCrateLedgerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (requestedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.requestedBy,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._requestedByTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._requestedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (decidedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.decidedBy,
+                                    referencedTable:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._decidedByTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositRequestsTableReferences
+                                            ._decidedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (supplierCrateDepositsRefs)
+                        await $_getPrefetchedData<
+                          SupplierCrateDepositRequestData,
+                          $SupplierCrateDepositRequestsTable,
+                          SupplierCrateDepositData
+                        >(
+                          currentTable: table,
+                          referencedTable:
+                              $$SupplierCrateDepositRequestsTableReferences
+                                  ._supplierCrateDepositsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SupplierCrateDepositRequestsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.requestId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SupplierCrateDepositRequestsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SupplierCrateDepositRequestsTable,
+      SupplierCrateDepositRequestData,
+      $$SupplierCrateDepositRequestsTableFilterComposer,
+      $$SupplierCrateDepositRequestsTableOrderingComposer,
+      $$SupplierCrateDepositRequestsTableAnnotationComposer,
+      $$SupplierCrateDepositRequestsTableCreateCompanionBuilder,
+      $$SupplierCrateDepositRequestsTableUpdateCompanionBuilder,
+      (
+        SupplierCrateDepositRequestData,
+        $$SupplierCrateDepositRequestsTableReferences,
+      ),
+      SupplierCrateDepositRequestData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool supplierId,
+        bool manufacturerId,
+        bool storeId,
+        bool supplierCrateLedgerId,
+        bool requestedBy,
+        bool decidedBy,
+        bool supplierCrateDepositsRefs,
+      })
+    >;
+typedef $$SupplierCrateDepositsTableCreateCompanionBuilder =
+    SupplierCrateDepositsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String supplierId,
+      required String manufacturerId,
+      Value<String?> storeId,
+      required String movementType,
+      required int signedAmountKobo,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<String?> requestId,
+      Value<String?> supplierCrateLedgerId,
+      Value<String?> note,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$SupplierCrateDepositsTableUpdateCompanionBuilder =
+    SupplierCrateDepositsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> supplierId,
+      Value<String> manufacturerId,
+      Value<String?> storeId,
+      Value<String> movementType,
+      Value<int> signedAmountKobo,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<String?> requestId,
+      Value<String?> supplierCrateLedgerId,
+      Value<String?> note,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$SupplierCrateDepositsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $SupplierCrateDepositsTable,
+          SupplierCrateDepositData
+        > {
+  $$SupplierCrateDepositsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDeposits.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
+      db.suppliers.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDeposits.supplierId,
+          db.suppliers.id,
+        ),
+      );
+
+  $$SuppliersTableProcessedTableManager get supplierId {
+    final $_column = $_itemColumn<String>('supplier_id')!;
+
+    final manager = $$SuppliersTableTableManager(
+      $_db,
+      $_db.suppliers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_supplierIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ManufacturersTable _manufacturerIdTable(_$AppDatabase db) =>
+      db.manufacturers.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDeposits.manufacturerId,
+          db.manufacturers.id,
+        ),
+      );
+
+  $$ManufacturersTableProcessedTableManager get manufacturerId {
+    final $_column = $_itemColumn<String>('manufacturer_id')!;
+
+    final manager = $$ManufacturersTableTableManager(
+      $_db,
+      $_db.manufacturers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.supplierCrateDeposits.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SupplierCrateDepositRequestsTable _requestIdTable(_$AppDatabase db) =>
+      db.supplierCrateDepositRequests.createAlias(
+        $_aliasNameGenerator(
+          db.supplierCrateDeposits.requestId,
+          db.supplierCrateDepositRequests.id,
+        ),
+      );
+
+  $$SupplierCrateDepositRequestsTableProcessedTableManager? get requestId {
+    final $_column = $_itemColumn<String>('request_id');
+    if ($_column == null) return null;
+    final manager = $$SupplierCrateDepositRequestsTableTableManager(
+      $_db,
+      $_db.supplierCrateDepositRequests,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_requestIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SupplierCrateLedgerTable _supplierCrateLedgerIdTable(
+    _$AppDatabase db,
+  ) => db.supplierCrateLedger.createAlias(
+    $_aliasNameGenerator(
+      db.supplierCrateDeposits.supplierCrateLedgerId,
+      db.supplierCrateLedger.id,
+    ),
+  );
+
+  $$SupplierCrateLedgerTableProcessedTableManager? get supplierCrateLedgerId {
+    final $_column = $_itemColumn<String>('supplier_crate_ledger_id');
+    if ($_column == null) return null;
+    final manager = $$SupplierCrateLedgerTableTableManager(
+      $_db,
+      $_db.supplierCrateLedger,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _supplierCrateLedgerIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _performedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(db.supplierCrateDeposits.performedBy, db.users.id),
+      );
+
+  $$UsersTableProcessedTableManager? get performedBy {
+    final $_column = $_itemColumn<String>('performed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_performedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PaymentTransactionsTable,
+    List<PaymentTransactionData>
+  >
+  _paymentTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.paymentTransactions,
+        aliasName: $_aliasNameGenerator(
+          db.supplierCrateDeposits.id,
+          db.paymentTransactions.crateDepositId,
+        ),
+      );
+
+  $$PaymentTransactionsTableProcessedTableManager get paymentTransactionsRefs {
+    final manager = $$PaymentTransactionsTableTableManager(
+      $_db,
+      $_db.paymentTransactions,
+    ).filter((f) => f.crateDepositId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _paymentTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$SupplierCrateDepositsTableFilterComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositsTable> {
+  $$SupplierCrateDepositsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get movementType => $composableBuilder(
+    column: $table.movementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableFilterComposer get supplierId {
+    final $$SuppliersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableFilterComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableFilterComposer get manufacturerId {
+    final $$ManufacturersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositRequestsTableFilterComposer get requestId {
+    final $$SupplierCrateDepositRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.requestId,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableFilterComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierCrateLedgerId,
+      referencedTable: $db.supplierCrateLedger,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SupplierCrateLedgerTableFilterComposer(
+            $db: $db,
+            $table: $db.supplierCrateLedger,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get performedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> paymentTransactionsRefs(
+    Expression<bool> Function($$PaymentTransactionsTableFilterComposer f) f,
+  ) {
+    final $$PaymentTransactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.paymentTransactions,
+      getReferencedColumn: (t) => t.crateDepositId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentTransactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.paymentTransactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$SupplierCrateDepositsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositsTable> {
+  $$SupplierCrateDepositsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get movementType => $composableBuilder(
+    column: $table.movementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableOrderingComposer get supplierId {
+    final $$SuppliersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableOrderingComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableOrderingComposer get manufacturerId {
+    final $$ManufacturersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableOrderingComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositRequestsTableOrderingComposer get requestId {
+    final $$SupplierCrateDepositRequestsTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.requestId,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableOrderingComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableOrderingComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.supplierCrateLedgerId,
+          referencedTable: $db.supplierCrateLedger,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateLedgerTableOrderingComposer(
+                $db: $db,
+                $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get performedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SupplierCrateDepositsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SupplierCrateDepositsTable> {
+  $$SupplierCrateDepositsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get movementType => $composableBuilder(
+    column: $table.movementType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SuppliersTableAnnotationComposer get supplierId {
+    final $$SuppliersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.supplierId,
+      referencedTable: $db.suppliers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SuppliersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableAnnotationComposer get manufacturerId {
+    final $$ManufacturersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositRequestsTableAnnotationComposer get requestId {
+    final $$SupplierCrateDepositRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.requestId,
+          referencedTable: $db.supplierCrateDepositRequests,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDepositRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$SupplierCrateLedgerTableAnnotationComposer get supplierCrateLedgerId {
+    final $$SupplierCrateLedgerTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.supplierCrateLedgerId,
+          referencedTable: $db.supplierCrateLedger,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateLedgerTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateLedger,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get performedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> paymentTransactionsRefs<T extends Object>(
+    Expression<T> Function($$PaymentTransactionsTableAnnotationComposer a) f,
+  ) {
+    final $$PaymentTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.paymentTransactions,
+          getReferencedColumn: (t) => t.crateDepositId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PaymentTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.paymentTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$SupplierCrateDepositsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SupplierCrateDepositsTable,
+          SupplierCrateDepositData,
+          $$SupplierCrateDepositsTableFilterComposer,
+          $$SupplierCrateDepositsTableOrderingComposer,
+          $$SupplierCrateDepositsTableAnnotationComposer,
+          $$SupplierCrateDepositsTableCreateCompanionBuilder,
+          $$SupplierCrateDepositsTableUpdateCompanionBuilder,
+          (SupplierCrateDepositData, $$SupplierCrateDepositsTableReferences),
+          SupplierCrateDepositData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool supplierId,
+            bool manufacturerId,
+            bool storeId,
+            bool requestId,
+            bool supplierCrateLedgerId,
+            bool performedBy,
+            bool paymentTransactionsRefs,
+          })
+        > {
+  $$SupplierCrateDepositsTableTableManager(
+    _$AppDatabase db,
+    $SupplierCrateDepositsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SupplierCrateDepositsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$SupplierCrateDepositsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> supplierId = const Value.absent(),
+                Value<String> manufacturerId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
+                Value<String> movementType = const Value.absent(),
+                Value<int> signedAmountKobo = const Value.absent(),
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<String?> requestId = const Value.absent(),
+                Value<String?> supplierCrateLedgerId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SupplierCrateDepositsCompanion(
+                id: id,
+                businessId: businessId,
+                supplierId: supplierId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                movementType: movementType,
+                signedAmountKobo: signedAmountKobo,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                requestId: requestId,
+                supplierCrateLedgerId: supplierCrateLedgerId,
+                note: note,
+                performedBy: performedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String supplierId,
+                required String manufacturerId,
+                Value<String?> storeId = const Value.absent(),
+                required String movementType,
+                required int signedAmountKobo,
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<String?> requestId = const Value.absent(),
+                Value<String?> supplierCrateLedgerId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SupplierCrateDepositsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                supplierId: supplierId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                movementType: movementType,
+                signedAmountKobo: signedAmountKobo,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                requestId: requestId,
+                supplierCrateLedgerId: supplierCrateLedgerId,
+                note: note,
+                performedBy: performedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SupplierCrateDepositsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                supplierId = false,
+                manufacturerId = false,
+                storeId = false,
+                requestId = false,
+                supplierCrateLedgerId = false,
+                performedBy = false,
+                paymentTransactionsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (paymentTransactionsRefs) db.paymentTransactions,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (supplierId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.supplierId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._supplierIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._supplierIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (manufacturerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturerId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._manufacturerIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._manufacturerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (requestId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.requestId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._requestIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._requestIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (supplierCrateLedgerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.supplierCrateLedgerId,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._supplierCrateLedgerIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._supplierCrateLedgerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (performedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.performedBy,
+                                    referencedTable:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._performedByTable(db),
+                                    referencedColumn:
+                                        $$SupplierCrateDepositsTableReferences
+                                            ._performedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (paymentTransactionsRefs)
+                        await $_getPrefetchedData<
+                          SupplierCrateDepositData,
+                          $SupplierCrateDepositsTable,
+                          PaymentTransactionData
+                        >(
+                          currentTable: table,
+                          referencedTable:
+                              $$SupplierCrateDepositsTableReferences
+                                  ._paymentTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SupplierCrateDepositsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).paymentTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.crateDepositId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$SupplierCrateDepositsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SupplierCrateDepositsTable,
+      SupplierCrateDepositData,
+      $$SupplierCrateDepositsTableFilterComposer,
+      $$SupplierCrateDepositsTableOrderingComposer,
+      $$SupplierCrateDepositsTableAnnotationComposer,
+      $$SupplierCrateDepositsTableCreateCompanionBuilder,
+      $$SupplierCrateDepositsTableUpdateCompanionBuilder,
+      (SupplierCrateDepositData, $$SupplierCrateDepositsTableReferences),
+      SupplierCrateDepositData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool supplierId,
+        bool manufacturerId,
+        bool storeId,
+        bool requestId,
+        bool supplierCrateLedgerId,
+        bool performedBy,
+        bool paymentTransactionsRefs,
+      })
+    >;
+typedef $$CrateShortfallWriteoffsTableCreateCompanionBuilder =
+    CrateShortfallWriteoffsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String manufacturerId,
+      Value<String?> storeId,
+      required int crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<String?> note,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$CrateShortfallWriteoffsTableUpdateCompanionBuilder =
+    CrateShortfallWriteoffsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> manufacturerId,
+      Value<String?> storeId,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<String?> note,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$CrateShortfallWriteoffsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $CrateShortfallWriteoffsTable,
+          CrateShortfallWriteoffData
+        > {
+  $$CrateShortfallWriteoffsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.crateShortfallWriteoffs.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ManufacturersTable _manufacturerIdTable(_$AppDatabase db) =>
+      db.manufacturers.createAlias(
+        $_aliasNameGenerator(
+          db.crateShortfallWriteoffs.manufacturerId,
+          db.manufacturers.id,
+        ),
+      );
+
+  $$ManufacturersTableProcessedTableManager get manufacturerId {
+    final $_column = $_itemColumn<String>('manufacturer_id')!;
+
+    final manager = $$ManufacturersTableTableManager(
+      $_db,
+      $_db.manufacturers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.crateShortfallWriteoffs.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _performedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(
+          db.crateShortfallWriteoffs.performedBy,
+          db.users.id,
+        ),
+      );
+
+  $$UsersTableProcessedTableManager? get performedBy {
+    final $_column = $_itemColumn<String>('performed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_performedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$CrateShortfallWriteoffsTableFilterComposer
+    extends Composer<_$AppDatabase, $CrateShortfallWriteoffsTable> {
+  $$CrateShortfallWriteoffsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableFilterComposer get manufacturerId {
+    final $$ManufacturersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get performedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CrateShortfallWriteoffsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CrateShortfallWriteoffsTable> {
+  $$CrateShortfallWriteoffsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableOrderingComposer get manufacturerId {
+    final $$ManufacturersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableOrderingComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get performedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CrateShortfallWriteoffsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CrateShortfallWriteoffsTable> {
+  $$CrateShortfallWriteoffsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableAnnotationComposer get manufacturerId {
+    final $$ManufacturersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get performedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CrateShortfallWriteoffsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CrateShortfallWriteoffsTable,
+          CrateShortfallWriteoffData,
+          $$CrateShortfallWriteoffsTableFilterComposer,
+          $$CrateShortfallWriteoffsTableOrderingComposer,
+          $$CrateShortfallWriteoffsTableAnnotationComposer,
+          $$CrateShortfallWriteoffsTableCreateCompanionBuilder,
+          $$CrateShortfallWriteoffsTableUpdateCompanionBuilder,
+          (
+            CrateShortfallWriteoffData,
+            $$CrateShortfallWriteoffsTableReferences,
+          ),
+          CrateShortfallWriteoffData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool manufacturerId,
+            bool storeId,
+            bool performedBy,
+          })
+        > {
+  $$CrateShortfallWriteoffsTableTableManager(
+    _$AppDatabase db,
+    $CrateShortfallWriteoffsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CrateShortfallWriteoffsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> manufacturerId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CrateShortfallWriteoffsCompanion(
+                id: id,
+                businessId: businessId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                note: note,
+                performedBy: performedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String manufacturerId,
+                Value<String?> storeId = const Value.absent(),
+                required int crateCount,
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CrateShortfallWriteoffsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                note: note,
+                performedBy: performedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CrateShortfallWriteoffsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                manufacturerId = false,
+                storeId = false,
+                performedBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (manufacturerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturerId,
+                                    referencedTable:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._manufacturerIdTable(db),
+                                    referencedColumn:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._manufacturerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (performedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.performedBy,
+                                    referencedTable:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._performedByTable(db),
+                                    referencedColumn:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._performedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$CrateShortfallWriteoffsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CrateShortfallWriteoffsTable,
+      CrateShortfallWriteoffData,
+      $$CrateShortfallWriteoffsTableFilterComposer,
+      $$CrateShortfallWriteoffsTableOrderingComposer,
+      $$CrateShortfallWriteoffsTableAnnotationComposer,
+      $$CrateShortfallWriteoffsTableCreateCompanionBuilder,
+      $$CrateShortfallWriteoffsTableUpdateCompanionBuilder,
+      (CrateShortfallWriteoffData, $$CrateShortfallWriteoffsTableReferences),
+      CrateShortfallWriteoffData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool manufacturerId,
+        bool storeId,
+        bool performedBy,
+      })
+    >;
 typedef $$ProductsTableCreateCompanionBuilder =
     ProductsCompanion Function({
       Value<String> id,
@@ -55333,6 +70498,47 @@ final class $$ProductsTableReferences
     ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_purchaseItemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanTripLotsTable, List<VanTripLotData>>
+  _vanTripLotsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTripLots,
+    aliasName: $_aliasNameGenerator(db.products.id, db.vanTripLots.productId),
+  );
+
+  $$VanTripLotsTableProcessedTableManager get vanTripLotsRefs {
+    final manager = $$VanTripLotsTableTableManager(
+      $_db,
+      $_db.vanTripLots,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripLotsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanReturnEventsTable, List<VanReturnEventData>>
+  _vanReturnEventsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanReturnEvents,
+    aliasName: $_aliasNameGenerator(
+      db.products.id,
+      db.vanReturnEvents.productId,
+    ),
+  );
+
+  $$VanReturnEventsTableProcessedTableManager get vanReturnEventsRefs {
+    final manager = $$VanReturnEventsTableTableManager(
+      $_db,
+      $_db.vanReturnEvents,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _vanReturnEventsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -55820,6 +71026,56 @@ class $$ProductsTableFilterComposer
           }) => $$PurchaseItemsTableFilterComposer(
             $db: $db,
             $table: $db.purchaseItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanTripLotsRefs(
+    Expression<bool> Function($$VanTripLotsTableFilterComposer f) f,
+  ) {
+    final $$VanTripLotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanReturnEventsRefs(
+    Expression<bool> Function($$VanReturnEventsTableFilterComposer f) f,
+  ) {
+    final $$VanReturnEventsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanReturnEvents,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanReturnEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanReturnEvents,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -56560,6 +71816,56 @@ class $$ProductsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> vanTripLotsRefs<T extends Object>(
+    Expression<T> Function($$VanTripLotsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripLotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> vanReturnEventsRefs<T extends Object>(
+    Expression<T> Function($$VanReturnEventsTableAnnotationComposer a) f,
+  ) {
+    final $$VanReturnEventsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanReturnEvents,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanReturnEventsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanReturnEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ProductsTableTableManager
@@ -56590,6 +71896,8 @@ class $$ProductsTableTableManager
             bool stockAdjustmentRequestsRefs,
             bool orderItemsRefs,
             bool purchaseItemsRefs,
+            bool vanTripLotsRefs,
+            bool vanReturnEventsRefs,
           })
         > {
   $$ProductsTableTableManager(_$AppDatabase db, $ProductsTable table)
@@ -56771,6 +72079,8 @@ class $$ProductsTableTableManager
                 stockAdjustmentRequestsRefs = false,
                 orderItemsRefs = false,
                 purchaseItemsRefs = false,
+                vanTripLotsRefs = false,
+                vanReturnEventsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -56784,6 +72094,8 @@ class $$ProductsTableTableManager
                     if (stockAdjustmentRequestsRefs) db.stockAdjustmentRequests,
                     if (orderItemsRefs) db.orderItems,
                     if (purchaseItemsRefs) db.purchaseItems,
+                    if (vanTripLotsRefs) db.vanTripLots,
+                    if (vanReturnEventsRefs) db.vanReturnEvents,
                   ],
                   addJoins:
                       <
@@ -57060,6 +72372,48 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (vanTripLotsRefs)
+                        await $_getPrefetchedData<
+                          ProductData,
+                          $ProductsTable,
+                          VanTripLotData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._vanTripLotsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripLotsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanReturnEventsRefs)
+                        await $_getPrefetchedData<
+                          ProductData,
+                          $ProductsTable,
+                          VanReturnEventData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._vanReturnEventsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanReturnEventsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -57095,6 +72449,8 @@ typedef $$ProductsTableProcessedTableManager =
         bool stockAdjustmentRequestsRefs,
         bool orderItemsRefs,
         bool purchaseItemsRefs,
+        bool vanTripLotsRefs,
+        bool vanReturnEventsRefs,
       })
     >;
 typedef $$PriceListsTableCreateCompanionBuilder =
@@ -59445,6 +74801,1675 @@ typedef $$CustomerWalletsTableProcessedTableManager =
         bool walletTransactionsRefs,
       })
     >;
+typedef $$VanTripsTableCreateCompanionBuilder =
+    VanTripsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String vanStoreId,
+      required String driverUserId,
+      required String sourceStoreId,
+      Value<String> status,
+      Value<DateTime> openedAt,
+      Value<String?> openedBy,
+      Value<DateTime?> closedAt,
+      Value<String?> closedBy,
+      Value<bool> closedWithBalance,
+      Value<int> shellsOut,
+      Value<int> shellsBack,
+      Value<DateTime?> restatedAt,
+      Value<String?> restatedReason,
+      Value<int> cogsKobo,
+      Value<int> recoveredKobo,
+      Value<int> unremittedKobo,
+      Value<int> shortageWriteoffKobo,
+      Value<int> damageWriteoffKobo,
+      Value<int> shortageLossKobo,
+      Value<int> damageLossKobo,
+      Value<int> profitKobo,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$VanTripsTableUpdateCompanionBuilder =
+    VanTripsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> vanStoreId,
+      Value<String> driverUserId,
+      Value<String> sourceStoreId,
+      Value<String> status,
+      Value<DateTime> openedAt,
+      Value<String?> openedBy,
+      Value<DateTime?> closedAt,
+      Value<String?> closedBy,
+      Value<bool> closedWithBalance,
+      Value<int> shellsOut,
+      Value<int> shellsBack,
+      Value<DateTime?> restatedAt,
+      Value<String?> restatedReason,
+      Value<int> cogsKobo,
+      Value<int> recoveredKobo,
+      Value<int> unremittedKobo,
+      Value<int> shortageWriteoffKobo,
+      Value<int> damageWriteoffKobo,
+      Value<int> shortageLossKobo,
+      Value<int> damageLossKobo,
+      Value<int> profitKobo,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$VanTripsTableReferences
+    extends BaseReferences<_$AppDatabase, $VanTripsTable, VanTripData> {
+  $$VanTripsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.vanTrips.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _vanStoreIdTable(_$AppDatabase db) => db.stores
+      .createAlias($_aliasNameGenerator(db.vanTrips.vanStoreId, db.stores.id));
+
+  $$StoresTableProcessedTableManager get vanStoreId {
+    final $_column = $_itemColumn<String>('van_store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanStoreIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _driverUserIdTable(_$AppDatabase db) => db.users
+      .createAlias($_aliasNameGenerator(db.vanTrips.driverUserId, db.users.id));
+
+  $$UsersTableProcessedTableManager get driverUserId {
+    final $_column = $_itemColumn<String>('driver_user_id')!;
+
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_driverUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _sourceStoreIdTable(_$AppDatabase db) =>
+      db.stores.createAlias(
+        $_aliasNameGenerator(db.vanTrips.sourceStoreId, db.stores.id),
+      );
+
+  $$StoresTableProcessedTableManager get sourceStoreId {
+    final $_column = $_itemColumn<String>('source_store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_sourceStoreIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _openedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.vanTrips.openedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get openedBy {
+    final $_column = $_itemColumn<String>('opened_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_openedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _closedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.vanTrips.closedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get closedBy {
+    final $_column = $_itemColumn<String>('closed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_closedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$OrdersTable, List<OrderData>> _ordersRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.orders,
+    aliasName: $_aliasNameGenerator(db.vanTrips.id, db.orders.vanTripId),
+  );
+
+  $$OrdersTableProcessedTableManager get ordersRefs {
+    final manager = $$OrdersTableTableManager(
+      $_db,
+      $_db.orders,
+    ).filter((f) => f.vanTripId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_ordersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PaymentTransactionsTable,
+    List<PaymentTransactionData>
+  >
+  _paymentTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.paymentTransactions,
+        aliasName: $_aliasNameGenerator(
+          db.vanTrips.id,
+          db.paymentTransactions.vanTripId,
+        ),
+      );
+
+  $$PaymentTransactionsTableProcessedTableManager get paymentTransactionsRefs {
+    final manager = $$PaymentTransactionsTableTableManager(
+      $_db,
+      $_db.paymentTransactions,
+    ).filter((f) => f.vanTripId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _paymentTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanTripLotsTable, List<VanTripLotData>>
+  _vanTripLotsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTripLots,
+    aliasName: $_aliasNameGenerator(db.vanTrips.id, db.vanTripLots.tripId),
+  );
+
+  $$VanTripLotsTableProcessedTableManager get vanTripLotsRefs {
+    final manager = $$VanTripLotsTableTableManager(
+      $_db,
+      $_db.vanTripLots,
+    ).filter((f) => f.tripId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripLotsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanReturnEventsTable, List<VanReturnEventData>>
+  _vanReturnEventsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanReturnEvents,
+    aliasName: $_aliasNameGenerator(db.vanTrips.id, db.vanReturnEvents.tripId),
+  );
+
+  $$VanReturnEventsTableProcessedTableManager get vanReturnEventsRefs {
+    final manager = $$VanReturnEventsTableTableManager(
+      $_db,
+      $_db.vanReturnEvents,
+    ).filter((f) => f.tripId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _vanReturnEventsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $DriverLedgerEntriesTable,
+    List<DriverLedgerEntryData>
+  >
+  _driverLedgerEntriesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.driverLedgerEntries,
+        aliasName: $_aliasNameGenerator(
+          db.vanTrips.id,
+          db.driverLedgerEntries.tripId,
+        ),
+      );
+
+  $$DriverLedgerEntriesTableProcessedTableManager get driverLedgerEntriesRefs {
+    final manager = $$DriverLedgerEntriesTableTableManager(
+      $_db,
+      $_db.driverLedgerEntries,
+    ).filter((f) => f.tripId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _driverLedgerEntriesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$VanTripsTableFilterComposer
+    extends Composer<_$AppDatabase, $VanTripsTable> {
+  $$VanTripsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get closedWithBalance => $composableBuilder(
+    column: $table.closedWithBalance,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shellsOut => $composableBuilder(
+    column: $table.shellsOut,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get restatedAt => $composableBuilder(
+    column: $table.restatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get restatedReason => $composableBuilder(
+    column: $table.restatedReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cogsKobo => $composableBuilder(
+    column: $table.cogsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get recoveredKobo => $composableBuilder(
+    column: $table.recoveredKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unremittedKobo => $composableBuilder(
+    column: $table.unremittedKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shortageWriteoffKobo => $composableBuilder(
+    column: $table.shortageWriteoffKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get damageWriteoffKobo => $composableBuilder(
+    column: $table.damageWriteoffKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shortageLossKobo => $composableBuilder(
+    column: $table.shortageLossKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get damageLossKobo => $composableBuilder(
+    column: $table.damageLossKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get profitKobo => $composableBuilder(
+    column: $table.profitKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get vanStoreId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get driverUserId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get sourceStoreId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sourceStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get openedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get closedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> ordersRefs(
+    Expression<bool> Function($$OrdersTableFilterComposer f) f,
+  ) {
+    final $$OrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.orders,
+      getReferencedColumn: (t) => t.vanTripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.orders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> paymentTransactionsRefs(
+    Expression<bool> Function($$PaymentTransactionsTableFilterComposer f) f,
+  ) {
+    final $$PaymentTransactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.paymentTransactions,
+      getReferencedColumn: (t) => t.vanTripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentTransactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.paymentTransactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanTripLotsRefs(
+    Expression<bool> Function($$VanTripLotsTableFilterComposer f) f,
+  ) {
+    final $$VanTripLotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.tripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanReturnEventsRefs(
+    Expression<bool> Function($$VanReturnEventsTableFilterComposer f) f,
+  ) {
+    final $$VanReturnEventsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanReturnEvents,
+      getReferencedColumn: (t) => t.tripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanReturnEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanReturnEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> driverLedgerEntriesRefs(
+    Expression<bool> Function($$DriverLedgerEntriesTableFilterComposer f) f,
+  ) {
+    final $$DriverLedgerEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.driverLedgerEntries,
+      getReferencedColumn: (t) => t.tripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DriverLedgerEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.driverLedgerEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$VanTripsTableOrderingComposer
+    extends Composer<_$AppDatabase, $VanTripsTable> {
+  $$VanTripsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get closedWithBalance => $composableBuilder(
+    column: $table.closedWithBalance,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shellsOut => $composableBuilder(
+    column: $table.shellsOut,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get restatedAt => $composableBuilder(
+    column: $table.restatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get restatedReason => $composableBuilder(
+    column: $table.restatedReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cogsKobo => $composableBuilder(
+    column: $table.cogsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get recoveredKobo => $composableBuilder(
+    column: $table.recoveredKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unremittedKobo => $composableBuilder(
+    column: $table.unremittedKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shortageWriteoffKobo => $composableBuilder(
+    column: $table.shortageWriteoffKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get damageWriteoffKobo => $composableBuilder(
+    column: $table.damageWriteoffKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shortageLossKobo => $composableBuilder(
+    column: $table.shortageLossKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get damageLossKobo => $composableBuilder(
+    column: $table.damageLossKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get profitKobo => $composableBuilder(
+    column: $table.profitKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get vanStoreId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get driverUserId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get sourceStoreId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sourceStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get openedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get closedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanTripsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VanTripsTable> {
+  $$VanTripsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get openedAt =>
+      $composableBuilder(column: $table.openedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get closedWithBalance => $composableBuilder(
+    column: $table.closedWithBalance,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shellsOut =>
+      $composableBuilder(column: $table.shellsOut, builder: (column) => column);
+
+  GeneratedColumn<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get restatedAt => $composableBuilder(
+    column: $table.restatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get restatedReason => $composableBuilder(
+    column: $table.restatedReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cogsKobo =>
+      $composableBuilder(column: $table.cogsKobo, builder: (column) => column);
+
+  GeneratedColumn<int> get recoveredKobo => $composableBuilder(
+    column: $table.recoveredKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unremittedKobo => $composableBuilder(
+    column: $table.unremittedKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shortageWriteoffKobo => $composableBuilder(
+    column: $table.shortageWriteoffKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get damageWriteoffKobo => $composableBuilder(
+    column: $table.damageWriteoffKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shortageLossKobo => $composableBuilder(
+    column: $table.shortageLossKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get damageLossKobo => $composableBuilder(
+    column: $table.damageLossKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get profitKobo => $composableBuilder(
+    column: $table.profitKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get vanStoreId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get driverUserId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get sourceStoreId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sourceStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get openedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get closedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> ordersRefs<T extends Object>(
+    Expression<T> Function($$OrdersTableAnnotationComposer a) f,
+  ) {
+    final $$OrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.orders,
+      getReferencedColumn: (t) => t.vanTripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.orders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> paymentTransactionsRefs<T extends Object>(
+    Expression<T> Function($$PaymentTransactionsTableAnnotationComposer a) f,
+  ) {
+    final $$PaymentTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.paymentTransactions,
+          getReferencedColumn: (t) => t.vanTripId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PaymentTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.paymentTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> vanTripLotsRefs<T extends Object>(
+    Expression<T> Function($$VanTripLotsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripLotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTripLots,
+      getReferencedColumn: (t) => t.tripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripLotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTripLots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> vanReturnEventsRefs<T extends Object>(
+    Expression<T> Function($$VanReturnEventsTableAnnotationComposer a) f,
+  ) {
+    final $$VanReturnEventsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanReturnEvents,
+      getReferencedColumn: (t) => t.tripId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanReturnEventsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanReturnEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> driverLedgerEntriesRefs<T extends Object>(
+    Expression<T> Function($$DriverLedgerEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$DriverLedgerEntriesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.driverLedgerEntries,
+          getReferencedColumn: (t) => t.tripId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DriverLedgerEntriesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.driverLedgerEntries,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$VanTripsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VanTripsTable,
+          VanTripData,
+          $$VanTripsTableFilterComposer,
+          $$VanTripsTableOrderingComposer,
+          $$VanTripsTableAnnotationComposer,
+          $$VanTripsTableCreateCompanionBuilder,
+          $$VanTripsTableUpdateCompanionBuilder,
+          (VanTripData, $$VanTripsTableReferences),
+          VanTripData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool vanStoreId,
+            bool driverUserId,
+            bool sourceStoreId,
+            bool openedBy,
+            bool closedBy,
+            bool ordersRefs,
+            bool paymentTransactionsRefs,
+            bool vanTripLotsRefs,
+            bool vanReturnEventsRefs,
+            bool driverLedgerEntriesRefs,
+          })
+        > {
+  $$VanTripsTableTableManager(_$AppDatabase db, $VanTripsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VanTripsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VanTripsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VanTripsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> vanStoreId = const Value.absent(),
+                Value<String> driverUserId = const Value.absent(),
+                Value<String> sourceStoreId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<String?> openedBy = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<String?> closedBy = const Value.absent(),
+                Value<bool> closedWithBalance = const Value.absent(),
+                Value<int> shellsOut = const Value.absent(),
+                Value<int> shellsBack = const Value.absent(),
+                Value<DateTime?> restatedAt = const Value.absent(),
+                Value<String?> restatedReason = const Value.absent(),
+                Value<int> cogsKobo = const Value.absent(),
+                Value<int> recoveredKobo = const Value.absent(),
+                Value<int> unremittedKobo = const Value.absent(),
+                Value<int> shortageWriteoffKobo = const Value.absent(),
+                Value<int> damageWriteoffKobo = const Value.absent(),
+                Value<int> shortageLossKobo = const Value.absent(),
+                Value<int> damageLossKobo = const Value.absent(),
+                Value<int> profitKobo = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanTripsCompanion(
+                id: id,
+                businessId: businessId,
+                vanStoreId: vanStoreId,
+                driverUserId: driverUserId,
+                sourceStoreId: sourceStoreId,
+                status: status,
+                openedAt: openedAt,
+                openedBy: openedBy,
+                closedAt: closedAt,
+                closedBy: closedBy,
+                closedWithBalance: closedWithBalance,
+                shellsOut: shellsOut,
+                shellsBack: shellsBack,
+                restatedAt: restatedAt,
+                restatedReason: restatedReason,
+                cogsKobo: cogsKobo,
+                recoveredKobo: recoveredKobo,
+                unremittedKobo: unremittedKobo,
+                shortageWriteoffKobo: shortageWriteoffKobo,
+                damageWriteoffKobo: damageWriteoffKobo,
+                shortageLossKobo: shortageLossKobo,
+                damageLossKobo: damageLossKobo,
+                profitKobo: profitKobo,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String vanStoreId,
+                required String driverUserId,
+                required String sourceStoreId,
+                Value<String> status = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<String?> openedBy = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<String?> closedBy = const Value.absent(),
+                Value<bool> closedWithBalance = const Value.absent(),
+                Value<int> shellsOut = const Value.absent(),
+                Value<int> shellsBack = const Value.absent(),
+                Value<DateTime?> restatedAt = const Value.absent(),
+                Value<String?> restatedReason = const Value.absent(),
+                Value<int> cogsKobo = const Value.absent(),
+                Value<int> recoveredKobo = const Value.absent(),
+                Value<int> unremittedKobo = const Value.absent(),
+                Value<int> shortageWriteoffKobo = const Value.absent(),
+                Value<int> damageWriteoffKobo = const Value.absent(),
+                Value<int> shortageLossKobo = const Value.absent(),
+                Value<int> damageLossKobo = const Value.absent(),
+                Value<int> profitKobo = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanTripsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                vanStoreId: vanStoreId,
+                driverUserId: driverUserId,
+                sourceStoreId: sourceStoreId,
+                status: status,
+                openedAt: openedAt,
+                openedBy: openedBy,
+                closedAt: closedAt,
+                closedBy: closedBy,
+                closedWithBalance: closedWithBalance,
+                shellsOut: shellsOut,
+                shellsBack: shellsBack,
+                restatedAt: restatedAt,
+                restatedReason: restatedReason,
+                cogsKobo: cogsKobo,
+                recoveredKobo: recoveredKobo,
+                unremittedKobo: unremittedKobo,
+                shortageWriteoffKobo: shortageWriteoffKobo,
+                damageWriteoffKobo: damageWriteoffKobo,
+                shortageLossKobo: shortageLossKobo,
+                damageLossKobo: damageLossKobo,
+                profitKobo: profitKobo,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VanTripsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                vanStoreId = false,
+                driverUserId = false,
+                sourceStoreId = false,
+                openedBy = false,
+                closedBy = false,
+                ordersRefs = false,
+                paymentTransactionsRefs = false,
+                vanTripLotsRefs = false,
+                vanReturnEventsRefs = false,
+                driverLedgerEntriesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (ordersRefs) db.orders,
+                    if (paymentTransactionsRefs) db.paymentTransactions,
+                    if (vanTripLotsRefs) db.vanTripLots,
+                    if (vanReturnEventsRefs) db.vanReturnEvents,
+                    if (driverLedgerEntriesRefs) db.driverLedgerEntries,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._businessIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (vanStoreId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanStoreId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._vanStoreIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._vanStoreIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (driverUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.driverUserId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._driverUserIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._driverUserIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (sourceStoreId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.sourceStoreId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._sourceStoreIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._sourceStoreIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (openedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.openedBy,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._openedByTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._openedByTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (closedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.closedBy,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._closedByTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._closedByTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (ordersRefs)
+                        await $_getPrefetchedData<
+                          VanTripData,
+                          $VanTripsTable,
+                          OrderData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanTripsTableReferences
+                              ._ordersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanTripsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ordersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.vanTripId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (paymentTransactionsRefs)
+                        await $_getPrefetchedData<
+                          VanTripData,
+                          $VanTripsTable,
+                          PaymentTransactionData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanTripsTableReferences
+                              ._paymentTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanTripsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).paymentTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.vanTripId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanTripLotsRefs)
+                        await $_getPrefetchedData<
+                          VanTripData,
+                          $VanTripsTable,
+                          VanTripLotData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanTripsTableReferences
+                              ._vanTripLotsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanTripsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripLotsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tripId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanReturnEventsRefs)
+                        await $_getPrefetchedData<
+                          VanTripData,
+                          $VanTripsTable,
+                          VanReturnEventData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanTripsTableReferences
+                              ._vanReturnEventsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanTripsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanReturnEventsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tripId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (driverLedgerEntriesRefs)
+                        await $_getPrefetchedData<
+                          VanTripData,
+                          $VanTripsTable,
+                          DriverLedgerEntryData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanTripsTableReferences
+                              ._driverLedgerEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanTripsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).driverLedgerEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tripId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$VanTripsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VanTripsTable,
+      VanTripData,
+      $$VanTripsTableFilterComposer,
+      $$VanTripsTableOrderingComposer,
+      $$VanTripsTableAnnotationComposer,
+      $$VanTripsTableCreateCompanionBuilder,
+      $$VanTripsTableUpdateCompanionBuilder,
+      (VanTripData, $$VanTripsTableReferences),
+      VanTripData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool vanStoreId,
+        bool driverUserId,
+        bool sourceStoreId,
+        bool openedBy,
+        bool closedBy,
+        bool ordersRefs,
+        bool paymentTransactionsRefs,
+        bool vanTripLotsRefs,
+        bool vanReturnEventsRefs,
+        bool driverLedgerEntriesRefs,
+      })
+    >;
 typedef $$OrdersTableCreateCompanionBuilder =
     OrdersCompanion Function({
       Value<String> id,
@@ -59462,7 +76487,9 @@ typedef $$OrdersTableCreateCompanionBuilder =
       Value<String?> barcode,
       Value<String?> staffId,
       Value<String?> storeId,
+      Value<String?> confirmedBy,
       Value<int> crateDepositPaidKobo,
+      Value<String?> vanTripId,
       Value<DateTime?> completedAt,
       Value<DateTime?> cancelledAt,
       Value<DateTime> createdAt,
@@ -59486,7 +76513,9 @@ typedef $$OrdersTableUpdateCompanionBuilder =
       Value<String?> barcode,
       Value<String?> staffId,
       Value<String?> storeId,
+      Value<String?> confirmedBy,
       Value<int> crateDepositPaidKobo,
+      Value<String?> vanTripId,
       Value<DateTime?> completedAt,
       Value<DateTime?> cancelledAt,
       Value<DateTime> createdAt,
@@ -59564,6 +76593,40 @@ final class $$OrdersTableReferences
       $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _confirmedByTable(_$AppDatabase db) => db.users
+      .createAlias($_aliasNameGenerator(db.orders.confirmedBy, db.users.id));
+
+  $$UsersTableProcessedTableManager? get confirmedBy {
+    final $_column = $_itemColumn<String>('confirmed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_confirmedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanTripsTable _vanTripIdTable(_$AppDatabase db) => db.vanTrips
+      .createAlias($_aliasNameGenerator(db.orders.vanTripId, db.vanTrips.id));
+
+  $$VanTripsTableProcessedTableManager? get vanTripId {
+    final $_column = $_itemColumn<String>('van_trip_id');
+    if ($_column == null) return null;
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanTripIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -59930,6 +76993,52 @@ class $$OrdersTableFilterComposer
           }) => $$StoresTableFilterComposer(
             $db: $db,
             $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get confirmedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.confirmedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableFilterComposer get vanTripId {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanTripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60320,6 +77429,52 @@ class $$OrdersTableOrderingComposer
     );
     return composer;
   }
+
+  $$UsersTableOrderingComposer get confirmedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.confirmedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableOrderingComposer get vanTripId {
+    final $$VanTripsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanTripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$OrdersTableAnnotationComposer
@@ -60484,6 +77639,52 @@ class $$OrdersTableAnnotationComposer
           }) => $$StoresTableAnnotationComposer(
             $db: $db,
             $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get confirmedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.confirmedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableAnnotationComposer get vanTripId {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanTripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60716,6 +77917,8 @@ class $$OrdersTableTableManager
             bool customerId,
             bool staffId,
             bool storeId,
+            bool confirmedBy,
+            bool vanTripId,
             bool walletTransactionsRefs,
             bool pendingCrateReturnsRefs,
             bool crateLedgerRefs,
@@ -60754,7 +77957,9 @@ class $$OrdersTableTableManager
                 Value<String?> barcode = const Value.absent(),
                 Value<String?> staffId = const Value.absent(),
                 Value<String?> storeId = const Value.absent(),
+                Value<String?> confirmedBy = const Value.absent(),
                 Value<int> crateDepositPaidKobo = const Value.absent(),
+                Value<String?> vanTripId = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime?> cancelledAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -60776,7 +77981,9 @@ class $$OrdersTableTableManager
                 barcode: barcode,
                 staffId: staffId,
                 storeId: storeId,
+                confirmedBy: confirmedBy,
                 crateDepositPaidKobo: crateDepositPaidKobo,
+                vanTripId: vanTripId,
                 completedAt: completedAt,
                 cancelledAt: cancelledAt,
                 createdAt: createdAt,
@@ -60800,7 +78007,9 @@ class $$OrdersTableTableManager
                 Value<String?> barcode = const Value.absent(),
                 Value<String?> staffId = const Value.absent(),
                 Value<String?> storeId = const Value.absent(),
+                Value<String?> confirmedBy = const Value.absent(),
                 Value<int> crateDepositPaidKobo = const Value.absent(),
+                Value<String?> vanTripId = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime?> cancelledAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -60822,7 +78031,9 @@ class $$OrdersTableTableManager
                 barcode: barcode,
                 staffId: staffId,
                 storeId: storeId,
+                confirmedBy: confirmedBy,
                 crateDepositPaidKobo: crateDepositPaidKobo,
+                vanTripId: vanTripId,
                 completedAt: completedAt,
                 cancelledAt: cancelledAt,
                 createdAt: createdAt,
@@ -60841,6 +78052,8 @@ class $$OrdersTableTableManager
                 customerId = false,
                 staffId = false,
                 storeId = false,
+                confirmedBy = false,
+                vanTripId = false,
                 walletTransactionsRefs = false,
                 pendingCrateReturnsRefs = false,
                 crateLedgerRefs = false,
@@ -60926,6 +78139,32 @@ class $$OrdersTableTableManager
                                         ._storeIdTable(db),
                                     referencedColumn: $$OrdersTableReferences
                                         ._storeIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (confirmedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.confirmedBy,
+                                    referencedTable: $$OrdersTableReferences
+                                        ._confirmedByTable(db),
+                                    referencedColumn: $$OrdersTableReferences
+                                        ._confirmedByTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (vanTripId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanTripId,
+                                    referencedTable: $$OrdersTableReferences
+                                        ._vanTripIdTable(db),
+                                    referencedColumn: $$OrdersTableReferences
+                                        ._vanTripIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -61128,6 +78367,8 @@ typedef $$OrdersTableProcessedTableManager =
         bool customerId,
         bool staffId,
         bool storeId,
+        bool confirmedBy,
+        bool vanTripId,
         bool walletTransactionsRefs,
         bool pendingCrateReturnsRefs,
         bool crateLedgerRefs,
@@ -67438,6 +84679,7 @@ typedef $$StockTransfersTableCreateCompanionBuilder =
       Value<String> status,
       required String initiatedBy,
       Value<String?> receivedBy,
+      Value<int?> costKobo,
       Value<DateTime> initiatedAt,
       Value<DateTime?> receivedAt,
       Value<DateTime> createdAt,
@@ -67455,6 +84697,7 @@ typedef $$StockTransfersTableUpdateCompanionBuilder =
       Value<String> status,
       Value<String> initiatedBy,
       Value<String?> receivedBy,
+      Value<int?> costKobo,
       Value<DateTime> initiatedAt,
       Value<DateTime?> receivedAt,
       Value<DateTime> createdAt,
@@ -67633,6 +84876,11 @@ class $$StockTransfersTableFilterComposer
 
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get costKobo => $composableBuilder(
+    column: $table.costKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -67844,6 +85092,11 @@ class $$StockTransfersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get costKobo => $composableBuilder(
+    column: $table.costKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get initiatedAt => $composableBuilder(
     column: $table.initiatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -68020,6 +85273,9 @@ class $$StockTransfersTableAnnotationComposer
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get costKobo =>
+      $composableBuilder(column: $table.costKobo, builder: (column) => column);
 
   GeneratedColumn<DateTime> get initiatedAt => $composableBuilder(
     column: $table.initiatedAt,
@@ -68251,6 +85507,7 @@ class $$StockTransfersTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<String> initiatedBy = const Value.absent(),
                 Value<String?> receivedBy = const Value.absent(),
+                Value<int?> costKobo = const Value.absent(),
                 Value<DateTime> initiatedAt = const Value.absent(),
                 Value<DateTime?> receivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -68266,6 +85523,7 @@ class $$StockTransfersTableTableManager
                 status: status,
                 initiatedBy: initiatedBy,
                 receivedBy: receivedBy,
+                costKobo: costKobo,
                 initiatedAt: initiatedAt,
                 receivedAt: receivedAt,
                 createdAt: createdAt,
@@ -68283,6 +85541,7 @@ class $$StockTransfersTableTableManager
                 Value<String> status = const Value.absent(),
                 required String initiatedBy,
                 Value<String?> receivedBy = const Value.absent(),
+                Value<int?> costKobo = const Value.absent(),
                 Value<DateTime> initiatedAt = const Value.absent(),
                 Value<DateTime?> receivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -68298,6 +85557,7 @@ class $$StockTransfersTableTableManager
                 status: status,
                 initiatedBy: initiatedBy,
                 receivedBy: receivedBy,
+                costKobo: costKobo,
                 initiatedAt: initiatedAt,
                 receivedAt: receivedAt,
                 createdAt: createdAt,
@@ -68498,6 +85758,8 @@ typedef $$StockAdjustmentsTableCreateCompanionBuilder =
       required int quantityDiff,
       required String reason,
       Value<String?> performedBy,
+      Value<int?> unitCostKobo,
+      Value<int?> valueKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -68511,6 +85773,8 @@ typedef $$StockAdjustmentsTableUpdateCompanionBuilder =
       Value<int> quantityDiff,
       Value<String> reason,
       Value<String?> performedBy,
+      Value<int?> unitCostKobo,
+      Value<int?> valueKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -68653,6 +85917,16 @@ class $$StockAdjustmentsTableFilterComposer
 
   ColumnFilters<String> get reason => $composableBuilder(
     column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get valueKobo => $composableBuilder(
+    column: $table.valueKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -68808,6 +86082,16 @@ class $$StockAdjustmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get valueKobo => $composableBuilder(
+    column: $table.valueKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -68930,6 +86214,14 @@ class $$StockAdjustmentsTableAnnotationComposer
 
   GeneratedColumn<String> get reason =>
       $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get valueKobo =>
+      $composableBuilder(column: $table.valueKobo, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -69101,6 +86393,8 @@ class $$StockAdjustmentsTableTableManager
                 Value<int> quantityDiff = const Value.absent(),
                 Value<String> reason = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
+                Value<int?> unitCostKobo = const Value.absent(),
+                Value<int?> valueKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -69112,6 +86406,8 @@ class $$StockAdjustmentsTableTableManager
                 quantityDiff: quantityDiff,
                 reason: reason,
                 performedBy: performedBy,
+                unitCostKobo: unitCostKobo,
+                valueKobo: valueKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -69125,6 +86421,8 @@ class $$StockAdjustmentsTableTableManager
                 required int quantityDiff,
                 required String reason,
                 Value<String?> performedBy = const Value.absent(),
+                Value<int?> unitCostKobo = const Value.absent(),
+                Value<int?> valueKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -69136,6 +86434,8 @@ class $$StockAdjustmentsTableTableManager
                 quantityDiff: quantityDiff,
                 reason: reason,
                 performedBy: performedBy,
+                unitCostKobo: unitCostKobo,
+                valueKobo: valueKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -71368,6 +88668,7 @@ typedef $$StockAdjustmentRequestsTableCreateCompanionBuilder =
       required String productId,
       required String storeId,
       required int quantityDiff,
+      Value<int?> unitCostKobo,
       required String reason,
       required String summary,
       Value<String?> requestedBy,
@@ -71385,6 +88686,7 @@ typedef $$StockAdjustmentRequestsTableUpdateCompanionBuilder =
       Value<String> productId,
       Value<String> storeId,
       Value<int> quantityDiff,
+      Value<int?> unitCostKobo,
       Value<String> reason,
       Value<String> summary,
       Value<String?> requestedBy,
@@ -71528,6 +88830,11 @@ class $$StockAdjustmentRequestsTableFilterComposer
 
   ColumnFilters<int> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -71696,6 +89003,11 @@ class $$StockAdjustmentRequestsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get reason => $composableBuilder(
     column: $table.reason,
     builder: (column) => ColumnOrderings(column),
@@ -71856,6 +89168,11 @@ class $$StockAdjustmentRequestsTableAnnotationComposer
 
   GeneratedColumn<int> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
     builder: (column) => column,
   );
 
@@ -72050,6 +89367,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 Value<String> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
                 Value<int> quantityDiff = const Value.absent(),
+                Value<int?> unitCostKobo = const Value.absent(),
                 Value<String> reason = const Value.absent(),
                 Value<String> summary = const Value.absent(),
                 Value<String?> requestedBy = const Value.absent(),
@@ -72065,6 +89383,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 productId: productId,
                 storeId: storeId,
                 quantityDiff: quantityDiff,
+                unitCostKobo: unitCostKobo,
                 reason: reason,
                 summary: summary,
                 requestedBy: requestedBy,
@@ -72082,6 +89401,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 required String productId,
                 required String storeId,
                 required int quantityDiff,
+                Value<int?> unitCostKobo = const Value.absent(),
                 required String reason,
                 required String summary,
                 Value<String?> requestedBy = const Value.absent(),
@@ -72097,6 +89417,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 productId: productId,
                 storeId: storeId,
                 quantityDiff: quantityDiff,
+                unitCostKobo: unitCostKobo,
                 reason: reason,
                 summary: summary,
                 requestedBy: requestedBy,
@@ -73037,6 +90358,7 @@ typedef $$OrderItemsTableCreateCompanionBuilder =
       required int unitPriceKobo,
       Value<int> buyingPriceKobo,
       required int totalKobo,
+      Value<int?> cataloguePriceKobo,
       Value<String?> priceSnapshot,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -73053,6 +90375,7 @@ typedef $$OrderItemsTableUpdateCompanionBuilder =
       Value<int> unitPriceKobo,
       Value<int> buyingPriceKobo,
       Value<int> totalKobo,
+      Value<int?> cataloguePriceKobo,
       Value<String?> priceSnapshot,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -73169,6 +90492,11 @@ class $$OrderItemsTableFilterComposer
 
   ColumnFilters<int> get totalKobo => $composableBuilder(
     column: $table.totalKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cataloguePriceKobo => $composableBuilder(
+    column: $table.cataloguePriceKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -73314,6 +90642,11 @@ class $$OrderItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get cataloguePriceKobo => $composableBuilder(
+    column: $table.cataloguePriceKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get priceSnapshot => $composableBuilder(
     column: $table.priceSnapshot,
     builder: (column) => ColumnOrderings(column),
@@ -73449,6 +90782,11 @@ class $$OrderItemsTableAnnotationComposer
 
   GeneratedColumn<int> get totalKobo =>
       $composableBuilder(column: $table.totalKobo, builder: (column) => column);
+
+  GeneratedColumn<int> get cataloguePriceKobo => $composableBuilder(
+    column: $table.cataloguePriceKobo,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get priceSnapshot => $composableBuilder(
     column: $table.priceSnapshot,
@@ -73598,6 +90936,7 @@ class $$OrderItemsTableTableManager
                 Value<int> unitPriceKobo = const Value.absent(),
                 Value<int> buyingPriceKobo = const Value.absent(),
                 Value<int> totalKobo = const Value.absent(),
+                Value<int?> cataloguePriceKobo = const Value.absent(),
                 Value<String?> priceSnapshot = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -73612,6 +90951,7 @@ class $$OrderItemsTableTableManager
                 unitPriceKobo: unitPriceKobo,
                 buyingPriceKobo: buyingPriceKobo,
                 totalKobo: totalKobo,
+                cataloguePriceKobo: cataloguePriceKobo,
                 priceSnapshot: priceSnapshot,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -73628,6 +90968,7 @@ class $$OrderItemsTableTableManager
                 required int unitPriceKobo,
                 Value<int> buyingPriceKobo = const Value.absent(),
                 required int totalKobo,
+                Value<int?> cataloguePriceKobo = const Value.absent(),
                 Value<String?> priceSnapshot = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -73642,6 +90983,7 @@ class $$OrderItemsTableTableManager
                 unitPriceKobo: unitPriceKobo,
                 buyingPriceKobo: buyingPriceKobo,
                 totalKobo: totalKobo,
+                cataloguePriceKobo: cataloguePriceKobo,
                 priceSnapshot: priceSnapshot,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -73779,6 +91121,8 @@ typedef $$OrderCrateLinesTableCreateCompanionBuilder =
       Value<int> depositPaidKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<DateTime?> settledAt,
+      Value<String?> settledBy,
       Value<int> rowid,
     });
 typedef $$OrderCrateLinesTableUpdateCompanionBuilder =
@@ -73792,6 +91136,8 @@ typedef $$OrderCrateLinesTableUpdateCompanionBuilder =
       Value<int> depositPaidKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<DateTime?> settledAt,
+      Value<String?> settledBy,
       Value<int> rowid,
     });
 
@@ -73866,6 +91212,24 @@ final class $$OrderCrateLinesTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static $UsersTable _settledByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.orderCrateLines.settledBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get settledBy {
+    final $_column = $_itemColumn<String>('settled_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_settledByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 }
 
 class $$OrderCrateLinesTableFilterComposer
@@ -73904,6 +91268,11 @@ class $$OrderCrateLinesTableFilterComposer
 
   ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get settledAt => $composableBuilder(
+    column: $table.settledAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -73975,6 +91344,29 @@ class $$OrderCrateLinesTableFilterComposer
     );
     return composer;
   }
+
+  $$UsersTableFilterComposer get settledBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.settledBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$OrderCrateLinesTableOrderingComposer
@@ -74013,6 +91405,11 @@ class $$OrderCrateLinesTableOrderingComposer
 
   ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get settledAt => $composableBuilder(
+    column: $table.settledAt,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -74084,6 +91481,29 @@ class $$OrderCrateLinesTableOrderingComposer
     );
     return composer;
   }
+
+  $$UsersTableOrderingComposer get settledBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.settledBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$OrderCrateLinesTableAnnotationComposer
@@ -74120,6 +91540,9 @@ class $$OrderCrateLinesTableAnnotationComposer
     column: $table.lastUpdatedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<DateTime> get settledAt =>
+      $composableBuilder(column: $table.settledAt, builder: (column) => column);
 
   $$BusinessesTableAnnotationComposer get businessId {
     final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
@@ -74189,6 +91612,29 @@ class $$OrderCrateLinesTableAnnotationComposer
     );
     return composer;
   }
+
+  $$UsersTableAnnotationComposer get settledBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.settledBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$OrderCrateLinesTableTableManager
@@ -74208,6 +91654,7 @@ class $$OrderCrateLinesTableTableManager
             bool businessId,
             bool orderId,
             bool manufacturerId,
+            bool settledBy,
           })
         > {
   $$OrderCrateLinesTableTableManager(
@@ -74234,6 +91681,8 @@ class $$OrderCrateLinesTableTableManager
                 Value<int> depositPaidKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<DateTime?> settledAt = const Value.absent(),
+                Value<String?> settledBy = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrderCrateLinesCompanion(
                 id: id,
@@ -74245,6 +91694,8 @@ class $$OrderCrateLinesTableTableManager
                 depositPaidKobo: depositPaidKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                settledAt: settledAt,
+                settledBy: settledBy,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -74258,6 +91709,8 @@ class $$OrderCrateLinesTableTableManager
                 Value<int> depositPaidKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<DateTime?> settledAt = const Value.absent(),
+                Value<String?> settledBy = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrderCrateLinesCompanion.insert(
                 id: id,
@@ -74269,6 +91722,8 @@ class $$OrderCrateLinesTableTableManager
                 depositPaidKobo: depositPaidKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                settledAt: settledAt,
+                settledBy: settledBy,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -74280,7 +91735,12 @@ class $$OrderCrateLinesTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({businessId = false, orderId = false, manufacturerId = false}) {
+              ({
+                businessId = false,
+                orderId = false,
+                manufacturerId = false,
+                settledBy = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [],
@@ -74345,6 +91805,21 @@ class $$OrderCrateLinesTableTableManager
                                   )
                                   as T;
                         }
+                        if (settledBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.settledBy,
+                                    referencedTable:
+                                        $$OrderCrateLinesTableReferences
+                                            ._settledByTable(db),
+                                    referencedColumn:
+                                        $$OrderCrateLinesTableReferences
+                                            ._settledByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
                         return state;
                       },
@@ -74373,6 +91848,7 @@ typedef $$OrderCrateLinesTableProcessedTableManager =
         bool businessId,
         bool orderId,
         bool manufacturerId,
+        bool settledBy,
       })
     >;
 typedef $$PurchaseItemsTableCreateCompanionBuilder =
@@ -78697,6 +96173,7 @@ typedef $$PaymentTransactionsTableCreateCompanionBuilder =
     PaymentTransactionsCompanion Function({
       Value<String> id,
       required String businessId,
+      Value<String?> storeId,
       required int amountKobo,
       required String method,
       required String type,
@@ -78705,6 +96182,8 @@ typedef $$PaymentTransactionsTableCreateCompanionBuilder =
       Value<String?> expenseId,
       Value<String?> walletTxnId,
       Value<String?> deliveryId,
+      Value<String?> vanTripId,
+      Value<String?> crateDepositId,
       Value<String?> performedBy,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
@@ -78717,6 +96196,7 @@ typedef $$PaymentTransactionsTableUpdateCompanionBuilder =
     PaymentTransactionsCompanion Function({
       Value<String> id,
       Value<String> businessId,
+      Value<String?> storeId,
       Value<int> amountKobo,
       Value<String> method,
       Value<String> type,
@@ -78725,6 +96205,8 @@ typedef $$PaymentTransactionsTableUpdateCompanionBuilder =
       Value<String?> expenseId,
       Value<String?> walletTxnId,
       Value<String?> deliveryId,
+      Value<String?> vanTripId,
+      Value<String?> crateDepositId,
       Value<String?> performedBy,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
@@ -78763,6 +96245,24 @@ final class $$PaymentTransactionsTableReferences
       $_db.businesses,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.paymentTransactions.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -78872,6 +96372,47 @@ final class $$PaymentTransactionsTableReferences
     );
   }
 
+  static $VanTripsTable _vanTripIdTable(_$AppDatabase db) =>
+      db.vanTrips.createAlias(
+        $_aliasNameGenerator(db.paymentTransactions.vanTripId, db.vanTrips.id),
+      );
+
+  $$VanTripsTableProcessedTableManager? get vanTripId {
+    final $_column = $_itemColumn<String>('van_trip_id');
+    if ($_column == null) return null;
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanTripIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SupplierCrateDepositsTable _crateDepositIdTable(_$AppDatabase db) =>
+      db.supplierCrateDeposits.createAlias(
+        $_aliasNameGenerator(
+          db.paymentTransactions.crateDepositId,
+          db.supplierCrateDeposits.id,
+        ),
+      );
+
+  $$SupplierCrateDepositsTableProcessedTableManager? get crateDepositId {
+    final $_column = $_itemColumn<String>('crate_deposit_id');
+    if ($_column == null) return null;
+    final manager = $$SupplierCrateDepositsTableTableManager(
+      $_db,
+      $_db.supplierCrateDeposits,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_crateDepositIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
   static $UsersTable _performedByTable(_$AppDatabase db) =>
       db.users.createAlias(
         $_aliasNameGenerator(db.paymentTransactions.performedBy, db.users.id),
@@ -78973,6 +96514,29 @@ class $$PaymentTransactionsTableFilterComposer
           }) => $$BusinessesTableFilterComposer(
             $db: $db,
             $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -79097,6 +96661,53 @@ class $$PaymentTransactionsTableFilterComposer
     return composer;
   }
 
+  $$VanTripsTableFilterComposer get vanTripId {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanTripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositsTableFilterComposer get crateDepositId {
+    final $$SupplierCrateDepositsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.crateDepositId,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
   $$UsersTableFilterComposer get performedBy {
     final $$UsersTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -79207,6 +96818,29 @@ class $$PaymentTransactionsTableOrderingComposer
           }) => $$BusinessesTableOrderingComposer(
             $db: $db,
             $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -79331,6 +96965,53 @@ class $$PaymentTransactionsTableOrderingComposer
     return composer;
   }
 
+  $$VanTripsTableOrderingComposer get vanTripId {
+    final $$VanTripsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanTripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositsTableOrderingComposer get crateDepositId {
+    final $$SupplierCrateDepositsTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.crateDepositId,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableOrderingComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
   $$UsersTableOrderingComposer get performedBy {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -79431,6 +97112,29 @@ class $$PaymentTransactionsTableAnnotationComposer
           }) => $$BusinessesTableAnnotationComposer(
             $db: $db,
             $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -79556,6 +97260,53 @@ class $$PaymentTransactionsTableAnnotationComposer
     return composer;
   }
 
+  $$VanTripsTableAnnotationComposer get vanTripId {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanTripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SupplierCrateDepositsTableAnnotationComposer get crateDepositId {
+    final $$SupplierCrateDepositsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.crateDepositId,
+          referencedTable: $db.supplierCrateDeposits,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierCrateDepositsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
   $$UsersTableAnnotationComposer get performedBy {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -79618,11 +97369,14 @@ class $$PaymentTransactionsTableTableManager
           PaymentTransactionData,
           PrefetchHooks Function({
             bool businessId,
+            bool storeId,
             bool orderId,
             bool shipmentId,
             bool expenseId,
             bool walletTxnId,
             bool deliveryId,
+            bool vanTripId,
+            bool crateDepositId,
             bool performedBy,
             bool voidedBy,
           })
@@ -79650,6 +97404,7 @@ class $$PaymentTransactionsTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<int> amountKobo = const Value.absent(),
                 Value<String> method = const Value.absent(),
                 Value<String> type = const Value.absent(),
@@ -79658,6 +97413,8 @@ class $$PaymentTransactionsTableTableManager
                 Value<String?> expenseId = const Value.absent(),
                 Value<String?> walletTxnId = const Value.absent(),
                 Value<String?> deliveryId = const Value.absent(),
+                Value<String?> vanTripId = const Value.absent(),
+                Value<String?> crateDepositId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
@@ -79668,6 +97425,7 @@ class $$PaymentTransactionsTableTableManager
               }) => PaymentTransactionsCompanion(
                 id: id,
                 businessId: businessId,
+                storeId: storeId,
                 amountKobo: amountKobo,
                 method: method,
                 type: type,
@@ -79676,6 +97434,8 @@ class $$PaymentTransactionsTableTableManager
                 expenseId: expenseId,
                 walletTxnId: walletTxnId,
                 deliveryId: deliveryId,
+                vanTripId: vanTripId,
+                crateDepositId: crateDepositId,
                 performedBy: performedBy,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
@@ -79688,6 +97448,7 @@ class $$PaymentTransactionsTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 required String businessId,
+                Value<String?> storeId = const Value.absent(),
                 required int amountKobo,
                 required String method,
                 required String type,
@@ -79696,6 +97457,8 @@ class $$PaymentTransactionsTableTableManager
                 Value<String?> expenseId = const Value.absent(),
                 Value<String?> walletTxnId = const Value.absent(),
                 Value<String?> deliveryId = const Value.absent(),
+                Value<String?> vanTripId = const Value.absent(),
+                Value<String?> crateDepositId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
@@ -79706,6 +97469,7 @@ class $$PaymentTransactionsTableTableManager
               }) => PaymentTransactionsCompanion.insert(
                 id: id,
                 businessId: businessId,
+                storeId: storeId,
                 amountKobo: amountKobo,
                 method: method,
                 type: type,
@@ -79714,6 +97478,8 @@ class $$PaymentTransactionsTableTableManager
                 expenseId: expenseId,
                 walletTxnId: walletTxnId,
                 deliveryId: deliveryId,
+                vanTripId: vanTripId,
+                crateDepositId: crateDepositId,
                 performedBy: performedBy,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
@@ -79733,11 +97499,14 @@ class $$PaymentTransactionsTableTableManager
           prefetchHooksCallback:
               ({
                 businessId = false,
+                storeId = false,
                 orderId = false,
                 shipmentId = false,
                 expenseId = false,
                 walletTxnId = false,
                 deliveryId = false,
+                vanTripId = false,
+                crateDepositId = false,
                 performedBy = false,
                 voidedBy = false,
               }) {
@@ -79771,6 +97540,21 @@ class $$PaymentTransactionsTableTableManager
                                     referencedColumn:
                                         $$PaymentTransactionsTableReferences
                                             ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$PaymentTransactionsTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$PaymentTransactionsTableReferences
+                                            ._storeIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -79850,6 +97634,36 @@ class $$PaymentTransactionsTableTableManager
                                   )
                                   as T;
                         }
+                        if (vanTripId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanTripId,
+                                    referencedTable:
+                                        $$PaymentTransactionsTableReferences
+                                            ._vanTripIdTable(db),
+                                    referencedColumn:
+                                        $$PaymentTransactionsTableReferences
+                                            ._vanTripIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (crateDepositId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.crateDepositId,
+                                    referencedTable:
+                                        $$PaymentTransactionsTableReferences
+                                            ._crateDepositIdTable(db),
+                                    referencedColumn:
+                                        $$PaymentTransactionsTableReferences
+                                            ._crateDepositIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
                         if (performedBy) {
                           state =
                               state.withJoin(
@@ -79906,11 +97720,14 @@ typedef $$PaymentTransactionsTableProcessedTableManager =
       PaymentTransactionData,
       PrefetchHooks Function({
         bool businessId,
+        bool storeId,
         bool orderId,
         bool shipmentId,
         bool expenseId,
         bool walletTxnId,
         bool deliveryId,
+        bool vanTripId,
+        bool crateDepositId,
         bool performedBy,
         bool voidedBy,
       })
@@ -80584,6 +98401,3382 @@ typedef $$StockCountsTableProcessedTableManager =
       (StockCountData, $$StockCountsTableReferences),
       StockCountData,
       PrefetchHooks Function({bool businessId, bool storeId, bool countedBy})
+    >;
+typedef $$DailyClosingsTableCreateCompanionBuilder =
+    DailyClosingsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String businessDate,
+      Value<String?> storeScopeId,
+      Value<int> totalSalesKobo,
+      Value<int> refundsKobo,
+      Value<int> discountsKobo,
+      Value<int> cogsKobo,
+      Value<int> grossProfitKobo,
+      Value<int> netProfitKobo,
+      Value<int> expensesKobo,
+      Value<int> damagesCostKobo,
+      Value<int> cashSalesKobo,
+      Value<int> cashInKobo,
+      Value<int> cashOutKobo,
+      Value<int> netCashMovementKobo,
+      Value<int> stockCogsKobo,
+      Value<int> stockExpectedClosingKobo,
+      Value<int> itemsSold,
+      Value<int> shortageUnits,
+      Value<String?> reviewedBy,
+      Value<DateTime> reviewedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$DailyClosingsTableUpdateCompanionBuilder =
+    DailyClosingsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> businessDate,
+      Value<String?> storeScopeId,
+      Value<int> totalSalesKobo,
+      Value<int> refundsKobo,
+      Value<int> discountsKobo,
+      Value<int> cogsKobo,
+      Value<int> grossProfitKobo,
+      Value<int> netProfitKobo,
+      Value<int> expensesKobo,
+      Value<int> damagesCostKobo,
+      Value<int> cashSalesKobo,
+      Value<int> cashInKobo,
+      Value<int> cashOutKobo,
+      Value<int> netCashMovementKobo,
+      Value<int> stockCogsKobo,
+      Value<int> stockExpectedClosingKobo,
+      Value<int> itemsSold,
+      Value<int> shortageUnits,
+      Value<String?> reviewedBy,
+      Value<DateTime> reviewedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$DailyClosingsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $DailyClosingsTable, DailyClosingData> {
+  $$DailyClosingsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.dailyClosings.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeScopeIdTable(_$AppDatabase db) =>
+      db.stores.createAlias(
+        $_aliasNameGenerator(db.dailyClosings.storeScopeId, db.stores.id),
+      );
+
+  $$StoresTableProcessedTableManager? get storeScopeId {
+    final $_column = $_itemColumn<String>('store_scope_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeScopeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _reviewedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.dailyClosings.reviewedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get reviewedBy {
+    final $_column = $_itemColumn<String>('reviewed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_reviewedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$DailyClosingsTableFilterComposer
+    extends Composer<_$AppDatabase, $DailyClosingsTable> {
+  $$DailyClosingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get businessDate => $composableBuilder(
+    column: $table.businessDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get totalSalesKobo => $composableBuilder(
+    column: $table.totalSalesKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get refundsKobo => $composableBuilder(
+    column: $table.refundsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get discountsKobo => $composableBuilder(
+    column: $table.discountsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cogsKobo => $composableBuilder(
+    column: $table.cogsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get grossProfitKobo => $composableBuilder(
+    column: $table.grossProfitKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get netProfitKobo => $composableBuilder(
+    column: $table.netProfitKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expensesKobo => $composableBuilder(
+    column: $table.expensesKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get damagesCostKobo => $composableBuilder(
+    column: $table.damagesCostKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cashSalesKobo => $composableBuilder(
+    column: $table.cashSalesKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cashInKobo => $composableBuilder(
+    column: $table.cashInKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cashOutKobo => $composableBuilder(
+    column: $table.cashOutKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get netCashMovementKobo => $composableBuilder(
+    column: $table.netCashMovementKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stockCogsKobo => $composableBuilder(
+    column: $table.stockCogsKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stockExpectedClosingKobo => $composableBuilder(
+    column: $table.stockExpectedClosingKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get itemsSold => $composableBuilder(
+    column: $table.itemsSold,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shortageUnits => $composableBuilder(
+    column: $table.shortageUnits,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeScopeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeScopeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get reviewedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reviewedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DailyClosingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DailyClosingsTable> {
+  $$DailyClosingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get businessDate => $composableBuilder(
+    column: $table.businessDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalSalesKobo => $composableBuilder(
+    column: $table.totalSalesKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get refundsKobo => $composableBuilder(
+    column: $table.refundsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get discountsKobo => $composableBuilder(
+    column: $table.discountsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cogsKobo => $composableBuilder(
+    column: $table.cogsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get grossProfitKobo => $composableBuilder(
+    column: $table.grossProfitKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get netProfitKobo => $composableBuilder(
+    column: $table.netProfitKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expensesKobo => $composableBuilder(
+    column: $table.expensesKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get damagesCostKobo => $composableBuilder(
+    column: $table.damagesCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cashSalesKobo => $composableBuilder(
+    column: $table.cashSalesKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cashInKobo => $composableBuilder(
+    column: $table.cashInKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cashOutKobo => $composableBuilder(
+    column: $table.cashOutKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get netCashMovementKobo => $composableBuilder(
+    column: $table.netCashMovementKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stockCogsKobo => $composableBuilder(
+    column: $table.stockCogsKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stockExpectedClosingKobo => $composableBuilder(
+    column: $table.stockExpectedClosingKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get itemsSold => $composableBuilder(
+    column: $table.itemsSold,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shortageUnits => $composableBuilder(
+    column: $table.shortageUnits,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeScopeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeScopeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get reviewedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reviewedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DailyClosingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DailyClosingsTable> {
+  $$DailyClosingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get businessDate => $composableBuilder(
+    column: $table.businessDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get totalSalesKobo => $composableBuilder(
+    column: $table.totalSalesKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get refundsKobo => $composableBuilder(
+    column: $table.refundsKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get discountsKobo => $composableBuilder(
+    column: $table.discountsKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cogsKobo =>
+      $composableBuilder(column: $table.cogsKobo, builder: (column) => column);
+
+  GeneratedColumn<int> get grossProfitKobo => $composableBuilder(
+    column: $table.grossProfitKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get netProfitKobo => $composableBuilder(
+    column: $table.netProfitKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expensesKobo => $composableBuilder(
+    column: $table.expensesKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get damagesCostKobo => $composableBuilder(
+    column: $table.damagesCostKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cashSalesKobo => $composableBuilder(
+    column: $table.cashSalesKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cashInKobo => $composableBuilder(
+    column: $table.cashInKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cashOutKobo => $composableBuilder(
+    column: $table.cashOutKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get netCashMovementKobo => $composableBuilder(
+    column: $table.netCashMovementKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stockCogsKobo => $composableBuilder(
+    column: $table.stockCogsKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stockExpectedClosingKobo => $composableBuilder(
+    column: $table.stockExpectedClosingKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get itemsSold =>
+      $composableBuilder(column: $table.itemsSold, builder: (column) => column);
+
+  GeneratedColumn<int> get shortageUnits => $composableBuilder(
+    column: $table.shortageUnits,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeScopeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeScopeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get reviewedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reviewedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DailyClosingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DailyClosingsTable,
+          DailyClosingData,
+          $$DailyClosingsTableFilterComposer,
+          $$DailyClosingsTableOrderingComposer,
+          $$DailyClosingsTableAnnotationComposer,
+          $$DailyClosingsTableCreateCompanionBuilder,
+          $$DailyClosingsTableUpdateCompanionBuilder,
+          (DailyClosingData, $$DailyClosingsTableReferences),
+          DailyClosingData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool storeScopeId,
+            bool reviewedBy,
+          })
+        > {
+  $$DailyClosingsTableTableManager(_$AppDatabase db, $DailyClosingsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DailyClosingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DailyClosingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DailyClosingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> businessDate = const Value.absent(),
+                Value<String?> storeScopeId = const Value.absent(),
+                Value<int> totalSalesKobo = const Value.absent(),
+                Value<int> refundsKobo = const Value.absent(),
+                Value<int> discountsKobo = const Value.absent(),
+                Value<int> cogsKobo = const Value.absent(),
+                Value<int> grossProfitKobo = const Value.absent(),
+                Value<int> netProfitKobo = const Value.absent(),
+                Value<int> expensesKobo = const Value.absent(),
+                Value<int> damagesCostKobo = const Value.absent(),
+                Value<int> cashSalesKobo = const Value.absent(),
+                Value<int> cashInKobo = const Value.absent(),
+                Value<int> cashOutKobo = const Value.absent(),
+                Value<int> netCashMovementKobo = const Value.absent(),
+                Value<int> stockCogsKobo = const Value.absent(),
+                Value<int> stockExpectedClosingKobo = const Value.absent(),
+                Value<int> itemsSold = const Value.absent(),
+                Value<int> shortageUnits = const Value.absent(),
+                Value<String?> reviewedBy = const Value.absent(),
+                Value<DateTime> reviewedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DailyClosingsCompanion(
+                id: id,
+                businessId: businessId,
+                businessDate: businessDate,
+                storeScopeId: storeScopeId,
+                totalSalesKobo: totalSalesKobo,
+                refundsKobo: refundsKobo,
+                discountsKobo: discountsKobo,
+                cogsKobo: cogsKobo,
+                grossProfitKobo: grossProfitKobo,
+                netProfitKobo: netProfitKobo,
+                expensesKobo: expensesKobo,
+                damagesCostKobo: damagesCostKobo,
+                cashSalesKobo: cashSalesKobo,
+                cashInKobo: cashInKobo,
+                cashOutKobo: cashOutKobo,
+                netCashMovementKobo: netCashMovementKobo,
+                stockCogsKobo: stockCogsKobo,
+                stockExpectedClosingKobo: stockExpectedClosingKobo,
+                itemsSold: itemsSold,
+                shortageUnits: shortageUnits,
+                reviewedBy: reviewedBy,
+                reviewedAt: reviewedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String businessDate,
+                Value<String?> storeScopeId = const Value.absent(),
+                Value<int> totalSalesKobo = const Value.absent(),
+                Value<int> refundsKobo = const Value.absent(),
+                Value<int> discountsKobo = const Value.absent(),
+                Value<int> cogsKobo = const Value.absent(),
+                Value<int> grossProfitKobo = const Value.absent(),
+                Value<int> netProfitKobo = const Value.absent(),
+                Value<int> expensesKobo = const Value.absent(),
+                Value<int> damagesCostKobo = const Value.absent(),
+                Value<int> cashSalesKobo = const Value.absent(),
+                Value<int> cashInKobo = const Value.absent(),
+                Value<int> cashOutKobo = const Value.absent(),
+                Value<int> netCashMovementKobo = const Value.absent(),
+                Value<int> stockCogsKobo = const Value.absent(),
+                Value<int> stockExpectedClosingKobo = const Value.absent(),
+                Value<int> itemsSold = const Value.absent(),
+                Value<int> shortageUnits = const Value.absent(),
+                Value<String?> reviewedBy = const Value.absent(),
+                Value<DateTime> reviewedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DailyClosingsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                businessDate: businessDate,
+                storeScopeId: storeScopeId,
+                totalSalesKobo: totalSalesKobo,
+                refundsKobo: refundsKobo,
+                discountsKobo: discountsKobo,
+                cogsKobo: cogsKobo,
+                grossProfitKobo: grossProfitKobo,
+                netProfitKobo: netProfitKobo,
+                expensesKobo: expensesKobo,
+                damagesCostKobo: damagesCostKobo,
+                cashSalesKobo: cashSalesKobo,
+                cashInKobo: cashInKobo,
+                cashOutKobo: cashOutKobo,
+                netCashMovementKobo: netCashMovementKobo,
+                stockCogsKobo: stockCogsKobo,
+                stockExpectedClosingKobo: stockExpectedClosingKobo,
+                itemsSold: itemsSold,
+                shortageUnits: shortageUnits,
+                reviewedBy: reviewedBy,
+                reviewedAt: reviewedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$DailyClosingsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({businessId = false, storeScopeId = false, reviewedBy = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$DailyClosingsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$DailyClosingsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeScopeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeScopeId,
+                                    referencedTable:
+                                        $$DailyClosingsTableReferences
+                                            ._storeScopeIdTable(db),
+                                    referencedColumn:
+                                        $$DailyClosingsTableReferences
+                                            ._storeScopeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (reviewedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.reviewedBy,
+                                    referencedTable:
+                                        $$DailyClosingsTableReferences
+                                            ._reviewedByTable(db),
+                                    referencedColumn:
+                                        $$DailyClosingsTableReferences
+                                            ._reviewedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$DailyClosingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DailyClosingsTable,
+      DailyClosingData,
+      $$DailyClosingsTableFilterComposer,
+      $$DailyClosingsTableOrderingComposer,
+      $$DailyClosingsTableAnnotationComposer,
+      $$DailyClosingsTableCreateCompanionBuilder,
+      $$DailyClosingsTableUpdateCompanionBuilder,
+      (DailyClosingData, $$DailyClosingsTableReferences),
+      DailyClosingData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool storeScopeId,
+        bool reviewedBy,
+      })
+    >;
+typedef $$VanTripLotsTableCreateCompanionBuilder =
+    VanTripLotsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String tripId,
+      required String productId,
+      required int quantity,
+      required int qtyRemaining,
+      required int loadPriceKobo,
+      Value<int> unitCostKobo,
+      Value<DateTime> dispatchedAt,
+      required String dispatchEventId,
+      Value<int> shellsOut,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$VanTripLotsTableUpdateCompanionBuilder =
+    VanTripLotsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> tripId,
+      Value<String> productId,
+      Value<int> quantity,
+      Value<int> qtyRemaining,
+      Value<int> loadPriceKobo,
+      Value<int> unitCostKobo,
+      Value<DateTime> dispatchedAt,
+      Value<String> dispatchEventId,
+      Value<int> shellsOut,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$VanTripLotsTableReferences
+    extends BaseReferences<_$AppDatabase, $VanTripLotsTable, VanTripLotData> {
+  $$VanTripLotsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.vanTripLots.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanTripsTable _tripIdTable(_$AppDatabase db) => db.vanTrips
+      .createAlias($_aliasNameGenerator(db.vanTripLots.tripId, db.vanTrips.id));
+
+  $$VanTripsTableProcessedTableManager get tripId {
+    final $_column = $_itemColumn<String>('trip_id')!;
+
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tripIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.vanTripLots.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$VanTripLotsTableFilterComposer
+    extends Composer<_$AppDatabase, $VanTripLotsTable> {
+  $$VanTripLotsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get quantity => $composableBuilder(
+    column: $table.quantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get loadPriceKobo => $composableBuilder(
+    column: $table.loadPriceKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dispatchedAt => $composableBuilder(
+    column: $table.dispatchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dispatchEventId => $composableBuilder(
+    column: $table.dispatchEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shellsOut => $composableBuilder(
+    column: $table.shellsOut,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableFilterComposer get tripId {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanTripLotsTableOrderingComposer
+    extends Composer<_$AppDatabase, $VanTripLotsTable> {
+  $$VanTripLotsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get quantity => $composableBuilder(
+    column: $table.quantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get loadPriceKobo => $composableBuilder(
+    column: $table.loadPriceKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dispatchedAt => $composableBuilder(
+    column: $table.dispatchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dispatchEventId => $composableBuilder(
+    column: $table.dispatchEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shellsOut => $composableBuilder(
+    column: $table.shellsOut,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableOrderingComposer get tripId {
+    final $$VanTripsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanTripLotsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VanTripLotsTable> {
+  $$VanTripLotsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get quantity =>
+      $composableBuilder(column: $table.quantity, builder: (column) => column);
+
+  GeneratedColumn<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get loadPriceKobo => $composableBuilder(
+    column: $table.loadPriceKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unitCostKobo => $composableBuilder(
+    column: $table.unitCostKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get dispatchedAt => $composableBuilder(
+    column: $table.dispatchedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dispatchEventId => $composableBuilder(
+    column: $table.dispatchEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shellsOut =>
+      $composableBuilder(column: $table.shellsOut, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableAnnotationComposer get tripId {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanTripLotsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VanTripLotsTable,
+          VanTripLotData,
+          $$VanTripLotsTableFilterComposer,
+          $$VanTripLotsTableOrderingComposer,
+          $$VanTripLotsTableAnnotationComposer,
+          $$VanTripLotsTableCreateCompanionBuilder,
+          $$VanTripLotsTableUpdateCompanionBuilder,
+          (VanTripLotData, $$VanTripLotsTableReferences),
+          VanTripLotData,
+          PrefetchHooks Function({bool businessId, bool tripId, bool productId})
+        > {
+  $$VanTripLotsTableTableManager(_$AppDatabase db, $VanTripLotsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VanTripLotsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VanTripLotsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VanTripLotsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> tripId = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<int> quantity = const Value.absent(),
+                Value<int> qtyRemaining = const Value.absent(),
+                Value<int> loadPriceKobo = const Value.absent(),
+                Value<int> unitCostKobo = const Value.absent(),
+                Value<DateTime> dispatchedAt = const Value.absent(),
+                Value<String> dispatchEventId = const Value.absent(),
+                Value<int> shellsOut = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanTripLotsCompanion(
+                id: id,
+                businessId: businessId,
+                tripId: tripId,
+                productId: productId,
+                quantity: quantity,
+                qtyRemaining: qtyRemaining,
+                loadPriceKobo: loadPriceKobo,
+                unitCostKobo: unitCostKobo,
+                dispatchedAt: dispatchedAt,
+                dispatchEventId: dispatchEventId,
+                shellsOut: shellsOut,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String tripId,
+                required String productId,
+                required int quantity,
+                required int qtyRemaining,
+                required int loadPriceKobo,
+                Value<int> unitCostKobo = const Value.absent(),
+                Value<DateTime> dispatchedAt = const Value.absent(),
+                required String dispatchEventId,
+                Value<int> shellsOut = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanTripLotsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                tripId: tripId,
+                productId: productId,
+                quantity: quantity,
+                qtyRemaining: qtyRemaining,
+                loadPriceKobo: loadPriceKobo,
+                unitCostKobo: unitCostKobo,
+                dispatchedAt: dispatchedAt,
+                dispatchEventId: dispatchEventId,
+                shellsOut: shellsOut,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VanTripLotsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({businessId = false, tripId = false, productId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$VanTripLotsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$VanTripLotsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (tripId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.tripId,
+                                    referencedTable:
+                                        $$VanTripLotsTableReferences
+                                            ._tripIdTable(db),
+                                    referencedColumn:
+                                        $$VanTripLotsTableReferences
+                                            ._tripIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$VanTripLotsTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$VanTripLotsTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$VanTripLotsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VanTripLotsTable,
+      VanTripLotData,
+      $$VanTripLotsTableFilterComposer,
+      $$VanTripLotsTableOrderingComposer,
+      $$VanTripLotsTableAnnotationComposer,
+      $$VanTripLotsTableCreateCompanionBuilder,
+      $$VanTripLotsTableUpdateCompanionBuilder,
+      (VanTripLotData, $$VanTripLotsTableReferences),
+      VanTripLotData,
+      PrefetchHooks Function({bool businessId, bool tripId, bool productId})
+    >;
+typedef $$VanReturnEventsTableCreateCompanionBuilder =
+    VanReturnEventsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String tripId,
+      required String productId,
+      required int quantity,
+      required String condition,
+      Value<int> creditKobo,
+      Value<int> costKobo,
+      Value<int> shellsBack,
+      Value<int?> crateShells,
+      Value<DateTime> recordedAt,
+      Value<String?> recordedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$VanReturnEventsTableUpdateCompanionBuilder =
+    VanReturnEventsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> tripId,
+      Value<String> productId,
+      Value<int> quantity,
+      Value<String> condition,
+      Value<int> creditKobo,
+      Value<int> costKobo,
+      Value<int> shellsBack,
+      Value<int?> crateShells,
+      Value<DateTime> recordedAt,
+      Value<String?> recordedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$VanReturnEventsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $VanReturnEventsTable,
+          VanReturnEventData
+        > {
+  $$VanReturnEventsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.vanReturnEvents.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanTripsTable _tripIdTable(_$AppDatabase db) =>
+      db.vanTrips.createAlias(
+        $_aliasNameGenerator(db.vanReturnEvents.tripId, db.vanTrips.id),
+      );
+
+  $$VanTripsTableProcessedTableManager get tripId {
+    final $_column = $_itemColumn<String>('trip_id')!;
+
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tripIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.vanReturnEvents.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _recordedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.vanReturnEvents.recordedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get recordedBy {
+    final $_column = $_itemColumn<String>('recorded_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_recordedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$VanReturnEventsTableFilterComposer
+    extends Composer<_$AppDatabase, $VanReturnEventsTable> {
+  $$VanReturnEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get quantity => $composableBuilder(
+    column: $table.quantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get condition => $composableBuilder(
+    column: $table.condition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get creditKobo => $composableBuilder(
+    column: $table.creditKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get costKobo => $composableBuilder(
+    column: $table.costKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get crateShells => $composableBuilder(
+    column: $table.crateShells,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get recordedAt => $composableBuilder(
+    column: $table.recordedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableFilterComposer get tripId {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get recordedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recordedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanReturnEventsTableOrderingComposer
+    extends Composer<_$AppDatabase, $VanReturnEventsTable> {
+  $$VanReturnEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get quantity => $composableBuilder(
+    column: $table.quantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get condition => $composableBuilder(
+    column: $table.condition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get creditKobo => $composableBuilder(
+    column: $table.creditKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get costKobo => $composableBuilder(
+    column: $table.costKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get crateShells => $composableBuilder(
+    column: $table.crateShells,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get recordedAt => $composableBuilder(
+    column: $table.recordedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableOrderingComposer get tripId {
+    final $$VanTripsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get recordedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recordedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanReturnEventsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VanReturnEventsTable> {
+  $$VanReturnEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get quantity =>
+      $composableBuilder(column: $table.quantity, builder: (column) => column);
+
+  GeneratedColumn<String> get condition =>
+      $composableBuilder(column: $table.condition, builder: (column) => column);
+
+  GeneratedColumn<int> get creditKobo => $composableBuilder(
+    column: $table.creditKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get costKobo =>
+      $composableBuilder(column: $table.costKobo, builder: (column) => column);
+
+  GeneratedColumn<int> get shellsBack => $composableBuilder(
+    column: $table.shellsBack,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get crateShells => $composableBuilder(
+    column: $table.crateShells,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get recordedAt => $composableBuilder(
+    column: $table.recordedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableAnnotationComposer get tripId {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get recordedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recordedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanReturnEventsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VanReturnEventsTable,
+          VanReturnEventData,
+          $$VanReturnEventsTableFilterComposer,
+          $$VanReturnEventsTableOrderingComposer,
+          $$VanReturnEventsTableAnnotationComposer,
+          $$VanReturnEventsTableCreateCompanionBuilder,
+          $$VanReturnEventsTableUpdateCompanionBuilder,
+          (VanReturnEventData, $$VanReturnEventsTableReferences),
+          VanReturnEventData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool tripId,
+            bool productId,
+            bool recordedBy,
+          })
+        > {
+  $$VanReturnEventsTableTableManager(
+    _$AppDatabase db,
+    $VanReturnEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VanReturnEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VanReturnEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VanReturnEventsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> tripId = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<int> quantity = const Value.absent(),
+                Value<String> condition = const Value.absent(),
+                Value<int> creditKobo = const Value.absent(),
+                Value<int> costKobo = const Value.absent(),
+                Value<int> shellsBack = const Value.absent(),
+                Value<int?> crateShells = const Value.absent(),
+                Value<DateTime> recordedAt = const Value.absent(),
+                Value<String?> recordedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanReturnEventsCompanion(
+                id: id,
+                businessId: businessId,
+                tripId: tripId,
+                productId: productId,
+                quantity: quantity,
+                condition: condition,
+                creditKobo: creditKobo,
+                costKobo: costKobo,
+                shellsBack: shellsBack,
+                crateShells: crateShells,
+                recordedAt: recordedAt,
+                recordedBy: recordedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String tripId,
+                required String productId,
+                required int quantity,
+                required String condition,
+                Value<int> creditKobo = const Value.absent(),
+                Value<int> costKobo = const Value.absent(),
+                Value<int> shellsBack = const Value.absent(),
+                Value<int?> crateShells = const Value.absent(),
+                Value<DateTime> recordedAt = const Value.absent(),
+                Value<String?> recordedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanReturnEventsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                tripId: tripId,
+                productId: productId,
+                quantity: quantity,
+                condition: condition,
+                creditKobo: creditKobo,
+                costKobo: costKobo,
+                shellsBack: shellsBack,
+                crateShells: crateShells,
+                recordedAt: recordedAt,
+                recordedBy: recordedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VanReturnEventsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                tripId = false,
+                productId = false,
+                recordedBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$VanReturnEventsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$VanReturnEventsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (tripId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.tripId,
+                                    referencedTable:
+                                        $$VanReturnEventsTableReferences
+                                            ._tripIdTable(db),
+                                    referencedColumn:
+                                        $$VanReturnEventsTableReferences
+                                            ._tripIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$VanReturnEventsTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$VanReturnEventsTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (recordedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.recordedBy,
+                                    referencedTable:
+                                        $$VanReturnEventsTableReferences
+                                            ._recordedByTable(db),
+                                    referencedColumn:
+                                        $$VanReturnEventsTableReferences
+                                            ._recordedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$VanReturnEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VanReturnEventsTable,
+      VanReturnEventData,
+      $$VanReturnEventsTableFilterComposer,
+      $$VanReturnEventsTableOrderingComposer,
+      $$VanReturnEventsTableAnnotationComposer,
+      $$VanReturnEventsTableCreateCompanionBuilder,
+      $$VanReturnEventsTableUpdateCompanionBuilder,
+      (VanReturnEventData, $$VanReturnEventsTableReferences),
+      VanReturnEventData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool tripId,
+        bool productId,
+        bool recordedBy,
+      })
+    >;
+typedef $$DriverLedgerEntriesTableCreateCompanionBuilder =
+    DriverLedgerEntriesCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String driverUserId,
+      Value<String?> tripId,
+      required String type,
+      required int amountKobo,
+      required int signedAmountKobo,
+      required String referenceType,
+      Value<String?> referenceId,
+      Value<String?> paymentMethod,
+      Value<String?> receiptPath,
+      Value<String?> referenceNote,
+      required DateTime activityDate,
+      Value<String?> performedBy,
+      Value<DateTime?> voidedAt,
+      Value<String?> voidedBy,
+      Value<String?> voidReason,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$DriverLedgerEntriesTableUpdateCompanionBuilder =
+    DriverLedgerEntriesCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> driverUserId,
+      Value<String?> tripId,
+      Value<String> type,
+      Value<int> amountKobo,
+      Value<int> signedAmountKobo,
+      Value<String> referenceType,
+      Value<String?> referenceId,
+      Value<String?> paymentMethod,
+      Value<String?> receiptPath,
+      Value<String?> referenceNote,
+      Value<DateTime> activityDate,
+      Value<String?> performedBy,
+      Value<DateTime?> voidedAt,
+      Value<String?> voidedBy,
+      Value<String?> voidReason,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$DriverLedgerEntriesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $DriverLedgerEntriesTable,
+          DriverLedgerEntryData
+        > {
+  $$DriverLedgerEntriesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.driverLedgerEntries.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _driverUserIdTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(db.driverLedgerEntries.driverUserId, db.users.id),
+      );
+
+  $$UsersTableProcessedTableManager get driverUserId {
+    final $_column = $_itemColumn<String>('driver_user_id')!;
+
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_driverUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanTripsTable _tripIdTable(_$AppDatabase db) =>
+      db.vanTrips.createAlias(
+        $_aliasNameGenerator(db.driverLedgerEntries.tripId, db.vanTrips.id),
+      );
+
+  $$VanTripsTableProcessedTableManager? get tripId {
+    final $_column = $_itemColumn<String>('trip_id');
+    if ($_column == null) return null;
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tripIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _performedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(db.driverLedgerEntries.performedBy, db.users.id),
+      );
+
+  $$UsersTableProcessedTableManager? get performedBy {
+    final $_column = $_itemColumn<String>('performed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_performedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _voidedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.driverLedgerEntries.voidedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get voidedBy {
+    final $_column = $_itemColumn<String>('voided_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_voidedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$DriverLedgerEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $DriverLedgerEntriesTable> {
+  $$DriverLedgerEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get receiptPath => $composableBuilder(
+    column: $table.receiptPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceNote => $composableBuilder(
+    column: $table.referenceNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get activityDate => $composableBuilder(
+    column: $table.activityDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get voidedAt => $composableBuilder(
+    column: $table.voidedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get driverUserId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableFilterComposer get tripId {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get performedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get voidedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DriverLedgerEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DriverLedgerEntriesTable> {
+  $$DriverLedgerEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get receiptPath => $composableBuilder(
+    column: $table.receiptPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceNote => $composableBuilder(
+    column: $table.referenceNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get activityDate => $composableBuilder(
+    column: $table.activityDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get voidedAt => $composableBuilder(
+    column: $table.voidedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get driverUserId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableOrderingComposer get tripId {
+    final $$VanTripsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get performedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get voidedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DriverLedgerEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DriverLedgerEntriesTable> {
+  $$DriverLedgerEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get signedAmountKobo => $composableBuilder(
+    column: $table.signedAmountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get referenceType => $composableBuilder(
+    column: $table.referenceType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get referenceId => $composableBuilder(
+    column: $table.referenceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get receiptPath => $composableBuilder(
+    column: $table.receiptPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get referenceNote => $composableBuilder(
+    column: $table.referenceNote,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get activityDate => $composableBuilder(
+    column: $table.activityDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get voidedAt =>
+      $composableBuilder(column: $table.voidedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get driverUserId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.driverUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanTripsTableAnnotationComposer get tripId {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tripId,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get performedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get voidedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voidedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DriverLedgerEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DriverLedgerEntriesTable,
+          DriverLedgerEntryData,
+          $$DriverLedgerEntriesTableFilterComposer,
+          $$DriverLedgerEntriesTableOrderingComposer,
+          $$DriverLedgerEntriesTableAnnotationComposer,
+          $$DriverLedgerEntriesTableCreateCompanionBuilder,
+          $$DriverLedgerEntriesTableUpdateCompanionBuilder,
+          (DriverLedgerEntryData, $$DriverLedgerEntriesTableReferences),
+          DriverLedgerEntryData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool driverUserId,
+            bool tripId,
+            bool performedBy,
+            bool voidedBy,
+          })
+        > {
+  $$DriverLedgerEntriesTableTableManager(
+    _$AppDatabase db,
+    $DriverLedgerEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DriverLedgerEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DriverLedgerEntriesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$DriverLedgerEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> driverUserId = const Value.absent(),
+                Value<String?> tripId = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<int> amountKobo = const Value.absent(),
+                Value<int> signedAmountKobo = const Value.absent(),
+                Value<String> referenceType = const Value.absent(),
+                Value<String?> referenceId = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                Value<String?> receiptPath = const Value.absent(),
+                Value<String?> referenceNote = const Value.absent(),
+                Value<DateTime> activityDate = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime?> voidedAt = const Value.absent(),
+                Value<String?> voidedBy = const Value.absent(),
+                Value<String?> voidReason = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DriverLedgerEntriesCompanion(
+                id: id,
+                businessId: businessId,
+                driverUserId: driverUserId,
+                tripId: tripId,
+                type: type,
+                amountKobo: amountKobo,
+                signedAmountKobo: signedAmountKobo,
+                referenceType: referenceType,
+                referenceId: referenceId,
+                paymentMethod: paymentMethod,
+                receiptPath: receiptPath,
+                referenceNote: referenceNote,
+                activityDate: activityDate,
+                performedBy: performedBy,
+                voidedAt: voidedAt,
+                voidedBy: voidedBy,
+                voidReason: voidReason,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String driverUserId,
+                Value<String?> tripId = const Value.absent(),
+                required String type,
+                required int amountKobo,
+                required int signedAmountKobo,
+                required String referenceType,
+                Value<String?> referenceId = const Value.absent(),
+                Value<String?> paymentMethod = const Value.absent(),
+                Value<String?> receiptPath = const Value.absent(),
+                Value<String?> referenceNote = const Value.absent(),
+                required DateTime activityDate,
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime?> voidedAt = const Value.absent(),
+                Value<String?> voidedBy = const Value.absent(),
+                Value<String?> voidReason = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DriverLedgerEntriesCompanion.insert(
+                id: id,
+                businessId: businessId,
+                driverUserId: driverUserId,
+                tripId: tripId,
+                type: type,
+                amountKobo: amountKobo,
+                signedAmountKobo: signedAmountKobo,
+                referenceType: referenceType,
+                referenceId: referenceId,
+                paymentMethod: paymentMethod,
+                receiptPath: receiptPath,
+                referenceNote: referenceNote,
+                activityDate: activityDate,
+                performedBy: performedBy,
+                voidedAt: voidedAt,
+                voidedBy: voidedBy,
+                voidReason: voidReason,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$DriverLedgerEntriesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                driverUserId = false,
+                tripId = false,
+                performedBy = false,
+                voidedBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (driverUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.driverUserId,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._driverUserIdTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._driverUserIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (tripId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.tripId,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._tripIdTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._tripIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (performedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.performedBy,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._performedByTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._performedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (voidedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.voidedBy,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._voidedByTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._voidedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$DriverLedgerEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DriverLedgerEntriesTable,
+      DriverLedgerEntryData,
+      $$DriverLedgerEntriesTableFilterComposer,
+      $$DriverLedgerEntriesTableOrderingComposer,
+      $$DriverLedgerEntriesTableAnnotationComposer,
+      $$DriverLedgerEntriesTableCreateCompanionBuilder,
+      $$DriverLedgerEntriesTableUpdateCompanionBuilder,
+      (DriverLedgerEntryData, $$DriverLedgerEntriesTableReferences),
+      DriverLedgerEntryData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool driverUserId,
+        bool tripId,
+        bool performedBy,
+        bool voidedBy,
+      })
     >;
 typedef $$ActivityLogsTableCreateCompanionBuilder =
     ActivityLogsCompanion Function({
@@ -89503,6 +110696,19 @@ class $AppDatabaseManager {
       $$SupplierCrateLedgerTableTableManager(_db, _db.supplierCrateLedger);
   $$SupplierCrateBalancesTableTableManager get supplierCrateBalances =>
       $$SupplierCrateBalancesTableTableManager(_db, _db.supplierCrateBalances);
+  $$SupplierCrateDepositRequestsTableTableManager
+  get supplierCrateDepositRequests =>
+      $$SupplierCrateDepositRequestsTableTableManager(
+        _db,
+        _db.supplierCrateDepositRequests,
+      );
+  $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
+      $$SupplierCrateDepositsTableTableManager(_db, _db.supplierCrateDeposits);
+  $$CrateShortfallWriteoffsTableTableManager get crateShortfallWriteoffs =>
+      $$CrateShortfallWriteoffsTableTableManager(
+        _db,
+        _db.crateShortfallWriteoffs,
+      );
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db, _db.products);
   $$PriceListsTableTableManager get priceLists =>
@@ -89511,6 +110717,8 @@ class $AppDatabaseManager {
       $$CustomersTableTableManager(_db, _db.customers);
   $$CustomerWalletsTableTableManager get customerWallets =>
       $$CustomerWalletsTableTableManager(_db, _db.customerWallets);
+  $$VanTripsTableTableManager get vanTrips =>
+      $$VanTripsTableTableManager(_db, _db.vanTrips);
   $$OrdersTableTableManager get orders =>
       $$OrdersTableTableManager(_db, _db.orders);
   $$WalletTransactionsTableTableManager get walletTransactions =>
@@ -89569,6 +110777,14 @@ class $AppDatabaseManager {
       $$PaymentTransactionsTableTableManager(_db, _db.paymentTransactions);
   $$StockCountsTableTableManager get stockCounts =>
       $$StockCountsTableTableManager(_db, _db.stockCounts);
+  $$DailyClosingsTableTableManager get dailyClosings =>
+      $$DailyClosingsTableTableManager(_db, _db.dailyClosings);
+  $$VanTripLotsTableTableManager get vanTripLots =>
+      $$VanTripLotsTableTableManager(_db, _db.vanTripLots);
+  $$VanReturnEventsTableTableManager get vanReturnEvents =>
+      $$VanReturnEventsTableTableManager(_db, _db.vanReturnEvents);
+  $$DriverLedgerEntriesTableTableManager get driverLedgerEntries =>
+      $$DriverLedgerEntriesTableTableManager(_db, _db.driverLedgerEntries);
   $$ActivityLogsTableTableManager get activityLogs =>
       $$ActivityLogsTableTableManager(_db, _db.activityLogs);
   $$ErrorLogsTableTableManager get errorLogs =>

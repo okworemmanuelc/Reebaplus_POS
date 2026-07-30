@@ -164,11 +164,22 @@ void main() {
       expect((stxList.first as Map)['quantity_delta'], -2);
       expect((stxList.first as Map)['movement_type'], 'sale');
 
+      // #201 / migration 0170 — the tender is SPLIT by money type and stamped
+      // with the sale's store. This sale has no deposit and no overpayment, so
+      // the split degenerates to exactly one goods `sale` row, and the singular
+      // key still carries it (envelope compatibility).
       final payment = map['payment_transaction'] as Map;
       expect(payment['amount_kobo'], 200000);
       expect(payment['method'], 'cash');
       expect(payment['type'], 'sale');
       expect(payment['order_id'], orderId);
+      expect(payment['store_id'], storeId,
+          reason: '#169 US 36 — the tender row records where it happened');
+
+      final payments = map['payment_transactions'] as List;
+      expect(payments, hasLength(1),
+          reason: 'no deposit and no overpayment ⇒ one row, not three');
+      expect((payments.first as Map)['type'], 'sale');
 
       // No wallet portion on this sale.
       expect(map['wallet_transaction'], isNull);
@@ -181,6 +192,142 @@ void main() {
           .single();
       expect(cloudOrder['status'], 'completed');
       expect(cloudOrder['total_amount_kobo'], 200000);
+    }, skip: _skipReason);
+
+    test(
+        '#201 tender split: goods + held deposit + overpayment become three '
+        'store-stamped rows that sum to what was paid', () async {
+      final orderId = UuidV7.generate();
+      final orderNumber = 'ORD-SPL-${orderId.substring(orderId.length - 12)}';
+
+      // Goods 200000 + deposit 30000 = 230000 payable, tendered 250000.
+      // 0170's rule: sale 200000 / crate_deposit 30000 / wallet_topup 20000.
+      final response = await clients.userClient.rpc(
+        'pos_record_sale_v2',
+        params: {
+          'p_business_id': clients.env.businessId,
+          'p_actor_id': clients.env.userId,
+          'p_order_id': orderId,
+          'p_order_number': orderNumber,
+          'p_store_id': storeId,
+          'p_payment_type': 'cash',
+          'p_items': [
+            {'product_id': productId, 'quantity': 2, 'unit_price_kobo': 100000},
+          ],
+          'p_amount_paid_kobo': 250000,
+          'p_crate_deposit_paid_kobo': 30000,
+          'p_payment_method': 'cash',
+        },
+      ) as Map;
+
+      final payments = (response['payment_transactions'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(payments, hasLength(3));
+      expect(
+        {for (final p in payments) p['type']: p['amount_kobo']},
+        {'sale': 200000, 'crate_deposit': 30000, 'wallet_topup': 20000},
+        reason: 'the deposit is held (not a sale) and the excess is credit',
+      );
+      expect(payments.map((p) => p['store_id']).toSet(), {storeId});
+      expect(
+        payments.fold<int>(0, (s, p) => s + (p['amount_kobo'] as int)),
+        250000,
+        reason: 'the legs conserve the tender — no cash created or lost',
+      );
+      // The singular key stays the GOODS row, for the shipped client handler.
+      expect((response['payment_transaction'] as Map)['type'], 'sale');
+
+      final cloudPayments = await clients.adminClient
+          .from('payment_transactions')
+          .select('type, amount_kobo, store_id')
+          .eq('order_id', orderId);
+      expect(cloudPayments, hasLength(3));
+    }, skip: _skipReason);
+
+    test(
+        '#209 crate credit: the credit reduces the payable and the tender split '
+        'follows it — one dropped term used to move both', () async {
+      final orderId = UuidV7.generate();
+      final orderNumber = 'ORD-CRD-${orderId.substring(orderId.length - 12)}';
+
+      // Goods 200000, discount 20000, crate credit 30000 → payable 150000.
+      // Tendered 200000, so 50000 is an overpayment.
+      //
+      // Before 0173 the credit had nowhere to ride: `v_net_amount` came out
+      // 180000, the header recorded a payable the customer was never charged,
+      // and the #201 split booked the whole 180000 as goods `sale` with only
+      // 20000 left as `wallet_topup`. Both numbers move off this one parameter.
+      final response = await clients.userClient.rpc(
+        'pos_record_sale_v2',
+        params: {
+          'p_business_id': clients.env.businessId,
+          'p_actor_id': clients.env.userId,
+          'p_order_id': orderId,
+          'p_order_number': orderNumber,
+          'p_store_id': storeId,
+          'p_payment_type': 'cash',
+          'p_items': [
+            {'product_id': productId, 'quantity': 2, 'unit_price_kobo': 100000},
+          ],
+          'p_discount_kobo': 20000,
+          'p_crate_credit_kobo': 30000,
+          'p_amount_paid_kobo': 200000,
+          'p_payment_method': 'cash',
+        },
+      ) as Map;
+
+      final order = response['order'] as Map;
+      expect(order['net_amount_kobo'], 150000,
+          reason: 'net = gross − discount − credit + deposit');
+      expect(order['discount_kobo'], 20000,
+          reason: 'the credit is NOT recorded as a discount — the receipt '
+              'rebuilds Subtotal → Discount → Total from this column');
+
+      final payments = (response['payment_transactions'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(
+        {for (final p in payments) p['type']: p['amount_kobo']},
+        {'sale': 150000, 'wallet_topup': 50000},
+        reason: 'the goods leg is the credited payable, not the gross net',
+      );
+      expect(
+        payments.fold<int>(0, (s, p) => s + (p['amount_kobo'] as int)),
+        200000,
+        reason: 'the legs still conserve the tender',
+      );
+    }, skip: _skipReason);
+
+    test(
+        '#209: omitting p_crate_credit_kobo reproduces the pre-0173 arithmetic '
+        'exactly (the default is what keeps the deploy order free)', () async {
+      final orderId = UuidV7.generate();
+      final orderNumber = 'ORD-NCR-${orderId.substring(orderId.length - 12)}';
+
+      final response = await clients.userClient.rpc(
+        'pos_record_sale_v2',
+        params: {
+          'p_business_id': clients.env.businessId,
+          'p_actor_id': clients.env.userId,
+          'p_order_id': orderId,
+          'p_order_number': orderNumber,
+          'p_store_id': storeId,
+          'p_payment_type': 'cash',
+          'p_items': [
+            {'product_id': productId, 'quantity': 2, 'unit_price_kobo': 100000},
+          ],
+          'p_discount_kobo': 20000,
+          'p_amount_paid_kobo': 180000,
+          'p_payment_method': 'cash',
+        },
+      ) as Map;
+
+      final order = response['order'] as Map;
+      expect(order['net_amount_kobo'], 180000);
+      final payments = (response['payment_transactions'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(payments, hasLength(1));
+      expect(payments.single['type'], 'sale');
+      expect(payments.single['amount_kobo'], 180000);
     }, skip: _skipReason);
 
     test('replay: same p_order_id returns replayed=true with existing rows',

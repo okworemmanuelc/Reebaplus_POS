@@ -148,5 +148,38 @@ void main() {
           reason: 'stock voids append compensating rows, never re-push the '
               'original, so created_at is safe and intentionally preserved');
     });
+
+    // #169: the two crate ledgers were flagged scrubCreatedAt preemptively, so
+    // a future void re-push (a full-row upsert stamping the void columns) drops
+    // created_at exactly like the money ledgers — closing the P0001 orphan trap
+    // before any crate-void feature ships. Crate-shaped payloads to prove the
+    // real movement columns + void columns still ride.
+    for (final table in const ['crate_ledger', 'supplier_crate_ledger']) {
+      test('$table: void re-push drops created_at, movement + void cols survive',
+          () {
+        final scrubbed = SupabaseSyncService.scrubForTesting(table, {
+          'id': 'cl-1',
+          'business_id': 'biz',
+          'quantity_delta': -3,
+          'movement_type': 'returned',
+          'created_at': '2026-06-07T20:23:10.123456Z',
+          // the only legitimate mutation on an append-only ledger
+          'voided_at': '2026-07-24T09:00:00.000000Z',
+          'voided_by': 'u1',
+          'void_reason': 'order_cancelled',
+          'last_updated_at': '2026-07-24T09:00:00.000000Z',
+        });
+        expect(scrubbed.containsKey('created_at'), isFalse,
+            reason: 'crate-ledger created_at is cloud-owned; a void re-push '
+                'carrying it would trip the immutable-column trigger (P0001)');
+        expect(scrubbed['id'], 'cl-1');
+        expect(scrubbed['quantity_delta'], -3);
+        expect(scrubbed['movement_type'], 'returned');
+        expect(scrubbed['voided_at'], '2026-07-24T09:00:00.000000Z');
+        expect(scrubbed['voided_by'], 'u1');
+        expect(scrubbed['void_reason'], 'order_cancelled');
+        expect(scrubbed['last_updated_at'], '2026-07-24T09:00:00.000000Z');
+      });
+    }
   });
 }

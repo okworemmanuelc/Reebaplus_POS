@@ -680,6 +680,34 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await _enqueueFullManufacturer(manufacturerId);
   }
 
+  /// Sets a brand's Crate Money Arrangement (#211, ADR 0023 rule 3).
+  ///
+  /// The one write path for `manufacturers.crate_money_arrangement`. Takes the
+  /// typed [CrateMoneyArrangement] rather than a string so no call site can
+  /// invent a value the cloud CHECK (0171) would reject and jam the outbox on.
+  ///
+  /// This changes the arrangement from now on and NOTHING else — no history is
+  /// restated, no balance is recomputed, no ledger row is written (ADR 0021 /
+  /// ADR 0023 "Rejected alternatives"). `lastUpdatedAt` is set explicitly: the
+  /// local `manufacturers` table has no bump trigger fired by this path's
+  /// partial write, and the pull side is last-write-wins on that column.
+  Future<void> updateManufacturerCrateMoneyArrangement(
+    String manufacturerId,
+    CrateMoneyArrangement arrangement,
+  ) async {
+    final now = DateTime.now();
+    final comp = ManufacturersCompanion(
+      id: Value(manufacturerId),
+      crateMoneyArrangement: Value(arrangement.wire),
+      lastUpdatedAt: Value(now),
+    );
+    await (update(manufacturers)
+          ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
+        .write(comp);
+    // Full-row enqueue: a partial upsert would omit the NOT NULL name → 23502.
+    await _enqueueFullManufacturer(manufacturerId);
+  }
+
   Future<void> updateTrackEmpties(String productId, bool value) async {
     final now = DateTime.now();
     final comp = ProductsCompanion(

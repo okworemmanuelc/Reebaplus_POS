@@ -8,14 +8,16 @@ library;
 import 'dart:async';
 
 import 'package:drift/drift.dart' show innerJoin;
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
+import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
+import 'package:reebaplus_pos/core/providers/mirror_notifier.dart';
 import 'package:reebaplus_pos/core/services/biometric_service.dart';
 import 'package:reebaplus_pos/core/services/business_logo_service.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
@@ -24,7 +26,6 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart';
 import 'package:reebaplus_pos/features/inventory/data/services/supplier_service.dart';
-import 'package:reebaplus_pos/features/payments/data/services/payment_service.dart';
 import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
@@ -62,66 +63,20 @@ final supabaseClientProvider = Provider<SupabaseClient>(
 final navigationProvider = Provider<NavigationService>((ref) {
   return NavigationService();
 });
-final currentIndexProvider = ChangeNotifierProvider<ValueNotifier<int>>((ref) {
-  final original = ref.watch(navigationProvider).currentIndex;
-  final proxy = ValueNotifier<int>(original.value);
-  void originalListener() {
-    if (proxy.value != original.value) proxy.value = original.value;
-  }
-
-  void proxyListener() {
-    if (original.value != proxy.value) original.value = proxy.value;
-  }
-
-  original.addListener(originalListener);
-  proxy.addListener(proxyListener);
-  ref.onDispose(() {
-    original.removeListener(originalListener);
-  });
-  return proxy;
-});
-final lockedStoreProvider = ChangeNotifierProvider<ValueNotifier<String?>>((
-  ref,
-) {
-  final original = ref.watch(navigationProvider).lockedStoreId;
-  final proxy = ValueNotifier<String?>(original.value);
-  void originalListener() {
-    if (proxy.value != original.value) proxy.value = original.value;
-  }
-
-  void proxyListener() {
-    if (original.value != proxy.value) original.value = proxy.value;
-  }
-
-  original.addListener(originalListener);
-  proxy.addListener(proxyListener);
-  ref.onDispose(() {
-    original.removeListener(originalListener);
-  });
-  return proxy;
-});
+// Non-owning bridges to NavigationService-owned notifiers (issue #153): Riverpod
+// owns only the proxy, so navigation's notifiers survive every rebuild.
+final currentIndexProvider = mirrorNotifier<int>(
+  (ref) => ref.watch(navigationProvider).currentIndex,
+);
+final lockedStoreProvider = mirrorNotifier<String?>(
+  (ref) => ref.watch(navigationProvider).lockedStoreId,
+);
 // §12.1: true once the user explicitly picked a concrete active store this
 // session (vs MainLayout's silent confined-user default). Drives the POS
 // "pick a store" gate for every user with more than one store.
-final storeExplicitlyChosenProvider =
-    ChangeNotifierProvider<ValueNotifier<bool>>((ref) {
-      final original = ref.watch(navigationProvider).storeExplicitlyChosen;
-      final proxy = ValueNotifier<bool>(original.value);
-      void originalListener() {
-        if (proxy.value != original.value) proxy.value = original.value;
-      }
-
-      void proxyListener() {
-        if (original.value != proxy.value) original.value = proxy.value;
-      }
-
-      original.addListener(originalListener);
-      proxy.addListener(proxyListener);
-      ref.onDispose(() {
-        original.removeListener(originalListener);
-      });
-      return proxy;
-    });
+final storeExplicitlyChosenProvider = mirrorNotifier<bool>(
+  (ref) => ref.watch(navigationProvider).storeExplicitlyChosen,
+);
 
 // ── Secure Storage ─────────────────────────────────────────────────────────
 final secureStorageProvider = Provider<SecureStorageService>(
@@ -139,11 +94,13 @@ final authProvider = ChangeNotifierProvider<AuthService>((ref) {
     googleWebClientId: googleWebClientId,
   );
 });
-final deviceUserIdProvider = ChangeNotifierProvider<ValueNotifier<String?>>((
-  ref,
-) {
-  return ref.watch(authProvider).deviceUserIdNotifier;
-});
+// Non-owning bridge to the AuthService-owned notifier (issue #153). AuthService
+// is itself a ChangeNotifier and notifies on every login/logout, so returning
+// `deviceUserIdNotifier` directly had Riverpod dispose it out from under the
+// service — the "used after being disposed" crash on re-login.
+final deviceUserIdProvider = mirrorNotifier<String?>(
+  (ref) => ref.watch(authProvider).deviceUserIdNotifier,
+);
 
 // ── Theme (global — initialised before runApp) ─────────────────────────────
 final themeProvider = ChangeNotifierProvider<ThemeController>(
@@ -154,10 +111,8 @@ final themeProvider = ChangeNotifierProvider<ThemeController>(
 final cartProvider = ChangeNotifierProvider<CartService>((ref) {
   return CartService(ref.read(authProvider), ref.read(navigationProvider));
 });
-final activeCustomerProvider = ChangeNotifierProvider<ValueNotifier<Customer?>>(
-  (ref) {
-    return ref.watch(cartProvider).activeCustomer;
-  },
+final activeCustomerProvider = mirrorNotifier<Customer?>(
+  (ref) => ref.watch(cartProvider).activeCustomer,
 );
 
 // ── Notification ────────────────────────────────────────────────────────────
@@ -315,6 +270,17 @@ final supplierCrateDepositHeldProvider =
   whenAbsent: 0,
 );
 
+/// #163 — the business-wide crate debt WE owe suppliers, valued in kobo at the
+/// current per-manufacturer deposit rate, DERIVED from the append-only
+/// `supplier_crate_ledger` (all suppliers). Positive = empties we still owe for
+/// full crates delivered. The crate-side liability the net-position figure nets
+/// out (Daily Reconciliation), alongside held customer deposits.
+final supplierCrateDebtValueKoboProvider =
+    businessScopedStreamAutoDispose<int>(
+  (ref, db, businessId) => db.cratePoolDao.watchSupplierCrateDebtValueKobo(),
+  whenAbsent: 0,
+);
+
 /// One supplier's cumulative crates received from / returned (sent back) to
 /// them — running totals, not the net balance.
 final supplierCrateMovementTotalsProvider =
@@ -322,6 +288,77 @@ final supplierCrateMovementTotalsProvider =
         String>(
   (ref, db, businessId, id) => db.supplierCrateLedgerDao.watchMovementTotals(id),
   whenAbsent: (received: 0, returned: 0),
+);
+
+/// #212 — one supplier's **Placed Deposit** position, one entry per brand they
+/// hold crate money for: what they are sitting on, what is awaiting a manager's
+/// confirmation, and the brand-level crate shortfall behind it.
+///
+/// Every figure comes from `computeCrateDepositPosition`, the one pure seam, so
+/// this list and #215's business-wide card can never disagree. A brand on the
+/// default `none` arrangement contributes nothing at all.
+final supplierCrateDepositPositionsProvider =
+    businessScopedStreamAutoDisposeFamily<List<SupplierCrateDepositPosition>,
+        String>(
+  (ref, db, businessId, id) =>
+      db.cratePoolDao.watchSupplierCrateDepositPositions(id),
+  whenAbsent: const [],
+);
+
+/// #215 — the **business-wide** crate-money roll-up: what every supplier is
+/// holding of the owner's money, in total and by supplier.
+///
+/// Read by exactly two places, and they must never disagree: the Placed Deposit
+/// asset inside `businessNetPositionKobo`, and the reconciliation's sixth card.
+/// Both get their figures from `computeCrateDepositPosition` via
+/// `rollUpCrateDepositPositions`, so neither re-derives anything.
+///
+/// **Business-scoped on purpose, and it ignores the locked store.** Supplier
+/// crate money is a company obligation — the depot invoices the business, not
+/// the branch — so unlike [supplierBalancesKoboProvider] and friends this one
+/// takes no `lockedStoreProvider` read. Scoping it per store would repeat the
+/// defect `CRATE_TRACKING_AUDIT` C4 names and let two branches each claim the
+/// same money. The card that renders it says "business-wide" on its face.
+final businessCrateDepositRollupProvider =
+    businessScopedStreamAutoDispose<CrateDepositRollup>(
+  (ref, db, businessId) => db.cratePoolDao.watchBusinessCrateDepositRollup(),
+  whenAbsent: CrateDepositRollup.empty,
+);
+
+/// #216 — the **brand-level Crate Shortfall**: crates owed that are not in the
+/// yard, valued at each brand's rate, net of what has already been written off.
+///
+/// The surface #215 deliberately left open. Its card could show
+/// `unbackedValueKobo` but not this, because the pair-keyed read behind it
+/// could not answer a brand-level question honestly — subtracting a
+/// business-wide yard from one supplier's debt double-subtracts across two
+/// suppliers of the same brand. This provider reads a stream keyed by
+/// manufacturer alone, so two suppliers of one brand contribute to ONE
+/// shortfall and neither is named in it (ADR 0023 rule 4: crates are fungible,
+/// and attribution happens only at settlement).
+///
+/// A WARNING, not a booked loss (rule 5): nothing here reaches profit. The loss
+/// lands only when somebody deliberately writes a shortfall off, and that is a
+/// separate, dated figure the reconciliation P&L reads.
+///
+/// Business-scoped and store-blind, exactly like
+/// [businessCrateDepositRollupProvider] — a shortfall is a company figure.
+final crateShortfallRollupProvider =
+    businessScopedStreamAutoDispose<CrateShortfallRollup>(
+  (ref, db, businessId) => db.cratePoolDao.watchCrateShortfallRollup(),
+  whenAbsent: CrateShortfallRollup.empty,
+);
+
+/// #216 — every Crate Shortfall write-off decision, newest first.
+///
+/// Two readers: the reconciliation's P&L (which windows them to the period and
+/// books the loss on the day each was TAKEN) and the audit trail of who accepted
+/// what. Handed over unwindowed on purpose — the period filter belongs to the
+/// pure math in `crateShortfallWriteOffKobo`, not to the query.
+final crateShortfallWriteOffsProvider =
+    businessScopedStreamAutoDispose<List<CrateShortfallWriteoffData>>(
+  (ref, db, businessId) => db.cratePoolDao.watchCrateShortfallWriteOffs(),
+  whenAbsent: const [],
 );
 
 /// One supplier's empty-crate movement history (receipts + returns), newest
@@ -342,10 +379,9 @@ final deliveryReceiptServiceProvider =
 // Expenses are persisted/synced via ExpensesDao (§20); the old in-memory
 // ExpenseService stub was removed in Session 59.
 
-// ── Payment ─────────────────────────────────────────────────────────────────
-final paymentServiceProvider = ChangeNotifierProvider<PaymentService>((ref) {
-  return PaymentService();
-});
+// Supplier payments are persisted/synced via SupplierLedgerDao; the old
+// in-memory PaymentService stub and its `paymentServiceProvider` had no
+// consumers and were removed in #202.
 
 // ── Stateless services ─────────────────────────────────────────────────────
 final printerServiceProvider = Provider<PrinterService>((ref) {
@@ -551,13 +587,10 @@ final productImageServiceProvider = Provider<ProductImageService>((ref) {
 
 /// Lifts the `SupabaseSyncService.pullStatus` ValueNotifier into Riverpod
 /// so the MainLayout catch-up banner (and SyncIssues) can `ref.watch` it.
-/// Mirrors the pattern used for the `isOnline` ValueNotifier (read directly
-/// from the service in `app_drawer.dart`).
-final pullStatusProvider = ChangeNotifierProvider<ValueNotifier<PullStatus>>((
-  ref,
-) {
-  return ref.watch(supabaseSyncServiceProvider).pullStatus;
-});
+/// Non-owning (issue #153) — the service keeps ownership of `pullStatus`.
+final pullStatusProvider = mirrorNotifier<PullStatus>(
+  (ref) => ref.watch(supabaseSyncServiceProvider).pullStatus,
+);
 
 /// True while a user-initiated pull-to-refresh is in flight. The
 /// `AppRefreshWrapper` orb is the sole animation for a manual pull, so

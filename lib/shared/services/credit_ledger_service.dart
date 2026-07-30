@@ -17,11 +17,28 @@ class CreditLedgerService {
   ///
   /// Creates a WalletTransaction (credit) and a corresponding PaymentTransaction
   /// (wallet_topup), atomically in one transaction.
+  ///
+  /// [storeId] is the store this collection is stamped against (PRD #155 US 36
+  /// — every NEW payment row carries its store, so store-scoped money reports
+  /// can see it). Callers pass the active write store
+  /// (`activeWriteStoreProvider`: the locked store, else the user's first
+  /// selectable store); null is tolerated and reports business-wide, exactly as
+  /// legacy rows do.
+  ///
+  /// Note: only the v1 (flag-OFF) path keeps this stamp. The v2
+  /// `pos_wallet_topup` RPC takes no store parameter, and the sync service
+  /// restores the row the server returns back over the local one
+  /// (`supabase_sync_service.dart`, the domain-RPC response branch) — so with
+  /// the flag ON the store is lost locally too, not just in the cloud. The flag
+  /// is held off in Phase 1; closing this needs a migration that adds
+  /// `p_store_id` AND drops the old signature (an added param makes an
+  /// overload, not a replacement — PGRST203).
   Future<void> topup({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' or 'transfer'
     required String staffId,
+    String? storeId,
   }) async {
     final businessId = _walletTxDao.requireBusinessId();
     final wallet = await _customerWalletsDao.getByCustomerId(customerId);
@@ -58,6 +75,7 @@ class CreditLedgerService {
       final paymentComp = PaymentTransactionsCompanion.insert(
         id: Value(paymentTxnId),
         businessId: businessId,
+        storeId: Value(storeId),
         amountKobo: amountKobo,
         method: method,
         type: 'wallet_topup',
@@ -144,12 +162,27 @@ class CreditLedgerService {
   ///     CREDITS BALANCE (a `crate_refund` spendable credit) so it REDUCES the debt — no
   ///     cash leaves. (Spendable credit is 0 when in debt, so the deposit is the
   ///     only thing refunded.) [method] is ignored on this path.
-  ///   • Credit balance NOT in debt → paid out as CASH: a `payment_transactions` refund
-  ///     row per portion via [method].
+  ///   • Credit balance NOT in debt → paid out as CASH: one
+  ///     `payment_transactions` cash-out row per portion via [method].
   /// Both paths post a `crate_deposit_refunded` debit for the deposit portion,
   /// which clears "held". The credit portion (only > 0 when not in debt) is a
   /// `refund` debit + cash row. Payment rows link via wallet_txn_id (the
   /// PaymentTransactions exactly-one-reference rule).
+  ///
+  /// **The two cash-out rows are typed differently on purpose (#190).** The
+  /// credit portion pays back spendable credit, so it is a real `refund`. The
+  /// deposit portion releases money the business only HELD — never revenue,
+  /// never counted in Cash sales — so it is an IN-FAMILY reversal: a NEGATIVE
+  /// `crate_deposit` row that nets the held-deposit line down. Typing it
+  /// `refund` put it in Cash refunds and subtracted it from the period net
+  /// result, showing a flat loss for money that was only ever a liability.
+  ///
+  /// [storeId] is the store the money leaves from, stamped on every cash-out
+  /// payment row (PRD #155 US 36). This is load-bearing, not cosmetic: the
+  /// Sales card's Refunds figure is store-filtered, and a store-less refund is
+  /// excluded outright under a locked store (#194). Callers pass the active
+  /// write store (`activeWriteStoreProvider`); null reports business-wide, as
+  /// legacy rows do.
   ///
   /// Also writes an `activity_logs` entry and fires a notification (§24 money
   /// movement / §26.4 refund issued). Returns the amount actually refunded
@@ -159,6 +192,7 @@ class CreditLedgerService {
     required int amountKobo,
     required String method, // 'cash' | 'transfer' | 'pos' | 'other'
     required String staffId,
+    String? storeId,
     String? note,
   }) async {
     if (amountKobo <= 0) return 0;
@@ -207,13 +241,23 @@ class CreditLedgerService {
         return id;
       }
 
-      Future<void> postCashRow(int portion, String walletTxnId) async {
+      /// One cash-out payment row. [amountKobo] is SIGNED and [type] names the
+      /// money family it belongs to — a deposit RELEASE posts a negative row of
+      /// its own type, not a positive `refund` (#190; see the deposit leg
+      /// below). Both are named: the sign is the load-bearing argument here and
+      /// an unlabelled `-depositPortion` at the call site reads like a typo.
+      Future<void> postCashRow({
+        required int amountKobo,
+        required String walletTxnId,
+        required String type,
+      }) async {
         final payComp = PaymentTransactionsCompanion.insert(
           id: Value(UuidV7.generate()),
           businessId: businessId,
-          amountKobo: portion,
+          storeId: Value(storeId),
+          amountKobo: amountKobo,
           method: method,
-          type: 'refund',
+          type: type,
           walletTxnId: Value(walletTxnId),
           performedBy: Value(staffId),
           lastUpdatedAt: Value(now),
@@ -232,15 +276,38 @@ class CreditLedgerService {
           // To credit balance: a spendable crate_refund credit reduces the debt. No cash.
           await postWalletLeg(depositPortion, 'crate_refund');
         } else {
-          // Cash out.
-          await postCashRow(depositPortion, refundedId);
+          // Cash out — as an IN-FAMILY reversal, not a refund (#190). Handing
+          // back a deposit releases money the business only HELD: it was never
+          // counted in Cash sales, so it must not land in Cash refunds, and it
+          // was never revenue, so it must not be subtracted from the period net
+          // result. A NEGATIVE `crate_deposit` row nets the held-deposit line
+          // down instead — the rule `markCancelled` documents and
+          // `OrdersDao.settleCrateDepositReturn` follows.
+          //
+          // The TENDER stays the caller's [method] here, unlike the Confirm
+          // path which copies it off the order's collection row. There is no
+          // single originating row to copy from: this releases the customer's
+          // whole held balance, which is a wallet-derived aggregate that can
+          // span many orders and many tenders. §18.3 asks the user how to pay
+          // it back for exactly that reason.
+          await postCashRow(
+            amountKobo: -depositPortion,
+            walletTxnId: refundedId,
+            type: 'crate_deposit',
+          );
         }
       }
 
-      // Credit portion (only > 0 when NOT in debt) → cash out via a refund debit.
+      // Credit portion (only > 0 when NOT in debt) → cash out via a refund
+      // debit. This one IS a real refund: it pays back spendable credit, not
+      // held deposit.
       if (creditPortion > 0) {
         final refundId = await postWalletLeg(-creditPortion, 'refund');
-        await postCashRow(creditPortion, refundId);
+        await postCashRow(
+          amountKobo: creditPortion,
+          walletTxnId: refundId,
+          type: 'refund',
+        );
       }
 
       // §24 money movement / §26.4 refund issued — audit + notify CEO/Manager.
@@ -291,4 +358,134 @@ class CreditLedgerService {
     voidedBy: voidedBy,
     reason: reason,
   );
+
+  /// §18 / PRD #155 (#173) — voids a customer credit TOP-UP by [walletTxnId]
+  /// (the top-up's `wallet_transactions` credit row). A mistyped Add-Credit
+  /// entry is corrected without fabricating an offsetting sale. In ONE
+  /// transaction it:
+  ///   1. marks the original credit voided and appends a compensating wallet
+  ///      DEBIT (referenceType `void`) — the same append-only pattern as
+  ///      [WalletTransactionsDao.voidTransaction], so the derived balance drops
+  ///      the credit; and
+  ///   2. reverses the paired `wallet_topup` payment row through the #169 seam
+  ///      ([PaymentTransactionsDao.postReversalPayment]) with a NEGATIVE amount,
+  ///      so the reconciliation cash card's "Debts collected (cash)"
+  ///      (`cashDebtsCollectedKobo`: cash-method `type == 'wallet_topup'` rows)
+  ///      nets this collection to zero — the voided amount drops out.
+  ///
+  /// Only genuine top-ups (referenceType `topup_cash` / `topup_transfer`) are
+  /// voidable here; anything else is a no-op. Idempotent — an already-voided
+  /// top-up returns false. The UI entry point (customer screen) is gated on
+  /// `customers.wallet.withdraw` (Gates.refundCustomerWallet). Returns whether a
+  /// void was posted.
+  Future<bool> voidTopup({
+    required String walletTxnId,
+    required String staffId,
+    String? reason,
+  }) async {
+    const topupRefs = {'topup_cash', 'topup_transfer'};
+    final businessId = _walletTxDao.requireBusinessId();
+
+    return _db.transaction(() async {
+      final original =
+          await (_db.select(_db.walletTransactions)
+                ..where(
+                  (t) =>
+                      t.businessId.equals(businessId) &
+                      t.id.equals(walletTxnId),
+                )
+                ..limit(1))
+              .getSingleOrNull();
+      if (original == null) return false;
+      if (original.voidedAt != null) return false; // already voided
+      if (!topupRefs.contains(original.referenceType)) return false;
+
+      final now = DateTime.now();
+
+      // 1a. Mark the original credit voided in place (retained metadata, as
+      //     WalletTransactionsDao.voidTransaction does).
+      await (_db.update(
+        _db.walletTransactions,
+      )..where((t) => t.id.equals(walletTxnId))).write(
+        WalletTransactionsCompanion(
+          voidedAt: Value(now),
+          voidedBy: Value(staffId),
+          voidReason: Value(reason),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+
+      // 1b. Append the compensating wallet debit (opposite sign) so the derived
+      //     balance drops the credit.
+      final compId = UuidV7.generate();
+      final compComp = WalletTransactionsCompanion.insert(
+        id: Value(compId),
+        businessId: businessId,
+        walletId: original.walletId,
+        customerId: original.customerId,
+        type: original.type == 'credit' ? 'debit' : 'credit',
+        amountKobo: original.amountKobo,
+        signedAmountKobo: -original.signedAmountKobo,
+        referenceType: 'void',
+        orderId: Value(original.orderId),
+        performedBy: Value(staffId),
+        createdAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await _db.into(_db.walletTransactions).insert(compComp);
+
+      final updatedOrig =
+          await (_db.select(_db.walletTransactions)
+                ..where((t) => t.id.equals(walletTxnId))
+                ..limit(1))
+              .getSingle();
+      await _db.syncDao.enqueueUpsert('wallet_transactions', updatedOrig);
+      await _db.syncDao.enqueueUpsert('wallet_transactions', compComp);
+
+      // 2. Reverse the paired payment row (#169 seam), negative so the cash
+      //    card nets the collection to zero. Legacy top-ups with no payment row
+      //    (e.g. pre-ledger data) simply skip this leg.
+      final payment =
+          await (_db.select(_db.paymentTransactions)
+                ..where(
+                  (p) =>
+                      p.businessId.equals(businessId) &
+                      p.walletTxnId.equals(walletTxnId) &
+                      p.type.equals('wallet_topup'),
+                )
+                ..limit(1))
+              .getSingleOrNull();
+      if (payment != null) {
+        await _db.paymentTransactionsDao.postReversalPayment(
+          original: payment,
+          reversalType: 'wallet_topup',
+          performedBy: staffId,
+          amountKobo: -payment.amountKobo,
+          reason: reason,
+          at: now,
+        );
+      }
+
+      // 3. Audit + notify (§24 money movement).
+      await _db.activityLogDao.logActivity(
+        action: 'customer.wallet.topup_voided',
+        description:
+            'Voided credit top-up of '
+            '${formatCurrency(original.amountKobo / 100)}'
+            '${reason != null && reason.trim().isNotEmpty ? ' — ${reason.trim()}' : ''}',
+        staffId: staffId,
+        entityType: 'customer',
+        entityId: original.customerId,
+      );
+      await _db.notificationsDao.fireNotification(
+        type: 'wallet_topup_voided',
+        message:
+            'A credit top-up of '
+            '${formatCurrency(original.amountKobo / 100)} was voided',
+        severity: 'info',
+        linkedRecordId: original.customerId,
+      );
+      return true;
+    });
+  }
 }

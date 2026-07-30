@@ -1,4 +1,20 @@
 {
     "workbench.colorTheme": "Visual Studio Dark",
-    "java.configuration.updateBuildConfiguration": "automatic"
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "//": "Keep the generated build/ tree out of search, file-watching and Java project import so IDE extensions never flag phantom errors inside it (e.g. the stray Dart/native files under build/ios and build/macos).",
+    "search.exclude": {
+        "**/build": true,
+        "**/.dart_tool": true
+    },
+    "files.watcherExclude": {
+        "**/build/**": true,
+        "**/.dart_tool/**": true
+    },
+    "java.import.exclusions": [
+        "**/node_modules/**",
+        "**/.metadata/**",
+        "**/archetype-resources/**",
+        "**/META-INF/maven/**",
+        "**/build/**"
+    ]
 }

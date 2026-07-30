@@ -509,6 +509,34 @@ abstract final class Gates {
     rule: Gate.key('sales.cancel'),
   );
 
+  /// Confirm a pending order — the "Confirm" ("Mark as delivered") action on the
+  /// Orders Pending tab (#171 / PRD #155). Confirm is a real money boundary: it
+  /// runs the crate-deposit settlement (forfeit / refund / shortfall) before the
+  /// `pending → completed` flip, so it is gated on the dedicated `sales.confirm`
+  /// key. Seeded Cashier-tier and above (CEO + Manager + Cashier grant it by
+  /// default; a Stock keeper does NOT) — the tier lives in the seeded grants, not
+  /// a tier atom, so `sales.confirm` stays the canonical axis (invariant #6).
+  /// Cited by the Confirm button's render gate and re-checked with `.require()`
+  /// at the Confirm write boundary.
+  static const NamedGate confirmOrder = NamedGate(
+    name: 'confirmOrder',
+    action: 'Confirm Order',
+    rule: Gate.key('sales.confirm'),
+  );
+
+  /// Confirm an order whose crate-deposit refund is paid **as cash out of the
+  /// till** (#171). The cash-refund branch of deposit settlement additionally
+  /// requires the existing wallet-withdraw key on top of `sales.confirm`, so a
+  /// user who may Confirm (and refund to the credit balance) still cannot pay a
+  /// deposit refund out of the drawer unless they also hold
+  /// `customers.wallet.withdraw`. Cited by the Cash refund-destination chip's
+  /// render gate and re-checked with `.require()` when the confirmer picked Cash.
+  static const NamedGate confirmOrderCashRefund = NamedGate(
+    name: 'confirmOrderCashRefund',
+    action: 'Refund Deposit as Cash',
+    rule: Gate.allKeys(['sales.confirm', 'customers.wallet.withdraw']),
+  );
+
   /// See monetary values on Orders (§19.3): the per-order line prices / total /
   /// paid / discount, and the per-tab money summary stats (Total Value, Revenue,
   /// Collected, Crate Deposits). Roles below Manager see items + quantities only.
@@ -556,6 +584,84 @@ abstract final class Gates {
     name: 'crateDepositsReport',
     action: 'Crate Deposits Report',
     rule: Gate.tierAtLeast(GateTier.manager),
+  );
+
+  // ── Crate money cluster (#211, PRD #203 / ADR 0023) ───────────────────────
+
+  /// Set a brand's **Crate Money Arrangement** — whether crate money moves for
+  /// that manufacturer at all, and when (ADR 0023 rule 3). Compounded at the
+  /// call site with the crate-business check (`businessTracksCrates`), which is
+  /// a business-type rule rather than a permission, exactly as
+  /// [crateDepositsReport] does.
+  ///
+  /// `settings.manage` — CEO-only by default (migration 0043) — deliberately
+  /// the same key as [manageSettings] but a distinct action with its own name
+  /// and denial text, the [recordCrateReturn] pattern. This is a standing money
+  /// *policy*, not a transaction: flipping it decides whether every future
+  /// delivery of that brand moves cash. ADR 0023 rule 6 keeps cash movement
+  /// away from the roles that receive stock, so the person who types the crate
+  /// count must not be the person who chooses the arrangement. Reusing the
+  /// owner-policy key rather than minting a new one keeps this slice clear of
+  /// the permission-key deploy ordering (a new key must reach the cloud
+  /// catalogue before any grant syncs, or `role_permissions` FK-rejects and
+  /// jams the outbox).
+  static const NamedGate crateMoneyArrangement = NamedGate(
+    name: 'crateMoneyArrangement',
+    action: 'Set Crate Money Arrangement',
+    rule: Gate.key('settings.manage'),
+  );
+
+  /// Decide a pending **crate deposit** — confirm it, adjust the amount before
+  /// confirming, or reject the money leg (#212, ADR 0023 rule 6).
+  ///
+  /// This is the door the whole approval queue exists to keep shut.
+  /// [receiveStock] is `stock.add` OR `products.add`, so a **stock keeper** may
+  /// receive a delivery and their crate COUNT lands immediately — but cash
+  /// movement is the one thing the permission model has always kept away from
+  /// that role. `expenses.approve` (CEO + Manager by default) is the app's
+  /// existing "this person may sign off money leaving the business" key, and it
+  /// is the right shape here: confirming a deposit is exactly that decision,
+  /// even though the money is an asset rather than a cost.
+  ///
+  /// It is a DISTINCT named gate rather than a second citation of
+  /// [approveExpenses] — the denial text must say "Confirm Crate Deposit", and
+  /// a future owner who wants deposits on a different key changes one entry —
+  /// but it deliberately mints NO new permission key. A new key must reach the
+  /// cloud catalogue before any grant syncs or `role_permissions` FK-rejects
+  /// and jams the outbox, which is the same reasoning [crateMoneyArrangement]
+  /// records.
+  ///
+  /// It is NOT [crateMoneyArrangement]'s key: that one is `settings.manage`,
+  /// CEO-only, because setting a standing money *policy* is an owner act. A
+  /// per-delivery confirmation is a manager's daily transaction.
+  static const NamedGate confirmCrateDeposit = NamedGate(
+    name: 'confirmCrateDeposit',
+    action: 'Confirm Crate Deposit',
+    rule: Gate.key('expenses.approve'),
+  );
+
+  // ── Van Sales cluster (#140, PRD #139 / ADR 0019) ─────────────────────────
+
+  /// Set up and run the van side of the business (`van.manage`, CEO + Manager
+  /// by default) — registering a van location today, and from #141 the load,
+  /// remittance and reconcile flows. This is the *manager* side of van sales;
+  /// a driver never holds it, which is what makes "a driver records their own
+  /// payment" impossible by construction (spec §9.5, edge case 21).
+  static const NamedGate vanManage = NamedGate(
+    name: 'vanManage',
+    action: 'Manage Van Sales',
+    rule: Gate.key('van.manage'),
+  );
+
+  /// Sell from a van on the road (`van.sell`, the seeded Driver role's key).
+  /// Today it is what makes a van *selectable* at all: a van is hidden from
+  /// every normal store surface, and the one viewer it may be an active store
+  /// for is a driver holding this key who is explicitly assigned to that van
+  /// (`selectableStoresFor`). The driver terminal itself lands in #142.
+  static const NamedGate vanSell = NamedGate(
+    name: 'vanSell',
+    action: 'Sell From a Van',
+    rule: Gate.key('van.sell'),
   );
 
   /// Every declared gate. Backs the membership test (every entry cited) and
@@ -606,10 +712,16 @@ abstract final class Gates {
     suspendStaff,
     staffRemove,
     refundOrder,
+    confirmOrder,
+    confirmOrderCashRefund,
     seeOrderMoney,
     seeExtendedDateRanges,
     viewApprovals,
     dailyReconciliation,
     crateDepositsReport,
+    crateMoneyArrangement,
+    confirmCrateDeposit,
+    vanManage,
+    vanSell,
   ];
 }

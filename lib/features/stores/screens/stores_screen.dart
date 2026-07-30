@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/data/nigerian_states.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
@@ -47,8 +48,12 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   void initState() {
     super.initState();
     final db = ref.read(databaseProvider);
+    // #140 — vans are locations, but they are not stores: they never appear in
+    // this list, its transfer flows, or the store details screen. They are
+    // registered and listed in Settings → Stores, and get their own hub in
+    // #141 (van-sales spec §4.1).
     _storesSub = db.storesDao.watchActiveStores().listen((data) {
-      if (mounted) setState(() => _stores = data);
+      if (mounted) setState(() => _stores = withoutVans(data));
     });
   }
 
