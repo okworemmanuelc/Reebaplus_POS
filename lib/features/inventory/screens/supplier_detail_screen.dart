@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -1219,7 +1220,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     final qtyCtrl = TextEditingController();
     final depositCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final storeId = ref.read(lockedStoreProvider).value;
+    final lockedStoreId = ref.read(lockedStoreProvider).value;
+    // #213: a crate-MONEY brand needs a store, because the approval queue
+    // scopes approvers by store and `store_id` is NOT NULL. Under "All Stores"
+    // #212 had nowhere to route the money and fell back to the legacy column;
+    // asking which store the trip belongs to is what lets the money leg exist
+    // at all. A `none` brand never sees this and behaves exactly as before.
+    final stores = ref.read(selectableStoresProvider);
+    String? chosenStoreId =
+        lockedStoreId ?? (stores.length == 1 ? stores.single.id : null);
 
     await showModalBottomSheet<void>(
       context: context,
@@ -1229,7 +1238,20 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
+        builder: (ctx, setSheet) {
+        // The selected brand's Crate Money Arrangement decides the whole shape
+        // of this sheet (#211/#213). `per_delivery` means the deposit is real
+        // money on a real ledger: it is never hand-typed into the legacy crate
+        // column, and the refund a supplier hands back waits for a manager.
+        final selectedMfr = selectedId == null
+            ? null
+            : manufacturers.where((m) => m.id == selectedId).firstOrNull;
+        final isMoneyBrand =
+            selectedMfr != null &&
+            crateMoneyArrangementOf(selectedMfr.crateMoneyArrangement) ==
+                CrateMoneyArrangement.perDelivery;
+        final needsStorePick = isMoneyBrand && lockedStoreId == null;
+        return Padding(
           padding: EdgeInsets.only(
             left: ctx.getRSize(20),
             right: ctx.getRSize(20),
@@ -1311,6 +1333,26 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                     validator: (v) =>
                         (v == null || v.isEmpty) ? 'Select a manufacturer' : null,
                   ),
+                  if (needsStorePick) ...[
+                    SizedBox(height: ctx.getRSize(16)),
+                    AppDropdown<String>(
+                      value: chosenStoreId,
+                      labelText: 'Store',
+                      hintText: 'Which store was this?',
+                      items: stores
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s.id,
+                              child: Text(s.name),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setSheet(() => chosenStoreId = v),
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Choose the store this belongs to'
+                          : null,
+                    ),
+                  ],
                   SizedBox(height: ctx.getRSize(16)),
                   AppInput(
                     controller: qtyCtrl,
@@ -1321,23 +1363,64 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     validator: (v) {
                       final n = int.tryParse((v ?? '').trim()) ?? 0;
-                      if (n <= 0) return 'Enter a crate count';
-                      return null;
+                      if (n > 0) return null;
+                      // A settlement can carry no crates at all — the day a
+                      // supplier simply pays back a balance. It then needs the
+                      // amount, because there is nothing to derive one from.
+                      if (isMoneyBrand &&
+                          isReturn &&
+                          _typedKobo(depositCtrl.text) > 0) {
+                        return null;
+                      }
+                      return 'Enter a crate count';
                     },
                   ),
                   SizedBox(height: ctx.getRSize(16)),
-                  AppInput(
-                    controller: depositCtrl,
-                    labelText: isReturn
-                        ? 'Deposit refunded to you (optional)'
-                        : 'Deposit paid to supplier (optional)',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [CurrencyInputFormatter()],
-                  ),
+                  if (isMoneyBrand && !isReturn)
+                    // The deposit on a receipt is NOT hand-typed for this brand
+                    // — it is the manufacturer's rate, and a manager confirms
+                    // it. Showing a money box here would invite a figure the
+                    // write path deliberately ignores.
+                    Text(
+                      'A manager will confirm the deposit for these crates at '
+                      "${selectedMfr.name}'s rate. You are only recording the "
+                      'crates.',
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(12),
+                        color: _subtext,
+                      ),
+                    )
+                  else ...[
+                    AppInput(
+                      controller: depositCtrl,
+                      labelText: !isReturn
+                          ? 'Deposit paid to supplier (optional)'
+                          : isMoneyBrand
+                          ? 'Refund actually received (optional)'
+                          : 'Deposit refunded to you (optional)',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [CurrencyInputFormatter()],
+                    ),
+                    if (isMoneyBrand && isReturn) ...[
+                      SizedBox(height: ctx.getRSize(6)),
+                      Text(
+                        'Type what the supplier actually handed back. Leave it '
+                        'blank and a manager records the real figure. Anything '
+                        'short of the deposit stays yours, still held.',
+                        style: TextStyle(
+                          fontSize: ctx.getRFontSize(12),
+                          color: _subtext,
+                        ),
+                      ),
+                    ],
+                  ],
                   SizedBox(height: ctx.getRSize(24)),
                   AppButton(
-                    text: isReturn ? 'Record Return' : 'Record Receipt',
+                    text: isReturn
+                        ? (isMoneyBrand ? 'Record Settlement' : 'Record Return')
+                        : 'Record Receipt',
                     onPressed: () => _submitCrateMovement(
                       ctx,
                       supplier: supplier,
@@ -1346,8 +1429,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                       qtyText: qtyCtrl.text,
                       depositText: depositCtrl.text,
                       isReturn: isReturn,
+                      isMoneyBrand: isMoneyBrand,
                       staffId: staffId,
-                      storeId: storeId,
+                      storeId: isMoneyBrand ? chosenStoreId : lockedStoreId,
                       formKey: formKey,
                     ),
                   ),
@@ -1355,7 +1439,8 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
               ),
             ),
           ),
-        ),
+        );
+        },
       ),
     );
     qtyCtrl.dispose();
@@ -1397,6 +1482,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     );
   }
 
+  /// Naira typed into a money box, in kobo. 0 when it cannot be read as money.
+  int _typedKobo(String text) {
+    final raw = text.replaceAll(',', '').trim();
+    if (raw.isEmpty) return 0;
+    final naira = double.tryParse(raw);
+    if (naira == null || naira <= 0) return 0;
+    return (naira * 100).round();
+  }
+
   Future<void> _submitCrateMovement(
     BuildContext sheetCtx, {
     required SupplierData supplier,
@@ -1405,16 +1499,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     required String qtyText,
     required String depositText,
     required bool isReturn,
+    required bool isMoneyBrand,
     required String staffId,
     required String? storeId,
     required GlobalKey<FormState> formKey,
   }) async {
     if (!(formKey.currentState?.validate() ?? false)) return;
     final mfrId = manufacturerId!;
-    final qty = int.parse(qtyText.trim());
-    final depositKobo =
-        (((double.tryParse(depositText.replaceAll(',', '').trim()) ?? 0)) * 100)
-            .round();
+    final qty = int.tryParse(qtyText.trim()) ?? 0;
+    final depositKobo = _typedKobo(depositText);
     final mfrName = manufacturers.firstWhere((m) => m.id == mfrId).name;
     final messenger = ScaffoldMessenger.of(context);
 
@@ -1432,6 +1525,33 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     Navigator.pop(sheetCtx);
     try {
       final service = ref.read(supplierCrateServiceProvider);
+      if (isReturn && isMoneyBrand && storeId != null) {
+        // #213 — the standalone settlement. No delivery is invented: this
+        // writes the empties leg (when there are empties) and parks the refund
+        // for a money-permitted role, who records what was actually handed
+        // back. A short refund leaves the remainder held, not gone.
+        await service.recordSettlement(
+          supplierId: supplier.id,
+          supplierName: supplier.name,
+          manufacturerId: mfrId,
+          manufacturerName: mfrName,
+          crateCount: qty,
+          staffId: staffId,
+          storeId: storeId,
+          refundAmountKobo: depositKobo > 0 ? depositKobo : null,
+        );
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              qty == 0
+                  ? 'Settlement recorded — the refund is waiting for a manager'
+                  : '$qty $mfrName crate${qty == 1 ? '' : 's'} returned to '
+                        '${supplier.name} — the refund is waiting for a manager',
+            ),
+          ),
+        );
+        return;
+      }
       if (isReturn) {
         await service.recordReturn(
           supplierId: supplier.id,
