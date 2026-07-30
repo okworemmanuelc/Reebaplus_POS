@@ -7,7 +7,9 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
@@ -412,7 +414,17 @@ class _DailyReconciliationDetailScreenState
           // Rendered only when a brand actually moves crate money, so every
           // business on the default `none` arrangement — which is every live
           // tenant until an owner switches one on — still reads exactly five.
-          if (d.showCrates && d.crateDeposits.hasMoney) ...[
+          //
+          // #216 widens the condition: a brand can be short of crates before
+          // any deposit money has moved (a `standing_float` brand's losses raise
+          // a Shortfall and move no money at all), and an accepted loss must
+          // stay visible in the period it was booked even after the shortfall
+          // itself has closed. A `none` business still reads exactly five —
+          // every one of these three is zero for it.
+          if (d.showCrates &&
+              (d.crateDeposits.hasMoney ||
+                  d.crateShortfalls.hasShortfall ||
+                  d.crateShortfallWrittenOffKobo != 0)) ...[
             SizedBox(height: context.spacingM),
             _crateMoneyCard(context, theme, d),
           ],
@@ -1216,7 +1228,320 @@ class _DailyReconciliationDetailScreenState
           'figure in every store.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
+        // ── #216 — the warning, and the loss somebody took ──────────────────
+        ...(_crateShortfallSection(context, theme, d)),
       ],
+    );
+  }
+
+  /// **Crates missing** — the Crate Shortfall, and the write-off that accepts
+  /// it (#216, PRD #203, ADR 0023 rules 4 and 5).
+  ///
+  /// It shares #215's card rather than growing a seventh, because it is the
+  /// same story told to its end: money placed with a depot, crates owed back,
+  /// and the gap between what is owed and what is actually in the yard.
+  ///
+  /// Three things about how this renders are decisions:
+  ///
+  ///  * **It is a warning, not a loss.** The open figure appears BELOW the
+  ///    total and is in no total on this report — not profit, not worth, not
+  ///    cash. Crates turn up behind the store, a driver returns late, a count
+  ///    was wrong. It shrinks by itself when they reappear, because it is
+  ///    derived from today's counts every time this screen rebuilds.
+  ///  * **It names the brand, never a supplier.** Crates are fungible, and the
+  ///    app must not guess whose went missing (rule 4).
+  ///  * **The write-off is the owner's move to make.** There is no timer and no
+  ///    automatic sweep anywhere behind this button. Profit must never be
+  ///    reduced by a decision nobody made — so the shortfall simply stays here,
+  ///    visible, until someone deals with it.
+  List<Widget> _crateShortfallSection(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d,
+  ) {
+    final shortfalls = d.crateShortfalls;
+    final writtenOff = d.crateShortfallWrittenOffKobo;
+    if (!shortfalls.hasShortfall && writtenOff == 0) return const [];
+
+    final warnColor = theme.extension<AppSemanticColors>()!.warning;
+    final dangerColor = theme.colorScheme.error;
+    // Only a money-permitted role may accept a loss — the same gate that
+    // confirms a crate deposit (`expenses.approve`). No new permission key: a
+    // key that has not reached the cloud catalogue FK-rejects every grant and
+    // jams the outbox.
+    final mayWriteOff = Gates.confirmCrateDeposit.allows(ref);
+
+    return [
+      SizedBox(height: context.spacingM),
+      _divider(theme),
+      if (shortfalls.hasShortfall) ...[
+        for (final s in shortfalls.brands)
+          _line(
+            context,
+            theme,
+            '${s.manufacturerName} — '
+            '${s.openShortfallCrates} crate'
+            '${s.openShortfallCrates == 1 ? '' : 's'} missing',
+            formatCurrency(s.openShortfallValueKobo / 100.0),
+            danger: true,
+          ),
+        _line(
+          context,
+          theme,
+          'Crates missing (now)',
+          formatCurrency(shortfalls.openValueKobo / 100.0),
+          strong: true,
+          color: warnColor,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Crates you owe that are not in the yard. This is a warning, not a '
+          'loss — it has not touched your profit, and it goes down by itself '
+          'if the crates turn up. It stays here until you decide to write it '
+          'off.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+      // The accepted loss, in the period it was accepted. Shown even once the
+      // shortfall has closed: the money left the profit on that day and the
+      // report for that day must keep saying so (ADR 0021 — a closed day is
+      // never restated).
+      if (writtenOff != 0) ...[
+        const SizedBox(height: 6),
+        _line(
+          context,
+          theme,
+          'Crate losses written off this period',
+          '− ${formatCurrency(writtenOff / 100.0)}',
+          color: dangerColor,
+        ),
+        for (final s in shortfalls.brands)
+          if (s.lastWrittenOffAt != null)
+            Text(
+              'Last written off on ${_dayLabel(s.lastWrittenOffAt!)}'
+              '${_staffLabel(s.lastWrittenOffBy)} — ${s.manufacturerName}',
+              style: context.bodySmall.copyWith(color: theme.hintColor),
+            ),
+        const SizedBox(height: 6),
+        Text(
+          'Crates you accepted as lost. This one DOES come out of your profit, '
+          'on the day you accepted it.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+      if (shortfalls.hasShortfall && mayWriteOff) ...[
+        SizedBox(height: context.spacingS),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _openCrateWriteOffSheet(shortfalls),
+            icon: Icon(
+              FontAwesomeIcons.circleMinus.data,
+              size: context.getRSize(14),
+            ),
+            label: const Text('Write off missing crates'),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  /// The day a write-off was taken, in the owner's own date format.
+  String _dayLabel(DateTime at) => DateFormat('d MMM yyyy').format(at);
+
+  /// " by Ada" when the actor is known and named, "" otherwise. Never "by
+  /// unknown" — an unnamed actor is better left unsaid than asserted.
+  String _staffLabel(String? userId) {
+    if (userId == null) return '';
+    final name = ref.read(usersByBusinessProvider).valueOrNull?[userId]?.name;
+    return name == null ? '' : ' by $name';
+  }
+
+  /// **Accept the loss** — the write-off sheet (#216, ADR 0023 rule 5).
+  ///
+  /// Deliberately a two-step, typed confirmation rather than a one-tap
+  /// "write off all". It is the only action in PRD #203 that reduces profit,
+  /// and it is irreversible in the sense that matters: the ledger is
+  /// append-only, so a mistake is corrected by a compensating row that books a
+  /// gain on a LATER day rather than by un-doing this one (ADR 0021).
+  Future<void> _openCrateWriteOffSheet(CrateShortfallRollup shortfalls) async {
+    final theme = Theme.of(context);
+    var selected = shortfalls.brands.first;
+    final qtyCtl = TextEditingController(
+      text: '${shortfalls.brands.first.openShortfallCrates}',
+    );
+    final noteCtl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) => Padding(
+          padding: EdgeInsets.only(
+            left: sheetCtx.getRSize(20),
+            right: sheetCtx.getRSize(20),
+            top: sheetCtx.getRSize(16),
+            // The keyboard inset PLUS the device's own bottom padding — the
+            // modal rule: `deviceBottomPadding`, never `deviceBottomInset`.
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom +
+                sheetCtx.deviceBottomPadding +
+                sheetCtx.getRSize(16),
+          ),
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: sheetCtx.getRSize(40),
+                      height: sheetCtx.getRSize(4),
+                      decoration: BoxDecoration(
+                        color: theme.dividerColor,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(20)),
+                  Text(
+                    'Write off missing crates',
+                    style: sheetCtx.bodyLarge.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(8)),
+                  Text(
+                    'Only do this once you are sure the crates are gone. It '
+                    'comes out of today’s profit and it stays on today’s '
+                    'record — it does not change any day already closed.',
+                    style: sheetCtx.bodySmall.copyWith(color: theme.hintColor),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(16)),
+                  DropdownButtonFormField<String>(
+                    initialValue: selected.manufacturerId,
+                    decoration: const InputDecoration(labelText: 'Brand'),
+                    items: [
+                      for (final s in shortfalls.brands)
+                        DropdownMenuItem(
+                          value: s.manufacturerId,
+                          child: Text(
+                            '${s.manufacturerName} — '
+                            '${s.openShortfallCrates} missing',
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) => setSheet(() {
+                      selected = shortfalls.brands.firstWhere(
+                        (s) => s.manufacturerId == v,
+                      );
+                      qtyCtl.text = '${selected.openShortfallCrates}';
+                    }),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(12)),
+                  TextFormField(
+                    controller: qtyCtl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'How many crates are you accepting as lost?',
+                    ),
+                    validator: (v) {
+                      final n = int.tryParse((v ?? '').trim()) ?? 0;
+                      if (n <= 0) return 'Enter how many crates';
+                      // Capped at what is actually missing: writing off more
+                      // than the gap would book a loss for crates that are
+                      // sitting in the yard.
+                      if (n > selected.openShortfallCrates) {
+                        return 'Only ${selected.openShortfallCrates} '
+                            'missing';
+                      }
+                      return null;
+                    },
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(12)),
+                  TextFormField(
+                    controller: noteCtl,
+                    decoration: const InputDecoration(
+                      labelText: 'Note (optional)',
+                    ),
+                  ),
+                  SizedBox(height: sheetCtx.getRSize(16)),
+                  Builder(
+                    builder: (btnCtx) {
+                      final qty = int.tryParse(qtyCtl.text.trim()) ?? 0;
+                      final cost = qty * selected.ratePerCrateKobo;
+                      return FilledButton(
+                        onPressed: () => _confirmCrateWriteOff(
+                          sheetCtx: sheetCtx,
+                          formKey: formKey,
+                          manufacturerId: selected.manufacturerId,
+                          manufacturerName: selected.manufacturerName,
+                          crateCount: int.tryParse(qtyCtl.text.trim()) ?? 0,
+                          note: noteCtl.text.trim().isEmpty
+                              ? null
+                              : noteCtl.text.trim(),
+                        ),
+                        child: Text(
+                          cost > 0
+                              ? 'Write off ${formatCurrency(cost / 100.0)}'
+                              : 'Write off',
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    qtyCtl.dispose();
+    noteCtl.dispose();
+  }
+
+  Future<void> _confirmCrateWriteOff({
+    required BuildContext sheetCtx,
+    required GlobalKey<FormState> formKey,
+    required String manufacturerId,
+    required String manufacturerName,
+    required int crateCount,
+    String? note,
+  }) async {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    // Write-boundary re-check (§10.2.1): honour a permission revoked while the
+    // sheet was open. The gate is the money gate, not a new key.
+    if (!Gates.confirmCrateDeposit.allows(ref)) {
+      Navigator.pop(sheetCtx);
+      return;
+    }
+    final actorId = ref.read(authProvider).currentUser?.id;
+    if (actorId == null) return;
+    final storeId = ref.read(lockedStoreProvider).value;
+    Navigator.pop(sheetCtx);
+    final id = await ref
+        .read(databaseProvider)
+        .cratePoolDao
+        .writeOffCrateShortfall(
+          manufacturerId: manufacturerId,
+          crateCount: crateCount,
+          performedBy: actorId,
+          storeId: storeId,
+          note: note,
+        );
+    if (!mounted) return;
+    if (id == null) return;
+    AppNotification.showSuccess(
+      context,
+      '$crateCount $manufacturerName crate${crateCount == 1 ? '' : 's'} '
+      'written off. It comes out of today’s profit, and today’s report will '
+      'show who accepted it.',
     );
   }
 
@@ -1612,6 +1937,11 @@ class _DailyReconciliationDetailScreenState
             money(d.uncostedTakingsKobo)],
         if (d.forfeitIncomeKobo != 0)
           ['Forfeit income (kept crate deposits)', money(d.forfeitIncomeKobo)],
+        // #216 — the one crate figure that reaches profit: crates the owner
+        // deliberately accepted as lost, on the day they accepted them.
+        if (d.showCrates && d.crateShortfallWrittenOffKobo != 0)
+          ['Crate losses written off (accepted this period)',
+            money(-d.crateShortfallWrittenOffKobo)],
         ['Net profit', money(d.netProfitKobo)],
         // Business worth right now (point-in-time) — mirrors _businessWorthCard.
         // Supplier account position: negative = a debt we owe for unpaid goods,
@@ -1639,6 +1969,15 @@ class _DailyReconciliationDetailScreenState
           for (final s in d.crateDeposits.bySupplier)
             ['Crate money held by ${s.supplierName} (now)',
               money(s.placedDepositKobo)],
+        // #216 — the WARNING, deliberately outside every total above: it has
+        // not touched profit and shrinks by itself if the crates turn up.
+        if (d.showCrates && d.crateShortfalls.hasShortfall) ...[
+          for (final s in d.crateShortfalls.brands)
+            ['${s.manufacturerName} crates missing (now)',
+              money(s.openShortfallValueKobo)],
+          ['Crates missing, not yet written off (now, business-wide)',
+            money(d.crateShortfalls.openValueKobo)],
+        ],
         if (d.showCrates && d.crateDeposits.hasPending)
           ['Crate money awaiting confirmation (now)',
             money(d.crateDeposits.pendingDepositKobo)],
