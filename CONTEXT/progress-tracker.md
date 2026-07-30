@@ -23,8 +23,8 @@ the run: **1550 passed / 126 skipped / 0 failed**.
 | #213 settle on return (code only, no migration) | **MERGED** | `4098972` — 1665 pass / 126 skip / 0 fail |
 | #214 standing float (code only, no migration) | **MERGED** | `dd1a709` — 1698 pass / 126 skip / 0 fail |
 | #215 worth + recon card (**ADR 0014 amended**) | **MERGED** | `6bccbe5` — 1714 pass / 126 skip / 0 fail |
-| #216 shortfall + write-off | in progress | — |
-| #217 forfeit netting | pending | — |
+| #216 shortfall + write-off (Drift v80, cloud 0173) | **MERGED** | `cf4a902` — 1749 pass / 126 skip / 0 fail |
+| #217 forfeit netting | in progress | — |
 
 **#210 notes.** `confirmReceipt` now takes `fullCratesReceivedByManufacturer`
 as a **required** parameter — the defect was a leg nobody remembered to post,
@@ -156,8 +156,41 @@ accumulated on live tenants is NOT repaired.** Repairing it is an unscoped data
 migration needing a decision about the true opening crate position, which the
 app cannot infer. Reasoning is in the `businessNetPositionKobo` doc comment.
 
+**#216 notes.** Shortfall is **derived** on every read; only the *decision* is
+persisted. `computeCrateShortfall` calls `computeCrateDepositPosition` rather
+than subtracting counts itself, so the arithmetic stays in one place.
+Unattributable **by construction** — `CrateShortfall` carries no `supplierId`
+and neither does the cloud table, so there is nowhere an attribution could be
+written even by mistake (the same unrepresentable-state trick #212 used for
+`emptiesOnHand`).
+
+A write-off is a **P&L line, not a payment** — no `payment_transactions` row
+and no `supplier_crate_deposits` row, because no cash moves when an owner
+accepts a loss and attributing it to a depot is what rule 4 forbids. It books
+on the decision's own timestamp at the rate **snapshotted on the row**, so a
+March shortfall accepted in July cuts July's profit and a later rate edit
+cannot restate it. "Nothing auto-writes-off" is pinned twice: behaviourally,
+and structurally by a test that greps `lib/` and fails if any caller of
+`writeOffCrateShortfall` appears outside the DAO and the card's button.
+
+**It also fixed #213's empties-pool gap**, which turned out to corrupt this
+slice's central figure in the unsafe direction: `recordCrateSettlement` posted
+only the supplier leg, so settling 40 crates while genuinely 10 short made the
+shortfall read `max(0, 60−90) = 0` — a real loss erased and profit overstated.
+The empties leg is now written **arrangement-blind**, since a crate leaving the
+yard cannot depend on a money setting. `none` brands are unaffected: the
+settlement sheet routes to `recordSettlement` only on the `per_delivery`
+branch, so the button was never actually shared (which was #213's stated
+worry).
+
+**Gaps #216 named, none blocking:** no reversal UI (the schema, CHECK and
+arithmetic support a compensating negative row and it is tested, but nothing in
+the app writes one — a write-off taken in error has no in-app undo); the
+write-off button always dates the decision `now` even when viewing a past
+period; `lastWrittenOffBy` costs an extra query per brand in the rollup stream.
+
 **Cloud migrations are NOT deployed yet** — branches commit them, deployment is
-sequenced separately after the app code lands. Pending: **0171, 0172**.
+sequenced separately after the app code lands. Pending: **0171, 0172, 0173**.
 
 ### #203 — crate-deposit OUTFLOW settlement: PRD WRITTEN + published (2026-07-29)
 Grilling session on the #155 carve-out. **No code written.** Output is
