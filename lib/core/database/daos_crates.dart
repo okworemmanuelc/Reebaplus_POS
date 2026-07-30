@@ -2633,8 +2633,100 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String performedBy,
     String? storeId,
     String? note,
+  }) => _bookCrateShortfallLoss(
+    manufacturerId: manufacturerId,
+    crateCount: (_) => crateCount,
+    performedBy: performedBy,
+    storeId: storeId,
+    note: note,
+    source: CrateWriteOffSource.manual,
+  );
+
+  /// **The forfeit netting** (#217, PRD #203 slice 8/8, ADR 0023 finding #4).
+  ///
+  /// A customer never brought [keptCrates] back, so the business keeps their
+  /// deposit — income since #176. On a brand where a deposit was genuinely
+  /// PLACED with a depot, those crates are ones the business can now never hand
+  /// back, and the app charged the customer the *same*
+  /// `manufacturers.deposit_amount_kobo` it owes that depot. Gain and loss are
+  /// the same size, so the forfeit **nets to zero**, and this is the row that
+  /// makes it so.
+  ///
+  /// **On a `none` brand this writes nothing and the forfeit stays pure
+  /// income** — the gate is [crateForfeitShortfallCrates], and it is the same
+  /// release gate as every other write in this PRD. Nobody was ever paid a
+  /// deposit for those crates; they were the business's own to lose, so keeping
+  /// the customer's money is a real gain that must read exactly as it did
+  /// before PRD #203 existed.
+  ///
+  /// **THIS IS WHERE "HISTORY IS NEVER RESTATED" IS ENFORCED.** The netting is
+  /// decided ONCE, here, inside the settling transaction, from the arrangement
+  /// as it stands at that instant — and then it is a persisted fact. No report
+  /// re-asks the question, so switching a brand on next Tuesday cannot reach
+  /// back and net a forfeit settled last March: there is no row for March, and
+  /// nothing ever writes one. A reader that re-derived the netting from today's
+  /// setting would rewrite every closed day the moment an owner flipped a
+  /// switch, which ADR 0021 forbids outright.
+  ///
+  /// **The id is DETERMINISTIC** per `(order, manufacturer)`, the same trick and
+  /// the same reason as `OrdersDao.settlementLegId` (#188): two tills that both
+  /// settle the same order while offline each net it locally, and the cloud's
+  /// primary-key upsert collapses the duplicate instead of booking the loss
+  /// twice. Without it the forfeit would net once and the crate would be lost
+  /// twice.
+  ///
+  /// **No cash leg, and no double count.** Like every write-off it moves no
+  /// money (the customer's cash arrived at the sale; the depot's never comes
+  /// back), and because it lands in the same `written off` total the card
+  /// already nets out of the derived shortfall, the owner cannot later be asked
+  /// to accept the same missing crates a second time.
+  ///
+  /// Returns the row id, or null when nothing was written — a `none` brand, a
+  /// non-positive count, or an unknown brand.
+  Future<String?> recordCustomerForfeitShortfall({
+    required String manufacturerId,
+    required String orderId,
+    required int keptCrates,
+    required String performedBy,
+    String? storeId,
+    DateTime? at,
   }) async {
-    if (crateCount <= 0) return null;
+    if (keptCrates <= 0) return null;
+    return _bookCrateShortfallLoss(
+      manufacturerId: manufacturerId,
+      // The gate, as a pure function rather than an `if` buried in a DAO.
+      crateCount: (arrangement) => crateForfeitShortfallCrates(
+        arrangement: arrangement,
+        keptCrates: keptCrates,
+      ),
+      performedBy: performedBy,
+      storeId: storeId,
+      note: 'Customer kept $keptCrates crate${keptCrates == 1 ? '' : 's'} — '
+          'their deposit covers the crate you owe the depot.',
+      source: CrateWriteOffSource.customerForfeit,
+      // #188 — deterministic per (order, brand), so a second offline device's
+      // push is a no-op UPSERT rather than a second booked loss.
+      id: UuidV7.deterministic(
+        'crate_forfeit_netting:$orderId:$manufacturerId',
+      ),
+      at: at,
+    );
+  }
+
+  /// The ONE writer of `crate_shortfall_writeoffs`. [crateCount] is a function
+  /// of the brand's arrangement rather than a plain number, so the release gate
+  /// and the amount are decided together, at the one moment the arrangement has
+  /// been read.
+  Future<String?> _bookCrateShortfallLoss({
+    required String manufacturerId,
+    required int Function(CrateMoneyArrangement) crateCount,
+    required String performedBy,
+    required CrateWriteOffSource source,
+    String? storeId,
+    String? note,
+    String? id,
+    DateTime? at,
+  }) async {
     final manufacturer =
         await (select(manufacturers)..where(
               (t) => t.id.equals(manufacturerId) & whereBusiness(t),
@@ -2649,30 +2741,40 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     // because this verb moves no money for any brand.
     if (!arrangement.movesMoney) return null;
 
+    final count = crateCount(arrangement);
+    if (count <= 0) return null;
+
     final rate = manufacturer.depositAmountKobo > 0
         ? manufacturer.depositAmountKobo
         : 0;
-    final now = DateTime.now();
-    final id = UuidV7.generate();
+    final now = at ?? DateTime.now();
+    final rowId = id ?? UuidV7.generate();
     await transaction(() async {
       // Every defaulted column is set explicitly: a synced write that leaves one
       // Absent lets the cloud mint a different value and the row diverges.
       final row = CrateShortfallWriteoffsCompanion.insert(
-        id: Value(id),
+        id: Value(rowId),
         businessId: requireBusinessId(),
         manufacturerId: manufacturerId,
         storeId: Value(storeId),
-        crateCount: crateCount,
+        crateCount: count,
         ratePerCrateKobo: Value(rate),
         note: Value(note),
+        source: Value(source.wire),
         performedBy: Value(performedBy),
         createdAt: Value(now),
         lastUpdatedAt: Value(now),
       );
-      await into(crateShortfallWriteoffs).insert(row);
+      await into(crateShortfallWriteoffs).insert(
+        row,
+        // #217 — the deterministic-id path: the second offline device to settle
+        // the same order must be a no-op, not a duplicate booked loss and not a
+        // crash. Harmless for the random-id manual path.
+        mode: InsertMode.insertOrIgnore,
+      );
       await db.syncDao.enqueueUpsert('crate_shortfall_writeoffs', row);
     });
-    return id;
+    return rowId;
   }
 
   /// **The brand-level Crate Shortfall**, business-wide (#216).
@@ -2719,14 +2821,18 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     // accepted one and when (the "who wrote off a shortage and when" the card
     // shows). A COUNT, never money — each decision booked its own money at its
     // own snapshotted rate on its own day.
+    //
+    // The SUM counts every row whatever its origin, #217's forfeit netting
+    // included: those crates left with a customer and are as gone as any other,
+    // and leaving them out would ask the owner to accept the same missing
+    // crates a second time. The "last written off" PAIR is manual-only — see
+    // [_lastManualShortfallWriteOff].
     final writtenOffSum = crateShortfallWriteoffs.crateCount.sum();
-    final lastAt = crateShortfallWriteoffs.createdAt.max();
     final writeOffRows =
         (selectOnly(crateShortfallWriteoffs)
               ..addColumns([
                 crateShortfallWriteoffs.manufacturerId,
                 writtenOffSum,
-                lastAt,
               ])
               ..where(whereBusiness(crateShortfallWriteoffs))
               ..groupBy([crateShortfallWriteoffs.manufacturerId]))
@@ -2759,13 +2865,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       }
 
       final writtenOffBy = <String, int>{};
-      final lastAtBy = <String, DateTime>{};
       for (final r in input.writeOffs) {
         final id = r.read(crateShortfallWriteoffs.manufacturerId);
         if (id == null) continue;
         writtenOffBy[id] = r.read(writtenOffSum) ?? 0;
-        final at = r.read(lastAt);
-        if (at != null) lastAtBy[id] = at;
       }
 
       final shortfalls = <CrateShortfall>[];
@@ -2775,6 +2878,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         // would zero it anyway, and this keeps a `none` business from paying for
         // a name lookup it can never render.
         if (!arrangement.movesMoney) continue;
+        final lastManual = await _lastManualShortfallWriteOff(brand.id);
         shortfalls.add(
           computeCrateShortfall(
             manufacturerId: brand.id,
@@ -2784,8 +2888,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
             cratesOwed: owedBy[brand.id] ?? 0,
             emptiesOnHand: input.empties[brand.id] ?? 0,
             writtenOffCrates: writtenOffBy[brand.id] ?? 0,
-            lastWrittenOffAt: lastAtBy[brand.id],
-            lastWrittenOffBy: await _lastShortfallWriteOffBy(brand.id),
+            lastWrittenOffAt: lastManual?.createdAt,
+            lastWrittenOffBy: lastManual?.performedBy,
           ),
         );
       }
@@ -2793,14 +2897,29 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Who took the most recent write-off on [manufacturerId]. Read separately
-  /// from the grouped sum because SQLite's `MAX()` and a bare column in the same
-  /// aggregate is a bare-column trick this codebase does not rely on.
-  Future<String?> _lastShortfallWriteOffBy(String manufacturerId) async {
+  /// Who took the most recent write-off on [manufacturerId], and when. Read
+  /// separately from the grouped sum because SQLite's `MAX()` and a bare column
+  /// in the same aggregate is a bare-column trick this codebase does not rely
+  /// on.
+  ///
+  /// **MANUAL rows only** (#217). The card's "who accepted this loss and when"
+  /// is a question about a person taking responsibility, and the forfeit netting
+  /// is not one: no one chose it, it is the automatic second half of a customer
+  /// keeping their crates. Counting it here would replace the owner who last
+  /// stood in front of this card with whichever cashier last confirmed an order,
+  /// and would keep resetting the date to today on a brand nobody has looked at
+  /// in months. The netting still nets out of the shortfall COUNT above — it is
+  /// only the attribution that excludes it.
+  Future<CrateShortfallWriteoffData?> _lastManualShortfallWriteOff(
+    String manufacturerId,
+  ) async {
     final row =
         await (select(crateShortfallWriteoffs)
               ..where(
-                (t) => whereBusiness(t) & t.manufacturerId.equals(manufacturerId),
+                (t) =>
+                    whereBusiness(t) &
+                    t.manufacturerId.equals(manufacturerId) &
+                    t.source.equals(kCrateWriteOffSourceManual),
               )
               ..orderBy([
                 (t) =>
@@ -2808,7 +2927,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
               ])
               ..limit(1))
             .getSingleOrNull();
-    return row?.performedBy;
+    return row;
   }
 
   /// Every write-off decision, newest first — the rows the reconciliation's P&L
