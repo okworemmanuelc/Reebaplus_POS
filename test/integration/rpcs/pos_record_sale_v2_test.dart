@@ -146,8 +146,12 @@ void main() {
       expect(order['id'], orderId);
       expect(order['order_number'], orderNumber);
       expect(order['total_amount_kobo'], 200000,
-          reason: 'server computes total = sum(qty * unit_price)');
-      expect(order['net_amount_kobo'], 200000);
+          reason: '#219 / 0174 — total_amount_kobo is THE PAYABLE '
+              '(gross − discount + deposit), the same meaning the v1 client '
+              'header writes. No discount and no deposit here, so it '
+              'coincides with the server-computed gross');
+      expect(order['net_amount_kobo'], 200000,
+          reason: 'both money columns hold the payable, as v1 writes them');
       expect(order['amount_paid_kobo'], 200000);
       expect(order['status'], 'completed');
 
@@ -192,6 +196,63 @@ void main() {
           .single();
       expect(cloudOrder['status'], 'completed');
       expect(cloudOrder['total_amount_kobo'], 200000);
+    }, skip: _skipReason);
+
+    test(
+        '#219: total_amount_kobo is the PAYABLE, not the gross — a discounted '
+        'sale records what the customer settled', () async {
+      final orderId = UuidV7.generate();
+      final orderNumber = 'ORD-PAY-${orderId.substring(orderId.length - 12)}';
+
+      // Goods 200000, discount 10000, no deposit → payable 190000.
+      //
+      // This is the case that separates the two candidate meanings: before
+      // migration 0174 the header recorded the GROSS (200000) while the v1
+      // client path recorded 190000 for the identical sale, so the same column
+      // meant two things depending on which sync path wrote the row.
+      final response = await clients.userClient.rpc(
+        'pos_record_sale_v2',
+        params: {
+          'p_business_id': clients.env.businessId,
+          'p_actor_id': clients.env.userId,
+          'p_order_id': orderId,
+          'p_order_number': orderNumber,
+          'p_store_id': storeId,
+          'p_payment_type': 'cash',
+          'p_items': [
+            {'product_id': productId, 'quantity': 2, 'unit_price_kobo': 100000},
+          ],
+          'p_discount_kobo': 10000,
+          'p_amount_paid_kobo': 190000,
+          'p_payment_method': 'cash',
+        },
+      ) as Map;
+
+      final order = response['order'] as Map;
+      expect(order['total_amount_kobo'], 190000,
+          reason: '#219 / 0174 — the payable = gross − discount + deposit, '
+              'NOT the 200000 gross');
+      expect(order['net_amount_kobo'], 190000,
+          reason: 'both money columns agree, as they do on the v1 path');
+      expect(order['discount_kobo'], 10000);
+
+      // The gross is not lost — it is what `receiptTotalsFromOrder` rebuilds
+      // as the printed Subtotal, and it must come back out at 200000 so a
+      // reprint ties to the original copy (#200 / US 33).
+      final subtotalKobo = (order['total_amount_kobo'] as int) -
+          ((order['crate_deposit_paid_kobo'] as int?) ?? 0) +
+          (order['discount_kobo'] as int);
+      expect(subtotalKobo, 200000,
+          reason: 'receiptTotalsFromOrder reconstructs the pre-discount goods '
+              'from the header — feeding it the gross printed Subtotal 210000');
+
+      final cloudOrder = await clients.adminClient
+          .from('orders')
+          .select('total_amount_kobo, net_amount_kobo, discount_kobo')
+          .eq('id', orderId)
+          .single();
+      expect(cloudOrder['total_amount_kobo'], 190000);
+      expect(cloudOrder['net_amount_kobo'], 190000);
     }, skip: _skipReason);
 
     test(
