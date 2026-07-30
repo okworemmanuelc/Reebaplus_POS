@@ -16,6 +16,9 @@ import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 // fixture suite can never disagree about what a supplier is holding.
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
+// #216: the brand-level Crate Shortfall — derived through the seam above, with
+// only the write-off DECISION persisted.
+import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';

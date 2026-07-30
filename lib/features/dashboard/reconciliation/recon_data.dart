@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
+import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
+import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -634,6 +636,10 @@ class ReconData {
     // test harness and every existing construction site stay valid.
     this.cashCrateDepositsPlacedKobo = 0,
     this.crateDeposits = CrateDepositRollup.empty,
+    // #216 — the warning, and the loss somebody accepted. Optional-defaulted
+    // like every other additive field.
+    this.crateShortfalls = CrateShortfallRollup.empty,
+    this.crateShortfallWrittenOffKobo = 0,
     required this.bestStaff,
     required this.bestStaffKobo,
     required this.expensesKobo,
@@ -784,6 +790,37 @@ class ReconData {
   /// **The asset.** [CrateDepositRollup.placedDepositKobo], hoisted so
   /// [businessNetPositionKobo] and the CSV read one name.
   int get placedCrateDepositsKobo => crateDeposits.placedDepositKobo;
+
+  /// #216 — **the warning**: crates owed that are not in the yard, per brand,
+  /// net of what has already been written off (ADR 0023 rule 4).
+  ///
+  /// Point-in-time and business-wide, like [crateDeposits]. It is a suspicion,
+  /// not a loss — crates turn up behind the store, a driver returns late, a
+  /// count was wrong — so **it appears in no total on this object**. It is not
+  /// in profit, not in worth, not in cash. It shrinks by itself when crates
+  /// reappear, because it is derived from today's counts every time it is read,
+  /// and it stays visible until somebody deliberately accepts the loss.
+  final CrateShortfallRollup crateShortfalls;
+
+  /// #216 — **the loss somebody accepted**, in this period (ADR 0023 rule 5).
+  ///
+  /// The write-off decisions dated inside `[start, endExclusive)`, each valued
+  /// at the rate snapshotted when it was taken. This is the ONE figure PRD #203
+  /// puts into profit: everything else it books is a refundable Placed Deposit,
+  /// an asset that changed shape and can never be a cost. A write-off is the
+  /// opposite — the moment an owner says the crates are not coming back — so it
+  /// is a realized loss and sits with [crateDamageDepositKobo] and
+  /// [deletionCostKobo] in [netProfitKobo] and [periodNetResultKobo].
+  ///
+  /// **Dated by decision, not by discovery.** A shortfall that opened in March
+  /// and was accepted in July reduces JULY's profit. That is the whole reason
+  /// the decision is persisted rather than re-derived (ADR 0019's reasoning,
+  /// ADR 0021's no-restatement rule): a later count must never move a loss
+  /// somebody has already taken responsibility for.
+  ///
+  /// 0 for every `none` brand, and therefore 0 for every business that has not
+  /// deliberately switched one on.
+  final int crateShortfallWrittenOffKobo;
 
   final String? bestStaff;
   final int bestStaffKobo;
@@ -1001,6 +1038,12 @@ class ReconData {
   /// [deletionCostKobo] joins Damages as a loss line (#193): stock written off
   /// because its product was deleted is value the business paid for and no longer
   /// has, so it belongs in the result and not merely in a stock-card note.
+  /// [crateShortfallWrittenOffKobo] joins them (#216): crates the owner has
+  /// deliberately accepted as lost are deposit value the business will not get
+  /// back, and the day they said so is the day it costs them. It is the only
+  /// crate-money figure in PRD #203 that may touch this line — a Placed Deposit
+  /// is refundable and can never reduce profit — and it enters only on the
+  /// owner's decision, never on a timer.
   int get netProfitKobo =>
       grossProfitKobo +
       uncostedTakingsKobo +
@@ -1008,6 +1051,7 @@ class ReconData {
       expensesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
+      crateShortfallWrittenOffKobo -
       deletionCostKobo;
 
   // ── Cash-flow summary getters (ADR 0014) ─────────────────────────────────
@@ -1109,6 +1153,8 @@ class ReconData {
       expensesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
+      // #216 — an accepted crate loss is realized, on the day it was accepted.
+      crateShortfallWrittenOffKobo -
       // #193 — deleted-product write-offs sit with Damages and Shortages as a
       // realized loss, not as an unbooked stock-card footnote.
       deletionCostKobo -
@@ -1217,6 +1263,8 @@ class ReconInputs {
     this.heldCrateDepositsKobo = 0,
     this.supplierCrateDebtKobo = 0,
     this.crateDeposits = CrateDepositRollup.empty,
+    this.crateShortfalls = CrateShortfallRollup.empty,
+    this.crateShortfallWriteOffs = const [],
     this.isCeo = false,
     this.inScope = _everyStore,
     this.start,
@@ -1267,6 +1315,18 @@ class ReconInputs {
   /// decision, not by convenience: supplier crate money is a company
   /// obligation, so it is not scoped by [inScope] here or anywhere else.
   final CrateDepositRollup crateDeposits;
+
+  /// #216 — the business-wide brand-level Crate Shortfall, already computed
+  /// through `computeCrateShortfall` (and so through
+  /// [computeCrateDepositPosition]) by its own provider. Handed in whole: this
+  /// file re-derives none of it, which is the rule the whole seam exists for.
+  final CrateShortfallRollup crateShortfalls;
+
+  /// #216 — every Crate Shortfall write-off decision, UNWINDOWED. The period
+  /// filter is applied by [crateShortfallWriteOffKobo] inside [reconDataFrom],
+  /// like every other row set here, so the "booked on the day it was taken"
+  /// rule is exercised by the pure math rather than by a query.
+  final List<CrateShortfallWriteoffData> crateShortfallWriteOffs;
 
   /// Gates the supplier-ledger flows only; every other figure is computed
   /// either way and the screen decides what to show per the cost wall.
@@ -1366,6 +1426,15 @@ ReconData computeReconData(
           ? (ref.watch(businessCrateDepositRollupProvider).valueOrNull ??
                 CrateDepositRollup.empty)
           : CrateDepositRollup.empty,
+      // #216 — business-wide for the same reason, and store-blind for the same
+      // reason: a crate that went missing went missing from the company.
+      crateShortfalls: showCrates
+          ? (ref.watch(crateShortfallRollupProvider).valueOrNull ??
+                CrateShortfallRollup.empty)
+          : CrateShortfallRollup.empty,
+      crateShortfallWriteOffs: showCrates
+          ? (ref.watch(crateShortfallWriteOffsProvider).valueOrNull ?? const [])
+          : const [],
       isCeo: isCeo,
       inScope: reconStoreFilter(ref, businessWide: businessWide),
       start: start,
@@ -1946,10 +2015,41 @@ ReconData reconDataFrom(ReconInputs input) {
   // business-wide basis, and computed entirely upstream by
   // [computeCrateDepositPosition]: nothing here re-derives it.
   var crateDeposits = CrateDepositRollup.empty;
+  // #216 — the WARNING (point-in-time, in no total) and the LOSS SOMEBODY TOOK
+  // (this period, in profit). Same gate, same business-wide basis. The warning
+  // arrives already computed through `computeCrateShortfall`; the loss is the
+  // one thing computed here, and it is computed by the pure helper beside the
+  // seam rather than by a sum written out in this file.
+  var crateShortfalls = CrateShortfallRollup.empty;
+  var crateShortfallWrittenOffKobo = 0;
   if (showCrates) {
     heldCrateDepositsKobo = input.heldCrateDepositsKobo;
     supplierCrateDebtKobo = input.supplierCrateDebtKobo;
     crateDeposits = input.crateDeposits;
+    crateShortfalls = input.crateShortfalls;
+    crateShortfallWrittenOffKobo = crateShortfallWriteOffKobo(
+      writeOffs: [
+        for (final w in input.crateShortfallWriteOffs)
+          CrateShortfallWriteOff(
+            manufacturerId: w.manufacturerId,
+            crateCount: w.crateCount,
+            // The rate SNAPSHOTTED when the decision was taken, never today's.
+            // A brand whose deposit rate rises next month must not restate the
+            // profit of a day already closed (ADR 0021).
+            ratePerCrateKobo: w.ratePerCrateKobo,
+            writtenOffAt: w.createdAt,
+          ),
+      ],
+      // Fail closed: a brand missing from this map reads `none` and books
+      // nothing. `manufacturers` is the same unfiltered business-wide list the
+      // empties valuation above uses.
+      arrangementByManufacturerId: {
+        for (final m in manufacturers)
+          m.id: crateMoneyArrangementOf(m.crateMoneyArrangement),
+      },
+      start: input.start,
+      endExclusive: endExclusive,
+    );
   }
 
   // ── Forfeit income (#176 / PRD #155 story 7) ─────────────────────────────
@@ -2077,6 +2177,8 @@ ReconData reconDataFrom(ReconInputs input) {
     cashCrateDepositsKobo: cashCrateDepositsKobo,
     cashCrateDepositsPlacedKobo: cashCrateDepositsPlacedKobo,
     crateDeposits: crateDeposits,
+    crateShortfalls: crateShortfalls,
+    crateShortfallWrittenOffKobo: crateShortfallWrittenOffKobo,
     bestStaff: bestStaff,
     bestStaffKobo: bestStaffKobo,
     expensesKobo: expensesKobo,

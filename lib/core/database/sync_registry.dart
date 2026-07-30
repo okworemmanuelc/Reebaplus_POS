@@ -1134,6 +1134,18 @@ final List<SyncedTable> kSyncRegistry = [
     tenantScoped: true,
     restore: _restoreSupplierCrateDeposits,
   ),
+  // #216 / PRD #203, ADR 0023 rule 5 — the Crate Shortfall write-off ledger.
+  // The same treatment as the Placed Deposit ledger above and for the same
+  // reasons: no `hardDelete` (an accepted loss is never removed), no
+  // `scrubCreatedAt` (the table carries no void columns, so no row is ever
+  // re-pushed and there is no immutable-created_at trigger to trip), and
+  // INSERT-OR-IGNORE on the pull side. A correction is a new NEGATIVE
+  // `crate_count` row.
+  const SyncedTable(
+    name: 'crate_shortfall_writeoffs',
+    tenantScoped: true,
+    restore: _restoreCrateShortfallWriteoffs,
+  ),
   SyncedTable(
     name: 'saved_carts',
     tenantScoped: true,
@@ -1385,6 +1397,38 @@ Future<void> _restoreSupplierCrateDeposits(
       fkSkipped,
       () => ex.db
           .into(ex.db.supplierCrateDeposits)
+          .insert(data, mode: InsertMode.insertOrIgnore),
+    );
+  }
+}
+
+/// #216 — the append-only Crate Shortfall write-off ledger.
+///
+/// INSERT-OR-IGNORE, never an on-conflict UPDATE, for the identical reason
+/// [_restoreSupplierCrateDeposits] is: `crate_shortfall_writeoffs` is in
+/// `_ledgerTables` and has NO void columns, so **no column on it may ever change
+/// after insert**. `Restore.plain` would issue an on-conflict UPDATE on every
+/// re-delivery of a row this device already holds and abort a whole pull page
+/// the first time the cloud round-tripped a value even slightly differently. An
+/// append-only row has nothing to update anyway.
+///
+/// FK-resilient: its parents are manufacturers, stores and users, all pulled
+/// earlier — but a page that arrives out of order defers rather than dropping a
+/// row that carries a booked loss.
+Future<void> _restoreCrateShortfallWriteoffs(
+  SyncRestoreExecutor ex,
+  String table,
+  List<Map<String, dynamic>> rows,
+  Set<String>? fkSkipped,
+) async {
+  for (final r in rows) {
+    final data = CrateShortfallWriteoffData.fromJson(r);
+    await ex.insertResilient(
+      'crate_shortfall_writeoffs',
+      r,
+      fkSkipped,
+      () => ex.db
+          .into(ex.db.crateShortfallWriteoffs)
           .insert(data, mode: InsertMode.insertOrIgnore),
     );
   }

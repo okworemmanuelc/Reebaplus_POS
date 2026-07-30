@@ -9575,6 +9575,673 @@ class SupplierCrateDepositsCompanion
   }
 }
 
+class $CrateShortfallWriteoffsTable extends CrateShortfallWriteoffs
+    with TableInfo<$CrateShortfallWriteoffsTable, CrateShortfallWriteoffData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CrateShortfallWriteoffsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _manufacturerIdMeta = const VerificationMeta(
+    'manufacturerId',
+  );
+  @override
+  late final GeneratedColumn<String> manufacturerId = GeneratedColumn<String>(
+    'manufacturer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturers (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _crateCountMeta = const VerificationMeta(
+    'crateCount',
+  );
+  @override
+  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+    'crate_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
+    'ratePerCrateKobo',
+  );
+  @override
+  late final GeneratedColumn<int> ratePerCrateKobo = GeneratedColumn<int>(
+    'rate_per_crate_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _performedByMeta = const VerificationMeta(
+    'performedBy',
+  );
+  @override
+  late final GeneratedColumn<String> performedBy = GeneratedColumn<String>(
+    'performed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    manufacturerId,
+    storeId,
+    crateCount,
+    ratePerCrateKobo,
+    note,
+    performedBy,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'crate_shortfall_writeoffs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CrateShortfallWriteoffData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('manufacturer_id')) {
+      context.handle(
+        _manufacturerIdMeta,
+        manufacturerId.isAcceptableOrUnknown(
+          data['manufacturer_id']!,
+          _manufacturerIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturerIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    }
+    if (data.containsKey('crate_count')) {
+      context.handle(
+        _crateCountMeta,
+        crateCount.isAcceptableOrUnknown(data['crate_count']!, _crateCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_crateCountMeta);
+    }
+    if (data.containsKey('rate_per_crate_kobo')) {
+      context.handle(
+        _ratePerCrateKoboMeta,
+        ratePerCrateKobo.isAcceptableOrUnknown(
+          data['rate_per_crate_kobo']!,
+          _ratePerCrateKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('performed_by')) {
+      context.handle(
+        _performedByMeta,
+        performedBy.isAcceptableOrUnknown(
+          data['performed_by']!,
+          _performedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CrateShortfallWriteoffData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CrateShortfallWriteoffData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      manufacturerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      ),
+      crateCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}crate_count'],
+      )!,
+      ratePerCrateKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rate_per_crate_kobo'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      performedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}performed_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CrateShortfallWriteoffsTable createAlias(String alias) {
+    return $CrateShortfallWriteoffsTable(attachedDatabase, alias);
+  }
+}
+
+class CrateShortfallWriteoffData extends DataClass
+    implements Insertable<CrateShortfallWriteoffData> {
+  final String id;
+  final String businessId;
+
+  /// The brand. The ONLY axis a shortfall has — see the class doc.
+  final String manufacturerId;
+
+  /// The store whose device took the decision, for the audit trail only.
+  /// Nullable, and it never scopes the figure: a shortfall is business-wide
+  /// (`CRATE_TRACKING_AUDIT` C4), so splitting the loss per branch would let two
+  /// stores each believe the same crates were theirs to lose.
+  final String? storeId;
+
+  /// Crates accepted as lost. **Signed:** positive is a write-off, negative is
+  /// the compensating row for a reversal. A `<> 0` CHECK rather than `> 0` so a
+  /// future reversal path ships as code only — widening a CHECK on an
+  /// append-only money ledger costs a table rebuild on every device, and v71 /
+  /// #212 are the precedents for declaring the whole range up front.
+  final int crateCount;
+
+  /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED at the moment the decision
+  /// was taken. The loss booked is `crate_count × rate_per_crate_kobo` forever
+  /// after — never today's rate — so a rate edited next month cannot restate the
+  /// profit of a day already closed.
+  final int ratePerCrateKobo;
+  final String? note;
+
+  /// Who accepted the loss. Half of "who wrote off a shortage and when".
+  final String? performedBy;
+
+  /// **The day the loss hits profit.** The other half. Set explicitly by the
+  /// DAO, never left to the column default, so the decision date is a fact the
+  /// write path owns rather than a side effect of when a row reached SQLite.
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const CrateShortfallWriteoffData({
+    required this.id,
+    required this.businessId,
+    required this.manufacturerId,
+    this.storeId,
+    required this.crateCount,
+    required this.ratePerCrateKobo,
+    this.note,
+    this.performedBy,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['manufacturer_id'] = Variable<String>(manufacturerId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
+    }
+    map['crate_count'] = Variable<int>(crateCount);
+    map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || performedBy != null) {
+      map['performed_by'] = Variable<String>(performedBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  CrateShortfallWriteoffsCompanion toCompanion(bool nullToAbsent) {
+    return CrateShortfallWriteoffsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      manufacturerId: Value(manufacturerId),
+      storeId: storeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeId),
+      crateCount: Value(crateCount),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      performedBy: performedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(performedBy),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory CrateShortfallWriteoffData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CrateShortfallWriteoffData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
+      crateCount: serializer.fromJson<int>(json['crateCount']),
+      ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
+      note: serializer.fromJson<String?>(json['note']),
+      performedBy: serializer.fromJson<String?>(json['performedBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'manufacturerId': serializer.toJson<String>(manufacturerId),
+      'storeId': serializer.toJson<String?>(storeId),
+      'crateCount': serializer.toJson<int>(crateCount),
+      'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
+      'note': serializer.toJson<String?>(note),
+      'performedBy': serializer.toJson<String?>(performedBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  CrateShortfallWriteoffData copyWith({
+    String? id,
+    String? businessId,
+    String? manufacturerId,
+    Value<String?> storeId = const Value.absent(),
+    int? crateCount,
+    int? ratePerCrateKobo,
+    Value<String?> note = const Value.absent(),
+    Value<String?> performedBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => CrateShortfallWriteoffData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    manufacturerId: manufacturerId ?? this.manufacturerId,
+    storeId: storeId.present ? storeId.value : this.storeId,
+    crateCount: crateCount ?? this.crateCount,
+    ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+    note: note.present ? note.value : this.note,
+    performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  CrateShortfallWriteoffData copyWithCompanion(
+    CrateShortfallWriteoffsCompanion data,
+  ) {
+    return CrateShortfallWriteoffData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      manufacturerId: data.manufacturerId.present
+          ? data.manufacturerId.value
+          : this.manufacturerId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      crateCount: data.crateCount.present
+          ? data.crateCount.value
+          : this.crateCount,
+      ratePerCrateKobo: data.ratePerCrateKobo.present
+          ? data.ratePerCrateKobo.value
+          : this.ratePerCrateKobo,
+      note: data.note.present ? data.note.value : this.note,
+      performedBy: data.performedBy.present
+          ? data.performedBy.value
+          : this.performedBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CrateShortfallWriteoffData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('note: $note, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    manufacturerId,
+    storeId,
+    crateCount,
+    ratePerCrateKobo,
+    note,
+    performedBy,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CrateShortfallWriteoffData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.manufacturerId == this.manufacturerId &&
+          other.storeId == this.storeId &&
+          other.crateCount == this.crateCount &&
+          other.ratePerCrateKobo == this.ratePerCrateKobo &&
+          other.note == this.note &&
+          other.performedBy == this.performedBy &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class CrateShortfallWriteoffsCompanion
+    extends UpdateCompanion<CrateShortfallWriteoffData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> manufacturerId;
+  final Value<String?> storeId;
+  final Value<int> crateCount;
+  final Value<int> ratePerCrateKobo;
+  final Value<String?> note;
+  final Value<String?> performedBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const CrateShortfallWriteoffsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.manufacturerId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.crateCount = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
+    this.note = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CrateShortfallWriteoffsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String manufacturerId,
+    this.storeId = const Value.absent(),
+    required int crateCount,
+    this.ratePerCrateKobo = const Value.absent(),
+    this.note = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       manufacturerId = Value(manufacturerId),
+       crateCount = Value(crateCount);
+  static Insertable<CrateShortfallWriteoffData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? manufacturerId,
+    Expression<String>? storeId,
+    Expression<int>? crateCount,
+    Expression<int>? ratePerCrateKobo,
+    Expression<String>? note,
+    Expression<String>? performedBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (manufacturerId != null) 'manufacturer_id': manufacturerId,
+      if (storeId != null) 'store_id': storeId,
+      if (crateCount != null) 'crate_count': crateCount,
+      if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
+      if (note != null) 'note': note,
+      if (performedBy != null) 'performed_by': performedBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CrateShortfallWriteoffsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? manufacturerId,
+    Value<String?>? storeId,
+    Value<int>? crateCount,
+    Value<int>? ratePerCrateKobo,
+    Value<String?>? note,
+    Value<String?>? performedBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return CrateShortfallWriteoffsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      manufacturerId: manufacturerId ?? this.manufacturerId,
+      storeId: storeId ?? this.storeId,
+      crateCount: crateCount ?? this.crateCount,
+      ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+      note: note ?? this.note,
+      performedBy: performedBy ?? this.performedBy,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (manufacturerId.present) {
+      map['manufacturer_id'] = Variable<String>(manufacturerId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (crateCount.present) {
+      map['crate_count'] = Variable<int>(crateCount.value);
+    }
+    if (ratePerCrateKobo.present) {
+      map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (performedBy.present) {
+      map['performed_by'] = Variable<String>(performedBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CrateShortfallWriteoffsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('manufacturerId: $manufacturerId, ')
+          ..write('storeId: $storeId, ')
+          ..write('crateCount: $crateCount, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('note: $note, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ProductsTable extends Products
     with TableInfo<$ProductsTable, ProductData> {
   @override
@@ -47579,6 +48246,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SupplierCrateDepositRequestsTable(this);
   late final $SupplierCrateDepositsTable supplierCrateDeposits =
       $SupplierCrateDepositsTable(this);
+  late final $CrateShortfallWriteoffsTable crateShortfallWriteoffs =
+      $CrateShortfallWriteoffsTable(this);
   late final $ProductsTable products = $ProductsTable(this);
   late final $PriceListsTable priceLists = $PriceListsTable(this);
   late final $CustomersTable customers = $CustomersTable(this);
@@ -47776,6 +48445,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     supplierCrateBalances,
     supplierCrateDepositRequests,
     supplierCrateDeposits,
+    crateShortfallWriteoffs,
     products,
     priceLists,
     customers,
@@ -48128,6 +48798,34 @@ final class $$BusinessesTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CrateShortfallWriteoffsTable,
+    List<CrateShortfallWriteoffData>
+  >
+  _crateShortfallWriteoffsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.crateShortfallWriteoffs,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.crateShortfallWriteoffs.businessId,
+        ),
+      );
+
+  $$CrateShortfallWriteoffsTableProcessedTableManager
+  get crateShortfallWriteoffsRefs {
+    final manager = $$CrateShortfallWriteoffsTableTableManager(
+      $_db,
+      $_db.crateShortfallWriteoffs,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _crateShortfallWriteoffsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -49570,6 +50268,32 @@ class $$BusinessesTableFilterComposer
               }) => $$SupplierCrateDepositsTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> crateShortfallWriteoffsRefs(
+    Expression<bool> Function($$CrateShortfallWriteoffsTableFilterComposer f) f,
+  ) {
+    final $$CrateShortfallWriteoffsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -51254,6 +51978,33 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> crateShortfallWriteoffsRefs<T extends Object>(
+    Expression<T> Function($$CrateShortfallWriteoffsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CrateShortfallWriteoffsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> productsRefs<T extends Object>(
     Expression<T> Function($$ProductsTableAnnotationComposer a) f,
   ) {
@@ -52521,6 +53272,7 @@ class $$BusinessesTableTableManager
             bool supplierCrateBalancesRefs,
             bool supplierCrateDepositRequestsRefs,
             bool supplierCrateDepositsRefs,
+            bool crateShortfallWriteoffsRefs,
             bool productsRefs,
             bool priceListsRefs,
             bool customersRefs,
@@ -52680,6 +53432,7 @@ class $$BusinessesTableTableManager
                 supplierCrateBalancesRefs = false,
                 supplierCrateDepositRequestsRefs = false,
                 supplierCrateDepositsRefs = false,
+                crateShortfallWriteoffsRefs = false,
                 productsRefs = false,
                 priceListsRefs = false,
                 customersRefs = false,
@@ -52745,6 +53498,7 @@ class $$BusinessesTableTableManager
                     if (supplierCrateDepositRequestsRefs)
                       db.supplierCrateDepositRequests,
                     if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                    if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (productsRefs) db.products,
                     if (priceListsRefs) db.priceLists,
                     if (customersRefs) db.customers,
@@ -53024,6 +53778,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateShortfallWriteoffsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          CrateShortfallWriteoffData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._crateShortfallWriteoffsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateShortfallWriteoffsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -54091,6 +54866,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool supplierCrateBalancesRefs,
         bool supplierCrateDepositRequestsRefs,
         bool supplierCrateDepositsRefs,
+        bool crateShortfallWriteoffsRefs,
         bool productsRefs,
         bool priceListsRefs,
         bool customersRefs,
@@ -55019,6 +55795,34 @@ final class $$ManufacturersTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $CrateShortfallWriteoffsTable,
+    List<CrateShortfallWriteoffData>
+  >
+  _crateShortfallWriteoffsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.crateShortfallWriteoffs,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturers.id,
+          db.crateShortfallWriteoffs.manufacturerId,
+        ),
+      );
+
+  $$CrateShortfallWriteoffsTableProcessedTableManager
+  get crateShortfallWriteoffsRefs {
+    final manager = $$CrateShortfallWriteoffsTableTableManager(
+      $_db,
+      $_db.crateShortfallWriteoffs,
+    ).filter((f) => f.manufacturerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _crateShortfallWriteoffsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$ProductsTable, List<ProductData>>
   _productsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.products,
@@ -55364,6 +56168,32 @@ class $$ManufacturersTableFilterComposer
               }) => $$SupplierCrateDepositsTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> crateShortfallWriteoffsRefs(
+    Expression<bool> Function($$CrateShortfallWriteoffsTableFilterComposer f) f,
+  ) {
+    final $$CrateShortfallWriteoffsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -55796,6 +56626,33 @@ class $$ManufacturersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> crateShortfallWriteoffsRefs<T extends Object>(
+    Expression<T> Function($$CrateShortfallWriteoffsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CrateShortfallWriteoffsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> productsRefs<T extends Object>(
     Expression<T> Function($$ProductsTableAnnotationComposer a) f,
   ) {
@@ -55996,6 +56853,7 @@ class $$ManufacturersTableTableManager
             bool supplierCrateBalancesRefs,
             bool supplierCrateDepositRequestsRefs,
             bool supplierCrateDepositsRefs,
+            bool crateShortfallWriteoffsRefs,
             bool productsRefs,
             bool customerCrateBalancesRefs,
             bool manufacturerCrateBalancesRefs,
@@ -56079,6 +56937,7 @@ class $$ManufacturersTableTableManager
                 supplierCrateBalancesRefs = false,
                 supplierCrateDepositRequestsRefs = false,
                 supplierCrateDepositsRefs = false,
+                crateShortfallWriteoffsRefs = false,
                 productsRefs = false,
                 customerCrateBalancesRefs = false,
                 manufacturerCrateBalancesRefs = false,
@@ -56095,6 +56954,7 @@ class $$ManufacturersTableTableManager
                     if (supplierCrateDepositRequestsRefs)
                       db.supplierCrateDepositRequests,
                     if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                    if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (productsRefs) db.products,
                     if (customerCrateBalancesRefs) db.customerCrateBalances,
                     if (manufacturerCrateBalancesRefs)
@@ -56218,6 +57078,27 @@ class $$ManufacturersTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateShortfallWriteoffsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturerData,
+                          $ManufacturersTable,
+                          CrateShortfallWriteoffData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturersTableReferences
+                              ._crateShortfallWriteoffsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateShortfallWriteoffsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.manufacturerId == item.id,
@@ -56397,6 +57278,7 @@ typedef $$ManufacturersTableProcessedTableManager =
         bool supplierCrateBalancesRefs,
         bool supplierCrateDepositRequestsRefs,
         bool supplierCrateDepositsRefs,
+        bool crateShortfallWriteoffsRefs,
         bool productsRefs,
         bool customerCrateBalancesRefs,
         bool manufacturerCrateBalancesRefs,
@@ -56578,6 +57460,34 @@ final class $$StoresTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CrateShortfallWriteoffsTable,
+    List<CrateShortfallWriteoffData>
+  >
+  _crateShortfallWriteoffsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.crateShortfallWriteoffs,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.crateShortfallWriteoffs.storeId,
+        ),
+      );
+
+  $$CrateShortfallWriteoffsTableProcessedTableManager
+  get crateShortfallWriteoffsRefs {
+    final manager = $$CrateShortfallWriteoffsTableTableManager(
+      $_db,
+      $_db.crateShortfallWriteoffs,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _crateShortfallWriteoffsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -57214,6 +58124,32 @@ class $$StoresTableFilterComposer
               }) => $$SupplierCrateDepositsTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> crateShortfallWriteoffsRefs(
+    Expression<bool> Function($$CrateShortfallWriteoffsTableFilterComposer f) f,
+  ) {
+    final $$CrateShortfallWriteoffsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -58005,6 +58941,33 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> crateShortfallWriteoffsRefs<T extends Object>(
+    Expression<T> Function($$CrateShortfallWriteoffsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CrateShortfallWriteoffsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> customersRefs<T extends Object>(
     Expression<T> Function($$CustomersTableAnnotationComposer a) f,
   ) {
@@ -58558,6 +59521,7 @@ class $$StoresTableTableManager
             bool supplierCrateLedgerRefs,
             bool supplierCrateDepositRequestsRefs,
             bool supplierCrateDepositsRefs,
+            bool crateShortfallWriteoffsRefs,
             bool customersRefs,
             bool ordersRefs,
             bool storeCrateBalancesRefs,
@@ -58650,6 +59614,7 @@ class $$StoresTableTableManager
                 supplierCrateLedgerRefs = false,
                 supplierCrateDepositRequestsRefs = false,
                 supplierCrateDepositsRefs = false,
+                crateShortfallWriteoffsRefs = false,
                 customersRefs = false,
                 ordersRefs = false,
                 storeCrateBalancesRefs = false,
@@ -58681,6 +59646,7 @@ class $$StoresTableTableManager
                     if (supplierCrateDepositRequestsRefs)
                       db.supplierCrateDepositRequests,
                     if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                    if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (customersRefs) db.customers,
                     if (ordersRefs) db.orders,
                     if (storeCrateBalancesRefs) db.storeCrateBalances,
@@ -58832,6 +59798,27 @@ class $$StoresTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateShortfallWriteoffsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          CrateShortfallWriteoffData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._crateShortfallWriteoffsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateShortfallWriteoffsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.storeId == item.id,
@@ -59302,6 +60289,7 @@ typedef $$StoresTableProcessedTableManager =
         bool supplierCrateLedgerRefs,
         bool supplierCrateDepositRequestsRefs,
         bool supplierCrateDepositsRefs,
+        bool crateShortfallWriteoffsRefs,
         bool customersRefs,
         bool ordersRefs,
         bool storeCrateBalancesRefs,
@@ -59429,6 +60417,34 @@ final class $$UsersTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _supplierCrateDepositsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CrateShortfallWriteoffsTable,
+    List<CrateShortfallWriteoffData>
+  >
+  _crateShortfallWriteoffsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.crateShortfallWriteoffs,
+        aliasName: $_aliasNameGenerator(
+          db.users.id,
+          db.crateShortfallWriteoffs.performedBy,
+        ),
+      );
+
+  $$CrateShortfallWriteoffsTableProcessedTableManager
+  get crateShortfallWriteoffsRefs {
+    final manager = $$CrateShortfallWriteoffsTableTableManager(
+      $_db,
+      $_db.crateShortfallWriteoffs,
+    ).filter((f) => f.performedBy.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _crateShortfallWriteoffsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -59802,6 +60818,32 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
               }) => $$SupplierCrateDepositsTableFilterComposer(
                 $db: $db,
                 $table: $db.supplierCrateDeposits,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> crateShortfallWriteoffsRefs(
+    Expression<bool> Function($$CrateShortfallWriteoffsTableFilterComposer f) f,
+  ) {
+    final $$CrateShortfallWriteoffsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.performedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -60357,6 +61399,33 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> crateShortfallWriteoffsRefs<T extends Object>(
+    Expression<T> Function($$CrateShortfallWriteoffsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$CrateShortfallWriteoffsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.crateShortfallWriteoffs,
+          getReferencedColumn: (t) => t.performedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.crateShortfallWriteoffs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> stockAdjustmentsRefs<T extends Object>(
     Expression<T> Function($$StockAdjustmentsTableAnnotationComposer a) f,
   ) {
@@ -60652,6 +61721,7 @@ class $$UsersTableTableManager
             bool businessId,
             bool storeId,
             bool supplierCrateDepositsRefs,
+            bool crateShortfallWriteoffsRefs,
             bool stockAdjustmentsRefs,
             bool orderCrateLinesRefs,
             bool stockCountsRefs,
@@ -60767,6 +61837,7 @@ class $$UsersTableTableManager
                 businessId = false,
                 storeId = false,
                 supplierCrateDepositsRefs = false,
+                crateShortfallWriteoffsRefs = false,
                 stockAdjustmentsRefs = false,
                 orderCrateLinesRefs = false,
                 stockCountsRefs = false,
@@ -60783,6 +61854,7 @@ class $$UsersTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
+                    if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (orderCrateLinesRefs) db.orderCrateLines,
                     if (stockCountsRefs) db.stockCounts,
@@ -60857,6 +61929,27 @@ class $$UsersTableTableManager
                                 table,
                                 p0,
                               ).supplierCrateDepositsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.performedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateShortfallWriteoffsRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          CrateShortfallWriteoffData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._crateShortfallWriteoffsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateShortfallWriteoffsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.performedBy == item.id,
@@ -61118,6 +62211,7 @@ typedef $$UsersTableProcessedTableManager =
         bool businessId,
         bool storeId,
         bool supplierCrateDepositsRefs,
+        bool crateShortfallWriteoffsRefs,
         bool stockAdjustmentsRefs,
         bool orderCrateLinesRefs,
         bool stockCountsRefs,
@@ -68302,6 +69396,745 @@ typedef $$SupplierCrateDepositsTableProcessedTableManager =
         bool supplierCrateLedgerId,
         bool performedBy,
         bool paymentTransactionsRefs,
+      })
+    >;
+typedef $$CrateShortfallWriteoffsTableCreateCompanionBuilder =
+    CrateShortfallWriteoffsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String manufacturerId,
+      Value<String?> storeId,
+      required int crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<String?> note,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$CrateShortfallWriteoffsTableUpdateCompanionBuilder =
+    CrateShortfallWriteoffsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> manufacturerId,
+      Value<String?> storeId,
+      Value<int> crateCount,
+      Value<int> ratePerCrateKobo,
+      Value<String?> note,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$CrateShortfallWriteoffsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $CrateShortfallWriteoffsTable,
+          CrateShortfallWriteoffData
+        > {
+  $$CrateShortfallWriteoffsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.crateShortfallWriteoffs.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ManufacturersTable _manufacturerIdTable(_$AppDatabase db) =>
+      db.manufacturers.createAlias(
+        $_aliasNameGenerator(
+          db.crateShortfallWriteoffs.manufacturerId,
+          db.manufacturers.id,
+        ),
+      );
+
+  $$ManufacturersTableProcessedTableManager get manufacturerId {
+    final $_column = $_itemColumn<String>('manufacturer_id')!;
+
+    final manager = $$ManufacturersTableTableManager(
+      $_db,
+      $_db.manufacturers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.crateShortfallWriteoffs.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _performedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(
+          db.crateShortfallWriteoffs.performedBy,
+          db.users.id,
+        ),
+      );
+
+  $$UsersTableProcessedTableManager? get performedBy {
+    final $_column = $_itemColumn<String>('performed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_performedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$CrateShortfallWriteoffsTableFilterComposer
+    extends Composer<_$AppDatabase, $CrateShortfallWriteoffsTable> {
+  $$CrateShortfallWriteoffsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableFilterComposer get manufacturerId {
+    final $$ManufacturersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get performedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CrateShortfallWriteoffsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CrateShortfallWriteoffsTable> {
+  $$CrateShortfallWriteoffsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableOrderingComposer get manufacturerId {
+    final $$ManufacturersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableOrderingComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get performedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CrateShortfallWriteoffsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CrateShortfallWriteoffsTable> {
+  $$CrateShortfallWriteoffsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get crateCount => $composableBuilder(
+    column: $table.crateCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturersTableAnnotationComposer get manufacturerId {
+    final $$ManufacturersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get performedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.performedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CrateShortfallWriteoffsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CrateShortfallWriteoffsTable,
+          CrateShortfallWriteoffData,
+          $$CrateShortfallWriteoffsTableFilterComposer,
+          $$CrateShortfallWriteoffsTableOrderingComposer,
+          $$CrateShortfallWriteoffsTableAnnotationComposer,
+          $$CrateShortfallWriteoffsTableCreateCompanionBuilder,
+          $$CrateShortfallWriteoffsTableUpdateCompanionBuilder,
+          (
+            CrateShortfallWriteoffData,
+            $$CrateShortfallWriteoffsTableReferences,
+          ),
+          CrateShortfallWriteoffData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool manufacturerId,
+            bool storeId,
+            bool performedBy,
+          })
+        > {
+  $$CrateShortfallWriteoffsTableTableManager(
+    _$AppDatabase db,
+    $CrateShortfallWriteoffsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CrateShortfallWriteoffsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CrateShortfallWriteoffsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CrateShortfallWriteoffsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> manufacturerId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
+                Value<int> crateCount = const Value.absent(),
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CrateShortfallWriteoffsCompanion(
+                id: id,
+                businessId: businessId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                note: note,
+                performedBy: performedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String manufacturerId,
+                Value<String?> storeId = const Value.absent(),
+                required int crateCount,
+                Value<int> ratePerCrateKobo = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CrateShortfallWriteoffsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                manufacturerId: manufacturerId,
+                storeId: storeId,
+                crateCount: crateCount,
+                ratePerCrateKobo: ratePerCrateKobo,
+                note: note,
+                performedBy: performedBy,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CrateShortfallWriteoffsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                manufacturerId = false,
+                storeId = false,
+                performedBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (manufacturerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturerId,
+                                    referencedTable:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._manufacturerIdTable(db),
+                                    referencedColumn:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._manufacturerIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (performedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.performedBy,
+                                    referencedTable:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._performedByTable(db),
+                                    referencedColumn:
+                                        $$CrateShortfallWriteoffsTableReferences
+                                            ._performedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$CrateShortfallWriteoffsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CrateShortfallWriteoffsTable,
+      CrateShortfallWriteoffData,
+      $$CrateShortfallWriteoffsTableFilterComposer,
+      $$CrateShortfallWriteoffsTableOrderingComposer,
+      $$CrateShortfallWriteoffsTableAnnotationComposer,
+      $$CrateShortfallWriteoffsTableCreateCompanionBuilder,
+      $$CrateShortfallWriteoffsTableUpdateCompanionBuilder,
+      (CrateShortfallWriteoffData, $$CrateShortfallWriteoffsTableReferences),
+      CrateShortfallWriteoffData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool manufacturerId,
+        bool storeId,
+        bool performedBy,
       })
     >;
 typedef $$ProductsTableCreateCompanionBuilder =
@@ -108871,6 +110704,11 @@ class $AppDatabaseManager {
       );
   $$SupplierCrateDepositsTableTableManager get supplierCrateDeposits =>
       $$SupplierCrateDepositsTableTableManager(_db, _db.supplierCrateDeposits);
+  $$CrateShortfallWriteoffsTableTableManager get crateShortfallWriteoffs =>
+      $$CrateShortfallWriteoffsTableTableManager(
+        _db,
+        _db.crateShortfallWriteoffs,
+      );
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db, _db.products);
   $$PriceListsTableTableManager get priceLists =>
