@@ -21,8 +21,8 @@ the run: **1550 passed / 126 skipped / 0 failed**.
 | #211 arrangement setting (Drift v78, cloud 0171) | **MERGED** | `7185235` — 1585 pass / 126 skip / 0 fail |
 | #212 Placed Deposit + approval + position seam (Drift v79, cloud 0172) | **MERGED** | `f159f46` — 1640 pass / 126 skip / 0 fail |
 | #213 settle on return (code only, no migration) | **MERGED** | `4098972` — 1665 pass / 126 skip / 0 fail |
-| #214 standing float | in progress | — |
-| #215 worth + recon card (amends ADR 0014) | pending | — |
+| #214 standing float (code only, no migration) | **MERGED** | `dd1a709` — 1698 pass / 126 skip / 0 fail |
+| #215 worth + recon card (amends ADR 0014) | in progress | — |
 | #216 shortfall + write-off | pending | — |
 | #217 forfeit netting | pending | — |
 
@@ -111,6 +111,24 @@ box is that door), so changing it would alter the button's behaviour for every
 brand incl. `none` from inside a money slice. Either file it, or fold it into
 #216 — which already reconciles crates owed against empties on hand and would
 surface the discrepancy anyway.
+
+**#214 notes.** Code only again — 0172 absorbed a second consecutive slice.
+Replaced the *incidental* refusal of float brands with a declared pure
+predicate `crateDepositKindAllowedFor(arrangement, kind)`: `none` admits
+nothing, `per_delivery` admits placement + release, `standing_float` admits
+only top-up + payout. Extracted the both-or-neither deposit write into one
+private `_postCrateDepositLegs` shared by confirmation, correction and float —
+a cross-slice refactor, justified because the alternative was a third
+divergent copy of a money write. All of #212/#213's tests still pass unchanged,
+which is the guard on it.
+
+Two calls worth knowing: a **payout larger than the recorded float is not
+capped** (it records money that genuinely arrived and lets the seam surface a
+negative Placed Deposit, rather than clamping and hiding a real disagreement
+with the depot); and **crates lost on a float brand move no money** — they
+raise the Shortfall only, because the supplier has not deducted anything yet.
+Booking the loss immediately is the trap this slice exists to avoid, and the
+new `CONTEXT.md` "Float Top-up / Float Payout" entry names it.
 
 **Cloud migrations are NOT deployed yet** — branches commit them, deployment is
 sequenced separately after the app code lands. Pending: **0171, 0172**.
