@@ -72,6 +72,8 @@ OrdersCompanion _orderCompanion(
   required String orderNumber,
   int totalKobo = 200000,
   int amountPaidKobo = 200000,
+  int discountKobo = 0,
+  int crateDepositPaidKobo = 0,
 }) =>
     OrdersCompanion.insert(
       businessId: businessId,
@@ -79,6 +81,8 @@ OrdersCompanion _orderCompanion(
       customerId: Value(s.customerId),
       totalAmountKobo: totalKobo,
       netAmountKobo: totalKobo,
+      discountKobo: Value(discountKobo),
+      crateDepositPaidKobo: Value(crateDepositPaidKobo),
       amountPaidKobo: Value(amountPaidKobo),
       paymentType: 'cash',
       status: 'completed',
@@ -212,6 +216,11 @@ void main() {
       expect(payload['p_status'], 'completed');
       // The RPC's wallet branch stays a no-op — the legs above own the ledger.
       expect(payload.containsKey('p_wallet_amount_kobo'), isFalse);
+      // #209 — an ordinary sale takes nothing off the goods that the header
+      // does not explain, so the crate-credit key stays OFF the wire. This is
+      // the byte-identical guarantee that lets 0173 be deployed in either
+      // order relative to the client.
+      expect(payload.containsKey('p_crate_credit_kobo'), isFalse);
 
       final items = payload['p_items'] as List;
       expect(items, hasLength(1));
@@ -277,6 +286,148 @@ void main() {
       expect(item['unit_price_kobo'], 90000);
       expect(item['catalogue_price_kobo'], 100000,
           reason: 'the tier list price the charge deviated from is forwarded');
+    });
+
+    // ── #209: the envelope forwards the customer's crate credit ─────────────
+    //
+    // pos_record_sale_v2 is server-authoritative on totals — it recomputes the
+    // gross from p_items and derives net = gross − discount − credit + deposit.
+    // The envelope used to forward only the discount, so any OTHER reduction
+    // the cart applied to the payable vanished on the wire and the server's
+    // header (and, since #201, the tender split that divides it) came out that
+    // much higher than the sale actually was.
+    //
+    // What is pinned here is the CONTRACT, not a live feature: #202 deleted the
+    // cart's crate-credit block, so a shipped sale always derives 0 today. These
+    // build the header a crate-credit sale WOULD write — a payable below
+    // gross − discount — and assert the difference rides the envelope, so the
+    // server's `v_net_amount` reproduces `orders.total_amount_kobo` exactly.
+    //
+    // The mirror of the goods-payable identity the RPC relies on:
+    //   p_crate_credit_kobo
+    //     = Σ(quantity × unit_price_kobo)          (the gross the RPC recomputes)
+    //     − orders.discount_kobo
+    //     − (orders.total_amount_kobo − orders.crate_deposit_paid_kobo)
+    Future<Map<String, dynamic>> envelopeFor(OrdersCompanion order,
+        {required _SaleSeed seed, int? paidKobo}) async {
+      final total = order.totalAmountKobo.value;
+      await db.ordersDao.createOrder(
+        order: order,
+        items: [_itemCompanion(seed, businessId)],
+        customerId: seed.customerId,
+        amountPaidKobo: paidKobo ?? total,
+        totalAmountKobo: total,
+        staffId: seed.staffId,
+        storeId: seed.storeId,
+        paymentMethod: 'cash',
+      );
+      final pending = await getPendingQueue(db);
+      return decodePayload(pending
+          .firstWhere((r) => r.actionType == 'domain:pos_record_sale_v2'));
+    }
+
+    test(
+        'flag ON: a DISCOUNT-only sale forwards no crate credit — the discount '
+        'already explains the whole payable (#209)', () async {
+      await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: true);
+      final s = await _seedSaleFixtures(db, businessId);
+      await db.delete(db.syncQueue).go();
+
+      // gross 200000, discount 20000, payable 180000 → nothing unexplained.
+      final payload = await envelopeFor(
+        _orderCompanion(s, businessId,
+            orderNumber: 'ORD-209-DISC',
+            totalKobo: 180000,
+            amountPaidKobo: 180000,
+            discountKobo: 20000),
+        seed: s,
+      );
+      expect(payload['p_discount_kobo'], 20000);
+      expect(payload.containsKey('p_crate_credit_kobo'), isFalse);
+    });
+
+    test(
+        'flag ON: a payable below gross − discount forwards the gap as '
+        'p_crate_credit_kobo (#209)', () async {
+      await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: true);
+      final s = await _seedSaleFixtures(db, businessId);
+      await db.delete(db.syncQueue).go();
+
+      // gross 200000, discount 20000, payable 150000 → 30000 of credit.
+      // Without it the RPC would derive net = 200000 − 20000 = 180000, write
+      // that header over this device's 150000, and (0170) book 30000 more of
+      // the tender as goods `sale` instead of `wallet_topup`.
+      final payload = await envelopeFor(
+        _orderCompanion(s, businessId,
+            orderNumber: 'ORD-209-CREDIT',
+            totalKobo: 150000,
+            amountPaidKobo: 150000,
+            discountKobo: 20000),
+        seed: s,
+      );
+      expect(payload['p_discount_kobo'], 20000,
+          reason: 'the credit is NOT folded into the stored discount');
+      expect(payload['p_crate_credit_kobo'], 30000);
+      // The identity the server reproduces: gross − discount − credit = payable.
+      expect(200000 - 20000 - (payload['p_crate_credit_kobo'] as int), 150000);
+    });
+
+    test(
+        'flag ON: the crate DEPOSIT is added back before the credit is derived '
+        '— held money is not mistaken for a credit (#209)', () async {
+      await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: true);
+      final s = await _seedSaleFixtures(db, businessId);
+      await db.delete(db.syncQueue).go();
+
+      // gross 200000, no discount, 25000 credit, 30000 deposit held.
+      // total_amount_kobo is the payable INCLUDING the deposit:
+      //   200000 − 25000 + 30000 = 205000.
+      final payload = await envelopeFor(
+        _orderCompanion(s, businessId,
+            orderNumber: 'ORD-209-DEPOSIT',
+            totalKobo: 205000,
+            amountPaidKobo: 205000,
+            crateDepositPaidKobo: 30000),
+        seed: s,
+      );
+      expect(payload['p_crate_deposit_paid_kobo'], 30000);
+      expect(payload['p_crate_credit_kobo'], 25000,
+          reason: 'the deposit rides its own parameter, not the credit');
+    });
+
+    test(
+        'flag OFF: the crate credit is a v2-envelope term only — the v1 path '
+        'pushes the header it already wrote (#209)', () async {
+      await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: false);
+      final s = await _seedSaleFixtures(db, businessId);
+      await db.delete(db.syncQueue).go();
+
+      await db.ordersDao.createOrder(
+        order: _orderCompanion(s, businessId,
+            orderNumber: 'ORD-209-V1',
+            totalKobo: 150000,
+            amountPaidKobo: 150000,
+            discountKobo: 20000),
+        items: [_itemCompanion(s, businessId)],
+        customerId: s.customerId,
+        amountPaidKobo: 150000,
+        totalAmountKobo: 150000,
+        staffId: s.staffId,
+        storeId: s.storeId,
+        paymentMethod: 'cash',
+      );
+
+      // v1 pushes the local row verbatim, so the payable needs no reconstruction
+      // and there is no envelope to carry a credit on. This is the path #209's
+      // v2 arithmetic is being brought back into line with.
+      final order = await db.select(db.orders).getSingle();
+      expect(order.totalAmountKobo, 150000);
+      expect(order.netAmountKobo, 150000);
+      expect(order.discountKobo, 20000);
+      final actionTypes =
+          (await getPendingQueue(db)).map((r) => r.actionType).toSet();
+      expect(actionTypes.contains('domain:pos_record_sale_v2'), isFalse);
+      expect(actionTypes, contains('orders:upsert'));
     });
 
     test(

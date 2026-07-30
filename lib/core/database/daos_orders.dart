@@ -664,6 +664,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // crate deposits and overpayments into "Cash sales". That parity holds only
       // while 0170 is DEPLOYED — flipping the flag against a cloud that predates
       // it reintroduces the single bundled, store-less `sale` row.
+      //
+      // #209 / migration 0173 closed the last money gap 0170 had to leave open:
+      // the envelope now forwards every reduction the header applied to the
+      // payable, not just the per-line discount, so a crate-credit sale is no
+      // longer a known v1/v2 difference on this checklist. Same deployment
+      // caveat — 0173 must be live before any client that can produce a non-zero
+      // credit, or the sale is rejected as an unknown parameter and jams.
       final flagValue = await db.systemConfigDao.get(
         'feature.domain_rpcs_v2.record_sale',
       );
@@ -925,6 +932,48 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // store for both the order header and the stock movements.
         final saleStoreId = storeId ?? items.first.storeId.value;
 
+        // #209 — every kobo the cart took off the goods that `discount_kobo`
+        // does NOT account for. Cloud twin: migration 0173's
+        // `p_crate_credit_kobo`.
+        //
+        // `pos_record_sale_v2` is server-authoritative on totals: it recomputes
+        // the gross from `p_items` and derives `net = gross − discount − credit
+        // + deposit`. Before this, only the per-line discount rode the envelope,
+        // so the customer's empty-crate CREDIT — the other term in the cart's
+        // goods total — vanished on the wire, and the server's payable came out
+        // that much higher than the header this device had already written. Two
+        // numbers went wrong off one dropped term: the RPC's response overwrites
+        // the local order header (`_applyDomainResponse`), and the #201 tender
+        // split divides that same over-stated payable, booking up to `credit`
+        // more of the tender as goods `sale` and less as `wallet_topup`.
+        //
+        // DERIVED, not passed in, and that is the point: nothing has to remember
+        // to plumb a new argument through `createOrder` for the envelope to stay
+        // honest. The credit is whatever the header does not otherwise explain,
+        // so any future reduction the cart applies to the payable rides along
+        // automatically and this seam cannot silently drop it again.
+        //
+        // It is exactly 0 today — #202 deleted the cart's crate-credit block
+        // because the field it read was hardcoded empty — so the key below is
+        // omitted and the wire shape is byte-identical to the pre-#209 envelope.
+        // That omission is also what keeps an un-deployed 0173 harmless
+        // (an unknown parameter is PGRST202, and a jammed sale outbox).
+        //
+        // Signed on purpose: a term that RAISED the payable would ride as a
+        // negative rather than being clamped away into a fresh divergence.
+        final grossKobo = thinItems.fold<int>(
+          0,
+          (sum, it) =>
+              sum + (it['quantity'] as int) * (it['unit_price_kobo'] as int),
+        );
+        final goodsPayableKobo =
+            (orderJson['total_amount_kobo'] as int) -
+            ((orderJson['crate_deposit_paid_kobo'] as int?) ?? 0);
+        final crateCreditKobo =
+            grossKobo -
+            ((orderJson['discount_kobo'] as int?) ?? 0) -
+            goodsPayableKobo;
+
         final payload = <String, dynamic>{
           'p_business_id': requireBusinessId(),
           'p_actor_id': staffId,
@@ -937,6 +986,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           if (customerId != null) 'p_customer_id': customerId,
           if (orderJson.containsKey('discount_kobo'))
             'p_discount_kobo': orderJson['discount_kobo'],
+          // #209 — omitted when 0 (always, today), so an older cloud never sees
+          // a parameter it does not have. See the derivation above.
+          if (crateCreditKobo != 0) 'p_crate_credit_kobo': crateCreditKobo,
           'p_amount_paid_kobo': amountPaidKobo,
           if (orderJson.containsKey('crate_deposit_paid_kobo'))
             'p_crate_deposit_paid_kobo': orderJson['crate_deposit_paid_kobo'],
