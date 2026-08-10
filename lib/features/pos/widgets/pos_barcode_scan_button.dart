@@ -48,8 +48,8 @@ class PosBarcodeScanButton extends ConsumerWidget {
     // the POS is a bottom-nav tab root whose visible bar already lifts the FAB
     // clear of the system nav (see AppFAB).
     return AppFAB(
-      label: 'Scan',
       icon: FontAwesomeIcons.barcode.data,
+      tooltip: 'Scan barcode',
       onPressed: () => _scan(context, ref),
       reserveBottomInset: false,
     );

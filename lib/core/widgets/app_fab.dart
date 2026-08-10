@@ -4,12 +4,14 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 /// A standardized Floating Action Button for the Ribaplus design system.
 /// Features a theme-aware gradient, custom shadow, and specific minimum width.
 class AppFAB extends StatelessWidget {
-  final String label;
+  final String? label;
   final IconData icon;
   final VoidCallback onPressed;
   final String? heroTag;
   final double? width;
+  final double? height;
   final Widget? trailing;
+  final String? tooltip;
 
   /// Lift the FAB above the system navigation bar on edge-to-edge devices
   /// (3-button nav / gesture pill). Default true. Set false ONLY on bottom-nav
@@ -19,12 +21,14 @@ class AppFAB extends StatelessWidget {
 
   const AppFAB({
     super.key,
-    required this.label,
+    this.label,
     required this.icon,
     required this.onPressed,
     this.heroTag,
     this.width,
+    this.height,
     this.trailing,
+    this.tooltip,
     this.reserveBottomInset = true,
   });
 
@@ -33,19 +37,58 @@ class AppFAB extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Width should match "Add Store" style (~160-180px responsive)
-    final double defaultWidth = rSize(context, 165);
+    final bool isIconOnly = label == null || label!.isEmpty;
+    final double fabHeight = height ?? rSize(context, 48);
+
+    Widget fabContent;
+    if (isIconOnly) {
+      fabContent = Icon(
+        icon,
+        color: colorScheme.onPrimary,
+        size: rSize(context, 20),
+      );
+    } else {
+      fabContent = Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: colorScheme.onPrimary,
+            size: rSize(context, 18),
+          ),
+          SizedBox(width: rSize(context, 10)),
+          Text(
+            label!,
+            style: TextStyle(
+              color: colorScheme.onPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: rFontSize(context, 15),
+            ),
+          ),
+          if (trailing != null) ...[
+            SizedBox(width: rSize(context, 8)),
+            trailing!,
+          ],
+        ],
+      );
+    }
+
+    final double defaultWidth = isIconOnly ? fabHeight : rSize(context, 165);
 
     Widget fab = Container(
-      height: rSize(context, 50),
-      constraints: BoxConstraints(minWidth: width ?? defaultWidth),
+      height: fabHeight,
+      width: isIconOnly ? fabHeight : width,
+      constraints: isIconOnly
+          ? BoxConstraints(minWidth: fabHeight, minHeight: fabHeight)
+          : BoxConstraints(minWidth: width ?? defaultWidth),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [colorScheme.primary, colorScheme.secondary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(isIconOnly ? 16 : 16),
         boxShadow: [
           BoxShadow(
             color: colorScheme.primary.withValues(alpha: 0.35),
@@ -60,35 +103,18 @@ class AppFAB extends StatelessWidget {
           onTap: onPressed,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: rSize(context, 16)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  color: colorScheme.onPrimary,
-                  size: rSize(context, 18),
-                ),
-                SizedBox(width: rSize(context, 10)),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: colorScheme.onPrimary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: rFontSize(context, 15),
-                  ),
-                ),
-                if (trailing != null) ...[
-                  SizedBox(width: rSize(context, 8)),
-                  trailing!,
-                ],
-              ],
+            padding: EdgeInsets.symmetric(
+              horizontal: isIconOnly ? 0 : rSize(context, 16),
             ),
+            child: Center(child: fabContent),
           ),
         ),
       ),
     );
+
+    if (tooltip != null && tooltip!.isNotEmpty) {
+      fab = Tooltip(message: tooltip!, child: fab);
+    }
 
     Widget result = fab;
     if (heroTag != null) {

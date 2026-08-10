@@ -143,12 +143,14 @@ void main() {
     );
   }
 
-  testWidgets('scan button is always visible (not gated on the cart)', (
+  testWidgets('scan button is always visible (not gated on the cart) and textless', (
     tester,
   ) async {
     await tester.pumpWidget(host(_FakeBarcodeScanner(null), loaded: const []));
     // Rendered with an empty cart — the button is present regardless.
     expect(find.byType(PosBarcodeScanButton), findsOneWidget);
+    expect(find.text('Scan'), findsNothing);
+    expect(find.byTooltip('Scan barcode'), findsOneWidget);
     expect(cart.value, isEmpty);
   });
 
