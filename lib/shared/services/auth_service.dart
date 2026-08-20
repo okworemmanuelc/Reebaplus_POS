@@ -721,10 +721,13 @@ class AuthService extends ValueNotifier<UserData?> {
       showPickerOnUnlock = false;
       // Side-effects first — navigationService fully ready before any rebuild
       _nav.applyUserStoreLock(user.storeId);
-      // Default landing = POS. MainLayout bounces a role without `sales.make`
-      // (e.g. the stock keeper) to Home once permissions resolve, since POS is
-      // hidden from their nav bar.
-      _nav.setIndex(1);
+      // Open the session on the neutral landing tab (Home). The role row has
+      // not resolved from local SQLite at this point, so the role's real
+      // landing — Cashier on the till, everyone else on Home — is applied by
+      // MainLayout via `applyRoleLanding` a frame or two later, once the role
+      // and its grants are known. Home is the safe neutral because it is the
+      // only tab that is never hidden from any role's nav bar.
+      _nav.beginSessionLanding();
       saveDeviceUserId(user.id);
       if (user.email != null) saveLastLoggedInEmail(user.email!);
 

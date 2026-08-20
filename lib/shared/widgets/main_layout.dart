@@ -219,24 +219,48 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       }
     }
 
-    // Hard rule #7: a role without POS access (e.g. the stock keeper) must never
-    // land on the POS (1) or Cart (8) tab — both are sales.make-gated and hidden
-    // from their nav bar, so a POS landing leaves them on a screen they can't use
-    // with no tab to leave it. setCurrentUser defaults every login to POS; bounce
-    // a non-seller to Home (0) here instead. Gated on the permission set being
-    // RESOLVED (not the transient empty-while-loading state) so a seller isn't
-    // wrongly redirected before their grants stream in.
+    // Role landing tab. `setCurrentUser` opens every session on Home because the
+    // role row has not arrived from local SQLite yet; once it has, move the
+    // session to the tab this role actually starts its day on — Cashier on the
+    // till, CEO / Manager / Stock keeper on Home (see
+    // `NavigationService.landingTabForRole`). Both reads below are gated on the
+    // permission set being RESOLVED (not the transient empty-while-loading
+    // state) so nobody is routed off a stale, still-denying gate.
+    //
+    // `canSell` folds hard rule #7 into the landing: a role that cannot sell
+    // lands on Home whatever its slug says, so a Cashier stripped of
+    // `sales.make` never opens on a POS tab that is hidden from their nav bar.
+    //
+    // `applyRoleLanding` is a one-shot — re-scheduling it on every build until
+    // the role resolves is cheap, and it will not yank a user who has already
+    // moved to another tab.
     final canSell = Gates.makeSale.allows(ref);
     final role = ref.watch(currentUserRoleProvider);
     final permsResolved =
         role != null && ref.watch(rolePermissionsProvider(role.id)).hasValue;
+    if (permsResolved) {
+      final landing = canSell
+          ? NavigationService.landingTabForRole(role.slug)
+          : NavigationService.homeTab;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        nav.applyRoleLanding(landing);
+      });
+    }
+
+    // Hard rule #7, continuous guard: a role without POS access (e.g. the stock
+    // keeper) must never SIT on the POS (1) or Cart (8) tab — both are
+    // sales.make-gated and hidden from their nav bar, so being there leaves them
+    // on a screen they can't use with no tab to leave it. Distinct from the
+    // one-shot landing above and deliberately NOT latched: this also catches a
+    // permission revoked live mid-session while they are standing on the tab.
     if (permsResolved && !canSell) {
       final idx = nav.currentIndex.value;
       if (idx == 1 || idx == 8) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           final live = nav.currentIndex.value;
-          if (live == 1 || live == 8) nav.setIndex(0);
+          if (live == 1 || live == 8) nav.setIndex(NavigationService.homeTab);
         });
       }
     }

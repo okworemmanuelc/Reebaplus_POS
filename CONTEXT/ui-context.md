@@ -261,6 +261,13 @@ in the bar itself.
 Each tab keeps its own push stack. Tab switches use a 200ms `easeOut` fade.
 Only the landing tab is pre-initialised; other tabs initialise on first visit.
 
+**Landing tab is per role** (`NavigationService.landingTabForRole`): CEO,
+Manager and Stock keeper open on Home; Cashier opens on POS. A session starts on
+Home — the neutral default, and the only tab never hidden from a nav bar —
+because the role has not resolved from local SQLite at login; MainLayout applies
+the role's tab once permissions land, once per session. A root-level back press
+falls home to that same landing tab.
+
 ### App bar
 
 | Property | Value |
