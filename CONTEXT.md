@@ -287,11 +287,17 @@ seam; shipping a balance as an absolute value (only ledger rows sync).
 The refundable money a returnable crate is worth — its per-crate **rate** is
 `manufacturers.deposit_amount_kobo`, snapshotted onto `order_crate_lines.
 deposit_rate_kobo` at sale time so a later rate edit never changes a historic
-settlement. A crate sale is either **Money-Track** or **Crate-Track** (below).
-_Avoid_: recomputing a historic deposit at today's rate; conflating the deposit
-*money* flow with the crate *count*, which #156 makes trustworthy. The inflow leg
-(money customers pay us) is [Held Deposit]; the outflow leg (money we pay a
-supplier) is [Placed Deposit] — see ADR 0023.
+settlement. The rate is read **live** from that column
+wherever a crate is valued, including the open cart (`CartCrateSync`);
+`products.empty_crate_value_kobo` is only a **fallback for a product with no
+manufacturer**, never a second rate (ADR 0024). A crate sale is either
+**Money-Track** or **Crate-Track** (below).
+_Avoid_: recomputing a historic deposit at today's rate; treating the product
+column as a rate when a brand exists (a stale value there once made a full
+deposit read as a *part* deposit and settle down the partial path); conflating
+the deposit *money* flow with the crate *count*, which #156 makes trustworthy. The inflow leg (money customers pay
+us) is [Held Deposit]; the outflow leg (money we pay a supplier) is
+[Placed Deposit] — see ADR 0023.
 
 **Held Deposit**:
 Deposit money the shop is currently holding for a customer against crates they

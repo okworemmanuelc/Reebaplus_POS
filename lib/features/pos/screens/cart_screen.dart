@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -14,6 +15,7 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/crates/cart_crate_lines.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -29,6 +31,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
+import 'package:reebaplus_pos/shared/services/cart_crate_sync.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:flutter/services.dart';
@@ -57,6 +60,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   List<ManufacturerData> _manufacturers = [];
   List<StoreData> _stores = [];
   late final CartService _cart;
+  late final CartCrateSync _crateSync;
 
   // ── Clear animation ──
   late AnimationController _clearCtrl;
@@ -85,6 +89,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
     _cart = ref.read(cartProvider);
     final db = ref.read(databaseProvider);
+    // Keep the cart's crate config reconciled against the catalogue for as long
+    // as this screen lives. This screen is built ONCE into the main layout's
+    // tab stack, so it never re-runs initState after an Inventory edit — the
+    // reconciler's live query is what carries a brand deposit change back here.
+    _crateSync = ref.read(cartCrateSyncProvider)..start();
     _cart.addListener(_onCartChanged);
     _cart.activeCustomer.addListener(_onActiveCustomerChanged);
     db.storesDao.getActiveStores().then((ws) {
@@ -132,6 +141,67 @@ class _CartScreenState extends ConsumerState<CartScreen>
     await _clearCtrl.forward();
     cart.clear();
     if (mounted) setState(() => _isClearing = false);
+  }
+
+  /// Proceed to Checkout. Reconciles the cart's crate config against the
+  /// catalogue one last time before the quote is built.
+  ///
+  /// [CartCrateSync] already keeps the cart fresh through a live query, so this
+  /// almost always no-ops. It exists for the frame-tight case: an edit
+  /// committed on another device (or another tab) that the stream has not
+  /// delivered yet when Checkout is tapped. CheckoutPage snapshots `cart`,
+  /// `crateLines` and `total` at construction and never re-reads them, so a
+  /// value that moves after this point cannot be corrected on that page.
+  ///
+  /// When something did move, stay on the cart and let it rebuild with the new
+  /// figures — the cashier confirms what they are about to charge instead of
+  /// being pushed onto a checkout screen quoting numbers they never saw. This
+  /// mirrors how the price-staleness prompt returns to the cart.
+  Future<void> _goToCheckout() async {
+    final bool moved;
+    try {
+      moved = await _crateSync.sync();
+    } catch (e, st) {
+      // §33.4 — never let a pre-flight read kill the checkout button. Record it
+      // and go on with the figures on screen: the live query has been feeding
+      // this cart all along, so they are the best available.
+      CrashReporter.record(e, st, context: 'pos.cart.crate_preflight');
+      if (mounted) _openCheckout();
+      return;
+    }
+    if (!mounted) return;
+    if (moved) {
+      AppNotification.showInfo(
+        context,
+        'Crate values updated. Review the cart and check out again.',
+      );
+      return;
+    }
+    _openCheckout();
+  }
+
+  void _openCheckout() {
+    // Rebuilt from the live cart rather than captured in `build`, so the values
+    // pushed to checkout are the ones that survived the pre-flight above.
+    final items = List<Map<String, dynamic>>.from(ref.read(cartProvider).value)
+      ..sort((a, b) => b['qty'].compareTo(a['qty']));
+    final quote = _quote(
+      items,
+      isCrate: businessTracksCrates(ref.read(currentBusinessProvider)),
+    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CheckoutPage(
+          cart: items,
+          subtotal: quote.subtotal,
+          crateLines: quote.crateLines,
+          total: quote.total,
+          customer: _activeCustomer,
+          onCheckoutSuccess: widget.onCheckoutSuccess,
+        ),
+      ),
+    );
   }
 
   Future<void> _saveCurrentCart() async {
@@ -785,16 +855,20 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    ref.watch(
-      currencySymbolProvider,
-    ); // rebuild money displays when currency changes
-    final cartItems = List<Map<String, dynamic>>.from(
-      ref.read(cartProvider).value,
-    );
-    cartItems.sort((a, b) => b['qty'].compareTo(a['qty']));
-    final sub = cartItems.fold<double>(
+  /// Everything the cart's money display AND the checkout hand-off are computed
+  /// from, derived in ONE place from [items].
+  ///
+  /// Extracted from `build` deliberately. These figures used to be locals in
+  /// `build`, captured by the Checkout button's closure — so the page was handed
+  /// whatever the last paint had computed. Deriving them on demand means the
+  /// checkout quote is built from the cart as it stands when the button is
+  /// actually pressed, and means the displayed deposit and the deposit sent to
+  /// checkout cannot drift apart.
+  _CartQuote _quote(
+    List<Map<String, dynamic>> items, {
+    required bool isCrate,
+  }) {
+    final sub = items.fold<double>(
       0.0,
       (s, i) =>
           s +
@@ -806,9 +880,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
 
     // ── Bottle detection & crate deposit computation ──
     // Empty crates are tracked for any product whose unit == 'Bottle'.
-    // The deposit price per bottle is read live from the manufacturer's
-    // current `depositAmountKobo`, so a CEO edit reflects everywhere
-    // immediately. CrateSizeGroups are no longer the gating identifier.
+    // The deposit per bottle comes off the line's `emptyCrateValueKobo`, which
+    // CartCrateSync holds equal to the manufacturer's current
+    // `depositAmountKobo` for as long as this screen is mounted — so an owner
+    // editing a brand deposit reflects here without the cart being rebuilt.
+    // CrateSizeGroups are no longer the gating identifier.
     // §13.4 / rule #13 — empty-crate features (the deposit section here + at
     // checkout, the crate breakdown, the customer crate-credit offset) only
     // exist for Bar / Beer Distributor businesses. A non-crate business can
@@ -817,17 +893,14 @@ class _CartScreenState extends ConsumerState<CartScreen>
     // business type — the same check Inventory's Empty Crates tab uses. Gating
     // bottleItems at the source empties everything downstream (deposit lines,
     // crateLines passed to checkout, customer crate-credit) for non-crate types.
-    final isCrate = businessTracksCrates(ref.watch(currentBusinessProvider));
-    final bottleItems = !isCrate
-        ? const <Map<String, dynamic>>[]
-        : cartItems
-              .where(
-                (i) =>
-                    (i['unit'] as String?)?.toLowerCase() == 'bottle' &&
-                    (i['trackEmpties'] as bool? ?? false),
-              )
-              .toList();
+    final bottleItems = crateBearingLines(items, isCrate: isCrate);
     final hasBottles = bottleItems.isNotEmpty;
+
+    // Crate-bearing lines whose crate value has never been configured. Each
+    // line's value is kept equal to the brand's canonical `depositAmountKobo`
+    // (ADR 0023 rule 2) by CartCrateSync, so 0 here means exactly one thing:
+    // nobody has set what a crate of this brand is worth.
+    final unconfiguredCrateItems = unconfiguredCrateValueProducts(bottleItems);
 
     // Compute aggregate deposit across items.
     // Required deposit = emptyCrateValueKobo × qty for each bottle item.
@@ -843,7 +916,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     for (final item in bottleItems) {
       final mfrId = item['manufacturerId'] as String?;
       final qty = (item['qty'] as num).toDouble();
-      final int crateValueKobo = (item['emptyCrateValueKobo'] as int?) ?? 0;
+      final int crateValueKobo = lineCrateValueKobo(item);
 
       final depositPerCrate = crateValueKobo / 100.0;
       final amount = qty * depositPerCrate;
@@ -912,7 +985,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     // Per-line discounts (§13.3). Summed across the cart and subtracted from
     // the payable total. discountKobo lives on each line (set in the Edit
     // Quantity modal); converted to naira here to match `sub`.
-    final discountTotal = cartItems.fold<double>(
+    final discountTotal = items.fold<double>(
       0.0,
       (s, i) => s + (((i['discountKobo'] as int?) ?? 0) / 100.0),
     );
@@ -922,6 +995,39 @@ class _CartScreenState extends ConsumerState<CartScreen>
     // added to the payable there (§13.4 Ring 3). computedDeposit stays
     // informational on the Empty Crates card below.
     final tot = sub - discountTotal;
+
+    return _CartQuote(
+      subtotal: sub,
+      discountTotal: discountTotal,
+      total: tot,
+      computedDeposit: computedDeposit,
+      depositLines: depositLines,
+      crateLines: crateLines,
+      hasBottles: hasBottles,
+      unconfiguredCrateItems: unconfiguredCrateItems,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
+    final cartItems = List<Map<String, dynamic>>.from(
+      ref.read(cartProvider).value,
+    );
+    cartItems.sort((a, b) => b['qty'].compareTo(a['qty']));
+    final quote = _quote(
+      cartItems,
+      isCrate: businessTracksCrates(ref.watch(currentBusinessProvider)),
+    );
+    final sub = quote.subtotal;
+    final discountTotal = quote.discountTotal;
+    final tot = quote.total;
+    final computedDeposit = quote.computedDeposit;
+    final depositLines = quote.depositLines;
+    final hasBottles = quote.hasBottles;
+    final unconfiguredCrateItems = quote.unconfiguredCrateItems;
 
     final customerName = _activeCustomer?.name ?? 'Walk-in Customer';
     final activeBalanceKobo = _activeCustomer == null
@@ -1452,6 +1558,20 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                       ),
                                     ],
                                     SizedBox(height: context.getRSize(8)),
+                                    // Deliberately NOT behind the registered-
+                                    // customer gate below: a missing crate
+                                    // value is a product-setup problem, and the
+                                    // cashier who can see it is the one holding
+                                    // the item. It also has to appear ABOVE the
+                                    // deposit figures so the ₦0 lines there are
+                                    // explained rather than read as a real
+                                    // crate value.
+                                    if (unconfiguredCrateItems.isNotEmpty) ...[
+                                      _CrateValueMissingBanner(
+                                        productNames: unconfiguredCrateItems,
+                                      ),
+                                      SizedBox(height: context.getRSize(8)),
+                                    ],
                                     // §3.13 — the Empty Crates section is
                                     // hidden for walk-in customers (no profile
                                     // = no crate balance/deposit to defer); it
@@ -1670,30 +1790,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                       text: 'Proceed to Checkout',
                                       variant: AppButtonVariant.primary,
                                       icon: FontAwesomeIcons.checkToSlot.data,
-                                      onPressed: () {
-                                        final currentCustomer = _activeCustomer;
-                                        void goToCheckout() {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => CheckoutPage(
-                                                cart:
-                                                    List<
-                                                      Map<String, dynamic>
-                                                    >.from(cartItems),
-                                                subtotal: sub,
-                                                crateLines: crateLines,
-                                                total: tot,
-                                                customer: currentCustomer,
-                                                onCheckoutSuccess:
-                                                    widget.onCheckoutSuccess,
-                                              ),
-                                            ),
-                                          );
-                                        }
-
-                                        goToCheckout();
-                                      },
+                                      onPressed: _goToCheckout,
                                     ),
                                   ],
                                 ),
@@ -1709,6 +1806,127 @@ class _CartScreenState extends ConsumerState<CartScreen>
       ),
     );
   }
+}
+
+/// Tells the cashier that a crate-tracked item in the cart has no crate value
+/// set, and names the items so somebody can go and fix the product.
+///
+/// Informational, not a blocker: the sale still completes and the empties are
+/// still tracked as owed. What is wrong is the MONEY on them — an unconfigured
+/// brand values every crate at ₦0, on this order and on the customer's crate
+/// balance — and that is invisible without this.
+class _CrateValueMissingBanner extends StatelessWidget {
+  /// Deduplicated, sorted product names. Never empty (the caller gates on it).
+  final List<String> productNames;
+
+  const _CrateValueMissingBanner({required this.productNames});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final warning =
+        t.extension<AppSemanticColors>()?.warning ?? AppColors.warning;
+    final isOne = productNames.length == 1;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.getRSize(14)),
+      decoration: BoxDecoration(
+        color: warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: warning.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            FontAwesomeIcons.triangleExclamation.data,
+            size: context.getRSize(14),
+            color: warning,
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isOne
+                      ? 'No crate value set for this item'
+                      : 'No crate value set for these items',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    fontWeight: FontWeight.w800,
+                    color: t.colorScheme.onSurface,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(4)),
+                Text(
+                  productNames.join(', '),
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    fontWeight: FontWeight.w700,
+                    color: warning,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(6)),
+                Text(
+                  isOne
+                      ? 'Its empty crates are worth nothing until a crate value '
+                            'is set on the product. You can still complete this '
+                            'sale.'
+                      : 'Their empty crates are worth nothing until a crate '
+                            'value is set on each product. You can still '
+                            'complete this sale.',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    fontWeight: FontWeight.w500,
+                    color:
+                        t.textTheme.bodySmall?.color ?? t.iconTheme.color!,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One derivation of the cart's money, shared by the display and the checkout
+/// hand-off so the two can never disagree. See [_CartScreenState._quote].
+class _CartQuote {
+  final double subtotal;
+  final double discountTotal;
+
+  /// Goods payable: subtotal − discounts. The crate deposit is NOT in here —
+  /// it is captured per brand at checkout and added to the payable there
+  /// (§13.4 Ring 3).
+  final double total;
+
+  /// The full deposit the empties in this cart are worth, shown on the Empty
+  /// Crates card. Informational — checkout captures what was actually paid.
+  final double computedDeposit;
+  final List<_CrateDepositLine> depositLines;
+
+  /// Per-brand crate lines handed to checkout.
+  final List<Map<String, dynamic>> crateLines;
+  final bool hasBottles;
+
+  /// Names of crate-tracked lines with no crate value configured. Drives
+  /// [_CrateValueMissingBanner].
+  final List<String> unconfiguredCrateItems;
+
+  const _CartQuote({
+    required this.subtotal,
+    required this.discountTotal,
+    required this.total,
+    required this.computedDeposit,
+    required this.depositLines,
+    required this.crateLines,
+    required this.hasBottles,
+    required this.unconfiguredCrateItems,
+  });
 }
 
 class _CrateDepositLine {

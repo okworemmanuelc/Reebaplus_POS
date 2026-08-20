@@ -30,6 +30,7 @@ import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
+import 'package:reebaplus_pos/shared/services/cart_crate_sync.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/notification_service.dart';
 import 'package:reebaplus_pos/shared/services/crate_return_approval_service.dart';
@@ -114,6 +115,16 @@ final cartProvider = ChangeNotifierProvider<CartService>((ref) {
 final activeCustomerProvider = mirrorNotifier<Customer?>(
   (ref) => ref.watch(cartProvider).activeCustomer,
 );
+
+/// Keeps the cart's crate configuration reconciled against the live catalogue.
+/// Held here (not built ad-hoc in a screen) so the cart and the checkout page
+/// share ONE instance — and therefore one subscription — over the same
+/// [cartProvider]. Call `start()` from the first screen that needs it.
+final cartCrateSyncProvider = Provider<CartCrateSync>((ref) {
+  final sync = CartCrateSync(ref.read(databaseProvider), ref.read(cartProvider));
+  ref.onDispose(sync.dispose);
+  return sync;
+});
 
 // ── Notification ────────────────────────────────────────────────────────────
 final notificationProvider = ChangeNotifierProvider<NotificationService>((ref) {
