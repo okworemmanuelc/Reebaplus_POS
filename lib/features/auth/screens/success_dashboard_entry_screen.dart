@@ -24,8 +24,9 @@ class _SuccessDashboardEntryScreenState
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
 
-      // Onboarding lands on POS with the empty-state "Add your first product"
-      // CTA (ADR 0006) — no auto-push of the Add Product form.
+      // Onboarding is a CEO flow, so MainLayout lands on Home with the Get
+      // Started checklist; its "Add your first product" CTA is the route into
+      // the catalogue (ADR 0006) — no auto-push of the Add Product form.
       Navigator.of(context).pushAndRemoveUntil(
         SmoothRoute(page: const MainLayout()),
         (route) => false,
@@ -73,7 +74,7 @@ class _SuccessDashboardEntryScreenState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Text(
-                  'Preparing your Point of Sale...',
+                  'Preparing your dashboard...',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,

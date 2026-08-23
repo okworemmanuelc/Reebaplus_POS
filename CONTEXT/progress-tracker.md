@@ -75,6 +75,58 @@ charged.
 - Retiring `products.empty_crate_value_kobo` still waits on the inventory forms
   editing the brand rate directly.
 
+### Post-login landing is now per role (2026-08-11)
+**Reverses the 2026-06-19 "Login routing changed to POS" decision for CEO and
+Manager** (see that entry below), at the user's request. The landing tab is no
+longer one number for the whole app:
+
+| Role | Lands on |
+| --- | --- |
+| CEO, Manager, Stock keeper | Home (tab 0, the dashboard) |
+| Cashier | Point of Sale (tab 1) |
+| Driver | Driver terminal — routed *instead of* MainLayout (#142), unchanged |
+
+**Why the landing can't be decided at login.** `AuthService.setCurrentUser` runs
+*before* the role row has resolved from local SQLite, so it cannot know the
+role. It now opens the session on Home — the neutral default, and the only tab
+that is never hidden from any role's nav bar — via
+`NavigationService.beginSessionLanding()`. MainLayout applies the role's real
+landing once permissions resolve, through the new one-shot
+`NavigationService.applyRoleLanding()`. This *reduces* the total post-login
+flashing: previously every role landed on POS and the Stock keeper was bounced
+back out; now only a Cashier moves, and that move happens under `_HomeRouter`'s
+350 ms fade-in.
+
+**One-shot, deliberately.** MainLayout re-schedules `applyRoleLanding` on every
+build until it fires; a second application would yank a user back to their
+landing tab after they had walked off it. A tab the user picks *inside* the
+resolve window also survives (the move is skipped when the session is no longer
+sitting on the untouched Home default).
+
+**Hard rule #7 still folded in, and still continuous.** The landing computation
+passes Home whenever `Gates.makeSale` denies, so a Cashier stripped of
+`sales.make` never opens on a hidden POS tab. The pre-existing bounce-off-POS/Cart
+guard is kept separate and *not* latched — it also catches a permission revoked
+live while the user is standing on the tab.
+
+**Back-press now falls home to the landing tab, not POS.** `handleBackPress`
+step 3 used a hardcoded POS index, which bounced a Stock keeper onto the very
+tab MainLayout then had to bounce them back out of. It tracks
+`NavigationService.landingIndex` instead.
+
+- **Touched:** `navigation_service.dart` (`homeTab`/`posTab` constants,
+  `landingTabForRole`, `beginSessionLanding`, `applyRoleLanding`, `landingIndex`,
+  back-press step 3, `resetNavigation`), `auth_service.dart` (`setCurrentUser`),
+  `main_layout.dart` (landing application above the hard-rule-#7 guard),
+  `success_dashboard_entry_screen.dart` + `ceo_sign_up_screen.dart` (both
+  promised "Point of Sale" to a CEO who now lands on Home).
+- **Where the rule lives:** `NavigationService.landingTabForRole` — a pure
+  slug → tab map. It is deliberately **not** a `Gates` entry: a landing tab is a
+  preference, not a gated action (no denial feedback, no write boundary), so
+  registering it would misuse the registry (ADR 0002).
+- **Tests:** new `test/shared/role_landing_tab_test.dart` (10 green) covers the
+  map and the session protocol incl. the one-shot latch and logout re-arm.
+
 ### #186 — the variance card's money and units now stand on ONE basis (2026-07-30)
 Follow-up from #182, filed by two code-review agents. The Daily Reconciliation's
 variance card reported one event — a daily stock count — on two bases at once:
@@ -4219,7 +4271,11 @@ Remaining: on-device walkthrough on the emulator.
   35 → 36. `flutter analyze lib` clean;
   pos/sync/database suites green. See BUILD_LOG 2026-06-19 and 2026-06-23.
 
-### Login routing changed to POS (2026-06-19)
+### Login routing changed to POS (2026-06-19) — SUPERSEDED 2026-08-11
+> **Superseded** by "Post-login landing is now per role (2026-08-11)" at the top
+> of this file: CEO and Manager land on Home again, and only the Cashier keeps
+> the POS landing. Kept for the decision history.
+
 - Changed the default post-login landing screen from Home (Dashboard, index 0) to Point of Sale (index 1) for all roles, including CEO and Manager, matching the user's intent to land them on POS directly after sign in.
 - **Exception (2026-06-20):** roles without `sales.make` (e.g. Stock keeper) land on Home, not POS — POS/Cart are hidden from their nav bar + drawer, so MainLayout bounces a POS/Cart landing to Home once permissions resolve.
 - Updated `auth_service.dart`, `navigation_service.dart`, and UI strings in `ceo_sign_up_screen.dart` and `success_dashboard_entry_screen.dart` to refer to "Point of Sale" instead of "dashboard".

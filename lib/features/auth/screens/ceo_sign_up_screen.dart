@@ -1291,7 +1291,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Taking you to Point of Sale…',
+              'Taking you to your dashboard…',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,

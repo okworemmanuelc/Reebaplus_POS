@@ -10,8 +10,50 @@ class NavigationService {
 
   NavigationService._internal();
 
-  final ValueNotifier<int> currentIndex = ValueNotifier<int>(1);
+  /// Tab indexes into MainLayout's `_tabWidgets` list. Only the two that the
+  /// landing rule below needs are named here; the rest are mapped by
+  /// [indexToRoute].
+  static const int homeTab = 0;
+  static const int posTab = 1;
+
+  /// The tab a role opens on at login, keyed by the stable role slug (§8.2 —
+  /// the same slugs `roleRank` switches on in `shared/utils/role_display.dart`).
+  ///
+  /// Cashier opens on the till: selling *is* their shift, so any other landing
+  /// costs them a tap every time they open the app. CEO, Manager and Stock
+  /// keeper open on Home — their work starts from the day's numbers and the
+  /// stock / report surfaces that hang off the dashboard.
+  ///
+  /// Driver is mapped for completeness only: a driver is routed to
+  /// `DriverTerminalScreen` *instead of* MainLayout (#142), so they normally
+  /// never reach a tab index at all. Should one ever land here — e.g. a driver
+  /// who also holds `sales.make`, which `driverTerminalActiveProvider` reads as
+  /// "not a driver terminal" — the till is still the right tab for them.
+  ///
+  /// An unknown / unresolved slug lands on Home, which is the only tab that is
+  /// never hidden from the nav bar, so it is always a legal place to be.
+  static int landingTabForRole(String? slug) =>
+      (slug == 'cashier' || slug == 'driver') ? posTab : homeTab;
+
+  /// Starts on [homeTab] rather than the role's real landing tab: at the moment
+  /// a session begins the role row has not resolved from local SQLite yet, and
+  /// Home is the one tab no role can have hidden. [applyRoleLanding] moves the
+  /// session to the role's tab a frame or two later, once the role is known.
+  final ValueNotifier<int> currentIndex = ValueNotifier<int>(homeTab);
   final List<int> _history = [];
+
+  /// The tab this session opened on — and the tab a root-level back press falls
+  /// home to. Tracks [applyRoleLanding] so "back" means "return to where this
+  /// role starts", not "return to POS": a Stock keeper has no POS tab to return
+  /// to (it is `sales.make`-gated and hidden from their nav bar).
+  int _landingIndex = homeTab;
+  int get landingIndex => _landingIndex;
+
+  /// Whether the role-resolved landing has already been applied this session.
+  /// Makes [applyRoleLanding] a one-shot: MainLayout re-schedules it on every
+  /// build until it fires, and must not yank a user back to their landing tab
+  /// after they have walked off it.
+  bool _landingApplied = false;
 
   // Each tab has its own NavigatorState key
   List<GlobalKey<NavigatorState>> tabNavigatorKeys = [];
@@ -93,6 +135,32 @@ class NavigationService {
     }
   }
 
+  /// Opens a fresh session on the neutral landing tab with the role-based
+  /// landing not yet applied. Called by `AuthService.setCurrentUser`, which runs
+  /// *before* the role row has resolved locally — the real landing arrives via
+  /// [applyRoleLanding] once MainLayout sees the role.
+  void beginSessionLanding() {
+    _landingApplied = false;
+    _landingIndex = homeTab;
+    _history.clear();
+    currentIndex.value = homeTab;
+    currentTabCanPop.value = false;
+  }
+
+  /// Applies the role's landing tab — **once** per session.
+  ///
+  /// MainLayout calls this on every build once permissions resolve; every call
+  /// after the first is a no-op, so a user who has since moved to another tab is
+  /// never yanked back. The move itself is also skipped when the session is no
+  /// longer sitting on the untouched neutral default, so someone who picked a
+  /// tab inside the resolve window keeps their pick.
+  void applyRoleLanding(int index) {
+    if (_landingApplied) return;
+    _landingApplied = true;
+    _landingIndex = index;
+    if (currentIndex.value == homeTab) setIndex(index);
+  }
+
   bool popIndex() {
     if (_history.isNotEmpty) {
       currentIndex.value = _history.removeLast();
@@ -142,16 +210,23 @@ class NavigationService {
       return;
     }
 
-    // Step 3: At the root of a tab. If not POS (index 1), jump to POS.
-    if (currentIndex.value != 1) {
-      debugPrint('[NavigationService] At root of tab != POS. Switching to POS tab.');
-      setIndex(1);
+    // Step 3: At the root of a tab. If not the landing tab, fall home to it.
+    // Landing-relative, not POS-relative: a Stock keeper's POS tab is hidden
+    // from their nav bar, so bouncing them there would strand them on a screen
+    // MainLayout has to bounce back out of.
+    if (currentIndex.value != _landingIndex) {
+      debugPrint(
+        '[NavigationService] At root of a non-landing tab. '
+        'Switching to landing tab $_landingIndex.',
+      );
+      setIndex(_landingIndex);
       return;
     }
 
-    // Step 4: At the root of the POS tab — double-back-to-exit
+    // Step 4: At the root of the landing tab — double-back-to-exit
     debugPrint(
-      '[NavigationService] At root of POS tab. Checking double-back exit...',
+      '[NavigationService] At root of the landing tab. '
+      'Checking double-back exit...',
     );
     if (_lastBackPress == null ||
         now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
@@ -193,11 +268,14 @@ class NavigationService {
     allStoresChosen.value = false;
   }
 
-  /// Resets navigation state to defaults. Call on logout so the next session
-  /// starts clean (tab 1 = POS, empty history).
+  /// Resets navigation state to defaults. Call on logout/lock so the next
+  /// session starts clean (neutral landing tab, empty history, role landing
+  /// un-applied).
   void resetNavigation() {
     _history.clear();
-    currentIndex.value = 1;
+    _landingApplied = false;
+    _landingIndex = homeTab;
+    currentIndex.value = homeTab;
     _lastBackPress = null;
     _lastHandleTime = null;
     for (int i = 0; i < _tabCanPop.length; i++) {
