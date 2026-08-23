@@ -10,6 +10,71 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### The cart reads the brand deposit rate live; unset values are named (2026-08-20)
+Fixes the read half of **ADR 0024 defect (4)** — POS collecting one crate
+deposit while the sale recorded another.
+
+**What was wrong.** A cart line snapshotted `emptyCrateValueKobo`,
+`trackEmpties`, `unit` and `manufacturerId` when the product was tapped in, and
+nothing ever refreshed them. `CartService.refreshProduct` was written for
+exactly this and **had no production caller** — only a test. Meanwhile
+`createOrder` re-reads the product *and* `manufacturers.deposit_amount_kobo`
+before booking crates. The cart screen is mounted **once** into MainLayout's tab
+stack, so editing a brand deposit on Inventory and coming back showed the old
+figure indefinitely.
+
+**What changed.**
+- `CatalogDao.resolveCrateConfig` (one-shot) + `watchCrateConfig` (live) — one
+  LEFT JOIN products→manufacturers yielding `CartCrateConfig`. The deposit is
+  the **manufacturer's** rate; the product mirror is read **only** for a product
+  with no manufacturer.
+- `CartService.syncCrateConfig(map)` re-stamps lines across every user/store
+  bucket, but reports true **only when the ACTIVE cart moved** — a parked
+  store's cart must not interrupt the cashier — and notifies nobody on a no-op,
+  so a screen that re-syncs on cart change cannot loop.
+- `CartCrateSync` (provider-held, `start()` idempotent, `dispose` via
+  `ref.onDispose`) follows the cart's product set with the live query. Checkout
+  also awaits a one-shot `sync()`; if anything moved it **stays on the cart**
+  rather than pushing a CheckoutPage, which snapshots its totals at
+  construction.
+- The checkout quote used to be built from locals captured in `build`, so the
+  page received whatever the last paint had computed. Now derived on demand
+  (`_quote()` → `_CartQuote`), shared by the display and the hand-off.
+- Bottle-detection and the "unconfigured" rule moved to pure
+  `lib/core/crates/cart_crate_lines.dart`, so they are testable without a widget
+  harness.
+
+**New warning banner** (cart + checkout) naming the products / brands whose
+crate value is 0. It does **not** block: a 0 rate collects no deposit and falls
+through to crate-tracking, which is the safe outcome — but it silently values
+those crates at ₦0 on the order and on the customer's crate balance, so it is
+said out loud. The cart banner sits **outside** the registered-customer gate
+that hides the Empty Crates card; missing setup is worth seeing on a walk-in
+cart too.
+
+**ADR 0024 amended.** Its rejection of "make POS read the manufacturer rate"
+rested on that change touching "the cart, checkout, van sales and the receipt
+builder". Tracing the readers showed van sales and the receipt builder **never
+read the mirror** — the cart was its only money-path reader. The fan-out
+decision stands for the write side (the inventory forms still edit the
+per-product field); it is simply no longer load-bearing for what a customer is
+charged.
+
+**Coverage:** `test/pos/cart_crate_config_sync_test.dart` (11) +
+`test/crates/cart_crate_lines_test.dart` (12). Full suite green (1858 pass,
+129 pre-existing skips); `flutter analyze` clean.
+
+**Not done / still open:**
+- The ADR 0024 **fan-out itself is not implemented** —
+  `updateManufacturerEmptyCrateValue` still writes the manufacturer column
+  only, so the per-product field shown in the inventory forms can still drift
+  from the brand rate. It no longer affects what POS charges.
+- A bottle+trackEmpties product with **no manufacturer** still shows a deposit
+  line in the cart that checkout can never capture (`createOrder` skips lines
+  with no `manufacturerId`). Pre-existing; not filed.
+- Retiring `products.empty_crate_value_kobo` still waits on the inventory forms
+  editing the brand rate directly.
+
 ### Post-login landing is now per role (2026-08-11)
 **Reverses the 2026-06-19 "Login routing changed to POS" decision for CEO and
 Manager** (see that entry below), at the user's request. The landing tab is no
