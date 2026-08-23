@@ -20,6 +20,8 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -444,6 +446,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           // ── Crates Taken & Deposit ────────────────────────────────────
           if (_isCrateBusiness && widget.crateLines.isNotEmpty) ...[
             SizedBox(height: context.getRSize(28)),
+            // Carried through from the cart: a brand with no deposit rate set
+            // shows ₦0 in both sections below, which reads like a deliberate
+            // "no deposit" rather than missing setup. Name the brands first.
+            if (_unratedCrateBrands.isNotEmpty) ...[
+              _buildMissingCrateValueNotice(),
+              SizedBox(height: context.getRSize(12)),
+            ],
             if (_depositApplies)
               _buildCrateDepositSection()
             else
@@ -534,6 +543,74 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             isLoading: _isProcessing,
             icon: FontAwesomeIcons.check.data,
             onPressed: _confirmPayment,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Brands in this sale whose per-crate deposit rate is unset (ADR 0023 rule 2
+  /// — `manufacturers.deposit_amount_kobo`). Their crates are still recorded,
+  /// but valued at nothing: `createOrder` writes `depositRateKobo: 0` on the
+  /// order's crate line and, with no deposit paid, issues the crate debt at ₦0.
+  /// Sorted for a stable read.
+  List<String> get _unratedCrateBrands =>
+      <String>{
+        for (final line in widget.crateLines)
+          if (((line['rateKobo'] as int?) ?? 0) <= 0)
+            (line['name'] as String?) ?? 'Brand',
+      }.toList()..sort();
+
+  /// Names the unrated brands at the point of payment. Informational — the sale
+  /// completes either way; see [_unratedCrateBrands] for what it costs.
+  Widget _buildMissingCrateValueNotice() {
+    final warning =
+        Theme.of(context).extension<AppSemanticColors>()?.warning ??
+        AppColors.warning;
+    final brands = _unratedCrateBrands;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.getRSize(14)),
+      decoration: BoxDecoration(
+        color: warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: warning.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            FontAwesomeIcons.triangleExclamation.data,
+            size: context.getRSize(14),
+            color: warning,
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  brands.length == 1
+                      ? 'No crate value set for ${brands.single}'
+                      : 'No crate value set for: ${brands.join(', ')}',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    fontWeight: FontWeight.w800,
+                    color: _text,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(6)),
+                Text(
+                  'These crates are recorded as taken, but worth nothing until '
+                  'a crate value is set for the brand. You can complete this '
+                  'sale — no deposit will be collected for them.',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    color: _subtext,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

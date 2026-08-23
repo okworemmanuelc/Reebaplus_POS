@@ -421,6 +421,86 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
   }
 
+  /// Live crate configuration for the given cart lines, keyed by product id.
+  ///
+  /// A cart line snapshots its crate fields when the product is tapped into the
+  /// cart, so a later edit — the brand's deposit rate, the unit, the
+  /// track-empties toggle — leaves that line stale while the cart is still
+  /// open. [watchCrateConfig] keeps a screen in step with those edits;
+  /// [resolveCrateConfig] is the one-shot read for a checkout pre-flight.
+  ///
+  /// The deposit comes from the MANUFACTURER (`depositAmountKobo`), the single
+  /// canonical per-crate rate (ADR 0023 rule 2) that `createOrder` and the
+  /// checkout crate lines already value crates from.
+  /// `products.emptyCrateValueKobo` is only a mirror, written at product
+  /// create/update and never touched by [updateManufacturerEmptyCrateValue] —
+  /// so it goes stale the moment an owner edits the brand deposit. It is read
+  /// only for a product with NO manufacturer, which has no brand rate to read.
+  ///
+  /// One LEFT JOIN for the whole cart (no N+1); the outer join is what lets a
+  /// manufacturer-less product still resolve. Products that are gone or
+  /// soft-deleted are absent from the result, and callers leave those lines
+  /// untouched rather than zeroing them.
+  JoinedSelectStatement<HasResultSet, dynamic> _crateConfigQuery(
+    List<String> productIds,
+  ) {
+    return select(products).join([
+      leftOuterJoin(
+        manufacturers,
+        manufacturers.id.equalsExp(products.manufacturerId) &
+            whereBusiness(manufacturers),
+      ),
+    ])..where(
+      products.id.isIn(productIds) &
+          products.isDeleted.not() &
+          whereBusiness(products),
+    );
+  }
+
+  Map<String, CartCrateConfig> _crateConfigFromRows(List<TypedResult> rows) {
+    return {
+      for (final row in rows)
+        row.readTable(products).id: _crateConfigFor(
+          row.readTable(products),
+          row.readTableOrNull(manufacturers),
+        ),
+    };
+  }
+
+  CartCrateConfig _crateConfigFor(ProductData p, ManufacturerData? mfr) {
+    return CartCrateConfig(
+      productId: p.id,
+      manufacturerId: p.manufacturerId,
+      unit: p.unit,
+      trackEmpties: p.trackEmpties,
+      // No manufacturer → no brand rate exists, so the product mirror is the
+      // only figure there is. With a manufacturer the brand rate wins even when
+      // it is 0: 0 means "this brand's crate value is not configured yet", and
+      // the cart warns on it rather than quietly falling back to a stale mirror.
+      depositKobo: p.manufacturerId == null
+          ? p.emptyCrateValueKobo
+          : (mfr?.depositAmountKobo ?? 0),
+    );
+  }
+
+  /// One-shot [_crateConfigQuery] read — the checkout pre-flight.
+  Future<Map<String, CartCrateConfig>> resolveCrateConfig(
+    List<String> productIds,
+  ) async {
+    if (productIds.isEmpty) return const {};
+    return _crateConfigFromRows(await _crateConfigQuery(productIds).get());
+  }
+
+  /// Live [_crateConfigQuery] — re-emits whenever `products` OR `manufacturers`
+  /// is written, which is what lets an open cart pick up a brand deposit edited
+  /// on another screen without being remounted.
+  Stream<Map<String, CartCrateConfig>> watchCrateConfig(
+    List<String> productIds,
+  ) {
+    if (productIds.isEmpty) return Stream.value(const {});
+    return _crateConfigQuery(productIds).watch().map(_crateConfigFromRows);
+  }
+
   Future<ProductData?> findByName(String name) {
     return (select(products)
           ..where(
@@ -720,4 +800,36 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
     await _enqueueFullProduct(productId);
   }
+}
+
+/// The live crate configuration of one product, resolved by
+/// [CatalogDao.resolveCrateConfig] and stamped onto the matching cart line.
+///
+/// Carries every field the cart's crate maths reads, not just the deposit: a
+/// line is crate-bearing only when `unit` is a bottle AND [trackEmpties] is on,
+/// and both of those are editable on the product while the cart is open.
+class CartCrateConfig {
+  final String productId;
+
+  /// The brand that owns the crate. Null for a product with no manufacturer —
+  /// such a line can be shown in the cart's deposit breakdown but is never
+  /// deposit-tracked at checkout (`createOrder` skips it).
+  final String? manufacturerId;
+
+  /// Nullable by design (#108): absent unit means "not a bottle".
+  final String? unit;
+  final bool trackEmpties;
+
+  /// Canonical per-crate deposit (kobo). 0 means the brand's crate value has
+  /// not been configured — the cart surfaces this as a warning rather than
+  /// silently valuing the crates at nothing.
+  final int depositKobo;
+
+  const CartCrateConfig({
+    required this.productId,
+    required this.manufacturerId,
+    required this.unit,
+    required this.trackEmpties,
+    required this.depositKobo,
+  });
 }

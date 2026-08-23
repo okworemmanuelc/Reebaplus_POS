@@ -381,6 +381,68 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     }
   }
 
+  /// Product ids of the lines in the ACTIVE cart. Quick-Sale lines carry no DB
+  /// product and are excluded — there is nothing to re-read them from.
+  List<String> get activeProductIds => [
+    for (final item in value)
+      if ((item['id'] as String?)?.isNotEmpty ?? false) item['id'] as String,
+  ];
+
+  /// Re-stamps every cart line with the LIVE crate configuration for its
+  /// product, keyed by product id (see [CatalogDao.resolveCrateConfig]).
+  ///
+  /// A line snapshots `emptyCrateValueKobo` / `trackEmpties` / `unit` /
+  /// `manufacturerId` at add-time. Those are all editable on the product while
+  /// the cart is still open, and the write side does NOT trust the snapshot:
+  /// `createOrder` re-reads the product and the brand rate from the DB when it
+  /// books the crate ledger. Leaving the snapshot in place therefore lets the
+  /// cart show one deposit while the sale books another — so the snapshot is
+  /// refreshed here instead of being read as truth.
+  ///
+  /// Runs across ALL user/store cart buckets, like [refreshProduct]: a cart
+  /// parked on another store must not come back holding a stale crate value.
+  /// Lines whose product is absent from [configByProductId] (deleted, or simply
+  /// not part of this resolve) are left untouched rather than zeroed.
+  ///
+  /// Returns true when a line in the ACTIVE cart moved — the cart the cashier is
+  /// looking at. A correction landing only in a parked store's bucket returns
+  /// false: callers use this to decide whether to re-quote or interrupt the
+  /// cashier, and neither is warranted for a cart that is not on screen.
+  ///
+  /// Listeners are notified only on a real change, so a screen that re-syncs on
+  /// every cart notification cannot drive itself in a loop.
+  bool syncCrateConfig(Map<String, CartCrateConfig> configByProductId) {
+    if (configByProductId.isEmpty) return false;
+    final activeKey = _cartKey;
+    bool activeChanged = false;
+    for (final bucket in _userCarts.keys) {
+      final cart = _userCarts[bucket]!;
+      for (int i = 0; i < cart.length; i++) {
+        final line = cart[i];
+        final id = line['id'] as String?;
+        if (id == null) continue;
+        final config = configByProductId[id];
+        if (config == null) continue;
+        final changed =
+            (line['emptyCrateValueKobo'] as int?) != config.depositKobo ||
+            (line['trackEmpties'] as bool?) != config.trackEmpties ||
+            (line['unit'] as String?) != config.unit ||
+            (line['manufacturerId'] as String?) != config.manufacturerId;
+        if (!changed) continue;
+        cart[i] = Map<String, dynamic>.from(line)
+          ..['emptyCrateValueKobo'] = config.depositKobo
+          ..['trackEmpties'] = config.trackEmpties
+          ..['unit'] = config.unit
+          ..['manufacturerId'] = config.manufacturerId;
+        if (bucket == activeKey) activeChanged = true;
+      }
+    }
+    if (activeChanged) {
+      value = List.from(_userCarts[activeKey] ?? []);
+    }
+    return activeChanged;
+  }
+
   /// Accept fresh price/version for the current user's cart after a checkout
   /// staleness prompt. Maps `productId → (unitPriceKobo, version)`.
   void acceptStaleness(
