@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class AuthBackground extends StatelessWidget {
   final Widget child;
@@ -64,8 +63,10 @@ class AuthBackground extends StatelessWidget {
           ),
           Center(
             child: Container(
-              constraints: BoxConstraints(
-                maxWidth: !context.isPhone ? 480.0 : double.infinity,
+              constraints: const BoxConstraints(
+                // Preserves portrait behavior (<480dp) while preventing landscape
+                // phones from stretching full-width once breakpoint definitions change.
+                maxWidth: 480.0,
               ),
               child: child,
             ),

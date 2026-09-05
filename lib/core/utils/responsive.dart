@@ -1,61 +1,119 @@
 import 'package:flutter/material.dart';
 
-/// Baseline width used for responsive calculations (iPhone SE / standard Android).
-const double _kBaseWidth = 375.0;
+/// Baseline shortest side for form-factor calculations (iPhone SE / standard Android).
+const double _kBaseShortestSide = 375.0;
 
-/// Maximum scale factor to prevent UI overflow on wide screens (web/desktop).
-const double _kMaxScale = 1.5;
+/// Height at or above which vertical space is comfortable and the form-factor
+/// scale governs alone. Below it, scale is cut proportionally so a short
+/// viewport fits the same components at lower density.
+const double _kComfortableHeight = 700.0;
 
-/// Returns the clamped scale ratio for the given screen width.
-double _scaleFactor(double screenWidth) {
-  return (screenWidth / _kBaseWidth).clamp(0.8, _kMaxScale);
+/// Threshold below which a viewport is considered height-constrained (short).
+const double _kShortViewportHeight = 500.0;
+
+/// Upper clamp for spacing (padding, gaps, heights).
+const double _kSpacingCeiling = 1.50;
+
+/// Upper clamp for typography (prevents text ballooning on large tablets).
+const double _kFontCeiling = 1.35;
+
+/// Lower clamp for typography (keeps text legible even at highest density).
+const double _kFontFloor = 0.90;
+
+/// Lower clamp for spacing in comfortable viewports.
+const double _kSpacingFloorComfortable = 0.85;
+
+/// Lower clamp for spacing in short viewports (allows structural compression).
+const double _kSpacingFloorShort = 0.70;
+
+/// Fallback screen size used when MediaQuery is absent from context.
+const Size _kFallbackSize = Size(375.0, 812.0);
+
+/// Why two curves exist:
+/// Spacing (padding, gaps, icon boxes, band heights) can compress aggressively
+/// in tight or short viewports without loss of utility. Typography cannot —
+/// text below 0.90 scale becomes unreadable on mobile screens.
+///
+/// Why the spacing floor is conditional:
+/// Spacing and font previously shared a single scale curve, so their ratio was
+/// always exactly 1.0 and text fit its container by construction. Splitting into
+/// two curves breaks that invariant. Allowing a 0.70 spacing floor on a
+/// comfortable-height device (e.g. iPhone SE1 portrait) produces 18% smaller
+/// boxes with 5.5% larger text — a 28% ratio swing across 3,300 call sites
+/// nobody will manually review. Holding the spacing floor at 0.85 when the
+/// viewport is not short keeps the ratio swing under 6%. Only truly short
+/// viewports (height < 500dp, e.g. landscape phones) drop to 0.70 to fit
+/// chrome on screen without collapsing Expanded content.
+double _rawScale(Size size) {
+  final formFactor = size.shortestSide / _kBaseShortestSide;
+  final heightFactor = (size.height / _kComfortableHeight).clamp(0.0, 1.0);
+  return formFactor * heightFactor;
 }
 
-/// Scales [baseSize] relative to the device's screen width.
-/// On a 375px-wide device, returns [baseSize] unchanged.
-/// On wider/narrower screens, scales linearly (capped at ${_kMaxScale}x).
-double rFontSize(BuildContext context, double baseSize) {
-  final sw = MediaQuery.maybeOf(context)?.size.width ?? _kBaseWidth;
-  return baseSize * _scaleFactor(sw);
+double _calcSpacingScale(Size size) {
+  final raw = _rawScale(size);
+  final isShort = size.height < _kShortViewportHeight;
+  final spacingFloor = isShort ? _kSpacingFloorShort : _kSpacingFloorComfortable;
+  return raw.clamp(spacingFloor, _kSpacingCeiling);
 }
+
+double _calcFontScale(Size size) {
+  final raw = _rawScale(size);
+  return raw.clamp(_kFontFloor, _kFontCeiling);
+}
+
+/// Scales [baseSize] relative to the device's form factor and vertical room.
+/// Uses the typography curve (floored at 0.90, ceiling at 1.35).
+double rFontSize(BuildContext context, double baseSize) =>
+    context.getRFontSize(baseSize);
 
 /// Returns a fraction of the screen width.
 double rWidth(BuildContext context, double fraction) {
-  return (MediaQuery.maybeOf(context)?.size.width ?? _kBaseWidth) * fraction;
+  return (MediaQuery.maybeOf(context)?.size.width ?? _kFallbackSize.width) * fraction;
 }
 
 /// Returns a fraction of the screen height.
 double rHeight(BuildContext context, double fraction) {
-  return (MediaQuery.maybeOf(context)?.size.height ?? 812.0) * fraction;
+  return (MediaQuery.maybeOf(context)?.size.height ?? _kFallbackSize.height) * fraction;
 }
 
-/// Scales a fixed pixel value by the screen-width ratio (capped).
-double rSize(BuildContext context, double basePixels) {
-  final sw = MediaQuery.maybeOf(context)?.size.width ?? _kBaseWidth;
-  return basePixels * _scaleFactor(sw);
-}
+/// Scales a fixed pixel value by the responsive spacing curve.
+/// Uses the structural spacing curve (compressed to 0.70 in short viewports).
+double rSize(BuildContext context, double basePixels) =>
+    context.getRSize(basePixels);
 
 /// Extension on BuildContext to easily access responsive dimensions
 extension ResponsiveHelper on BuildContext {
+  Size get _screenSize => MediaQuery.maybeOf(this)?.size ?? _kFallbackSize;
+
   /// Returns the width of the screen.
-  double get screenWidth => MediaQuery.maybeOf(this)?.size.width ?? _kBaseWidth;
+  double get screenWidth => _screenSize.width;
 
   /// Returns the height of the screen.
-  double get screenHeight => MediaQuery.maybeOf(this)?.size.height ?? 812.0;
+  double get screenHeight => _screenSize.height;
 
-  /// Clamped scale ratio for this context.
-  double get _scale => _scaleFactor(screenWidth);
+  /// Returns the shortest side of the screen (orientation-independent form factor).
+  double get screenShortestSide => _screenSize.shortestSide;
 
-  /// Breakpoints for responsive design
-  bool get isPhone => screenWidth < 600;
-  bool get isTablet => screenWidth >= 600 && screenWidth < 1024;
-  bool get isDesktop => screenWidth >= 1024;
+  /// Vertical space is scarce (height < 500dp) — collapse or re-flow chrome, never hide it.
+  bool get isShortViewport => screenHeight < _kShortViewportHeight;
 
-  /// Scales a base font size relative to screen width (capped).
-  double getRFontSize(double baseSize) => baseSize * _scale;
+  /// Form factor, not window width. A phone in landscape is still a phone.
+  bool get isPhone => screenShortestSide < 600;
 
-  /// Scales a fixed pixel value by the screen-width ratio (capped).
-  double getRSize(double basePixels) => basePixels * _scale;
+  /// The 280dp side-rail decision. Width-driven — but never in a short window.
+  bool get isDesktop => screenWidth >= 1024 && !isShortViewport;
+
+  /// Tablet form factor, excluding viewports that receive the desktop rail layout.
+  bool get isTablet => screenShortestSide >= 600 && !isDesktop;
+
+  /// Scales a base font size relative to form factor and height (capped 0.90 - 1.35).
+  double getRFontSize(double baseSize) =>
+      baseSize * _calcFontScale(_screenSize);
+
+  /// Scales a fixed pixel value by the spacing curve (capped 0.70/0.85 - 1.50).
+  double getRSize(double basePixels) =>
+      basePixels * _calcSpacingScale(_screenSize);
 
   /// Returns a fraction of the screen width.
   double getRWidth(double fraction) => screenWidth * fraction;

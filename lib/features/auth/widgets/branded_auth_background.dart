@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
-import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// The branded auth backdrop from the Welcome screen (master plan §4.3):
 /// a base surface, two soft accent glows in opposite corners (top-right +
@@ -58,8 +57,10 @@ class BrandedAuthBackground extends StatelessWidget {
           ),
           Center(
             child: Container(
-              constraints: BoxConstraints(
-                maxWidth: !context.isPhone ? 480.0 : double.infinity,
+              constraints: const BoxConstraints(
+                // Preserves portrait behavior (<480dp) while preventing landscape
+                // phones from stretching full-width once breakpoint definitions change.
+                maxWidth: 480.0,
               ),
               child: child,
             ),
