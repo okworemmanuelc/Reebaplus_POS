@@ -116,3 +116,15 @@ Phase 2's structural re-flow (rail layout) is required, not optional.**
    screen layout** — this codebase has no rendered widget snapshot or golden test coverage
    for complete screens. Layout verification relies on Phase 0's dedicated viewport harness
    and device emulator inspections.
+3. **Whole-Surface Tap Targets Reduced to 40dp in Landscape:**
+   Fields whose entire surface is the tap target (such as the date pickers in
+   `lib/features/inventory/screens/record_supplier_activity.dart`, where the calendar icon
+   is purely a decorative glyph and a gesture detector wraps the entire input) now present
+   a 40dp tap target in landscape, down from 48dp. This is a direct, deliberate consequence
+   of the 40dp short-viewport field decision to recover vertical chrome space.
+4. **Auth Screens Bypass AppInput:**
+   The auth and onboarding screens construct raw `TextField` widgets styled with
+   `AppDecorations.authInputDecoration` rather than using `AppInput`. Consequently, Phase 0's
+   compact padding and icon constraints do not reach them. Phase 1 (auth landscape adaptation)
+   must not assume `AppDecorations` or raw `TextField`s are compacted by Phase 0.
+

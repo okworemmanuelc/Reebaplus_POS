@@ -231,12 +231,20 @@ for.
 
 ---
 
-## 4. Landscape phone layout: re-flow, not squeeze
+## 4. Landscape phone layout: collapsing header with pinned controls
 
-Landscape has 915dp of width and 252dp of height. Stacking horizontal bands
-vertically is the wrong shape for that viewport regardless of density.
+Landscape has 915dp of width and 252dp of height. Stacking fixed horizontal bands
+vertically consumes scarce vertical room, leaving only ~108dp of product grid.
 
-**POS in landscape becomes a filter rail plus grid:**
+**POS in landscape uses a collapsing header:**
+- The app header and the Retailer/All dropdown row scroll away with grid content.
+- The search bar (`_buildSearchField`) and category chips (`CategoryFilterBar`) **pin** to the top and stay visible.
+- **Rationale:** Category chips and search are the cashier's highest-frequency controls during a sale. Lower-frequency controls (switching retailer or filtering store accounts) scroll out of the way when browsing products, but nothing is hidden or removed (principle 1) because scrolling back up instantly restores them.
+- **Estimated recovery:** Recovers ~120–130dp of vertical space (to be empirically measured in Phase 2), expanding the visible product grid from ~1 clipped row to multiple comfortable rows.
+
+### Rejected Alternative: Side-Rail Re-Flow
+
+The original Phase 2 design proposed moving header dropdowns, search, quick sale, and category chips into a ~200dp vertical side-rail beside the product grid:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -256,13 +264,11 @@ vertically is the wrong shape for that viewport regardless of density.
 └──────────────────────────────────────────────────────────┘
 ```
 
-Rail ~200dp. The category chips become a vertical scrolling list. Every control
-that exists in portrait exists here — principle 1. The grid gains the full body
-height instead of 108dp: **2.3× more usable product area than compression alone.**
+**Why rejected:**
+1. Turning the horizontal category chip strip into a vertical list in a 200dp rail creates a crowded, scrolling sub-list alongside the main product grid scroll, adding dual-scroll friction for the cashier.
+2. The search field in a 200dp rail is uncomfortably narrow for typing or scanning item names.
+3. A collapsing header achieves the needed vertical recovery (~120–130dp) directly within the natural vertical scrolling flow without dividing the screen horizontally or adding layout branching complexity between portrait and landscape.
 
-The same rail pattern applies to every screen with the header-bands-above-a-list
-shape: POS, Receive Stock (`receive_stock_screen.dart:162-200`, identical
-structure), Inventory, Orders.
 
 ---
 
@@ -406,8 +412,8 @@ During Phase 0 implementation, three deliberate deviations from the initial §3 
 3. **Target 40dp Rendered Field Heights:**
    Rather than applying the estimated vertical padding numbers from §3 (`vertical: 8`), `AppInput` and `AppDropdown` were measured under `AppTheme.dark()` to hit exactly 40dp (±1dp) rendered height in short viewports. `AppInput` uses `vertical: 9.5` + `isDense: true` and 40×40 constraints for decorative icons (preserving 48dp for interactive icons). `AppDropdown` uses `vertical: 12.5` (falling back from caller padding, replacing its previous un-themed hardcoded 14dp padding).
 
-**Stop after Phase 0 and hand back for an emulator rotation check.** This phase
-moves every screen at once; it earns a review of its own.
+**Phase 0 Emulator Verification:**
+Landscape POS home verified on a Pixel-class device emulator (412dp height). Renders cleanly with no overflow (`RenderFlex` overflow eliminated). The product grid shows ~1 clipped row, confirming the ~108dp estimate from §3. Phase 0 verified.
 
 ### Phase 1 — onboarding and auth `fix/responsive-auth-landscape`
 
@@ -445,10 +451,12 @@ would stretch to 915dp. Change both conditions to
 
 ### Phase 2 — POS `fix/responsive-pos-landscape`
 
-- Implement the §4 landscape rail in `pos_home_screen.dart` under
-  `isShortViewport`. Portrait keeps today's bands.
-- `category_filter_bar.dart` — horizontal chip strip in portrait, vertical list
-  in the rail. Halve the `getRSize(8)` / `getRSize(16)` margins in short viewports.
+- Implement the collapsing header in `pos_home_screen.dart` under `isShortViewport`:
+  - The app header and the Retailer/All dropdown row scroll away with grid content.
+  - The search bar and category chips PIN to the top and stay visible.
+  - **Rationale:** Chips and search are the cashier's highest-frequency controls; nothing is hidden, since scrolling up restores everything.
+  - **Estimated recovery:** Recovers ~120–130dp of vertical space (to be empirically measured in Phase 2).
+  - Note: The earlier side-rail proposal is rejected (see §4 for rationale).
 - `product_grid.dart:110-116` — the aspect ratio pins card height at
   `getRSize(210)`. In a short viewport target ~150dp base and default to the
   compact list layout.
