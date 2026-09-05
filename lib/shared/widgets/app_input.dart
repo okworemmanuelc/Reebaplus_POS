@@ -7,6 +7,23 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 ///
 /// DESIGN RULE: All new input fields MUST use this widget instead of raw
 /// [TextField] or [TextFormField] to maintain design consistency.
+///
+/// ### Responsive Sizing & Icon Constraints
+/// In short viewports (`context.isShortViewport` is true, e.g. landscape phones),
+/// [AppInput] renders at a compact target height of 40dp (down from 53dp in
+/// comfortable portrait) by applying `isDense: true` and compact content padding.
+///
+/// - **Decorative icons:** Purely decorative icons (such as search indicators or
+///   currency badges) automatically receive compact 40×40 constraints
+///   ([prefixIconConstraints] / [suffixIconConstraints]), allowing the field to
+///   meet its 40dp height target.
+/// - **Interactive icons:** Interactive controls (e.g. [GestureDetector], [IconButton],
+///   [TextButton], [InkWell], even when nested inside [Padding], [SizedBox], or
+///   [Center]) preserve Flutter's default 48×48 minimum tap target floor. If a field
+///   contains both a decorative and an interactive icon, the interactive one wins
+///   and the entire field remains at 48dp.
+/// - **Explicit constraints:** Any caller-supplied [prefixIconConstraints] or
+///   [suffixIconConstraints] always take precedence over these defaults.
 class AppInput extends StatelessWidget {
   final TextEditingController? controller;
   final String? labelText;
@@ -71,23 +88,47 @@ class AppInput extends StatelessWidget {
     this.suffixIconConstraints,
   });
 
-  static bool _isInteractive(Widget? widget) {
-    if (widget == null) return false;
-    if (widget is IconButton ||
-        widget is TextButton ||
-        widget is ElevatedButton ||
-        widget is OutlinedButton ||
-        widget is GestureDetector ||
-        widget is InkWell ||
-        widget is InkResponse) {
-      return true;
+  /// Unwraps common single-child wrapper widgets to reveal the core icon/control.
+  static Widget? _unwrap(Widget? widget) {
+    var current = widget;
+    while (current != null) {
+      if (current is Padding) {
+        current = current.child;
+      } else if (current is SizedBox) {
+        current = current.child;
+      } else if (current is Align) {
+        current = current.child;
+      } else if (current is Center) {
+        current = current.child;
+      } else if (current is Container) {
+        current = current.child;
+      } else if (current is DecoratedBox) {
+        current = current.child;
+      } else if (current is ConstrainedBox) {
+        current = current.child;
+      } else if (current is FittedBox) {
+        current = current.child;
+      } else if (current is Opacity) {
+        current = current.child;
+      } else if (current is Transform) {
+        current = current.child;
+      } else {
+        break;
+      }
     }
-    if (widget is Padding) return _isInteractive(widget.child);
-    if (widget is Center) return _isInteractive(widget.child);
-    if (widget is Align) return _isInteractive(widget.child);
-    if (widget is SizedBox) return _isInteractive(widget.child);
-    if (widget is Container) return _isInteractive(widget.child);
-    return false;
+    return current;
+  }
+
+  static bool _isInteractive(Widget? widget) {
+    final core = _unwrap(widget);
+    if (core == null) return false;
+    return core is IconButton ||
+        core is TextButton ||
+        core is ElevatedButton ||
+        core is OutlinedButton ||
+        core is GestureDetector ||
+        core is InkWell ||
+        core is InkResponse;
   }
 
   @override

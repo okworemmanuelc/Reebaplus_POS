@@ -443,12 +443,38 @@ void main() {
                     suffixIcon: Icon(Icons.clear, size: 16),
                   ),
                   AppInput(
-                    key: const Key('interactive_suffix'),
-                    hintText: 'Interactive Suffix',
+                    key: const Key('interactive_bare'),
+                    hintText: 'Bare Interactive',
                     prefixIcon: const Icon(Icons.search, size: 16),
                     suffixIcon: GestureDetector(
                       onTap: () {},
                       child: const Icon(Icons.clear, size: 16),
+                    ),
+                  ),
+                  AppInput(
+                    key: const Key('interactive_wrapped_1'),
+                    hintText: 'Wrapped in Padding',
+                    prefixIcon: const Icon(Icons.search, size: 16),
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: const Icon(Icons.clear, size: 16),
+                      ),
+                    ),
+                  ),
+                  AppInput(
+                    key: const Key('interactive_wrapped_2'),
+                    hintText: 'Wrapped Two Deep',
+                    prefixIcon: const Icon(Icons.search, size: 16),
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: SizedBox(
+                        child: GestureDetector(
+                          onTap: () {},
+                          child: const Icon(Icons.clear, size: 16),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -462,8 +488,12 @@ void main() {
       final hPrefix = tester.getSize(find.byKey(const Key('prefix'))).height;
       final hSuffix = tester.getSize(find.byKey(const Key('suffix'))).height;
       final hBoth = tester.getSize(find.byKey(const Key('both'))).height;
-      final hInteractive =
-          tester.getSize(find.byKey(const Key('interactive_suffix'))).height;
+      final hBare =
+          tester.getSize(find.byKey(const Key('interactive_bare'))).height;
+      final hWrapped1 =
+          tester.getSize(find.byKey(const Key('interactive_wrapped_1'))).height;
+      final hWrapped2 =
+          tester.getSize(find.byKey(const Key('interactive_wrapped_2'))).height;
 
       // Purely decorative icons compress to 40x40 constraints in short viewports,
       // achieving the 40.0dp target across all four configurations.
@@ -472,9 +502,11 @@ void main() {
       expect(hSuffix, equals(40.0));
       expect(hBoth, equals(40.0));
 
-      // When an interactive icon is present (e.g. clear button, tap target),
-      // the interactive one wins and the 48dp floor is preserved.
-      expect(hInteractive, equals(48.0));
+      // Interactive icons preserve the 48dp floor whether bare, wrapped in
+      // Padding, or wrapped two deep (Padding -> SizedBox -> GestureDetector).
+      expect(hBare, equals(48.0));
+      expect(hWrapped1, equals(48.0));
+      expect(hWrapped2, equals(48.0));
     });
 
     testWidgets(
