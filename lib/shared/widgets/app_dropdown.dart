@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 
 class AppDropdown<T> extends FormField<T> {
@@ -252,7 +253,10 @@ class _AppDropdownState<T> extends FormFieldState<T> {
               fallbackBuilder: (context, child) => child,
               child: Container(
                 key: _key,
-                padding: widget.contentPadding ?? const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                padding: widget.contentPadding ??
+                    (context.isShortViewport
+                        ? const EdgeInsets.symmetric(horizontal: 14, vertical: 12.5)
+                        : const EdgeInsets.symmetric(horizontal: 14, vertical: 14)),
                 decoration: BoxDecoration(
                   color: buttonColor,
                   borderRadius: BorderRadius.circular(14),

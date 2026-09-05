@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+
 /// [AppInput] is the standard input field for the application.
 ///
 /// DESIGN RULE: All new input fields MUST use this widget instead of raw
@@ -33,6 +35,8 @@ class AppInput extends StatelessWidget {
   final InputBorder? border;
   final String? initialValue;
   final TextStyle? style;
+  final BoxConstraints? prefixIconConstraints;
+  final BoxConstraints? suffixIconConstraints;
 
   const AppInput({
     super.key,
@@ -63,12 +67,41 @@ class AppInput extends StatelessWidget {
     this.border,
     this.initialValue,
     this.style,
+    this.prefixIconConstraints,
+    this.suffixIconConstraints,
   });
+
+  static bool _isInteractive(Widget? widget) {
+    if (widget == null) return false;
+    if (widget is IconButton ||
+        widget is TextButton ||
+        widget is ElevatedButton ||
+        widget is OutlinedButton ||
+        widget is GestureDetector ||
+        widget is InkWell ||
+        widget is InkResponse) {
+      return true;
+    }
+    if (widget is Padding) return _isInteractive(widget.child);
+    if (widget is Center) return _isInteractive(widget.child);
+    if (widget is Align) return _isInteractive(widget.child);
+    if (widget is SizedBox) return _isInteractive(widget.child);
+    if (widget is Container) return _isInteractive(widget.child);
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+
+    final bool hasInteractiveIcon =
+        _isInteractive(prefixIcon) || _isInteractive(suffixIcon);
+
+    final BoxConstraints? compactConstraints =
+        (context.isShortViewport && !hasInteractiveIcon)
+            ? const BoxConstraints(minWidth: 40, minHeight: 40)
+            : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,9 +146,17 @@ class AppInput extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hintText,
             prefixIcon: prefixIcon,
+            prefixIconConstraints:
+                prefixIconConstraints ?? compactConstraints,
             suffixIcon: suffixIcon,
+            suffixIconConstraints:
+                suffixIconConstraints ?? compactConstraints,
             fillColor: fillColor ?? t.inputDecorationTheme.fillColor,
-            contentPadding: contentPadding,
+            isDense: context.isShortViewport ? true : null,
+            contentPadding: contentPadding ??
+                (context.isShortViewport
+                    ? const EdgeInsets.symmetric(horizontal: 16, vertical: 9.5)
+                    : null),
             prefixText: prefixText,
             suffixText: suffixText,
             border: border,
