@@ -1,6 +1,6 @@
 # Responsive Layout Plan — short viewports (landscape phones) and tablets
 
-Status: proposed, not started
+Status: in progress (Phase 0 complete)
 Author: design investigation, 2026-09-05
 Scope: `lib/core/utils/responsive.dart` + every screen in `lib/`
 Related: `context/ui-context.md`, ADR to be written in Phase 0
@@ -392,6 +392,19 @@ Each phase is one branch and one PR. Do not entangle phases.
    — confirm before claiming a number). Record the two-curve model, the
    `_kComfortableHeight` gate, the 1.35 font ceiling, and the rejected
    alternatives: orientation lock, and shortestSide-based `isDesktop`.
+
+#### Phase 0 Deviations from Original Plan
+
+During Phase 0 implementation, three deliberate deviations from the initial §3 proposal were established:
+
+1. **Conditional Spacing Floor (0.85 comfortable / 0.70 short):**
+   Section 3 specified an unconditional 0.70 floor. In practice, splitting into two curves breaks the previously constant 1:1 box-to-font ratio. An unconditional 0.70 floor on a comfortable-height device (e.g. iPhone SE1 portrait) shrank containers by 18% while text grew by 5.5% (a 28% ratio swing across 3,300 unreviewed call sites). Holding the spacing floor at 0.85 when height is not short keeps the ratio swing under 6%, preventing truncation. Only short viewports (`height < 500dp`) drop to 0.70.
+
+2. **`isTablet` Exclusivity (`!isDesktop`):**
+   Section 3 defined `isTablet => screenShortestSide >= 600 && screenShortestSide < 1024`. This was simplified to `screenShortestSide >= 600 && !isDesktop` to avoid two conditions disagreeing. Landscape tablets with width >= 1024 (e.g. iPad 10.9" and iPad Mini) evaluate `isDesktop: true` and `isTablet: false`, matching production behavior and deferring iPad rail layout changes to Phase 7.
+
+3. **Target 40dp Rendered Field Heights:**
+   Rather than applying the estimated vertical padding numbers from §3 (`vertical: 8`), `AppInput` and `AppDropdown` were measured under `AppTheme.dark()` to hit exactly 40dp (±1dp) rendered height in short viewports. `AppInput` uses `vertical: 9.5` + `isDense: true` and 40×40 constraints for decorative icons (preserving 48dp for interactive icons). `AppDropdown` uses `vertical: 12.5` (falling back from caller padding, replacing its previous un-themed hardcoded 14dp padding).
 
 **Stop after Phase 0 and hand back for an emulator rotation check.** This phase
 moves every screen at once; it earns a review of its own.
