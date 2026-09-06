@@ -265,9 +265,7 @@ The original Phase 2 design proposed moving header dropdowns, search, quick sale
 ```
 
 **Why rejected:**
-1. Turning the horizontal category chip strip into a vertical list in a 200dp rail creates a crowded, scrolling sub-list alongside the main product grid scroll, adding dual-scroll friction for the cashier.
-2. The search field in a 200dp rail is uncomfortably narrow for typing or scanning item names.
-3. A collapsing header achieves the needed vertical recovery (~120–130dp) directly within the natural vertical scrolling flow without dividing the screen horizontally or adding layout branching complexity between portrait and landscape.
+Search and category chips are the cashier's highest-frequency controls on the screen. The side-rail re-flow partitioned horizontal space to fit all controls simultaneously, but a collapsing header achieves a superior outcome: pinning search and category chips keeps both permanently reachable at the top of the viewport, while lower-frequency chrome (the app header and Retailer/All dropdowns) scrolls away naturally to yield vertical space.
 
 
 ---
