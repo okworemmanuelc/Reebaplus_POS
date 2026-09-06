@@ -286,7 +286,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       backgroundColor: Colors.transparent,
       builder: (modalCtx) {
         return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
+          height: context.getRHeight(0.7),
           decoration: BoxDecoration(
             color: _surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -461,7 +461,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
             return SizedBox(
-              height: MediaQuery.of(modalCtx).size.height * 0.85,
+              height: modalCtx.getRHeight(0.85),
               child: Column(
                 children: [
                   Padding(
