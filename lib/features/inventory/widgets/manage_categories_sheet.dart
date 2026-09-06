@@ -88,7 +88,7 @@ class ManageCategoriesSheet extends ConsumerWidget {
             Flexible(
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight: context.getRHeight(0.5),
+                  maxHeight: MediaQuery.of(context).size.height * 0.5,
                 ),
                 child: ListView.separated(
                   shrinkWrap: true,

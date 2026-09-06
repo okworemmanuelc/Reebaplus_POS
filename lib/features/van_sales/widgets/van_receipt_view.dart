@@ -231,7 +231,7 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
       context: context,
       isScrollControlled: true,
       constraints: BoxConstraints(
-        maxHeight: context.getRHeight(0.5),
+        maxHeight: MediaQuery.of(context).size.height * 0.5,
       ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(

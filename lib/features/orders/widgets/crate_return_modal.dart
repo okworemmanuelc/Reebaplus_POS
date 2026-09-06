@@ -390,7 +390,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     // change-customer sheet uses.
     return Container(
       constraints: BoxConstraints(
-        maxHeight: context.getRHeight(0.9),
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
       ),
       decoration: BoxDecoration(
         color: _bg,
@@ -450,7 +450,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           Flexible(
             child: _loading
                 ? SizedBox(
-                    height: context.getRHeight(0.25),
+                    height: MediaQuery.of(context).size.height * 0.25,
                     child: const Center(child: CircularProgressIndicator()),
                   )
                 : ListView(
