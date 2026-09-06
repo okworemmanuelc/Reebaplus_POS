@@ -1077,7 +1077,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
             return Container(
-              height: MediaQuery.of(ctx).size.height * 0.85,
+              height: ctx.getRHeight(0.85),
               decoration: BoxDecoration(
                 color: surfaceCol,
                 borderRadius: const BorderRadius.vertical(
@@ -1254,7 +1254,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           isScrollControlled: true,
           backgroundColor: Theme.of(ctx).colorScheme.surface,
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.5,
+            maxHeight: ctx.getRHeight(0.5),
           ),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

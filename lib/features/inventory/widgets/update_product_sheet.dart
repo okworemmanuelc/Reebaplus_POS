@@ -747,7 +747,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.92,
+          maxHeight: context.getRHeight(0.92),
         ),
         decoration: BoxDecoration(
           color: bg,

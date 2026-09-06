@@ -799,7 +799,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                     child: SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       child: SizedBox(
-                        height: MediaQuery.of(context).size.height * 0.6,
+                        height: context.getRHeight(0.6),
                         child: _buildEmptyState(context),
                       ),
                     ),

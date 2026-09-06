@@ -1029,7 +1029,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              height: MediaQuery.of(context).size.height * 0.85,
+              height: context.getRHeight(0.85),
               decoration: BoxDecoration(
                 color: surfaceCol,
                 borderRadius: const BorderRadius.vertical(
@@ -1285,7 +1285,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           isScrollControlled: true,
           backgroundColor: surfaceCol,
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.5,
+            maxHeight: context.getRHeight(0.5),
           ),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

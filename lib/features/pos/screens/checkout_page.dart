@@ -1622,7 +1622,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       isScrollControlled: true,
       backgroundColor: _surface,
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.5,
+        maxHeight: context.getRHeight(0.5),
       ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

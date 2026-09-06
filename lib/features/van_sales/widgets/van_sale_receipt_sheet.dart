@@ -58,7 +58,7 @@ class VanSaleReceiptSheet extends StatelessWidget {
     ];
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      height: context.getRHeight(0.85),
       decoration: BoxDecoration(
         color: t.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
