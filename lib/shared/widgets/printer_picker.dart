@@ -77,12 +77,19 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Select Receipt Printer',
-                  style: TextStyle(
-                    color: text,
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(16),
+                // Flexible + ellipsis so the title yields to the refresh
+                // button rather than overflowing the row: the button is pinned
+                // at the 48dp tap target, and at a large accessibility
+                // textScaler the title outgrows a narrow phone's header.
+                Flexible(
+                  child: Text(
+                    'Select Receipt Printer',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: text,
+                      fontWeight: FontWeight.bold,
+                      fontSize: context.getRFontSize(16),
+                    ),
                   ),
                 ),
                 IconButton(
@@ -134,39 +141,48 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
             ),
           ),
           Divider(height: 1, color: border),
+          // Every branch below is Flexible + scrollable so the sheet can
+          // never overflow its cap. A landscape phone gives the sheet ~370dp
+          // (see `sheetMaxHeight`), of which the header + paper-size rows take
+          // a fixed ~137dp that does not compress — the remainder scrolls
+          // rather than painting the yellow-and-black stripes.
           if (_isLoading)
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Center(child: CircularProgressIndicator()),
-                  // iOS/macOS scan for nearby printers (~5s); a bare spinner
-                  // looks stuck, so label what's happening.
-                  if (!Platform.isAndroid) ...[
-                    SizedBox(height: context.getRSize(12)),
-                    Text(
-                      'Scanning for nearby printers…',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: subtext),
-                    ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(context.getRSize(32)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Center(child: CircularProgressIndicator()),
+                    // iOS/macOS scan for nearby printers (~5s); a bare spinner
+                    // looks stuck, so label what's happening.
+                    if (!Platform.isAndroid) ...[
+                      SizedBox(height: context.getRSize(12)),
+                      Text(
+                        'Scanning for nearby printers…',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: subtext),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             )
           else if (_devices.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Center(
-                child: Text(
-                  // iOS/macOS discover BLE printers by scanning while they're
-                  // powered on — they are NOT paired in iOS Bluetooth settings,
-                  // so don't tell users to go there.
-                  Platform.isAndroid
-                      ? 'No paired printers found.\nPair your printer in Bluetooth settings, then tap refresh.'
-                      : 'No printers found nearby.\nMake sure your printer is switched on and in range and Bluetooth is enabled, then tap refresh.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: subtext),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(context.getRSize(32)),
+                child: Center(
+                  child: Text(
+                    // iOS/macOS discover BLE printers by scanning while they're
+                    // powered on — they are NOT paired in iOS Bluetooth settings,
+                    // so don't tell users to go there.
+                    Platform.isAndroid
+                        ? 'No paired printers found.\nPair your printer in Bluetooth settings, then tap refresh.'
+                        : 'No printers found nearby.\nMake sure your printer is switched on and in range and Bluetooth is enabled, then tap refresh.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: subtext),
+                  ),
                 ),
               ),
             )

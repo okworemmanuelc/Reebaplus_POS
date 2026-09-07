@@ -10,6 +10,142 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Whole-surface tap targets keep the 48dp floor (2026-09-07)
+Closes gap 3 of `docs/design/responsive-layout-plan.md` §10, and corrects three
+factual errors in the responsive ADR.
+
+**What was wrong.** Phase 0 compacted `AppInput` to 40dp in short viewports and
+gated the 48dp tap-target floor on `_isInteractive`, which only ever inspects the
+prefix/suffix **icon**. A date-picker field — `readOnly: true` + `onTap`, with a
+purely decorative calendar glyph — is tapped anywhere on its **whole surface**, so
+in landscape its only tap target sat at 40dp, under the Material / WCAG 2.5.5
+48dp minimum.
+
+**The complete affected set is three call sites**, verified by sweeping all 30
+files that construct an `AppInput`: `record_supplier_activity.dart:436` and
+`:759` (Date Received / Date Paid), `add_expense_screen.dart:572` (Date). Every
+other `onTap:` near an `AppInput` belongs to a `GestureDetector` suffix icon,
+which `_isInteractive` already catches. `staff_sign_up_screen.dart` matches a
+`readOnly` grep but builds a raw `TextField`, so it is unaffected.
+
+**Two levers make a field 40dp and a fix has to close both.** The compact 40×40
+icon constraints answer for a field that *has* an icon; `isDense: true` +
+`vertical: 9.5` content padding is the only thing left for a field that has none.
+The plan proposed flipping the first alone, which would have covered all three
+real sites while leaving the widget's documented contract false. `AppInput` now
+derives `wholeSurfaceTap = readOnly && onTap != null`, suppresses the icon
+constraints, and sets `InputDecoration.constraints: minHeight 48`.
+
+**Correction (probe, 2026-09-07): only the second lever is load-bearing.** This
+entry first claimed both were. Disabling `InputDecoration.constraints` does turn
+the no-icon assertion red; disabling the icon-constraint suppression leaves the
+whole suite green, because `minHeight: 48` already covers the icon case as well.
+The first lever is kept for coherence — a 48dp field should not hold a 40dp icon
+box — but it protects nothing, and nobody should delete the second believing the
+first covers it.
+
+A `readOnly` field **without** an `onTap` is a display field, not a control, and
+still compacts to 40dp — the ~8 display-only `readOnly` fields in
+`inventory_screen` / `product_detail_screen` are untouched. Cost is 8dp on three
+fields, all inside a `ListView`, so no overflow risk.
+
+**Tests.** 2 new in `test/utils/responsive_test.dart` (now 32): 48dp with and
+without an icon at `pixel7Landscape`, 40dp preserved for `readOnly` with no
+`onTap`, 53dp unchanged in portrait.
+
+**ADR corrections.** Limitation 3 cited
+`lib/features/inventory/screens/record_supplier_activity.dart`, **a file that
+does not exist** (it is `lib/features/payments/widgets/...`), and missed
+`add_expense_screen.dart` entirely. Both fixed, and the limitation rewritten as
+resolved.
+
+**ADR renumbered 0024 → 0025.** The responsive ADR claimed a number already held
+by `0024-brand-deposit-rate-fans-out-to-products.md` — which is in *this
+branch's own history* (`f73a102`) and already cited by number in `CONTEXT.md`,
+`BUILD_LOG.md`, and this file. The durable rule: **an ADR number is free only if
+no branch holds it** — check `git branch -a` + `git ls-tree`, not `ls
+docs/adr/`. 0018 is likewise held by `feat/push-notifications-fcm`.
+
+### AppDropdown takes the same floor, unconditionally (2026-09-07)
+Follows directly from the entry above and closes the last of gap 3.
+
+`AppDropdown` had the identical defect and a worse one than recorded: its whole
+surface is a `GestureDetector` (`app_dropdown.dart:232`) and `onChanged` is
+required and non-nullable, so it is **always** a control — and it measured
+**43dp in portrait**, meaning the breach predates Phase 0. Phase 0 only took it
+to 40dp in landscape.
+
+**The fix is therefore unconditional**, unlike `AppInput`'s: a
+`ConstrainedBox(minHeight: kMinInteractiveDimension)` at every viewport, placed
+**outside** the padded, keyed `Container` so the hit area, the painted surface
+and the size `_openDropdown` measures for its overlay all agree — and so a
+caller-supplied `contentPadding` cannot breach it either (without the floor, a
+zero-padding dropdown measures 15dp). The asymmetry with `AppInput` is the point:
+an `AppInput` may be a display field; an `AppDropdown` never is.
+
+**Two existing assertions were pinning the defect** (43dp portrait, 40dp
+landscape) and were updated, plus a dedicated floor test across three viewports
+and the padding-override case. `AppDropdown` also stops drifting under
+`textScaler 1.3` (44 → 48) — the floor now exceeds what scaled text produces, so
+it is the one field whose height is stable under text scaling.
+
+**The cost was paid, not dodged.** POS landscape chrome 154.2 → **162.2dp**, grid
+~98 → **~90dp**; the POS-home test budget moved 160 → 165dp. §4's arithmetic and
+the A/B area comparison are updated. On a 320dp-tall viewport (SE1 landscape) the
+grid falls to **~9.8dp** — it still does not crash, and it is unusable. That
+number is the strongest single argument that Phase 2's re-flow is required rather
+than optional, and it is exactly the trade this plan forbids resolving by
+shrinking a control.
+
+`flutter analyze` clean; `test/utils/` + `test/pos/` + `test/widgets/` → 175
+passed, 1 skipped (the still-`skip:`ped MediaQuery ban test, gap 2).
+
+**Still open.** This branch contains `f73a102`, so it is **not** cut from `main` —
+check for scope entanglement before the Phase 0 PR.
+
+### Bottom sheets get a height floor in short viewports (2026-09-07)
+Fixes a user-reported landscape overflow: the receipt printer picker painted
+**"BOTTOM OVERFLOWED BY 59 PIXELS"** while confirming an order.
+
+**What was wrong — two independent faults.** All four `PrinterPicker` call
+sites capped the sheet at `context.getRHeight(0.5)`, a blind fraction of screen
+height: a **206dp** ceiling on a 915x412 landscape phone, under content whose
+minimum is ~265dp. And inside the widget, only the device-list branch was
+`Flexible` — the loading and empty branches were fixed-height `Padding`s with an
+**unscaled** `EdgeInsets.all(32)`, so the content could neither shrink nor
+scroll. 265 - 206 = the reported 59.
+
+**The generalisable measurement.** A sheet's chrome does not compress with the
+viewport. The refresh `IconButton` and the paper-size `SegmentedButton` are both
+pinned at the 48dp tap-target floor, and Phase 0's fields bottom out at 40dp, so
+intrinsic sheet height is near-constant across orientations while
+`screenHeight * f` collapses by 2.2x on rotation. **A fraction is the wrong
+shape of answer for a vertical cap.**
+
+**What shipped.**
+- `context.sheetMaxHeight(fraction)` in `lib/core/utils/responsive.dart` — the
+  fraction as given, floored at 0.90 when `isShortViewport`. Use it for every
+  `showModalBottomSheet` `maxHeight`; never bare `getRHeight`.
+- Every branch of `PrinterPicker` is now `Flexible` + `SingleChildScrollView`,
+  so it cannot overflow *whatever* cap it is handed — this is the half that
+  actually makes a sheet safe.
+- The header title is `Flexible` + ellipsis (protects a large accessibility
+  `textScaler`).
+- `test/widgets/printer_picker_overflow_test.dart` — 14 tests across 4
+  viewports, including a case pinned at the old 206dp ceiling. Reverting either
+  half of the fix turns it red (verified: 55px bottom overflow returns).
+
+**Still open.** 10 more `getRHeight(0.x)` sheet sites carry the same latent bug
+— tabulated in `docs/design/responsive-layout-plan.md` §10 gap 6. The three at
+0.5-0.6 are the likeliest to be reported next. The `height:` sites (as opposed
+to `maxHeight:`) pin an exact height, so `sheetMaxHeight` is not a drop-in
+there; each needs a scrollable escape checked first.
+
+**Testing gotcha worth remembering.** The `flutter_test` font renders every
+glyph as a square of the font size, so a 22-character title measures ~387dp
+instead of ~190dp and manufactures *horizontal* overflows that do not exist on
+device. Confirm the culprit with a render-tree probe before "fixing" one.
+
 ### The cart reads the brand deposit rate live; unset values are named (2026-08-20)
 Fixes the read half of **ADR 0024 defect (4)** — POS collecting one crate
 deposit while the sale recorded another.

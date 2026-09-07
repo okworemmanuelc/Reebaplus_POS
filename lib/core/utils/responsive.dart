@@ -26,6 +26,10 @@ const double _kSpacingFloorComfortable = 0.85;
 /// Lower clamp for spacing in short viewports (allows structural compression).
 const double _kSpacingFloorShort = 0.70;
 
+/// Minimum fraction of a short viewport a bottom sheet may be capped to.
+/// See [ResponsiveHelper.sheetMaxHeight].
+const double _kShortSheetFloor = 0.90;
+
 /// Fallback screen size used when MediaQuery is absent from context.
 const Size _kFallbackSize = Size(375.0, 812.0);
 
@@ -120,6 +124,29 @@ extension ResponsiveHelper on BuildContext {
 
   /// Returns a fraction of the screen height.
   double getRHeight(double fraction) => screenHeight * fraction;
+
+  /// Max height for a bottom sheet, as a fraction of the screen — but never
+  /// less than [_kShortSheetFloor] of a short viewport.
+  ///
+  /// Why a floor and not a plain fraction: a sheet's chrome does NOT compress
+  /// with the viewport. A `SegmentedButton` and an `IconButton` are both pinned
+  /// at the 48dp tap-target minimum, and `AppInput`/`AppDropdown` bottom out at
+  /// 40dp, so a sheet's own minimum height is roughly constant across
+  /// orientations while `screenHeight * fraction` collapses by 2.2x on
+  /// rotation. `getRHeight(0.5)` on a 915x412 landscape phone yields a 206dp
+  /// ceiling under content that cannot shrink below ~265dp — the printer
+  /// picker's "BOTTOM OVERFLOWED BY 59 PIXELS", reported 2026-09-06.
+  ///
+  /// A near-full-height sheet in landscape is the correct Material behaviour
+  /// anyway: there is no useful backdrop to reveal in 412dp.
+  ///
+  /// Use this for every `showModalBottomSheet` `maxHeight`, never bare
+  /// [getRHeight] — see `docs/design/responsive-layout-plan.md` §10 gap 6 for
+  /// the sites still to migrate.
+  double sheetMaxHeight(double fraction) => screenHeight *
+      (isShortViewport && fraction < _kShortSheetFloor
+          ? _kShortSheetFloor
+          : fraction);
 
   /// Returns EdgeInsets with scaled padding.
   EdgeInsets rPadding(double base) => EdgeInsets.all(getRSize(base));

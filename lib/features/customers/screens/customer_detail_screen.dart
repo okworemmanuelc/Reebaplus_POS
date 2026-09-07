@@ -1254,7 +1254,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           isScrollControlled: true,
           backgroundColor: Theme.of(ctx).colorScheme.surface,
           constraints: BoxConstraints(
-            maxHeight: ctx.getRHeight(0.5),
+            maxHeight: ctx.sheetMaxHeight(0.5),
           ),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

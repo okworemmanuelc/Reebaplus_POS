@@ -22,8 +22,19 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 ///   [Center]) preserve Flutter's default 48×48 minimum tap target floor. If a field
 ///   contains both a decorative and an interactive icon, the interactive one wins
 ///   and the entire field remains at 48dp.
+/// - **Whole-surface tap targets:** a field that is [readOnly] *and* has an
+///   [onTap] (a date picker, a value chooser) is tapped anywhere on its surface,
+///   so no icon inspection can tell that the field itself is a control. Such a
+///   field keeps the 48dp floor in a short viewport whether or not it carries an
+///   icon — the field IS the tap target, and 40dp would put it under the
+///   Material / WCAG 2.5.5 minimum. A [readOnly] field with no [onTap] is a
+///   display field, not a control, and still compacts to 40dp.
 /// - **Explicit constraints:** Any caller-supplied [prefixIconConstraints] or
 ///   [suffixIconConstraints] always take precedence over these defaults.
+///
+/// Note this reasoning covers [AppInput] only. `AppDropdown` is also a
+/// whole-surface tap target and is still 40dp in a short viewport — see
+/// `docs/design/responsive-layout-plan.md` §10 gap 3.
 class AppInput extends StatelessWidget {
   final TextEditingController? controller;
   final String? labelText;
@@ -139,9 +150,26 @@ class AppInput extends StatelessWidget {
     final bool hasInteractiveIcon =
         _isInteractive(prefixIcon) || _isInteractive(suffixIcon);
 
+    // A `readOnly` field with an `onTap` (a date picker, a value chooser) is
+    // tapped anywhere on its surface, so [_isInteractive] — which only ever
+    // inspects the prefix/suffix icon — cannot see that the field itself is a
+    // control. Without this the 40dp short-viewport height would put its ONLY
+    // tap target under the 48dp Material / WCAG 2.5.5 floor.
+    final bool wholeSurfaceTap = readOnly && onTap != null;
+
+    final bool preserveTapTarget = hasInteractiveIcon || wholeSurfaceTap;
+
     final BoxConstraints? compactConstraints =
-        (context.isShortViewport && !hasInteractiveIcon)
+        (context.isShortViewport && !preserveTapTarget)
             ? const BoxConstraints(minWidth: 40, minHeight: 40)
+            : null;
+
+    // An icon carries the 48dp floor on its own (Flutter's default icon
+    // constraints), so this only has to answer for the case no icon can:
+    // a whole-surface tap target with no icon at all.
+    final BoxConstraints? tapTargetFloor =
+        (context.isShortViewport && wholeSurfaceTap)
+            ? const BoxConstraints(minHeight: kMinInteractiveDimension)
             : null;
 
     return Column(
@@ -193,6 +221,7 @@ class AppInput extends StatelessWidget {
             suffixIconConstraints:
                 suffixIconConstraints ?? compactConstraints,
             fillColor: fillColor ?? t.inputDecorationTheme.fillColor,
+            constraints: tapTargetFloor,
             isDense: context.isShortViewport ? true : null,
             contentPadding: contentPadding ??
                 (context.isShortViewport

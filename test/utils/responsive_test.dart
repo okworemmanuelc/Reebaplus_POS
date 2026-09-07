@@ -337,7 +337,7 @@ void main() {
 
   group('Field heights under AppTheme.dark() vs bare ThemeData', () {
     testWidgets(
-        'AppTheme.dark() renders AppInput and AppDropdown at 40dp +/- 1 in short viewport',
+        'AppTheme.dark() compacts AppInput to 40dp in a short viewport; AppDropdown holds its 48dp tap-target floor',
         (tester) async {
       // Portrait: normal unconstrained height under AppTheme.dark()
       await pumpWithViewport(
@@ -360,9 +360,13 @@ void main() {
         ),
       );
       expect(tester.getSize(find.byType(AppInput)).height, closeTo(53.0, 1.0));
+      // AppDropdown's whole surface is the tap target, so it holds 48dp even in
+      // portrait. Its padding alone measured 43dp here until 2026-09-07 — a
+      // PRE-EXISTING breach of the 48dp floor that predates Phase 0; Phase 0
+      // only made it worse (43 -> 40) in landscape. See the plan Section 10 gap 3.
       expect(
           tester.getSize(find.byType(AppDropdown<String>)).height,
-          closeTo(43.0, 1.0));
+          equals(kMinInteractiveDimension));
 
       // Landscape: compact height (target 40dp +/- 1) under AppTheme.dark()
       await pumpWithViewport(
@@ -385,9 +389,12 @@ void main() {
         ),
       );
       expect(tester.getSize(find.byType(AppInput)).height, closeTo(40.0, 1.0));
+      // The compact 12.5 vertical padding still applies — it just cannot take
+      // the control under the tap-target floor. A display field compacts; a
+      // control does not.
       expect(
           tester.getSize(find.byType(AppDropdown<String>)).height,
-          closeTo(40.0, 1.0));
+          equals(kMinInteractiveDimension));
     });
 
     testWidgets(
@@ -510,6 +517,178 @@ void main() {
     });
 
     testWidgets(
+        'readOnly + onTap fields keep the 48dp tap target at pixel7Landscape',
+        (tester) async {
+      // A readOnly field with an onTap is tapped anywhere on its surface, so
+      // the icon inspection in _isInteractive cannot see that the field itself
+      // is a control. 40dp would put its only tap target under the 48dp
+      // Material / WCAG 2.5.5 floor. See responsive-layout-plan.md Section 10,
+      // gap 3.
+      await pumpWithViewport(
+        tester,
+        size: pixel7Landscape,
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // The shape of the three real call sites: two date pickers in
+                  // payments/widgets/record_supplier_activity.dart and one in
+                  // expenses/screens/add_expense_screen.dart. The calendar glyph
+                  // is decorative; the whole field is the tap target.
+                  AppInput(
+                    key: const Key('tap_with_decorative_icon'),
+                    hintText: 'Date',
+                    readOnly: true,
+                    onTap: () {},
+                    suffixIcon: const Icon(Icons.calendar_today, size: 16),
+                  ),
+                  // The case no icon inspection could ever reach.
+                  AppInput(
+                    key: const Key('tap_no_icon'),
+                    hintText: 'Date',
+                    readOnly: true,
+                    onTap: () {},
+                  ),
+                  // readOnly WITHOUT onTap is a display field, not a control —
+                  // it must still compact. Guards the ~8 display-only readOnly
+                  // fields in inventory_screen / product_detail_screen.
+                  const AppInput(
+                    key: Key('readonly_display_only'),
+                    hintText: 'Display',
+                    readOnly: true,
+                  ),
+                  const AppInput(
+                    key: Key('readonly_display_with_icon'),
+                    hintText: 'Display',
+                    readOnly: true,
+                    suffixIcon: Icon(Icons.calendar_today, size: 16),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final hTapIcon =
+          tester.getSize(find.byKey(const Key('tap_with_decorative_icon')))
+              .height;
+      final hTapBare =
+          tester.getSize(find.byKey(const Key('tap_no_icon'))).height;
+      final hDisplay =
+          tester.getSize(find.byKey(const Key('readonly_display_only'))).height;
+      final hDisplayIcon =
+          tester.getSize(find.byKey(const Key('readonly_display_with_icon')))
+              .height;
+
+      // A whole-surface tap target holds 48dp with or without an icon.
+      expect(hTapIcon, equals(48.0));
+      expect(hTapBare, equals(48.0));
+
+      // A readOnly display field is not a control and still compacts to 40dp,
+      // so the fix does not leak vertical chrome back onto every readOnly field.
+      expect(hDisplay, equals(40.0));
+      expect(hDisplayIcon, equals(40.0));
+    });
+
+    testWidgets(
+        'AppDropdown holds the 48dp tap-target floor at every viewport, even against a caller padding override',
+        (tester) async {
+      // AppDropdown's entire surface is a GestureDetector (app_dropdown.dart:232)
+      // and `onChanged` is required and non-nullable, so there is no disabled
+      // state and no configuration in which 40dp would be acceptable. The floor
+      // is therefore unconditional, unlike AppInput's — which distinguishes a
+      // display field from a control.
+      Widget harness(Key key, {EdgeInsetsGeometry? contentPadding}) =>
+          MaterialApp(
+            theme: AppTheme.dark(),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    AppDropdown<String>(
+                      key: key,
+                      value: '1',
+                      contentPadding: contentPadding,
+                      items: const [
+                        DropdownMenuItem(value: '1', child: Text('1')),
+                      ],
+                      onChanged: (_) {},
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+      for (final size in [pixel7Landscape, pixel7Portrait, androidCompactLandscape]) {
+        await pumpWithViewport(
+          tester,
+          size: size,
+          child: harness(const Key('dd')),
+        );
+        expect(
+          tester.getSize(find.byKey(const Key('dd'))).height,
+          equals(kMinInteractiveDimension),
+          reason: 'AppDropdown fell below the tap-target floor at $size',
+        );
+      }
+
+      // A caller-supplied contentPadding replaces the vertical padding but must
+      // not be able to breach the floor — the constraint sits OUTSIDE the padded
+      // Container on purpose. Measured without the floor, this case renders a
+      // 15.0dp control (probe, 2026-09-07).
+      await pumpWithViewport(
+        tester,
+        size: pixel7Landscape,
+        child: harness(
+          const Key('dd'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('dd'))).height,
+        equals(kMinInteractiveDimension),
+      );
+    });
+
+    testWidgets(
+        'readOnly + onTap fields are unchanged in a comfortable viewport',
+        (tester) async {
+      await pumpWithViewport(
+        tester,
+        size: pixel7Portrait,
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Column(
+                children: [
+                  AppInput(
+                    key: const Key('portrait_tap'),
+                    hintText: 'Date',
+                    readOnly: true,
+                    onTap: () {},
+                    suffixIcon: const Icon(Icons.calendar_today, size: 16),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Portrait already clears the floor at 53dp; the tap-target rule adds
+      // nothing there and must not shrink the field to 48dp either.
+      expect(
+        tester.getSize(find.byKey(const Key('portrait_tap'))).height,
+        closeTo(53.0, 1.0),
+      );
+    });
+
+    testWidgets(
         'Field heights at pixel7Landscape with textScaler 1.3 do not overflow',
         (tester) async {
       await pumpWithViewport(
@@ -549,10 +728,13 @@ void main() {
       // No exception / overflow occurred
       expect(tester.takeException(), isNull);
       // Pinned rendered heights under textScaler 1.3 for drift tracking:
-      // AppInput drifts from 40.0dp to 46.0dp (+6.0dp)
-      // AppDropdown drifts from 40.0dp to 44.0dp (+4.0dp)
+      // AppInput drifts from 40.0dp to 46.0dp (+6.0dp).
+      // AppDropdown does NOT drift — its 48dp tap-target floor (2026-09-07)
+      // already exceeds the 44.0dp its padding + scaled text would produce, so
+      // the floor absorbs the drift entirely. It is the one field whose height
+      // is now stable across text scaling.
       expect(hInput, equals(46.0));
-      expect(hDropdown, equals(44.0));
+      expect(hDropdown, equals(48.0));
     });
   });
 }

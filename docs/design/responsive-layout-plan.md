@@ -1,9 +1,15 @@
 # Responsive Layout Plan — short viewports (landscape phones) and tablets
 
-Status: in progress (Phase 0 complete)
+Status: in progress — Phase 0 landed with gaps (see §10). Phase 1 not started.
 Author: design investigation, 2026-09-05
+Audited against implementation: 2026-09-06 (branch `fix/responsive-short-viewport-seam`)
 Scope: `lib/core/utils/responsive.dart` + every screen in `lib/`
-Related: `context/ui-context.md`, ADR to be written in Phase 0
+Related: `context/ui-context.md`, `docs/adr/0025-two-curve-responsive-scale.md`
+
+> **Read §10 first if you are picking this up.** Phase 0 shipped the scale model
+> and it works, but two of its six deliverables are incomplete and the plan
+> below contains figures that the implementation has since superseded. §10 is
+> the reconciliation; §3 and §4 have been corrected in place.
 
 ---
 
@@ -78,7 +84,9 @@ That drives:
 **iPads flip navigation mode on rotate.** `isDesktop => screenWidth >= 1024`
 means a 10.9" iPad is a *tablet* in portrait (820dp wide → bottom nav) and a
 *desktop* in landscape (1180dp wide → 280dp side rail, `main_layout.dart:286`).
-Rotating the device swaps the entire navigation chrome. Pre-existing, unreported.
+Rotating the device swaps the entire navigation chrome. Pre-existing, unreported
+— and **still present after Phase 0**, which deliberately preserved today's
+classification. Now owned by Phase 7 (§10, deviation 2).
 
 **Nothing in the app is orientation-aware.** No `OrientationBuilder` anywhere.
 Rotation is explicitly permitted on both platforms — `Info.plist` lists both
@@ -105,9 +113,10 @@ catch a regression.
    whether chrome collapses come from height.
 4. **Form factor is `shortestSide`.** A phone in landscape is a phone. A tablet
    is a tablet in both orientations.
-5. **Landscape is a re-flow, not a squeeze.** Where a screen has fixed horizontal
-   bands stacked vertically, landscape moves them into a vertical rail. Landscape
-   has width to spare and no height; the layout should trade one for the other.
+5. **Landscape is a re-flow, not a squeeze.** Where a screen stacks fixed
+   horizontal bands, landscape must trade its surplus width for the height it
+   lacks — by moving chrome into a rail, or by letting it collapse on scroll.
+   §4 holds the open comparison; compression alone is never the answer.
 6. **Tablets get more content, not bigger content.** Extra space becomes more
    columns, a second pane, a visible detail view — never larger padding.
 
@@ -133,12 +142,27 @@ double _rawScale(Size size) {
   return formFactor * heightFactor;
 }
 
-/// Structure: padding, gaps, band heights, icon boxes. Compresses hard.
-double _spacingScale(Size size) => _rawScale(size).clamp(0.70, 1.50);
+/// Structure: padding, gaps, band heights, icon boxes. Compresses hard —
+/// but only in a genuinely short viewport. See "conditional floor" below.
+double _spacingScale(Size size) {
+  final floor = size.height < 500.0 ? 0.70 : 0.85;
+  return _rawScale(size).clamp(floor, 1.50);
+}
 
 /// Typography. Compresses gently — text must stay legible at any density.
 double _fontScale(Size size) => _rawScale(size).clamp(0.90, 1.35);
 ```
+
+**The conditional spacing floor was added during implementation and is correct.**
+This plan originally specified a flat 0.70 floor. That was a latent bug: spacing
+and font previously shared one curve, so the box-to-text ratio was 1.0 *by
+construction* and text fit its container automatically. Splitting the curves
+destroys that invariant. A flat 0.70 floor on a comfortable-height device — the
+1st-gen SE at 320×568 — would have shrunk boxes 18% while growing text 5.5%: a
+**28% ratio swing across ~3,300 call sites nobody is going to review by hand**,
+i.e. silent text truncation. Holding the floor at 0.85 whenever the viewport is
+not short keeps the swing under 6%. Only `isShortViewport` drops to 0.70, where
+the compression is needed and the screens are being reworked anyway.
 
 `getRSize` / `rSize` use `_spacingScale`. `getRFontSize` / `rFontSize` use
 `_fontScale`. **No call site changes.**
@@ -151,7 +175,7 @@ what keeps tablets stable across rotation.
 
 | device | w×h | form | hFactor | spacing | font | today | change |
 |---|---|---|---|---|---|---|---|
-| iPhone SE (1st) portrait | 320×568 | 0.853 | 0.811 | **0.70** | 0.90 | 0.85 | tighter |
+| iPhone SE (1st) portrait | 320×568 | 0.853 | 0.811 | **0.85** | 0.90 | 0.85 | none |
 | Android compact portrait | 360×800 | 0.960 | 1.00 | **0.96** | 0.96 | 0.96 | none |
 | iPhone 13 mini portrait | 375×812 | 1.000 | 1.00 | **1.00** | 1.00 | 1.00 | none |
 | Pixel 7 portrait | 412×915 | 1.099 | 1.00 | **1.10** | 1.10 | 1.10 | none |
@@ -165,9 +189,14 @@ what keeps tablets stable across rotation.
 | iPad Pro 12.9 portrait | 1024×1366 | 2.731 | 1.00 | **1.50** | 1.35 | 1.50 | none |
 | iPad Pro 12.9 landscape | 1366×1024 | 2.731 | 1.00 | **1.50** | 1.35 | 1.50 | none |
 
-**Every portrait phone is unchanged. Every tablet is unchanged in both
-orientations — no jump on rotate. Only landscape phones and the 1st-gen SE
-move, and both move in the direction they need.**
+**Every portrait phone is unchanged — the 1st-gen SE included, once the
+conditional floor is applied. Every tablet is unchanged in both orientations,
+so there is no jump on rotate. Landscape phones are the only viewports that
+move, and they move exactly where they needed to go.**
+
+Every row above is now asserted by `test/utils/responsive_test.dart` — 26 tests,
+one scale assertion and one breakpoint assertion per viewport. The table is
+executable, not aspirational.
 
 The font clamp ceiling of 1.35 (down from 1.50) is the one deliberate tablet
 change: it stops body text reaching 21px on an iPad while spacing still opens to
@@ -231,20 +260,50 @@ for.
 
 ---
 
-## 4. Landscape phone layout: collapsing header with pinned controls
+## 4. Landscape phone layout — an open decision, to be measured in Phase 2
 
-Landscape has 915dp of width and 252dp of height. Stacking fixed horizontal bands
-vertically consumes scarce vertical room, leaving only ~108dp of product grid.
+Landscape gives POS 915dp of width and 252dp of body height. With Phase 0's
+scale, 40dp fields and the 48dp dropdown tap-target floor in place, the fixed
+chrome measures — these figures are asserted, not estimated
+(`test/pos/pos_home_screen_overflow_test.dart`):
 
-**POS in landscape uses a collapsing header:**
-- The app header and the Retailer/All dropdown row scroll away with grid content.
-- The search bar (`_buildSearchField`) and category chips (`CategoryFilterBar`) **pin** to the top and stay visible.
-- **Rationale:** Category chips and search are the cashier's highest-frequency controls during a sale. Lower-frequency controls (switching retailer or filtering store accounts) scroll out of the way when browsing products, but nothing is hidden or removed (principle 1) because scrolling back up instantly restores them.
-- **Estimated recovery:** Recovers ~120–130dp of vertical space (to be empirically measured in Phase 2), expanding the visible product grid from ~1 clipped row to multiple comfortable rows.
+| band | composition at spacing 0.70, 40dp input, 48dp dropdown | height |
+|---|---|---|
+| `_buildHeader` | `getRSize(16)`×2 = 22.4 + `AppDropdown` **48** | 70.4dp |
+| `_buildSearchField` | `getRSize(12)` = 8.4 + `AppInput` 40 | 48.4dp |
+| `CategoryFilterBar` | `getRSize(38)` = 26.6 + margins 16.8 | 43.4dp |
+| **chrome** | | **162.2dp** |
+| **grid** | 252 − 162.2 | **~90dp** |
 
-### Rejected Alternative: Side-Rail Re-Flow
+**Updated 2026-09-07:** chrome was 154.2dp with a 40dp dropdown. Restoring
+`AppDropdown`'s 48dp tap target (gap 3) added 8dp to the header band and took
+8dp off the grid. The 8dp was deliberately not clawed back from padding — see
+gap 3; buying grid pixels with a tap target is exactly the trade principle 1
+forbids.
 
-The original Phase 2 design proposed moving header dropdowns, search, quick sale, and category chips into a ~200dp vertical side-rail beside the product grid:
+~90dp is one clipped row. **Phase 0 stopped the crash; the screen is still not
+usable in landscape.** Two designs are on the table and neither has been
+measured on a device.
+
+The 1st-gen-SE landscape case (568×320) is worse and worth naming: chrome is the
+same 162.2dp against a much shorter body, leaving **~9.8dp of grid**. It does not
+crash — the test pins that — but POS is not usable at 320dp landscape at any
+scale. Only the re-flow below fixes it.
+
+### Option A — collapsing header
+
+App bar and the Retailer/All dropdown row scroll away with the grid; search and
+category chips pin to the top.
+
+- At rest: grid = 915 × 90 = **82,350dp²**
+- Scrolled: app bar (68) + dropdown row (70.4) yield; pinned chrome = 91.8dp
+  (search 48.4 + chips 43.4); grid = 915 × 228 = **208,800dp²**
+
+Note the scrolled figure is unchanged by the 48dp dropdown floor — the dropdown
+row is precisely what Option A scrolls away, so the 8dp comes back. Only the
+at-rest figure moved (89,500 → 82,350), which widens A's at-rest deficit.
+
+### Option B — side rail
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -264,9 +323,68 @@ The original Phase 2 design proposed moving header dropdowns, search, quick sale
 └──────────────────────────────────────────────────────────┘
 ```
 
-**Why rejected:**
-Search and category chips are the cashier's highest-frequency controls on the screen. The side-rail re-flow partitioned horizontal space to fit all controls simultaneously, but a collapsing header achieves a superior outcome: pinning search and category chips keeps both permanently reachable at the top of the viewport, while lower-frequency chrome (the app header and Retailer/All dropdowns) scrolls away naturally to yield vertical space.
+Rail ~200dp; chips become a vertical list. Grid = 715 × 252 = **180,200dp²**,
+constant, with every control permanently visible and no gesture required.
 
+### The honest comparison
+
+| | at rest | after scrolling | controls always visible | columns |
+|---|---|---|---|---|
+| today | 82,350dp² | 82,350dp² | all | ~5 |
+| **A** collapsing | 82,350dp² | **208,800dp²** | search + chips only | ~5 |
+| **B** rail | **180,200dp²** | 180,200dp² | **all** | ~3–4 |
+
+**A wins once scrolled (+16% over B) and loses badly at rest (−54%). B is
+constant and needs no gesture, but costs ~200dp of width and therefore a column
+or two.** A also lets the tier dropdown leave the viewport, which B does not —
+so A's advantage is not "keeps more reachable", it is "more pixels once the
+cashier scrolls".
+
+Two corrections to earlier drafts of this section, both recorded so the next
+reader does not re-derive them:
+
+1. **This plan originally claimed the rail gives "2.3× more usable product
+   area". That was wrong** — it divided heights (252/98 = 2.6×) and called the
+   result area. The rail costs 200dp of width, so the real at-rest gain is
+   **2.0×**, not 2.3×.
+2. **A later edit marked the rail "rejected" on the grounds that a collapsing
+   header "keeps both permanently reachable" while the rail merely "partitioned
+   horizontal space". That reasoning is backwards** — the rail keeps *every*
+   control permanently reachable, including the tier dropdown that Option A
+   scrolls away. The table above is the accurate basis for the choice.
+
+**Neither option is rejected. Phase 2 prototypes both on a real device and picks
+on measurement**, per the `prototype` skill. Decide with the owner — the cashier's
+actual scroll behaviour during a sale settles this, and no amount of arithmetic
+will.
+
+### Implementation risk that must be scoped before choosing A
+
+Option A requires converting POS's body from a `Column` to slivers
+(`NestedScrollView` / `SliverAppBar` with `pinned`) — **inside `AppRefreshWrapper`,
+which this codebase documents as the single sanctioned `RefreshIndicator`
+(`lib/shared/widgets/app_refresh_wrapper.dart`; see the pull-to-refresh
+invariant in `CONTEXT.md`).** Nesting a collapsing header inside a
+`RefreshIndicator` is a known-awkward Flutter combination and will interact with
+`SyncPullBanner`. Option B is a `Row` and carries none of this risk. Weigh that
+alongside the pixel counts.
+
+### ADR 0025 currently contradicts this section
+
+`docs/adr/0025-two-curve-responsive-scale.md` §5 concludes that "Phase 2's
+structural re-flow (**rail layout**) is required, not optional", citing the
+`textScaler 1.3` drift that gives back most of the compaction savings. The plan
+text meanwhile marked the rail rejected. **Whichever option Phase 2 picks, one of
+these two documents must be corrected in the same PR.** The `textScaler` finding
+is real and argues for B, since a rail's grid height does not shrink when a user
+raises their system font size — Option A's pinned chrome does.
+
+### Applicability beyond POS
+
+Whichever wins applies equally to every screen with the
+header-bands-above-a-list shape: Receive Stock
+(`receive_stock_screen.dart:162-200`, structurally identical), Inventory, and
+Orders.
 
 ---
 
@@ -393,25 +511,53 @@ Each phase is one branch and one PR. Do not entangle phases.
    body" is not achievable, ship only the height-literal ban and say so — do not
    ship a flaky test.
 6. Write the ADR (next free number is **0024**; 0018 is absent from `docs/adr/`
-   — confirm before claiming a number). Record the two-curve model, the
+   — confirm before claiming a number). **This instruction was wrong and the ADR
+   shipped on a colliding number — see §10 gap 3a. The ADR is `0025`. Neither
+   0024 nor 0018 was free: both were held by unmerged branches, which a check
+   against `docs/adr/` on this branch alone cannot see.** Record the two-curve model, the
    `_kComfortableHeight` gate, the 1.35 font ceiling, and the rejected
    alternatives: orientation lock, and shortestSide-based `isDesktop`.
 
-#### Phase 0 Deviations from Original Plan
+#### Phase 0 — audited status (2026-09-06)
 
-During Phase 0 implementation, three deliberate deviations from the initial §3 proposal were established:
+Commits `183f0a8`, `fdab844`, `4f3fe1b`, `f50ed17`, `78778af`, `928a66d`,
+`b580f1a` on `fix/responsive-short-viewport-seam`. `flutter analyze` clean.
 
-1. **Conditional Spacing Floor (0.85 comfortable / 0.70 short):**
-   Section 3 specified an unconditional 0.70 floor. In practice, splitting into two curves breaks the previously constant 1:1 box-to-font ratio. An unconditional 0.70 floor on a comfortable-height device (e.g. iPhone SE1 portrait) shrank containers by 18% while text grew by 5.5% (a 28% ratio swing across 3,300 unreviewed call sites). Holding the spacing floor at 0.85 when height is not short keeps the ratio swing under 6%, preventing truncation. Only short viewports (`height < 500dp`) drop to 0.70.
+| # | deliverable | status |
+|---|---|---|
+| 1 | two-curve scale model, all four entry points | **done** — plus a correct deviation (§3, conditional floor) |
+| 2 | `isShortViewport`, shortestSide breakpoints, `isDesktop` guard | **done** — with one deviation (below) |
+| 3 | compact `contentPadding` in `AppInput` / `AppDropdown` | **done, and exceeded** — measured, not estimated |
+| 4 | viewport harness + POS-home overflow test | **partial — the overflow test was never written** |
+| 5 | static ban test | **partial — written, broader than planned, but `skip:`ped** |
+| 6 | ADR | **done** — `docs/adr/0025` (renumbered from a colliding 0024, §10 gap 3a); its two factual errors corrected 2026-09-07 |
+| + | 14 of 15 fractional-height sheets → `getRHeight` | not planned for Phase 0; landed anyway |
+| + | auth 480dp cap trap | fixed, and more simply than this plan proposed |
 
-2. **`isTablet` Exclusivity (`!isDesktop`):**
-   Section 3 defined `isTablet => screenShortestSide >= 600 && screenShortestSide < 1024`. This was simplified to `screenShortestSide >= 600 && !isDesktop` to avoid two conditions disagreeing. Landscape tablets with width >= 1024 (e.g. iPad 10.9" and iPad Mini) evaluate `isDesktop: true` and `isTablet: false`, matching production behavior and deferring iPad rail layout changes to Phase 7.
+**Deviation 1 — conditional spacing floor.** Correct and now folded into §3.
 
-3. **Target 40dp Rendered Field Heights:**
-   Rather than applying the estimated vertical padding numbers from §3 (`vertical: 8`), `AppInput` and `AppDropdown` were measured under `AppTheme.dark()` to hit exactly 40dp (±1dp) rendered height in short viewports. `AppInput` uses `vertical: 9.5` + `isDense: true` and 40×40 constraints for decorative icons (preserving 48dp for interactive icons). `AppDropdown` uses `vertical: 12.5` (falling back from caller padding, replacing its previous un-themed hardcoded 14dp padding).
+**Deviation 2 — `isTablet` excludes `isDesktop`.** §3 defined `isTablet` as
+`shortestSide >= 600 && shortestSide < 1024`; the implementation uses
+`shortestSide >= 600 && !isDesktop` so the two predicates cannot disagree.
+Consequence, asserted by test: **iPad 10.9 and iPad mini are `isTablet` in
+portrait and `isDesktop` in landscape.** That is unchanged from production, so
+Phase 0 introduced no regression — but the rotation flip this plan flagged in §1
+as a pre-existing defect is **still present** and now belongs to Phase 7.
 
-**Phase 0 Emulator Verification:**
-Landscape POS home verified on a Pixel-class device emulator (412dp height). Renders cleanly with no overflow (`RenderFlex` overflow eliminated). The product grid shows ~1 clipped row, confirming the ~108dp estimate from §3. Phase 0 verified.
+**Deviation 3 — measured 40dp fields.** `AppInput` and `AppDropdown` were
+measured under `AppTheme.dark()` rather than using §3's estimated `vertical: 8`.
+`AppInput`: `isDense: true` + `vertical: 9.5`, and 40×40 icon constraints for
+*decorative* icons only — an `_isInteractive` check unwraps `Padding`/`SizedBox`/
+`Container`/etc. to find a real `IconButton`/`GestureDetector`/`InkWell` and
+preserves the 48dp tap target when it finds one. `AppDropdown`: `vertical: 12.5`,
+replacing a hardcoded un-themed 14. Good work, and better than what was asked
+for — but see the tap-target caveat in §10 gap 3, **fixed for `AppInput`
+2026-09-07; still open for `AppDropdown`.**
+
+**Emulator verification.** Landscape POS home renders with no `RenderFlex`
+overflow. The grid shows ~1 clipped row. Note the plan text previously recorded
+this as "confirming the ~108dp estimate" — with the delivered 40dp fields the
+measured figure is **~98dp**; §4 now carries the corrected arithmetic.
 
 ### Phase 1 — onboarding and auth `fix/responsive-auth-landscape`
 
@@ -449,12 +595,14 @@ would stretch to 915dp. Change both conditions to
 
 ### Phase 2 — POS `fix/responsive-pos-landscape`
 
-- Implement the collapsing header in `pos_home_screen.dart` under `isShortViewport`:
-  - The app header and the Retailer/All dropdown row scroll away with grid content.
-  - The search bar and category chips PIN to the top and stay visible.
-  - **Rationale:** Chips and search are the cashier's highest-frequency controls; nothing is hidden, since scrolling up restores everything.
-  - **Estimated recovery:** Recovers ~120–130dp of vertical space (to be empirically measured in Phase 2).
-  - Note: The earlier side-rail proposal is rejected (see §4 for rationale).
+- **First, settle §4.** Prototype both the collapsing header (A) and the side
+  rail (B) in `pos_home_screen.dart` under `isShortViewport` and measure on a
+  device. Neither is rejected; §4 carries the arithmetic and the risks. Scope
+  Option A's sliver-inside-`AppRefreshWrapper` problem before committing to it.
+  Whichever wins, correct the losing document — plan §4 or ADR 0025 §5, which
+  currently disagree.
+- Write the POS-home landscape overflow test that Phase 0 did not deliver
+  (§10, gap 1) **before** restructuring the screen, so the rework has a net.
 - `product_grid.dart:110-116` — the aspect ratio pins card height at
   `getRSize(210)`. In a short viewport target ~150dp base and default to the
   compact list layout.
@@ -486,9 +634,13 @@ header-bands-above-`Expanded` shape as POS, and no scroll on the fixed part),
 
 ### Phase 6 — sheets and modals
 
-The 15 `size.height * <fraction>` sites are the correct *shape* — they shrink
-with the viewport — but several wrap fixed-height headers that do not. Audit each
-at 412dp:
+The 15 fractional-height sites are the correct *shape* — they shrink with the
+viewport — but several wrap fixed-height headers that do not.
+
+**14 of the 15 were migrated from `MediaQuery...size.height * f` to
+`context.getRHeight(f)` in `b580f1a`. That is plumbing only — the values are
+identical and none of these are fixed** (§10, gap 6). The line numbers below
+still hold; read them as `getRHeight` calls now. Audit each at 412dp:
 
 `crate_return_modal.dart:453` (`* 0.25` = 98dp — almost certainly broken),
 `crate_return_modal.dart:393`, `manage_categories_sheet.dart:91`,
@@ -560,3 +712,278 @@ Locking phones to portrait was considered and **rejected by the owner.** Phones
 stay rotatable; the requirement is that a rotated phone shows *all* the same
 components at lower density. That is principle 1 and it is not negotiable in
 review — no phase may resolve a fit problem by hiding a control.
+
+---
+
+## 10. Audit of the Phase 0 implementation (2026-09-06)
+
+Read against branch `fix/responsive-short-viewport-seam` at `b580f1a`.
+`flutter analyze`: clean. `flutter test test/utils/`: 31 passed, 1 skipped.
+
+**The scale model is sound and does what it claimed.** Every row of §3's table is
+now an executable assertion. The two deviations the implementer made were both
+improvements, and ADR 0025 is unusually good — it records measured field heights,
+`textScaler` drift, and its own limitations rather than only its decisions.
+
+The gaps below are what a second pair of eyes should act on.
+
+### Gap 1 — the regression test that started all this was never written
+
+Phase 0 item 4 required "a widget test that pumps POS home at `phoneLandscape`
+and asserts no overflow… **it must fail on `main` before the fix and pass
+after**". `test/helpers/viewports.dart` shipped (13 surfaces, more than the 5
+asked for) and is good. But **no test pumps POS home, or any real screen, at any
+viewport.** `grep -rn "PosHomeScreen" test/` returns nothing.
+
+Everything asserted is arithmetic on the scale functions plus isolated `AppInput`
+/ `AppDropdown` measurements. The 134px overflow that opened this work is
+verified only by an emulator eyeball, and **nothing prevents it regressing.** ADR
+0025's limitation 2 concedes exactly this.
+
+This is the single most valuable thing to fix, and it is cheap now that the
+harness exists. Do it before Phase 2 restructures the screen.
+
+### Gap 2 — the ban test enforces nothing
+
+`test/utils/media_query_size_ban_test.dart` carries a `skip:`. It is honestly
+labelled and the reasoning is sound — 8 call sites still read MediaQuery size, so
+it cannot pass yet — but a skipped test is not a seam.
+
+The scope was widened beyond this plan (which asked only to ban new
+`size.height *` literals): it now bans **all** direct MediaQuery size reads in
+`lib/`, which is the better rule and explains why it cannot yet go green. The
+second test in the file, which proves the regex catches what it should and
+ignores `viewInsets` / `padding` / `textScaler`, **is** active and passing.
+
+Remaining offenders, verified accurate against the source:
+
+| site | reason |
+|---|---|
+| `product_grid.dart:98` | grid columns from raw width — *deferred, legitimate* |
+| `product_grid.dart:231` | cart-fling target |
+| `receive_product_grid.dart:44` | grid columns from raw width — *deferred, legitimate* |
+| `app_dropdown.dart:91` | overlay flip above/below — *deferred, legitimate* |
+| `who_is_working_screen.dart:289` | unmigrated |
+| `cart_screen.dart:1494` | unmigrated |
+| `view_selector_sheet.dart:21` | unmigrated |
+| `activity_log_screen.dart:190` | `size.height - kToolbarHeight - 100`, not a clean fraction |
+
+Migrate the bottom four and drop the `skip:`. The three width-based grid sites
+are correctly deferred — §3 says width answers horizontal questions.
+
+### Gap 3 — 40dp tap targets fall below the accessibility floor — FIXED 2026-09-07
+
+ADR 0025 limitation 3 flagged this and it deserved more prominence than a
+footnote: in landscape, fields whose **whole surface** is the tap target
+presented 40dp, under the 48dp Material / WCAG 2.5.5 minimum. `_isInteractive`
+inspects the prefix/suffix icon, so it could not see that the *field itself* has
+an `onTap`.
+
+Two ADR errors, both corrected in `0025` §3:
+
+1. **The ADR cited a path that does not exist** —
+   `lib/features/inventory/screens/record_supplier_activity.dart`. The file is
+   `lib/features/payments/widgets/record_supplier_activity.dart` (2 `readOnly:
+   true` + `onTap` date pickers among 6 `AppInput`s, `:436` and `:759`).
+2. **The ADR missed a second site** —
+   `lib/features/expenses/screens/add_expense_screen.dart:572` (the plan
+   previously said 573-577; the `readOnly:` line is 572, the block 570-581) has
+   the same `readOnly: true` + `onTap: _pickDate` + decorative `suffixIcon`
+   shape and is equally affected. `staff_sign_up_screen.dart` also matched a grep
+   for `readOnly: true` but builds raw `TextField`s, so it is **not** affected —
+   which is itself ADR limitation 4 in action.
+
+**Those three are the complete affected set**, verified by sweeping all 30 files
+that construct an `AppInput`. Every other `onTap:` near an `AppInput` belongs to
+a `GestureDetector` suffix icon, which `_isInteractive` already catches.
+
+**What shipped.** The plan proposed "treat `readOnly && onTap != null` as
+interactive", which flips only *one* of the two levers that produce 40dp and so
+would have left the widget's documented contract false. `AppInput` now derives
+`wholeSurfaceTap = readOnly && onTap != null` and closes both:
+
+- it suppresses the compact 40×40 icon constraints, so a decorative icon carries
+  its default 48dp floor again — this alone covers all three real sites; and
+- it sets `InputDecoration.constraints: minHeight 48` in a short viewport, which
+  answers the case no icon inspection ever could: a whole-surface tap target with
+  **no icon at all** (the pre-existing test already pins `hNone == 40.0`).
+
+**Correction, verified by probe 2026-09-07: only the second lever is
+load-bearing.** This section originally claimed both were, and that "removing
+either turns a different assertion red". Disabling `InputDecoration.constraints`
+does turn `responsive_test.dart:581` red — 40dp, the no-icon case. Disabling the
+icon-constraint suppression leaves **all 32 tests green**, because `minHeight: 48`
+already answers the icon case as well. Lever one is kept for coherence — a 48dp
+field should not hold a 40dp icon box — but it protects nothing, and the next
+reader must not delete lever two believing lever one covers it.
+
+Regression-tested in
+`test/utils/responsive_test.dart` (2 new tests): 48dp with and without an icon at
+`pixel7Landscape`, 40dp preserved for a `readOnly` field with **no** `onTap` (so
+the fix does not leak vertical chrome onto the ~8 display-only `readOnly` fields
+in `inventory_screen` / `product_detail_screen`), and 53dp unchanged in portrait.
+
+Cost: 8dp on exactly three fields. Both screens put them inside a `ListView`
+(`record_supplier_activity.dart:409`/`:686`, `add_expense_screen.dart:451`), so
+there is no overflow risk.
+
+**`AppDropdown` had the same defect — FIXED 2026-09-07.** Its entire surface is
+also a tap target (`app_dropdown.dart:232`, `GestureDetector(onTap:
+_toggleDropdown)`), and `onChanged` is required and non-nullable, so there is no
+disabled state and no configuration in which a compacted height is acceptable.
+
+**It was worse than recorded here, and worse than Phase 0.** The existing test
+pinned `AppDropdown` at **43dp in portrait** — a pre-existing breach of the 48dp
+floor that predates this whole workstream. Phase 0 took it 43 → 40 in landscape.
+So the fix is **unconditional**, not `isShortViewport`-gated like `AppInput`'s:
+a `ConstrainedBox(minHeight: kMinInteractiveDimension)` outside the padded,
+keyed `Container`, so the hit area, the painted surface and the size
+`_openDropdown` measures for the overlay all agree — and a caller-supplied
+`contentPadding` cannot breach it either (measured without the floor, a
+zero-padding dropdown renders **15.0dp**).
+
+Note this differs from `AppInput` deliberately: an `AppInput` may legitimately be
+a *display* field, so its floor is conditional on `readOnly && onTap != null`.
+An `AppDropdown` is always a control.
+
+Tests: a dedicated floor test across `pixel7Landscape` / `pixel7Portrait` /
+`androidCompactLandscape` plus the padding-override case, and two pre-existing
+assertions updated from 43dp/40dp — **they were pinning the defect.** The
+`textScaler 1.3` drift test also changes: `AppDropdown` no longer drifts at all
+(44 → 48), because the floor now exceeds what scaled text produces. It is the one
+field whose height is stable under text scaling.
+
+**Cost, paid not dodged:** +8dp on POS's header band in landscape → chrome
+154.2 → **162.2dp**, grid ~98 → **~90dp**; §4's arithmetic is updated. The
+POS-home test budget moved 160 → 165dp for the same reason. On a 320dp-tall
+viewport (SE1 landscape) the grid falls to **~9.8dp** — it still does not crash,
+and it is frankly unusable, which is Phase 2's case in one number.
+
+### Gap 3a — the ADR shipped on a colliding number
+
+Phase 0 item 6 said "next free number is **0024**; 0018 is absent from
+`docs/adr/` — confirm before claiming a number". The confirmation was made
+against the working tree, which cannot see other branches. Both numbers were
+already taken:
+
+| number | held by | branch |
+|---|---|---|
+| 0018 | `0018-push-notifications-fcm.md` | `feat/push-notifications-fcm` (unmerged) |
+| 0024 | `0024-brand-deposit-rate-fans-out-to-products.md` | `fix/cart-reads-brand-deposit-live` (unmerged, `f73a102`, 2026-08-20) |
+
+`0024-brand-deposit-rate-fans-out-to-products.md` is in **this branch's own
+history** — `fix/responsive-short-viewport-seam` contains `f73a102` — and is
+already cited by number in `CONTEXT.md:293`, `BUILD_LOG.md:19`, and
+`CONTEXT/progress-tracker.md:57/98/111`. The responsive ADR was the newer claim
+and moved: **`docs/adr/0025-two-curve-responsive-scale.md`**, with all 11
+references in this plan updated.
+
+**The durable rule:** an ADR number is free only if no *branch* holds it. Check
+with `git branch -a` + `git ls-tree`, not `ls docs/adr/`.
+
+Note this branch containing `f73a102` also means it is **not** cut from `main` —
+worth checking for scope entanglement before the Phase 0 PR (see Housekeeping).
+
+### Gap 4 — ADR 0025 and plan §4 give opposite Phase 2 instructions
+
+ADR §5 concludes the **rail** is "required, not optional"; the plan text had
+marked the rail **rejected**. §4 now presents both as open with the arithmetic.
+One of the two documents must be corrected in the Phase 2 PR.
+
+### Gap 5 — "full test suite passing cleanly" is not reproducible
+
+ADR 0025 limitation 2 states the full suite of 1,888 tests passes cleanly. A full
+`flutter test` run on this branch gives **1888 passed, ~130 skipped, 1 failed**:
+
+    test/van_sales/van_returns_test.dart:
+      sync › a return enqueues its event, the moved cursor and the ledger credit
+
+**This is not a responsive regression.** The test passes in isolation
+(`flutter test test/van_sales/van_returns_test.dart` → 26/26), touches no layout
+code, and fails only in a full-suite run — order-dependent state pollution,
+almost certainly pre-existing. It should be filed separately rather than left as
+a footnote contradicting the ADR.
+
+### Gap 6 — migrating the fractional sheets did not fix them
+
+`b580f1a` moved 14 of 15 `MediaQuery...size.height * f` sites to
+`context.getRHeight(f)`. That is a real plumbing win and it makes the ban test
+reachable. **It changes no behaviour** — `getRHeight(f)` is `screenHeight * f`.
+
+So `crate_return_modal.dart:453`, flagged in §6 as "almost certainly broken", is
+now `context.getRHeight(0.25)` and still resolves to **103dp on a landscape
+phone**. Phase 6 still owns every one of these.
+
+**Confirmed in the field, 2026-09-06.** The receipt printer picker overflowed by
+59px in landscape — the first of these to be reported by a user rather than
+predicted here. All four call sites capped the sheet at `getRHeight(0.5)`:
+a 206dp ceiling on a 915x412 phone, under content whose minimum is ~265dp.
+
+The measurement that generalises: **a sheet's chrome does not compress with the
+viewport.** The picker's refresh `IconButton` and its paper-size
+`SegmentedButton` are both pinned at the 48dp tap-target floor, and Phase 0's
+own fields bottom out at 40dp, so intrinsic sheet height is near-constant across
+orientations while `screenHeight * f` collapses by 2.2x on rotation. A fraction
+is the wrong shape of answer for a vertical cap.
+
+Shipped 2026-09-07 (`responsive.dart`):
+
+    double sheetMaxHeight(double fraction) => screenHeight *
+        (isShortViewport && fraction < 0.90 ? 0.90 : fraction);
+
+Plus the widget-level half, which is what actually makes a sheet safe: every
+branch of `PrinterPicker` is now `Flexible` + `SingleChildScrollView`, so it
+cannot overflow *whatever* cap it is handed. Regression-tested against the old
+206dp ceiling in `test/widgets/printer_picker_overflow_test.dart` (14 tests,
+4 viewports); reverting either half turns it red.
+
+**Remaining offenders — 10 sites still on a bare fraction:**
+
+| site | fraction | landscape (412dp) result |
+|---|---|---|
+| `crate_return_modal.dart:453` | 0.25 | 103dp |
+| `crate_return_modal.dart:393` | 0.9 | 370dp — already above the floor |
+| `manage_categories_sheet.dart:91` | 0.5 | 206dp |
+| `stores_screen.dart:802` | 0.6 | 247dp |
+| `cart_screen.dart:289` | 0.7 | 288dp |
+| `cart_screen.dart:464` | 0.85 | 350dp |
+| `customer_detail_screen.dart:1080` | 0.85 | 350dp |
+| `orders_screen.dart:1032` | 0.85 | 350dp |
+| `van_sale_receipt_sheet.dart:61` | 0.85 | 350dp |
+| `update_product_sheet.dart:750` | 0.92 | 379dp — already above the floor |
+
+Note the `height:` sites (not `maxHeight:`) are the dangerous ones — they pin an
+exact height rather than a ceiling, so `sheetMaxHeight` is not a drop-in there;
+each needs its content checked for a scrollable escape first. Phase 6 owns the
+migration; the three at 0.5-0.6 are the ones most likely to be reported next.
+
+### Housekeeping
+
+`598c2fc` (sheet migration) was reverted by `02ec949` and re-applied verbatim as
+`b580f1a`; the only difference between the two is one comment word
+("Retained" → "Kept"). Net effect nil — worth squashing before the PR so the
+history reads cleanly.
+
+**This branch is not cut from `main`.** `git branch --contains f73a102` lists
+`fix/responsive-short-viewport-seam`, so the branch carries the
+`fix/cart-reads-brand-deposit-live` work (and its ADR 0024) alongside the
+responsive changes. That is what produced the number collision in gap 3a. Check
+the diff against `main` for scope entanglement before opening the Phase 0 PR —
+the responsive PR should not be carrying someone else's crate-deposit commit.
+
+### Recommended order from here
+
+1. ~~Write the POS-home landscape overflow test (gap 1).~~ **DONE** —
+   `test/pos/pos_home_screen_overflow_test.dart` (5 tests) +
+   `test/helpers/pos_home_harness.dart`.
+2. ~~Fix the two ADR errors and the `readOnly`+`onTap` tap target (gaps 3,
+   2 of 2).~~ **DONE 2026-09-07** — plus a third ADR error found on the way: the
+   number collision (gap 3a), so the ADR is now `0025`. `AppDropdown` carries the
+   same tap-target defect and is left open — see gap 3.
+3. File the flaky van-returns test separately (gap 5); correct the ADR claim.
+4. Migrate the four remaining MediaQuery sites and un-`skip` the ban test (gap 2).
+4b. Move the three tightest sheet caps (0.5-0.6) onto `sheetMaxHeight` (gap 6) —
+    same defect class as the reported printer-picker overflow.
+5. Squash the revert churn, then open the Phase 0 PR.
+6. Phase 1 (auth) — unblocked and independent of the §4 decision.
+7. Phase 2 — prototype both §4 options, measure, decide, reconcile the documents.

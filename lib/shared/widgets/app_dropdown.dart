@@ -251,53 +251,66 @@ class _AppDropdownState<T> extends FormFieldState<T> {
             child: OptimizedBackdropFilter(
               filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               fallbackBuilder: (context, child) => child,
-              child: Container(
-                key: _key,
-                padding: widget.contentPadding ??
-                    (context.isShortViewport
-                        ? const EdgeInsets.symmetric(horizontal: 14, vertical: 12.5)
-                        : const EdgeInsets.symmetric(horizontal: 14, vertical: 14)),
-                decoration: BoxDecoration(
-                  color: buttonColor,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: hasError 
-                        ? Colors.red 
-                        : (isDark ? Colors.white.withValues(alpha: 0.05) : t.colorScheme.primary.withValues(alpha: 0.05)),
-                    width: 1,
-                  ),
+              // The whole surface is the tap target (the GestureDetector above),
+              // so this control may never render below the 48dp Material /
+              // WCAG 2.5.5 floor — at ANY viewport, not just a short one. The
+              // padding alone gave 43dp in portrait and 40dp in landscape.
+              // Unconditional by design: a tap target does not compress. The
+              // constraint sits outside the keyed Container so the hit area, the
+              // painted surface and the size `_openDropdown` measures for the
+              // overlay all agree.
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: kMinInteractiveDimension,
                 ),
-                child: Row(
-                  children: [
-                    if (widget.prefixIcon != null) ...[
-                      widget.prefixIcon!,
-                      const SizedBox(width: 10),
+                child: Container(
+                  key: _key,
+                  padding: widget.contentPadding ??
+                      (context.isShortViewport
+                          ? const EdgeInsets.symmetric(horizontal: 14, vertical: 12.5)
+                          : const EdgeInsets.symmetric(horizontal: 14, vertical: 14)),
+                  decoration: BoxDecoration(
+                    color: buttonColor,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: hasError
+                          ? Colors.red
+                          : (isDark ? Colors.white.withValues(alpha: 0.05) : t.colorScheme.primary.withValues(alpha: 0.05)),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      if (widget.prefixIcon != null) ...[
+                        widget.prefixIcon!,
+                        const SizedBox(width: 10),
+                      ],
+                      Expanded(
+                        child: selectedChild != null
+                            ? DefaultTextStyle(
+                                style: TextStyle(
+                                  color: t.colorScheme.onSurface,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                child: selectedChild,
+                              )
+                            : Text(
+                                widget.hintText ?? '',
+                                style: TextStyle(
+                                  color: subtextColor,
+                                  fontSize: 13,
+                                ),
+                              ),
+                      ),
+                      Icon(
+                        _isOpen ? FontAwesomeIcons.chevronUp.data : FontAwesomeIcons.chevronDown.data,
+                        size: 13,
+                        color: subtextColor,
+                      ),
                     ],
-                    Expanded(
-                      child: selectedChild != null
-                          ? DefaultTextStyle(
-                              style: TextStyle(
-                                color: t.colorScheme.onSurface,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              child: selectedChild,
-                            )
-                          : Text(
-                              widget.hintText ?? '',
-                              style: TextStyle(
-                                color: subtextColor,
-                                fontSize: 13,
-                              ),
-                            ),
-                    ),
-                    Icon(
-                      _isOpen ? FontAwesomeIcons.chevronUp.data : FontAwesomeIcons.chevronDown.data,
-                      size: 13,
-                      color: subtextColor,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -1,6 +1,14 @@
 # Two-curve responsive scale model and short-viewport constraints
 
-**Status:** accepted (2026-09-06)
+**Status:** accepted (2026-09-06); limitation 3 resolved 2026-09-07
+
+**Renumbered 0024 → 0025 on 2026-09-07.** This ADR originally claimed 0024, which
+was already taken by `0024-brand-deposit-rate-fans-out-to-products.md` (commit
+`f73a102`, 2026-08-20) — a decision already cited by number in `CONTEXT.md`,
+`BUILD_LOG.md`, and `CONTEXT/progress-tracker.md`. Neither ADR had reached `main`,
+so the newer one moved. `0018-push-notifications-fcm.md` also exists on an
+unmerged branch, so 0018 is **not** free either — check every branch, not just
+`main`, before claiming a number.
 
 Phase 0 of the responsive overhaul (`docs/design/responsive-layout-plan.md`). Replaces the
 single screen-width responsive scaling curve in `lib/core/utils/responsive.dart` with a
@@ -116,12 +124,64 @@ Phase 2's structural re-flow (rail layout) is required, not optional.**
    screen layout** — this codebase has no rendered widget snapshot or golden test coverage
    for complete screens. Layout verification relies on Phase 0's dedicated viewport harness
    and device emulator inspections.
-3. **Whole-Surface Tap Targets Reduced to 40dp in Landscape:**
-   Fields whose entire surface is the tap target (such as the date pickers in
-   `lib/features/inventory/screens/record_supplier_activity.dart`, where the calendar icon
-   is purely a decorative glyph and a gesture detector wraps the entire input) now present
-   a 40dp tap target in landscape, down from 48dp. This is a direct, deliberate consequence
-   of the 40dp short-viewport field decision to recover vertical chrome space.
+3. **Whole-Surface Tap Targets Reduced to 40dp in Landscape — RESOLVED 2026-09-07:**
+   Fields whose entire surface is the tap target — `AppInput` with `readOnly: true` **and**
+   an `onTap` — presented a 40dp tap target in landscape, under the 48dp Material /
+   WCAG 2.5.5 minimum. `_isInteractive` inspects the prefix/suffix icon, so it could not
+   see that the *field itself* was the control.
+
+   **This entry originally carried two factual errors, corrected here.**
+   - It cited `lib/features/inventory/screens/record_supplier_activity.dart`. **That file
+     does not exist.** The real file is
+     `lib/features/payments/widgets/record_supplier_activity.dart` (Date Received `:436`,
+     Date Paid `:759`).
+   - It missed a second affected site:
+     `lib/features/expenses/screens/add_expense_screen.dart:572` (Date), the same
+     `readOnly: true` + `onTap: _pickDate` + decorative calendar `suffixIcon` shape.
+
+   Those three call sites are the **complete** affected set — verified by sweeping all 30
+   files that construct an `AppInput`. Every other `onTap:` near an `AppInput` belongs to a
+   `GestureDetector` suffix icon, which `_isInteractive` already catches.
+   `staff_sign_up_screen.dart` matches a `readOnly` grep but builds a raw `TextField`, so it
+   is unaffected — limitation 4 in action.
+
+   **The fix.** `AppInput` derives `wholeSurfaceTap = readOnly && onTap != null` and closes
+   both of the levers that produce 40dp:
+   - it suppresses the compact 40×40 icon constraints, so a decorative icon carries its
+     default 48dp floor again (this alone covers all three real sites); and
+   - it sets `InputDecoration.constraints: minHeight 48` in a short viewport, which answers
+     the case no icon inspection ever could — a whole-surface tap target with no icon at all.
+
+   **Only the second lever is load-bearing.** Verified by probe, 2026-09-07: disabling
+   `InputDecoration.constraints` turns `responsive_test.dart:581` red (40dp, no-icon case),
+   but disabling the icon-constraint suppression leaves all 32 tests green — `minHeight: 48`
+   already carries the icon case too. The first lever is kept as coherence, not protection:
+   a 48dp field should not hold a 40dp icon box. It is **not** a second line of defence, and
+   a future reader must not treat it as one. Regression-tested at `pixel7Landscape` in
+   `test/utils/responsive_test.dart`. A `readOnly` field **without** an `onTap` is a display
+   field, not a control, and still compacts to 40dp — the fix costs 8dp on exactly three
+   fields, both of whose screens scroll (`ListView`).
+
+   **`AppDropdown` — also fixed, 2026-09-07, and unconditionally.** Its entire surface is a
+   tap target (`app_dropdown.dart:232`) and `onChanged` is required and non-nullable, so it
+   has no disabled state and no legitimate compacted form. It measured **43dp in portrait**
+   before this workstream began — a breach that predates Phase 0 — and Phase 0 took it to
+   40dp in landscape. It now carries a `ConstrainedBox(minHeight: kMinInteractiveDimension)`
+   outside the padded, keyed `Container`, at **every** viewport, which a caller-supplied
+   `contentPadding` cannot override.
+
+   The asymmetry with `AppInput` is deliberate: an `AppInput` can be a display field, so its
+   floor is conditional; an `AppDropdown` is always a control.
+
+   Two pre-existing assertions in `responsive_test.dart` were updated from 43dp and 40dp —
+   **they were pinning the defect** — and `AppDropdown` now shows zero drift under
+   `textScaler 1.3` (was 44dp) because the floor exceeds what scaled text produces.
+
+   **The cost is real and was paid, not dodged.** POS's landscape chrome moved
+   154.2 → 162.2dp and its grid ~98 → ~90dp; the screen's test budget moved 160 → 165dp.
+   At 320dp height (SE1 landscape) the grid falls to ~9.8dp — no crash, but unusable, which
+   is the strongest single argument for §5's conclusion that Phase 2's re-flow is required
+   rather than optional.
 4. **Auth Screens Bypass AppInput:**
    The auth and onboarding screens construct raw `TextField` widgets styled with
    `AppDecorations.authInputDecoration` rather than using `AppInput`. Consequently, Phase 0's

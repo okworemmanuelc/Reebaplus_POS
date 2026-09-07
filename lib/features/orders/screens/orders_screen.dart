@@ -1285,7 +1285,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           isScrollControlled: true,
           backgroundColor: surfaceCol,
           constraints: BoxConstraints(
-            maxHeight: context.getRHeight(0.5),
+            maxHeight: context.sheetMaxHeight(0.5),
           ),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

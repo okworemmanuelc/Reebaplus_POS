@@ -242,6 +242,35 @@ To prevent **overflow errors** on varying screen sizes (especially inside `GridV
 2. **Flexible visual areas**: Use `Expanded` on the visual or empty areas (e.g., images, colored headers, top backgrounds) so they fill the *remaining* space dynamically.
 3. **Intrinsic height for content**: Let text blocks define their own height. Wrap them in a standard `Padding` or `Container` (without an `Expanded` parent) so they naturally expand as needed, pushing back against the flexible visual area.
 
+### Tap targets never compress
+
+Structural scale compresses hard in a short viewport (`context.isShortViewport`,
+e.g. a landscape phone) — padding, gaps, and field heights all shrink. **A tap
+target does not.** No control may render below the 48dp Material / WCAG 2.5.5
+minimum at any viewport, whatever `getRSize` says.
+
+The trap is a control that does not *look* like one. A field that is `readOnly`
+with an `onTap` — a date picker, a value chooser — is tapped anywhere on its
+surface, so inspecting its icon tells you nothing; `AppInput` handles this case
+for you (`wholeSurfaceTap`). A `readOnly` field with no `onTap` is a display
+field, not a control, and correctly compacts to 40dp. When adding a new tappable
+surface, ask which part of it the user actually presses before letting it
+compress.
+
+`AppDropdown` is the simpler case and its floor is **unconditional** at every
+viewport, not just short ones: its whole surface is a `GestureDetector` and
+`onChanged` is required, so it is always a control and can never compact. It
+measured 43dp in portrait until 2026-09-07 — a reminder that this floor is worth
+checking on existing widgets, not only new ones.
+
+Use `kMinInteractiveDimension` (Flutter's own 48.0) rather than a literal, so the
+intent reads at the call site.
+
+Full responsive rules — the two-curve scale, `_kComfortableHeight`, and the
+form-factor-vs-available-width split — land here in Phase 9; see
+`docs/adr/0025-two-curve-responsive-scale.md` and
+`docs/design/responsive-layout-plan.md` in the meantime.
+
 ## Layout patterns
 
 ### `MainLayout` (`lib/shared/widgets/main_layout.dart`)
