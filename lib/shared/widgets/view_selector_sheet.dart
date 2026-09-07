@@ -18,7 +18,7 @@ class ViewSelectorSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final surfaceCol = Theme.of(context).colorScheme.surface;
     final textCol = Theme.of(context).colorScheme.onSurface;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final screenWidth = context.screenWidth;
 
     return Container(
       decoration: BoxDecoration(

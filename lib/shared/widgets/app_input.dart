@@ -33,7 +33,9 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 ///   [suffixIconConstraints] always take precedence over these defaults.
 ///
 /// Note this reasoning covers [AppInput] only. `AppDropdown` is also a
-/// whole-surface tap target and is still 40dp in a short viewport — see
+/// whole-surface tap target, but its `onChanged` is required and non-nullable,
+/// so it is *always* a control and carries an unconditional 48dp floor at every
+/// viewport rather than a conditional one — see
 /// `docs/design/responsive-layout-plan.md` §10 gap 3.
 class AppInput extends StatelessWidget {
   final TextEditingController? controller;

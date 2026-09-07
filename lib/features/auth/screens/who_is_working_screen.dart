@@ -286,7 +286,7 @@ class _PickerListState extends ConsumerState<_PickerList> {
   Widget build(BuildContext context) {
     final dateStr = DateFormat('EEEE, MMMM d').format(DateTime.now());
     final businessName = _businessName(ref);
-    final screenWidth = MediaQuery.of(context).size.width;
+    final screenWidth = context.screenWidth;
 
     Widget staffList;
     if (_isListView) {

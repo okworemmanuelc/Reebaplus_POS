@@ -10,6 +10,52 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Phase 0 review pass — stale-claim sweep before the PR (2026-09-07)
+Independent review of the whole `fix/responsive-short-viewport-seam` branch, ahead
+of the Phase 0 PR. No code defects found; `flutter analyze` clean, full
+`flutter test` **1912 passed / 129 skipped / 0 failed** (the #228 van-returns flake
+did not fire this run). Four documentation claims had gone stale as the work
+outran the text, and were corrected:
+
+- `app_input.dart`'s class doc still said `AppDropdown` "is still 40dp in a short
+  viewport". It has carried an unconditional 48dp floor since `e5a05d4`.
+- Plan §10 "Recommended order" item 2 still said `AppDropdown` "is left open",
+  contradicting gap 3 in the same file.
+- Plan §6 Phase 0 status table still rated deliverables 4 (POS-home overflow test)
+  and 5 (MediaQuery ban test) as **partial**; both are done and green.
+- Plan §10 Housekeeping still said the branch "is not cut from `main`" and carries
+  `f73a102`. That commit merged to `main` as **#223**, so it is no longer foreign.
+  Measured against `origin/main` (the *local* `main` ref is 45 commits stale):
+  `origin/main..HEAD` = 12 commits, all responsive; `HEAD..origin/main` = 0. The
+  branch is current and scope-clean — no rebase needed.
+- Plan §6 Phase 1's "Trap" told the next agent to change the auth 480dp cap to
+  `!isPhone || isShortViewport`. Phase 0 already shipped an equivalent,
+  unconditional `maxWidth: 480.0` in both background widgets; the instruction is
+  now marked closed so Phase 1 does not undo it.
+
+Remaining before the PR: squash the `598c2fc` / `02ec949` / `b580f1a` revert churn
+(item 5). Phase 1 (auth landscape) is unblocked.
+
+### Phase 0 Seam Closure: Gaps 5, 2, and 4b (2026-09-07)
+Closes gaps 5, 2, and 4b of `docs/design/responsive-layout-plan.md` §10.
+
+- **Gap 5 (Flaky van-returns test filed separately):**
+  `test/van_sales/van_returns_test.dart` passes 26/26 in isolation, but intermittently flakes during full-suite runs due to state pollution. Filed as GitHub issue **#228** (`test(van_sales): van_returns_test flakes intermittently in full-suite run`). ADR 0025 limitation 2 updated to cite #228 and reflect 1,911 passing tests.
+- **Gap 2 (MediaQuery size ban test un-skipped and enforced):**
+  Migrated all 4 remaining un-deferred `MediaQuery.size` call sites in `lib/`:
+  - `who_is_working_screen.dart:289` → `context.screenWidth`
+  - `cart_screen.dart:1494` → `context.screenWidth`
+  - `view_selector_sheet.dart:21` → `context.screenWidth`
+  - `activity_log_screen.dart:190` → `context.screenHeight - kToolbarHeight - 100`
+  Un-skipped `test/utils/media_query_size_ban_test.dart`; static ban test is active and passing cleanly.
+- **Gap 4b (Tightest sheet caps migrated to `sheetMaxHeight`):**
+  Migrated the tightest fractional sheet caps below 0.70 to `context.sheetMaxHeight`:
+  - `manage_categories_sheet.dart:91` (`0.5`)
+  - `stores_screen.dart:802` (`0.6`)
+  - `crate_return_modal.dart:453` (`0.25`) & line 393 (`0.9`)
+  Ensures short viewports floor bottom sheet heights at 0.90 of the screen rather than collapsing to 103dp–247dp.
+- **Verification:** `flutter analyze` clean (0 errors, 0 warnings); `flutter test test/pos/ test/widgets/ test/utils/` passing (176 passed, 0 skipped).
+
 ### Whole-surface tap targets keep the 48dp floor (2026-09-07)
 Closes gap 3 of `docs/design/responsive-layout-plan.md` §10, and corrects three
 factual errors in the responsive ADR.

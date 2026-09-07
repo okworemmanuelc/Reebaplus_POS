@@ -72,10 +72,6 @@ void main() {
             'Offenders:\n${offenders.join('\n')}',
       );
     },
-    // Kept skipped honestly: 4 non-sheet occurrences remain outside the 4 deferred sites
-    // (who_is_working_screen.dart:289, cart_screen.dart:1494, activity_log_screen.dart:190, view_selector_sheet.dart:21).
-    skip:
-        'TODO: migrate remaining non-sheet MediaQuery size call sites in lib/ to responsive.dart getters (see plan §6)',
   );
 
   test(

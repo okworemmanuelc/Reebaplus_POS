@@ -119,11 +119,12 @@ Phase 2's structural re-flow (rail layout) is required, not optional.**
    hardware devices, desktop browser window resizing or Android split-screen modes can
    trigger a abrupt 48dp/40dp step at 499dp vs 500dp.
 2. **Logic vs. Layout Verification:**
-   The full test suite (1,888 tests) passing cleanly proves that the business logic, Drift
-   DAOs, Riverpod state, and calculation layers are regression-free. It **does NOT prove
-   screen layout** — this codebase has no rendered widget snapshot or golden test coverage
-   for complete screens. Layout verification relies on Phase 0's dedicated viewport harness
-   and device emulator inspections.
+   The full test suite (1,911 tests passing cleanly; 1 pre-existing order-dependent
+   flake in `test/van_sales/van_returns_test.dart` filed separately as #228) proves
+   that the business logic, Drift DAOs, Riverpod state, and calculation layers are
+   regression-free. It **does NOT prove screen layout** — this codebase has no rendered
+   widget snapshot or golden test coverage for complete screens. Layout verification
+   relies on Phase 0's dedicated viewport harness and device emulator inspections.
 3. **Whole-Surface Tap Targets Reduced to 40dp in Landscape — RESOLVED 2026-09-07:**
    Fields whose entire surface is the tap target — `AppInput` with `readOnly: true` **and**
    an `onTap` — presented a 40dp tap target in landscape, under the 48dp Material /

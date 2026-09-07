@@ -1491,7 +1491,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                   final curve = Curves.easeIn.transform(t);
                                   return Transform.translate(
                                     offset: Offset(
-                                      curve * MediaQuery.of(context).size.width,
+                                      curve * context.screenWidth,
                                       0,
                                     ),
                                     child: Opacity(

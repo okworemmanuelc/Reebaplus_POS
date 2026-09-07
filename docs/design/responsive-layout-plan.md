@@ -528,8 +528,8 @@ Commits `183f0a8`, `fdab844`, `4f3fe1b`, `f50ed17`, `78778af`, `928a66d`,
 | 1 | two-curve scale model, all four entry points | **done** — plus a correct deviation (§3, conditional floor) |
 | 2 | `isShortViewport`, shortestSide breakpoints, `isDesktop` guard | **done** — with one deviation (below) |
 | 3 | compact `contentPadding` in `AppInput` / `AppDropdown` | **done, and exceeded** — measured, not estimated |
-| 4 | viewport harness + POS-home overflow test | **partial — the overflow test was never written** |
-| 5 | static ban test | **partial — written, broader than planned, but `skip:`ped** |
+| 4 | viewport harness + POS-home overflow test | **done 2026-09-07** — `test/pos/pos_home_screen_overflow_test.dart` (5 tests) + `test/helpers/pos_home_harness.dart`; was partial at the 2026-09-06 audit |
+| 5 | static ban test | **done 2026-09-07** — broader than planned (bans *all* direct MediaQuery size reads in `lib/`), `skip:` removed, green |
 | 6 | ADR | **done** — `docs/adr/0025` (renumbered from a colliding 0024, §10 gap 3a); its two factual errors corrected 2026-09-07 |
 | + | 14 of 15 fractional-height sheets → `getRHeight` | not planned for Phase 0; landed anyway |
 | + | auth 480dp cap trap | fixed, and more simply than this plan proposed |
@@ -551,8 +551,8 @@ measured under `AppTheme.dark()` rather than using §3's estimated `vertical: 8`
 `Container`/etc. to find a real `IconButton`/`GestureDetector`/`InkWell` and
 preserves the 48dp tap target when it finds one. `AppDropdown`: `vertical: 12.5`,
 replacing a hardcoded un-themed 14. Good work, and better than what was asked
-for — but see the tap-target caveat in §10 gap 3, **fixed for `AppInput`
-2026-09-07; still open for `AppDropdown`.**
+for — but see the tap-target caveat in §10 gap 3, **fixed 2026-09-07 for
+`AppInput` (conditionally) and for `AppDropdown` (unconditionally).**
 
 **Emulator verification.** Landscape POS home renders with no `RenderFlex`
 overflow. The grid shows ~1 clipped row. Note the plan text previously recorded
@@ -587,11 +587,15 @@ so kit-based screens already survive. Fix the ones that are not on the kit:
    `existing_account_screen`, `no_account_found_screen`, `staff_sign_up_screen`,
    `welcome_screen`, `access_granted_screen`.
 
-**Trap.** After Phase 0's breakpoint change a landscape phone becomes
-`isPhone == true` and therefore *loses* the 480dp content cap at
-`branded_auth_background.dart:62` and `auth_background.dart:68` — auth content
-would stretch to 915dp. Change both conditions to
-`!context.isPhone || context.isShortViewport`.
+**Trap — ALREADY CLOSED in Phase 0, do not redo it.** After Phase 0's breakpoint
+change a landscape phone becomes `isPhone == true` and would therefore have
+*lost* the 480dp content cap at `branded_auth_background.dart:60` and
+`auth_background.dart:66` — auth content stretching to 915dp. This plan proposed
+`!context.isPhone || context.isShortViewport`; Phase 0 shipped something simpler
+and equivalent: an **unconditional** `const BoxConstraints(maxWidth: 480.0)` in
+both files, with the `responsive.dart` import dropped. It is equivalent because
+no real device is both `isPhone` and wider than 480dp in portrait. Leave it
+alone — do not reintroduce a conditional here.
 
 ### Phase 2 — POS `fix/responsive-pos-landscape`
 
@@ -743,33 +747,16 @@ verified only by an emulator eyeball, and **nothing prevents it regressing.** AD
 This is the single most valuable thing to fix, and it is cheap now that the
 harness exists. Do it before Phase 2 restructures the screen.
 
-### Gap 2 — the ban test enforces nothing
+### Gap 2 — the ban test enforces nothing — RESOLVED 2026-09-07
 
-`test/utils/media_query_size_ban_test.dart` carries a `skip:`. It is honestly
-labelled and the reasoning is sound — 8 call sites still read MediaQuery size, so
-it cannot pass yet — but a skipped test is not a seam.
+`test/utils/media_query_size_ban_test.dart` previously carried a `skip:`.
+The four remaining unmigrated call sites were migrated to `responsive.dart` accessors:
+- `who_is_working_screen.dart:289` → `context.screenWidth`
+- `cart_screen.dart:1494` → `context.screenWidth`
+- `view_selector_sheet.dart:21` → `context.screenWidth`
+- `activity_log_screen.dart:190` → `context.screenHeight - kToolbarHeight - 100`
 
-The scope was widened beyond this plan (which asked only to ban new
-`size.height *` literals): it now bans **all** direct MediaQuery size reads in
-`lib/`, which is the better rule and explains why it cannot yet go green. The
-second test in the file, which proves the regex catches what it should and
-ignores `viewInsets` / `padding` / `textScaler`, **is** active and passing.
-
-Remaining offenders, verified accurate against the source:
-
-| site | reason |
-|---|---|
-| `product_grid.dart:98` | grid columns from raw width — *deferred, legitimate* |
-| `product_grid.dart:231` | cart-fling target |
-| `receive_product_grid.dart:44` | grid columns from raw width — *deferred, legitimate* |
-| `app_dropdown.dart:91` | overlay flip above/below — *deferred, legitimate* |
-| `who_is_working_screen.dart:289` | unmigrated |
-| `cart_screen.dart:1494` | unmigrated |
-| `view_selector_sheet.dart:21` | unmigrated |
-| `activity_log_screen.dart:190` | `size.height - kToolbarHeight - 100`, not a clean fraction |
-
-Migrate the bottom four and drop the `skip:`. The three width-based grid sites
-are correctly deferred — §3 says width answers horizontal questions.
+The `skip:` was removed and the static ban test is active and passing cleanly across `lib/`.
 
 ### Gap 3 — 40dp tap targets fall below the accessibility floor — FIXED 2026-09-07
 
@@ -890,7 +877,7 @@ ADR §5 concludes the **rail** is "required, not optional"; the plan text had
 marked the rail **rejected**. §4 now presents both as open with the arithmetic.
 One of the two documents must be corrected in the Phase 2 PR.
 
-### Gap 5 — "full test suite passing cleanly" is not reproducible
+### Gap 5 — "full test suite passing cleanly" is not reproducible — RESOLVED 2026-09-07
 
 ADR 0025 limitation 2 states the full suite of 1,888 tests passes cleanly. A full
 `flutter test` run on this branch gives **1888 passed, ~130 skipped, 1 failed**:
@@ -901,8 +888,8 @@ ADR 0025 limitation 2 states the full suite of 1,888 tests passes cleanly. A ful
 **This is not a responsive regression.** The test passes in isolation
 (`flutter test test/van_sales/van_returns_test.dart` → 26/26), touches no layout
 code, and fails only in a full-suite run — order-dependent state pollution,
-almost certainly pre-existing. It should be filed separately rather than left as
-a footnote contradicting the ADR.
+almost certainly pre-existing. Filed separately as **#228** (`test(van_sales): van_returns_test flakes intermittently in full-suite run`),
+and ADR 0025 limitation 2 updated to cite the issue.
 
 ### Gap 6 — migrating the fractional sheets did not fix them
 
@@ -964,12 +951,15 @@ migration; the three at 0.5-0.6 are the ones most likely to be reported next.
 ("Retained" → "Kept"). Net effect nil — worth squashing before the PR so the
 history reads cleanly.
 
-**This branch is not cut from `main`.** `git branch --contains f73a102` lists
-`fix/responsive-short-viewport-seam`, so the branch carries the
-`fix/cart-reads-brand-deposit-live` work (and its ADR 0024) alongside the
-responsive changes. That is what produced the number collision in gap 3a. Check
-the diff against `main` for scope entanglement before opening the Phase 0 PR —
-the responsive PR should not be carrying someone else's crate-deposit commit.
+**Scope entanglement — RESOLVED 2026-09-07, by `main` moving.** The branch was
+cut before `f73a102` (`fix/cart-reads-brand-deposit-live`, and its ADR 0024)
+reached `main`, which is what produced the number collision in gap 3a. That
+commit has since merged as **#223**, so `f73a102` is now an ancestor of
+`origin/main` and no longer a foreign commit here. Verified 2026-09-07:
+`git rev-list --count origin/main..HEAD` = **12**, all `*(responsive)` /
+`feat(ui)` commits, and `HEAD..origin/main` = **0** — the branch is current with
+`origin/main` and needs no rebase. Note the *local* `main` ref is stale (45
+commits behind); measure against `origin/main`, not `main`.
 
 ### Recommended order from here
 
@@ -978,12 +968,12 @@ the responsive PR should not be carrying someone else's crate-deposit commit.
    `test/helpers/pos_home_harness.dart`.
 2. ~~Fix the two ADR errors and the `readOnly`+`onTap` tap target (gaps 3,
    2 of 2).~~ **DONE 2026-09-07** — plus a third ADR error found on the way: the
-   number collision (gap 3a), so the ADR is now `0025`. `AppDropdown` carries the
-   same tap-target defect and is left open — see gap 3.
-3. File the flaky van-returns test separately (gap 5); correct the ADR claim.
-4. Migrate the four remaining MediaQuery sites and un-`skip` the ban test (gap 2).
-4b. Move the three tightest sheet caps (0.5-0.6) onto `sheetMaxHeight` (gap 6) —
-    same defect class as the reported printer-picker overflow.
+   number collision (gap 3a), so the ADR is now `0025`. `AppDropdown` carried the
+   same defect — worse, in fact: 43dp in *portrait*, predating Phase 0 — and was
+   fixed the same day with an unconditional floor. See gap 3.
+3. ~~File the flaky van-returns test separately (gap 5); correct the ADR claim.~~ **DONE 2026-09-07** — filed as **#228**, ADR 0025 limitation 2 updated.
+4. ~~Migrate the four remaining MediaQuery sites and un-`skip` the ban test (gap 2).~~ **DONE 2026-09-07** — all 4 sites migrated, `media_query_size_ban_test.dart` active and passing.
+4b. ~~Move the three tightest sheet caps (0.5-0.6) onto `sheetMaxHeight` (gap 6)~~ — **DONE 2026-09-07** — `manage_categories_sheet.dart` (0.5), `stores_screen.dart` (0.6), and `crate_return_modal.dart` (0.25/0.9) migrated.
 5. Squash the revert churn, then open the Phase 0 PR.
 6. Phase 1 (auth) — unblocked and independent of the §4 decision.
 7. Phase 2 — prototype both §4 options, measure, decide, reconcile the documents.

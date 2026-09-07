@@ -187,7 +187,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                     child: SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       child: Container(
-                        height: MediaQuery.of(context).size.height - kToolbarHeight - 100,
+                        height: context.screenHeight - kToolbarHeight - 100,
                         alignment: Alignment.center,
                         child: _buildEmptyState(context, textCol, subtextCol, desiredStoreId),
                       ),
