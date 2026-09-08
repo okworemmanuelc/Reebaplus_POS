@@ -1756,10 +1756,15 @@ class AuthService extends ValueNotifier<UserData?> {
           'p_business_type': draft.businessType,
           'p_business_phone': draft.businessPhone,
           'p_business_email': draft.businessEmail,
+          // `city` is deliberately absent: onboarding collects street +
+          // country only. The RPC builds `stores.location` with
+          // concat_ws(', ', street, city, country), which skips the missing
+          // key — so the cloud row is exactly `locationCombined`'s
+          // "street, country" and the first pull can no longer overwrite the
+          // local mirror with a differently-fused string.
           'p_location': {
             'name': draft.locationName,
             'street': draft.streetAddress,
-            'city': draft.cityState,
             'country': draft.country,
           },
           'p_settings': {

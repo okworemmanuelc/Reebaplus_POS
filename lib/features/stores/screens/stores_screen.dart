@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
-import 'package:reebaplus_pos/core/data/nigerian_lgas.dart';
-import 'package:reebaplus_pos/core/data/nigerian_states.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -67,14 +65,9 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   void _showAddSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
     final addressCtrl = TextEditingController();
-    final statePlainCtrl = TextEditingController();
-    final lgaPlainCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
     bool saving = false;
     String countryValue = kDefaultCountry;
-    String stateValue = '';
-    String lgaValue = '';
-    String? stateError;
 
     showModalBottomSheet(
       context: context,
@@ -82,10 +75,6 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          final isNigeria = countryValue.trim().toLowerCase() == 'nigeria';
-          final lgaOptions =
-              isNigeria ? (kNigerianLgas[stateValue] ?? <String>[]) : <String>[];
-
           return Padding(
             padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
             child: Container(
@@ -179,80 +168,8 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                         icon: Icons.public_outlined,
                         initial: countryValue,
                         options: kCountries,
-                        onChanged: (v) => setSheet(() {
-                          countryValue = v;
-                          stateValue = '';
-                          lgaValue = '';
-                          statePlainCtrl.clear();
-                          lgaPlainCtrl.clear();
-                        }),
+                        onChanged: (v) => setSheet(() => countryValue = v),
                       ),
-                      SizedBox(height: rSize(ctx, 16)),
-
-                      if (isNigeria)
-                        _AppAutocompleteField(
-                          key: ValueKey('add_state_$countryValue'),
-                          label: 'State / Region',
-                          icon: Icons.map_outlined,
-                          initial: stateValue,
-                          options: kNigerianStates,
-                          onChanged: (v) => setSheet(() {
-                            stateValue = v;
-                            lgaValue = '';
-                            lgaPlainCtrl.clear();
-                            stateError = null;
-                          }),
-                        )
-                      else
-                        AppInput(
-                          key: ValueKey('add_state_plain_$countryValue'),
-                          controller: statePlainCtrl,
-                          labelText: 'State / Region',
-                          prefixIcon:
-                              const Icon(Icons.map_outlined, size: 20),
-                          onChanged: (v) {
-                            stateValue = v;
-                            if (stateError != null) {
-                              setSheet(() => stateError = null);
-                            }
-                          },
-                        ),
-
-                      if (stateError != null) ...[
-                        SizedBox(height: rSize(ctx, 4)),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Text(
-                            stateError!,
-                            style: TextStyle(
-                              color: Theme.of(ctx).colorScheme.error,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                      SizedBox(height: rSize(ctx, 16)),
-
-                      if (isNigeria)
-                        _AppAutocompleteField(
-                          key: ValueKey('add_lga_${stateValue}_$countryValue'),
-                          label: 'Local Government / District (optional)',
-                          icon: Icons.account_balance_outlined,
-                          initial: lgaValue,
-                          options: lgaOptions,
-                          onChanged: (v) => lgaValue = v,
-                        )
-                      else
-                        AppInput(
-                          key: ValueKey('add_lga_plain_$countryValue'),
-                          controller: lgaPlainCtrl,
-                          labelText: 'District (optional)',
-                          prefixIcon: const Icon(
-                            Icons.account_balance_outlined,
-                            size: 20,
-                          ),
-                          onChanged: (v) => lgaValue = v,
-                        ),
                       SizedBox(height: rSize(ctx, 28)),
 
                       // Save button
@@ -262,13 +179,6 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                             ? null
                             : () async {
                                 if (!formKey.currentState!.validate()) return;
-                                if (stateValue.trim().isEmpty) {
-                                  setSheet(
-                                    () => stateError =
-                                        'State / Region is required',
-                                  );
-                                  return;
-                                }
                                 // Re-check at the write boundary (hard rule #6).
                                 if (!ref
                                     .read(currentUserPermissionsProvider)
@@ -280,8 +190,6 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                   final db = ref.read(databaseProvider);
                                   final combinedLocation = [
                                     addressCtrl.text.trim(),
-                                    lgaValue.trim(),
-                                    stateValue.trim(),
                                     countryValue.trim(),
                                   ]
                                       .where((p) => p.isNotEmpty)
@@ -331,34 +239,25 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   void _showEditSheet(BuildContext context, StoreData store) {
     final nameCtrl = TextEditingController(text: store.name);
 
-    // Parse location — new format: "street, lga, state, country" (4 parts)
-    // Old format: "street, cityState, country" (3 parts). Handle both.
-    final locParts = (store.location ?? '').split(', ');
+    // Parse `stores.location`. The current format is "street, country" (2
+    // parts); rows written before the state/LGA pickers were dropped are
+    // "street, lga, state, country" (4) or "street, state, country" (3). All
+    // three shapes put the street first and the country last, so read the ends
+    // and ignore whatever is in between — those middle segments are no longer
+    // collected and are dropped the next time the store is saved.
+    final locParts = (store.location ?? '')
+        .split(',')
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
     final addressCtrl = TextEditingController(
-      text: locParts.isNotEmpty ? locParts[0] : '',
+      text: locParts.isNotEmpty ? locParts.first : '',
     );
-    String initLga = '';
-    String initState = '';
-    String initCountry = kDefaultCountry;
-    if (locParts.length >= 4) {
-      initLga = locParts[1];
-      initState = locParts[2];
-      initCountry = locParts[3];
-    } else if (locParts.length == 3) {
-      initState = locParts[1];
-      initCountry = locParts[2];
-    } else if (locParts.length == 2) {
-      initState = locParts[1];
-    }
+    final initCountry = locParts.length >= 2 ? locParts.last : kDefaultCountry;
 
-    final statePlainCtrl = TextEditingController(text: initState);
-    final lgaPlainCtrl = TextEditingController(text: initLga);
     final formKey = GlobalKey<FormState>();
     bool saving = false;
     String countryValue = initCountry;
-    String stateValue = initState;
-    String lgaValue = initLga;
-    String? stateError;
 
     showModalBottomSheet(
       context: context,
@@ -366,10 +265,6 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          final isNigeria = countryValue.trim().toLowerCase() == 'nigeria';
-          final lgaOptions =
-              isNigeria ? (kNigerianLgas[stateValue] ?? <String>[]) : <String>[];
-
           return Padding(
             padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
             child: Container(
@@ -460,82 +355,8 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                         icon: Icons.public_outlined,
                         initial: countryValue,
                         options: kCountries,
-                        onChanged: (v) => setSheet(() {
-                          countryValue = v;
-                          stateValue = '';
-                          lgaValue = '';
-                          statePlainCtrl.clear();
-                          lgaPlainCtrl.clear();
-                        }),
+                        onChanged: (v) => setSheet(() => countryValue = v),
                       ),
-                      SizedBox(height: rSize(ctx, 16)),
-
-                      if (isNigeria)
-                        _AppAutocompleteField(
-                          key: ValueKey('edit_state_$countryValue'),
-                          label: 'State / Region',
-                          icon: Icons.map_outlined,
-                          initial: stateValue,
-                          options: kNigerianStates,
-                          onChanged: (v) => setSheet(() {
-                            stateValue = v;
-                            lgaValue = '';
-                            lgaPlainCtrl.clear();
-                            stateError = null;
-                          }),
-                        )
-                      else
-                        AppInput(
-                          key: ValueKey('edit_state_plain_$countryValue'),
-                          controller: statePlainCtrl,
-                          labelText: 'State / Region',
-                          prefixIcon:
-                              const Icon(Icons.map_outlined, size: 20),
-                          onChanged: (v) {
-                            stateValue = v;
-                            if (stateError != null) {
-                              setSheet(() => stateError = null);
-                            }
-                          },
-                        ),
-
-                      if (stateError != null) ...[
-                        SizedBox(height: rSize(ctx, 4)),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Text(
-                            stateError!,
-                            style: TextStyle(
-                              color: Theme.of(ctx).colorScheme.error,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                      SizedBox(height: rSize(ctx, 16)),
-
-                      if (isNigeria)
-                        _AppAutocompleteField(
-                          key: ValueKey(
-                            'edit_lga_${stateValue}_$countryValue',
-                          ),
-                          label: 'Local Government / District (optional)',
-                          icon: Icons.account_balance_outlined,
-                          initial: lgaValue,
-                          options: lgaOptions,
-                          onChanged: (v) => lgaValue = v,
-                        )
-                      else
-                        AppInput(
-                          key: ValueKey('edit_lga_plain_$countryValue'),
-                          controller: lgaPlainCtrl,
-                          labelText: 'District (optional)',
-                          prefixIcon: const Icon(
-                            Icons.account_balance_outlined,
-                            size: 20,
-                          ),
-                          onChanged: (v) => lgaValue = v,
-                        ),
                       SizedBox(height: rSize(ctx, 28)),
 
                       AppButton(
@@ -544,13 +365,6 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                             ? null
                             : () async {
                                 if (!formKey.currentState!.validate()) return;
-                                if (stateValue.trim().isEmpty) {
-                                  setSheet(
-                                    () => stateError =
-                                        'State / Region is required',
-                                  );
-                                  return;
-                                }
                                 // Re-check at the write boundary (hard rule #6).
                                 if (!ref
                                     .read(currentUserPermissionsProvider)
@@ -561,8 +375,6 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                 final db = ref.read(databaseProvider);
                                 final combinedLocation = [
                                   addressCtrl.text.trim(),
-                                  lgaValue.trim(),
-                                  stateValue.trim(),
                                   countryValue.trim(),
                                 ]
                                     .where((p) => p.isNotEmpty)
@@ -1202,7 +1014,6 @@ class _AppAutocompleteField extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   const _AppAutocompleteField({
-    super.key,
     required this.label,
     required this.icon,
     required this.initial,

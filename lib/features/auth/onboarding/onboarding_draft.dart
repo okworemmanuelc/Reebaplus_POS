@@ -40,8 +40,6 @@ class OnboardingDraft {
 
   String? locationName;
   String? streetAddress;
-  String? lgaDistrict;
-  String? cityState;
   String? country;
 
   String? currency;
@@ -58,13 +56,16 @@ class OnboardingDraft {
        userId = userId ?? UuidV7.generate();
 
   /// Combines the structured location parts into `stores.location`
-  /// ("street, LGA/District, city, country") — the shape existing UI that reads this field
-  /// expects.
+  /// ("street, country").
+  ///
+  /// Onboarding collects only street + country (no state / LGA pickers), and
+  /// this two-part shape is exactly what the cloud `complete_onboarding` RPC
+  /// rebuilds from `p_location` when its `city` key is null — so the local
+  /// mirror and the cloud row are byte-identical and the first pull can no
+  /// longer overwrite one with the other.
   String? get locationCombined {
     final parts = [
       streetAddress?.trim(),
-      lgaDistrict?.trim(),
-      cityState?.trim(),
       country?.trim(),
     ].where((p) => p != null && p.isNotEmpty).toList();
     if (parts.isEmpty) return null;

@@ -8,8 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/data/countries.dart';
-import 'package:reebaplus_pos/core/data/nigerian_lgas.dart';
-import 'package:reebaplus_pos/core/data/nigerian_states.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -58,17 +56,14 @@ class StaffSignUpDraft {
   // Collected in steps 4 & 5.
   String? phone;
   String? streetAddress;
-  String? lgaDistrict;
-  String? cityState;
   String? country;
 
   /// Combines the structured location parts into a single address string
-  /// matching the format used by [OnboardingDraft.locationCombined].
+  /// matching the format used by [OnboardingDraft.locationCombined]
+  /// ("street, country" — no state / LGA segments).
   String? get locationCombined {
     final parts = [
       streetAddress?.trim(),
-      lgaDistrict?.trim(),
-      cityState?.trim(),
       country?.trim(),
     ].where((p) => p != null && p.isNotEmpty).toList();
     if (parts.isEmpty) return null;
@@ -131,11 +126,11 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
   // Step 5 — address. Mirrors the CEO store-details step exactly.
   final _streetCtrl = TextEditingController();
-  final _statePlainCtrl = TextEditingController();
-  final _lgaPlainCtrl = TextEditingController();
-  String _stateValue = '';
-  String _lgaValue = '';
   String _countryValue = kDefaultCountry;
+
+  /// The dial code currently sitting in front of [_phoneCtrl] — see
+  /// [_applyDialCode].
+  String _dialCode = kCountryDialCodes[kDefaultCountry] ?? '';
   String? _addressError;
 
   // Steps 6 & 7 — PIN. Distinct shake keys: the create (step 6) and confirm
@@ -166,8 +161,6 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _streetCtrl.dispose();
-    _statePlainCtrl.dispose();
-    _lgaPlainCtrl.dispose();
     _resendTimer?.cancel();
     _lockoutTimer?.cancel();
     super.dispose();
@@ -192,6 +185,24 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       if (local.startsWith('0')) local = local.substring(1);
       return '$dialCode$local';
     }
+  }
+
+  /// Swaps the dial-code prefix on the phone box when the country changes.
+  ///
+  /// The country field is a free-text autocomplete whose `onChanged` fires on
+  /// every keystroke, so assigning the bare dial code (the previous behaviour)
+  /// discarded a number the staff member had already typed. Keep the local
+  /// digits, replace only the prefix, and do nothing until the typed country
+  /// resolves to a dial code.
+  void _applyDialCode(String country) {
+    final next = kCountryDialCodes[country.trim()] ?? '';
+    if (next.isEmpty || next == _dialCode) return;
+    final text = _phoneCtrl.text.trim();
+    final local = text.startsWith(_dialCode)
+        ? text.substring(_dialCode.length)
+        : text;
+    _dialCode = next;
+    _phoneCtrl.text = '$next$local';
   }
 
   // ── Connectivity ─────────────────────────────────────────────────────────
@@ -513,18 +524,12 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       setState(() => _addressError = 'Enter your street address.');
       return;
     }
-    if (_stateValue.trim().isEmpty) {
-      setState(() => _addressError = 'Enter the State / Region.');
-      return;
-    }
-    if (_lgaValue.trim().isEmpty) {
-      setState(() => _addressError = 'Enter the Local Government / District.');
+    if (_countryValue.trim().isEmpty) {
+      setState(() => _addressError = 'Enter the country.');
       return;
     }
     _draft
       ..streetAddress = street
-      ..lgaDistrict = _lgaValue.trim()
-      ..cityState = _stateValue.trim()
       ..country = _countryValue.trim();
     setState(() {
       _addressError = null;
@@ -1131,11 +1136,10 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     );
   }
 
+  /// Address step — street + country only. The State/Region and LGA/District
+  /// pickers were removed alongside the CEO onboarding ones: they were required
+  /// even when labelled "optional", and every keystroke in Country reset them.
   Widget _buildAddressStep() {
-    final isNigeria = _countryValue.trim().toLowerCase() == 'nigeria';
-    final lgaOptions = isNigeria
-        ? (kNigerianLgas[_stateValue] ?? <String>[])
-        : <String>[];
     return AuthFormShell(
       title: 'Your address',
       subtitle: 'Where are you based?',
@@ -1165,67 +1169,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             options: kCountries,
             onChanged: (v) => setState(() {
               _countryValue = v;
-              _stateValue = '';
-              _lgaValue = '';
-              _statePlainCtrl.clear();
-              _lgaPlainCtrl.clear();
-              final dialCode = kCountryDialCodes[v] ?? '';
-              if (dialCode.isNotEmpty) _phoneCtrl.text = dialCode;
+              _applyDialCode(v);
             }),
           ),
-        ),
-        const SizedBox(height: 12),
-        AuthInputCard(
-          child: isNigeria
-              ? AutocompleteField(
-                  key: const ValueKey('state_ng'),
-                  label: 'State / Region',
-                  icon: Icons.map_outlined,
-                  initial: _stateValue,
-                  options: kNigerianStates,
-                  onChanged: (v) => setState(() {
-                    _stateValue = v;
-                    _lgaValue = '';
-                    _lgaPlainCtrl.clear();
-                  }),
-                )
-              : TextField(
-                  controller: _statePlainCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  style: TextStyle(color: authTextPrimary(context)),
-                  onChanged: (v) => setState(() {
-                    _stateValue = v;
-                    _lgaValue = '';
-                  }),
-                  decoration: AppDecorations.authInputDecoration(
-                    context,
-                    label: 'State / Region',
-                    prefixIcon: Icons.map_outlined,
-                  ),
-                ),
-        ),
-        const SizedBox(height: 12),
-        AuthInputCard(
-          child: isNigeria
-              ? AutocompleteField(
-                  key: ValueKey('lga_$_stateValue'),
-                  label: 'Local Government / District',
-                  icon: Icons.account_balance_outlined,
-                  initial: _lgaValue,
-                  options: lgaOptions,
-                  onChanged: (v) => _lgaValue = v,
-                )
-              : TextField(
-                  controller: _lgaPlainCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  style: TextStyle(color: authTextPrimary(context)),
-                  onChanged: (v) => _lgaValue = v,
-                  decoration: AppDecorations.authInputDecoration(
-                    context,
-                    label: 'District (optional)',
-                    prefixIcon: Icons.account_balance_outlined,
-                  ),
-                ),
         ),
         const SizedBox(height: 4),
         AuthErrorText(_addressError),
