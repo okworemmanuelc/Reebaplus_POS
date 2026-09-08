@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 
 class SuccessDashboardEntryScreen extends StatefulWidget {
@@ -14,6 +16,8 @@ class SuccessDashboardEntryScreen extends StatefulWidget {
 
 class _SuccessDashboardEntryScreenState
     extends State<SuccessDashboardEntryScreen> {
+  Timer? _forwardTimer;
+
   @override
   void initState() {
     super.initState();
@@ -21,7 +25,7 @@ class _SuccessDashboardEntryScreenState
   }
 
   void _startAutoForward() {
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    _forwardTimer = Timer(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
 
       // Onboarding is a CEO flow, so MainLayout lands on Home with the Get
@@ -35,6 +39,12 @@ class _SuccessDashboardEntryScreenState
   }
 
   @override
+  void dispose() {
+    _forwardTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -42,59 +52,57 @@ class _SuccessDashboardEntryScreenState
 
     return AuthBackground(
       child: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Success Icon
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.greenAccent.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_circle_rounded,
-                  color: Colors.greenAccent,
-                  size: 80,
-                ),
+        child: AuthCenteredScroll(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Success Icon
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.greenAccent.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 32),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                color: Colors.greenAccent,
+                size: 80,
+              ),
+            ),
+            const SizedBox(height: 32),
 
-              // Success Text
-              Text(
-                'Your business is ready!',
+            // Success Text
+            Text(
+              'Your business is ready!',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'Preparing your dashboard...',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
+                  fontSize: 16,
+                  color: textColor.withValues(alpha: 0.7),
+                  height: 1.4,
                 ),
               ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
-                  'Preparing your dashboard...',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: textColor.withValues(alpha: 0.7),
-                    height: 1.4,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 48),
+            ),
+            const SizedBox(height: 48),
 
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: theme.colorScheme.primary,
-                ),
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: theme.colorScheme.primary,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

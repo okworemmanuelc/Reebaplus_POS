@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/auth/widgets/onboarding_step_indicator.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 class BiometricSetupScreen extends ConsumerStatefulWidget {
@@ -111,69 +112,65 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
 
     return AuthBackground(
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.isNewBusinessSetup)
-                const OnboardingStepIndicator(
-                  currentStep: 7,
-                  totalSteps: 7,
-                  stepLabels: OnboardingStepIndicator.pathALabels,
-                ),
-              if (widget.isNewBusinessSetup) const SizedBox(height: 16),
-              Icon(Icons.fingerprint, size: 80, color: primary),
-              const SizedBox(height: 24),
-              Text(
-                'Speed up your login',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
-                textAlign: TextAlign.center,
+        child: AuthCenteredScroll(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          children: [
+            if (widget.isNewBusinessSetup)
+              const OnboardingStepIndicator(
+                currentStep: 7,
+                totalSteps: 7,
+                stepLabels: OnboardingStepIndicator.pathALabels,
               ),
-              const SizedBox(height: 12),
-              Text(
-                'Use Face ID or Fingerprint to log into Reebaplus POS instantly and securely instead of typing your PIN every time.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: textColor.withValues(alpha: 0.7),
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
+            if (widget.isNewBusinessSetup) const SizedBox(height: 16),
+            Icon(Icons.fingerprint, size: 80, color: primary),
+            const SizedBox(height: 24),
+            Text(
+              'Speed up your login',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: textColor,
               ),
-              const SizedBox(height: 48),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Use Face ID or Fingerprint to log into Reebaplus POS instantly and securely instead of typing your PIN every time.',
+              style: TextStyle(
+                fontSize: 14,
+                color: textColor.withValues(alpha: 0.7),
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 48),
 
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: Color(0xFFFF6B6B),
-                      fontSize: 13,
-                    ),
-                    textAlign: TextAlign.center,
+            if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    color: Color(0xFFFF6B6B),
+                    fontSize: 13,
                   ),
+                  textAlign: TextAlign.center,
                 ),
-
-              AppButton(
-                text: 'Enable Biometrics',
-                isLoading: _loading,
-                onPressed: _enableBiometrics,
               ),
-              const SizedBox(height: 16),
 
-              AppButton(
-                text: 'Skip for now',
-                variant: AppButtonVariant.ghost,
-                onPressed: _loading ? null : _skip,
-              ),
-            ],
-          ),
+            AppButton(
+              text: 'Enable Biometrics',
+              isLoading: _loading,
+              onPressed: _enableBiometrics,
+            ),
+            const SizedBox(height: 16),
+
+            AppButton(
+              text: 'Skip for now',
+              variant: AppButtonVariant.ghost,
+              onPressed: _loading ? null : _skip,
+            ),
+          ],
         ),
       ),
     );

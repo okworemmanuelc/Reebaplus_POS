@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -142,13 +143,14 @@ class AppButton extends StatelessWidget {
         width: isFullWidth ? (width ?? double.infinity) : width,
         height:
             height ??
-            context.getRSize(
-              size == AppButtonSize.xsmall
-                  ? 32
-                  : (size == AppButtonSize.small
-                        ? 40
-                        : (size == AppButtonSize.large ? 60 : 54)),
-            ),
+            (size == AppButtonSize.xsmall
+                ? 32.0
+                : (size == AppButtonSize.small
+                    ? 40.0
+                    : max(
+                        kMinInteractiveDimension,
+                        context.getRSize(size == AppButtonSize.large ? 60 : 54),
+                      ))),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           gradient: gradient != null

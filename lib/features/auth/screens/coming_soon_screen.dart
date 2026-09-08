@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 
 /// Minimal dark-themed placeholder for routes not yet built (master plan §4
 /// uses placeholder routes for Terms/Privacy; the real invite-code entry is
@@ -31,32 +32,28 @@ class ComingSoonScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.hourglass_empty_rounded,
-                size: 56,
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.8),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  height: 1.5,
-                  color: authTextPrimary(context).withValues(alpha: 0.7),
-                ),
-              ),
-            ],
+      body: AuthCenteredScroll(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        children: [
+          Icon(
+            Icons.hourglass_empty_rounded,
+            size: 56,
+            color: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.8),
           ),
-        ),
+          const SizedBox(height: 20),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.5,
+              color: authTextPrimary(context).withValues(alpha: 0.7),
+            ),
+          ),
+        ],
       ),
     );
   }

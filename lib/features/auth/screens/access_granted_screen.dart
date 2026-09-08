@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +23,7 @@ class AccessGrantedScreen extends ConsumerStatefulWidget {
 class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
     with TickerProviderStateMixin {
   late Future<Map<String, String>> _futureDetails;
+  Timer? _contentTimer;
 
   // Animation controllers
   late final AnimationController _iconController;
@@ -112,13 +114,14 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
 
     // Kick off animations with stagger
     _iconController.forward();
-    Future.delayed(const Duration(milliseconds: 350), () {
+    _contentTimer = Timer(const Duration(milliseconds: 350), () {
       if (mounted) _contentController.forward();
     });
   }
 
   @override
   void dispose() {
+    _contentTimer?.cancel();
     _iconController.dispose();
     _contentController.dispose();
     _pulseController.dispose();

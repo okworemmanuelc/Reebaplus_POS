@@ -219,13 +219,17 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final pad = context.isShortViewport
+        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
+        : context.rPaddingSymmetric(horizontal: 32, vertical: 24);
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: context.rPaddingSymmetric(horizontal: 32, vertical: 24),
+              padding: pad,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
                 child: _saving
@@ -278,8 +282,103 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
 
   bool get _isOnboarding => widget.isNewBusinessSetup;
 
+  Widget _buildLandscapeInputState(Color primary, Color textColor) {
+    return Row(
+      key: const ValueKey('input_landscape'),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Left column
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (_isOnboarding)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'Step 6 of 7: PIN',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      fontWeight: FontWeight.w600,
+                      color: primary,
+                    ),
+                  ),
+                ),
+              Text(
+                _confirming ? 'Confirm your PIN' : 'Create a PIN',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(20),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _confirming
+                    ? 'Re-enter the same PIN to confirm'
+                    : 'Choose a 6-digit PIN for quick login',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(12),
+                  color: textColor.withValues(alpha: 0.6),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ShakeWidget(
+                key: _shakeKey,
+                child: PinDots(filled: _pin.length),
+              ),
+              SizedBox(
+                height: 20,
+                child: _errorMessage != null
+                    ? Center(
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: const Color(0xFFFF6B6B),
+                            fontSize: context.getRFontSize(12),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : null,
+              ),
+              if (_confirming)
+                TextButton(
+                  onPressed: () => setState(() {
+                    _pin = '';
+                    _firstPin = '';
+                    _confirming = false;
+                    _errorMessage = null;
+                  }),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, kMinInteractiveDimension),
+                  ),
+                  child: Text(
+                    '← Back to create PIN',
+                    style: TextStyle(
+                      color: textColor.withValues(alpha: 0.65),
+                      fontSize: context.getRFontSize(12),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Right column: Keypad
+        PinKeypad(onDigit: _onDigit, onBackspace: _onBackspace),
+      ],
+    );
+  }
+
   Widget _buildInputState(Color primary) {
     final textColor = authTextPrimary(context);
+
+    if (context.isShortViewport) {
+      return _buildLandscapeInputState(primary, textColor);
+    }
 
     return Column(
       key: const ValueKey('input'),

@@ -8,7 +8,103 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-152 sessions logged. Codebase is live and being verified on-device.
+153 sessions logged. Codebase is live and being verified on-device.
+
+### Phase 1 — Responsive Auth & Onboarding in Landscape (2026-09-08)
+Branch `fix/responsive-auth-landscape` cut from `fix/responsive-short-viewport-seam`.
+Implements Phase 1 of `docs/design/responsive-layout-plan.md` to ensure all auth
+and onboarding screens re-flow cleanly in landscape / short viewports without `RenderFlex`
+overflow and maintaining all 48dp (`kMinInteractiveDimension`) interactive tap target floors.
+
+**Key changes delivered:**
+- [app_button.dart](lib/shared/widgets/app_button.dart) — `AppButton` normal (54) and large (60)
+  heights floored at `max(kMinInteractiveDimension, ...)` so short viewports (`spacingScale = 0.70`)
+  never compress tap targets below 48dp (previously compressed to 37.8dp).
+- [biometric_setup_screen.dart](lib/features/auth/screens/biometric_setup_screen.dart) —
+  Migrated unscrolled `Padding > Column` onto `AuthCenteredScroll`. Test proves overflow failure
+  before fix (169px overflow) and 100% green after fix.
+- [success_dashboard_entry_screen.dart](lib/features/auth/screens/success_dashboard_entry_screen.dart) —
+  Migrated to `AuthCenteredScroll`; auto-forward timer stored in field and cancelled on `dispose()`.
+- [coming_soon_screen.dart](lib/features/auth/screens/coming_soon_screen.dart) —
+  Migrated to `AuthCenteredScroll`.
+- [login_screen.dart](lib/features/auth/screens/login_screen.dart) — Under `context.isShortViewport`,
+  re-flows into a two-column layout: left column holds avatar, greeting, email/dots, and action links;
+  right column holds `PinKeypad` (280dp tall, 240dp wide). Portrait stack unchanged.
+- [create_pin_screen.dart](lib/features/auth/screens/create_pin_screen.dart) — Under `context.isShortViewport`,
+  re-flows into a two-column layout with compact step indicators and right-aligned keypad.
+- [who_is_working_screen.dart](lib/features/auth/screens/who_is_working_screen.dart) —
+  Wrapped grid in `LayoutBuilder` to compute columns and cell width against actual container constraints
+  (`constraints.maxWidth` capped at 480dp inside `BrandedAuthBackground`) rather than raw screen width (915dp),
+  preventing card squeezing. Enforced 48dp floor on view selector and escape hatch buttons.
+- [ceo_sign_up_screen.dart](lib/features/auth/screens/ceo_sign_up_screen.dart) —
+  In `_buildTopBar()`, collapses back button and `_StepDots` into a compact single row
+  ("Step X of Y") under `context.isShortViewport` with 48dp back button floor.
+- [access_granted_screen.dart](lib/features/auth/screens/access_granted_screen.dart) —
+  Fixed animation timer cancellation in `dispose()`.
+- **Test coverage**:
+  - `test/auth/biometric_setup_screen_test.dart` (3 tests): reproduces pre-fix overflow and validates post-fix layout.
+  - `test/auth/auth_landscape_screens_test.dart` (40 tests): validates all touched screens and 7 verify-only screens
+    across `pixel7Landscape` (915×412), `androidCompactLandscape` (800×360), and `pixel7Portrait` (412×915),
+    verifying 0 `RenderFlex` exceptions and asserting the 48dp floor on interactive controls.
+
+### Store address simplified to street + country; onboarding store step audited (2026-09-08)
+Users reported that creating a store during onboarding was hard. Full audit of all
+four store-creation surfaces written to `STORE_CREATION_AUDIT.md`. Seven defects
+verified; the State/Region + LGA/District pickers were the root of most of them and
+have been removed everywhere.
+
+**Root causes found**
+- **Country typing wiped the phone box.** `AutocompleteField.onChanged` fires on
+  every keystroke, and the CEO step assigned `_storePhoneCtrl.text = dialCode`
+  unconditionally — so touching Country after entering a phone erased it, and set
+  it to `''` while the country was still a partial string with no dial code. The
+  user then got "Enter a valid phone number" on a field they had filled in.
+- **"District (optional)" was required.** Outside Nigeria the LGA field was
+  labelled optional but `_submitStoreDetails` rejected an empty value — a hard
+  block for every non-Nigerian tenant. Same bug in staff sign-up.
+- **Country edits silently cleared State + LGA.** `isNigeria` is an exact match on
+  the whole string, so typing "Nigeria" letter by letter swapped the two fields
+  between Autocomplete and TextField repeatedly, destroying their contents.
+- **The mandatory LGA was discarded on the first sync.** The client fused four
+  parts (`street, lga, state, country`); the RPC payload carried only three and the
+  cloud rebuilt `street, city, country`. `stores` restores by PK upsert, so the
+  next pull overwrote the local row and the LGA vanished.
+- Plus: the pickers accepted unconstrained free text anyway (so bought no data
+  quality), `resizeToAvoidBottomInset: false` leaves the 6-field step under the
+  keyboard, and "Store phone" is actually saved to `businesses.phone`.
+
+**Change — address is now `street, country`**
+- [onboarding_draft.dart](lib/features/auth/onboarding/onboarding_draft.dart) —
+  `lgaDistrict` / `cityState` dropped; `locationCombined` is two-part.
+- [ceo_sign_up_screen.dart](lib/features/auth/screens/ceo_sign_up_screen.dart) —
+  step 3 is Store name, Store phone, Street address, Country. New `_applyDialCode`
+  swaps only the dial-code prefix and no-ops until the typed country resolves, so
+  the phone survives a country edit.
+- [staff_sign_up_screen.dart](lib/features/auth/screens/staff_sign_up_screen.dart)
+  — same two pickers removed, same `_applyDialCode` fix.
+- [auth_service.dart](lib/shared/services/auth_service.dart) — `p_location` no
+  longer sends `city`. `concat_ws` skips the missing key, so cloud and client now
+  build the **identical** string. **No cloud migration needed.**
+- [stores_screen.dart](lib/features/stores/screens/stores_screen.dart) — New/Edit
+  Store sheets are Street address + Country. The Edit parser had to change: with a
+  2-part location the old code put the **country into the State box**. It now reads
+  segment 0 as street and the last segment as country, so legacy 3- and 4-part rows
+  still open correctly (dropped middle segments are not re-collected).
+- `receiptStoreAddress` is unchanged — it drops the trailing country segment, so
+  `"14 Market Road, Nigeria"` still prints as `"14 Market Road"`.
+- `kNigerianStates` / `kNigerianLgas` remain in the repo but are now unreferenced.
+- New test `test/auth/onboarding_draft_location_test.dart` locks the two-part shape.
+
+**Known, not fixed (flagged in the audit):** the New Store sheet still writes via a
+raw `db.into(db.stores).insert` instead of `StoresDao.createStore`, so it skips the
+business-scoping invariant, never sets `kind`, and logs no activity; and both
+sheets' `stores.manage` write-boundary check `return`s silently instead of calling
+`showGateDenied`.
+
+**Verification:** `flutter analyze lib` clean; `flutter test` green across
+`test/auth`, `test/stores`, `test/settings`, `test/utils`. The one failing test in
+the tree (`test/auth/biometric_setup_screen_test.dart`) is unrelated in-flight work
+on `biometric_setup_screen.dart`, untouched by this change.
 
 ### Phase 0 review pass — stale-claim sweep before the PR (2026-09-07)
 Independent review of the whole `fix/responsive-short-viewport-seam` branch, ahead

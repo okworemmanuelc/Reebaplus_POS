@@ -286,7 +286,6 @@ class _PickerListState extends ConsumerState<_PickerList> {
   Widget build(BuildContext context) {
     final dateStr = DateFormat('EEEE, MMMM d').format(DateTime.now());
     final businessName = _businessName(ref);
-    final screenWidth = context.screenWidth;
 
     Widget staffList;
     if (_isListView) {
@@ -297,30 +296,35 @@ class _PickerListState extends ConsumerState<_PickerList> {
             _StaffPickerCard(entry: widget.staff[i], isListView: true, onTap: () => widget.onTap(widget.staff[i])),
       );
     } else {
-      int effectiveColumns = _gridColumns;
-      if (screenWidth < 380 && effectiveColumns > 2) {
-        effectiveColumns = 2;
-      } else if (screenWidth > 600) {
-        final dynamicColumns = (screenWidth / 180).floor();
-        effectiveColumns = max(effectiveColumns, dynamicColumns);
-      }
+      staffList = LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          int effectiveColumns = _gridColumns;
+          if (width < 380 && effectiveColumns > 2) {
+            effectiveColumns = 2;
+          } else if (width > 600) {
+            final dynamicColumns = (width / 180).floor();
+            effectiveColumns = max(effectiveColumns, dynamicColumns);
+          }
 
-      final totalPadding = context.getRSize(48); // 24 on each side
-      final totalSpacing = context.getRSize(16) * (effectiveColumns - 1);
-      final cellWidth = (screenWidth - totalPadding - totalSpacing) / effectiveColumns;
-      final aspect = cellWidth / context.getRSize(160);
+          final totalPadding = context.getRSize(48); // 24 on each side
+          final totalSpacing = context.getRSize(16) * (effectiveColumns - 1);
+          final cellWidth = (width - totalPadding - totalSpacing) / effectiveColumns;
+          final aspect = cellWidth / context.getRSize(160);
 
-      staffList = GridView.builder(
-        padding: context.rPaddingSymmetric(horizontal: 24),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: effectiveColumns,
-          childAspectRatio: aspect,
-          crossAxisSpacing: context.getRSize(16),
-          mainAxisSpacing: context.getRSize(16),
-        ),
-        itemCount: widget.staff.length,
-        itemBuilder: (context, i) =>
-            _StaffPickerCard(entry: widget.staff[i], isListView: false, onTap: () => widget.onTap(widget.staff[i])),
+          return GridView.builder(
+            padding: context.rPaddingSymmetric(horizontal: 24),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: effectiveColumns,
+              childAspectRatio: aspect,
+              crossAxisSpacing: context.getRSize(16),
+              mainAxisSpacing: context.getRSize(16),
+            ),
+            itemCount: widget.staff.length,
+            itemBuilder: (context, i) =>
+                _StaffPickerCard(entry: widget.staff[i], isListView: false, onTap: () => widget.onTap(widget.staff[i])),
+          );
+        },
       );
     }
 
@@ -328,7 +332,10 @@ class _PickerListState extends ConsumerState<_PickerList> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: context.rPaddingSymmetric(horizontal: 24, vertical: 20),
+          padding: context.rPaddingSymmetric(
+            horizontal: 24,
+            vertical: context.isShortViewport ? 10 : 20,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -360,11 +367,14 @@ class _PickerListState extends ConsumerState<_PickerList> {
                       color: authTextPrimary(context).withValues(alpha: 0.7),
                     ),
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: const BoxConstraints(
+                      minWidth: kMinInteractiveDimension,
+                      minHeight: kMinInteractiveDimension,
+                    ),
                   ),
                 ],
               ),
-              SizedBox(height: context.getRSize(16)),
+              SizedBox(height: context.getRSize(context.isShortViewport ? 8 : 16)),
               Text(
                 "Who's working?",
                 style: TextStyle(
@@ -383,11 +393,14 @@ class _PickerListState extends ConsumerState<_PickerList> {
           padding: EdgeInsets.only(
             left: context.getRSize(16),
             right: context.getRSize(16),
-            bottom: context.getRSize(12),
-            top: context.getRSize(16),
+            bottom: context.getRSize(context.isShortViewport ? 8 : 12),
+            top: context.getRSize(context.isShortViewport ? 8 : 16),
           ),
           child: Center(
             child: TextButton.icon(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(kMinInteractiveDimension, kMinInteractiveDimension),
+              ),
               onPressed: () => Navigator.of(
                 context,
               ).push(MaterialPageRoute(builder: (_) => const WelcomeScreen())),

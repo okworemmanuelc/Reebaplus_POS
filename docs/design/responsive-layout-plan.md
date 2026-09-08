@@ -587,15 +587,31 @@ so kit-based screens already survive. Fix the ones that are not on the kit:
    `existing_account_screen`, `no_account_found_screen`, `staff_sign_up_screen`,
    `welcome_screen`, `access_granted_screen`.
 
-**Trap — ALREADY CLOSED in Phase 0, do not redo it.** After Phase 0's breakpoint
-change a landscape phone becomes `isPhone == true` and would therefore have
-*lost* the 480dp content cap at `branded_auth_background.dart:60` and
-`auth_background.dart:66` — auth content stretching to 915dp. This plan proposed
-`!context.isPhone || context.isShortViewport`; Phase 0 shipped something simpler
-and equivalent: an **unconditional** `const BoxConstraints(maxWidth: 480.0)` in
-both files, with the `responsive.dart` import dropped. It is equivalent because
-no real device is both `isPhone` and wider than 480dp in portrait. Leave it
-alone — do not reintroduce a conditional here.
+#### Phase 1 — audited status (2026-09-08)
+
+Branch `fix/responsive-auth-landscape` cut from `fix/responsive-short-viewport-seam`.
+`flutter analyze` clean (0 errors, 0 warnings).
+Comprehensive test suite `test/auth/auth_landscape_screens_test.dart` (40 tests) +
+`test/auth/biometric_setup_screen_test.dart` (3 tests) + full `test/auth/` (83 tests) green.
+
+| # | deliverable | status |
+|---|---|---|
+| 1 | `biometric_setup_screen.dart` — moved onto `AuthCenteredScroll` | **done** — verified failing before fix (`RenderFlex overflowed by 169 pixels`), passing across all viewports after |
+| 2 | `success_dashboard_entry_screen.dart` — moved onto `AuthCenteredScroll` | **done** — centers content, auto-forward timer stored in `Timer` and cancelled on `dispose()` |
+| 3 | `coming_soon_screen.dart` — moved onto `AuthCenteredScroll` | **done** — centers content, scrolls cleanly in short viewports |
+| 4 | `login_screen.dart` — two columns under `isShortViewport` | **done** — avatar, greeting, email/dots left; `PinKeypad` right; vertical stack preserved in portrait |
+| 5 | `create_pin_screen.dart` — two columns under `isShortViewport` | **done** — step label, title, subtitle, dots left; `PinKeypad` right; single-column in portrait |
+| 6 | `who_is_working_screen.dart` — grid sizing under `constraints.maxWidth` | **done** — `LayoutBuilder` prevents 5-column blowout inside 480dp cap; 48dp floor enforced |
+| 7 | `ceo_sign_up_screen.dart` — compact "Step X of Y" top bar | **done** — collapses back button and `_StepDots` into single row under `isShortViewport` with 48dp back button |
+| 8 | Verify-only screens harness verification | **done** — all 7 screens pumped at `pixel7Landscape`, `androidCompactLandscape`, `pixel7Portrait` without overflow |
+| + | `AppButton` 48dp floor | **done** — normal (54) and large (60) clamped to `max(kMinInteractiveDimension, ...)` preventing 37.8dp short-viewport compression |
+| + | `AccessGrantedScreen` timer leak fix | **done** — `_contentTimer` cancelled on `dispose()` |
+
+**Deviations and Notes:**
+- **`AppButton` Tap Target Floor & Small Sizing:** Under short viewports (`isShortViewport == true`, scale factor 0.70), `AppButton`'s height `context.getRSize(54)` previously shrank to 37.8dp. Normal and large heights now clamp at `max(kMinInteractiveDimension, ...)` preserving the 48dp floor. In addition, `xsmall` (32dp) and `small` (40dp) use raw constants instead of riding `context.getRSize` so they do not compress to 22.4dp / 28dp in landscape viewports.
+- **Landscape Typography Scaling:** New two-column landscape paths in `LoginScreen` and `CreatePinScreen` use `context.getRFontSize(...)` (11, 12, 13, 15, 18, 20) with tightened vertical padding so all portrait controls (including 'Enter your 6-digit PIN to continue') fit legibly beside the keypad on 360–412dp tall surfaces without vertical scrolling.
+- **Bottom insets on auth screens:** Auth screens remain the documented exception to the `deviceBottomPadding` rule: screens like `LoginScreen` use `resizeToAvoidBottomInset: false` and `auth_form_kit.dart` uses `MediaQuery.of(context).viewInsets.bottom` to manage keyboard insets safely.
+- **Nothing broken:** Every screen in §2 has been audited and verified via widget tests across `pixel7Landscape`, `androidCompactLandscape`, and `pixel7Portrait` without `RenderFlex` overflow or tap target compression.
 
 ### Phase 2 — POS `fix/responsive-pos-landscape`
 

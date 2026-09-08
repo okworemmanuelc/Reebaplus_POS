@@ -806,10 +806,205 @@ class _PinPad extends StatelessWidget {
     }
   }
 
+  Widget _buildLandscapeLayout(
+    BuildContext context,
+    Color textColor,
+    Color subtextColor,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // ── Left Column: Avatar, greeting, email/dots, actions ──────────
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (showSwitchAccount && onSwitchAccount != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: onSwitchAccount,
+                      icon: Icon(
+                        Icons.arrow_back_rounded,
+                        size: 16,
+                        color: textColor.withValues(alpha: 0.75),
+                      ),
+                      label: Text(
+                        'Switch account',
+                        style: TextStyle(
+                          color: textColor.withValues(alpha: 0.75),
+                          fontSize: context.getRFontSize(12),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        minimumSize: const Size(48, kMinInteractiveDimension),
+                      ),
+                    ),
+                  ),
+                if (identifiedUser != null) ...[
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: _hexColor(
+                      context,
+                      identifiedUser!.avatarColor,
+                    ).withValues(alpha: 0.2),
+                    child: Text(
+                      identifiedUser!.name.isNotEmpty
+                          ? identifiedUser!.name[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(18),
+                        fontWeight: FontWeight.bold,
+                        color: _hexColor(context, identifiedUser!.avatarColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Welcome back, ${identifiedUser!.name.split(' ').first}',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(15),
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ] else ...[
+                  Image.asset(
+                    'assets/images/reebaplus_logo.png',
+                    height: 36,
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                if (identifiedUser == null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: TextFormField(
+                      controller: emailController,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: context.getRFontSize(13),
+                      ),
+                      decoration: AppDecorations.authInputDecoration(
+                        context,
+                        label: 'Email Address',
+                        prefixIcon: Icons.email_outlined,
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                    ),
+                  )
+                else if (emailController.text.isNotEmpty)
+                  Text(
+                    emailController.text,
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: subtextColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  'Enter your 6-digit PIN to continue',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    color: subtextColor,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                ValueListenableBuilder<String>(
+                  valueListenable: pinNotifier,
+                  builder: (context, currentPin, _) =>
+                      PinDots(filled: currentPin.length),
+                ),
+                SizedBox(
+                  height: 18,
+                  child: warningText != null
+                      ? Center(
+                          child: Text(
+                            warningText!,
+                            style: TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: context.getRFontSize(11),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+                if (onForgotPin != null && identifiedUser != null)
+                  TextButton(
+                    onPressed: onForgotPin,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, kMinInteractiveDimension),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: Text(
+                      'Forgot PIN?',
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.6),
+                        fontSize: context.getRFontSize(12),
+                      ),
+                    ),
+                  ),
+                if (onSwitchToEmail != null)
+                  TextButton(
+                    onPressed: onSwitchToEmail,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, kMinInteractiveDimension),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: Text(
+                      identifiedUser != null
+                          ? 'Not you? Switch account'
+                          : 'Login with different account',
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.65),
+                        fontSize: context.getRFontSize(12),
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // ── Right Column: Keypad ─────────────────────────────────────
+          PinKeypad(
+            onDigit: onDigit,
+            onBackspace: onBackspace,
+            leadingKey: biometricsAvailable && onBiometrics != null
+                ? PinKey(
+                    icon: Icons.fingerprint_rounded,
+                    onTap: onBiometrics!,
+                  )
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textColor = authTextPrimary(context);
     final subtextColor = authTextPrimary(context).withValues(alpha: 0.65);
+
+    if (context.isShortViewport) {
+      return Center(
+        child: _buildLandscapeLayout(context, textColor, subtextColor),
+      );
+    }
+
     return Stack(
       children: [
         // ── Back to "Who's working?" picker (only when another staff exists) ─
