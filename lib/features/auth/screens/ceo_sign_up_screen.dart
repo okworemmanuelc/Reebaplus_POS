@@ -92,12 +92,11 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
   String? _businessType;
   bool _tracksEmptyCrates = true;
-  String _countryValue = kDefaultCountry;
+  String _countryValue = '';
 
-  /// The dial code currently sitting in front of [_storePhoneCtrl]. Tracked so
-  /// a country change can swap the prefix instead of wiping the number the
-  /// user already typed — see [_applyDialCode].
-  String _dialCode = kCountryDialCodes[kDefaultCountry] ?? '';
+  /// The dial code for the resolved [_countryValue]. Renders as a read-only
+  /// affix beside [_storePhoneCtrl].
+  String _dialCode = '';
 
   // Per-step inline validation messages.
   String? _businessNameError;
@@ -180,25 +179,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     }
   }
 
-  /// Swaps the dial-code prefix on the phone box when the country changes.
+  /// Swaps the dial-code prefix when the country changes.
   ///
-  /// The country field is a free-text autocomplete, so its `onChanged` fires on
-  /// every keystroke — not only when a suggestion is picked. Overwriting the
-  /// phone box outright (the previous behaviour) erased a number the user had
-  /// already entered, and blanked it completely while the country was still a
-  /// partial string with no dial code, producing a "phone is required" error on
-  /// a field that looked filled in. Keep the local digits, replace only the
-  /// prefix, and leave the box untouched until the typed country actually
-  /// resolves to a dial code.
+  /// The phone box holds only local digits, so swapping country updates the
+  /// [_dialCode] affix without touching or wiping the typed digits.
   void _applyDialCode(String country) {
     final next = kCountryDialCodes[country.trim()] ?? '';
-    if (next.isEmpty || next == _dialCode) return;
-    final text = _storePhoneCtrl.text.trim();
-    final local = text.startsWith(_dialCode)
-        ? text.substring(_dialCode.length)
-        : text;
+    if (next == _dialCode) return;
     _dialCode = next;
-    _storePhoneCtrl.text = '$next$local';
   }
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
@@ -250,8 +238,6 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       _emailCtrl.text = verified;
       draftNotifier.update((d) => d.email = verified);
     }
-    // Pre-populate the phone prefix for Nigeria
-    _storePhoneCtrl.text = kCountryDialCodes[kDefaultCountry] ?? '';
     if (mounted) setState(() => _booting = false);
   }
 
@@ -336,13 +322,23 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     final storeName = _storeNameCtrl.text.trim();
     final phone = _storePhoneCtrl.text.trim();
     final address = _storeAddressCtrl.text.trim();
+    final country = _countryValue.trim();
+
     if (storeName.length < 2) {
       setState(
         () => _storeError = 'Enter a store name (at least 2 characters).',
       );
       return;
     }
-    final dialCode = kCountryDialCodes[_countryValue.trim()] ?? '';
+    if (address.isEmpty) {
+      setState(() => _storeError = 'Enter the store address.');
+      return;
+    }
+    if (country.isEmpty || !kCountryDialCodes.containsKey(country)) {
+      setState(() => _storeError = 'Choose a valid country from the list.');
+      return;
+    }
+    final dialCode = _dialCode;
     final formattedPhone = formatPhoneNumber(phone, dialCode);
     final phoneDigits = formattedPhone.replaceAll(RegExp(r'\D'), '');
     if (phoneDigits.length < 8) {
@@ -351,21 +347,12 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       );
       return;
     }
-    if (address.isEmpty) {
-      setState(() => _storeError = 'Enter the store address.');
-      return;
-    }
-    if (_countryValue.trim().isEmpty) {
-      setState(() => _storeError = 'Enter the country.');
-      return;
-    }
-    _storePhoneCtrl.text = formattedPhone;
     ref.read(onboardingDraftProvider.notifier).update((d) {
       d.locationName = storeName;
       d.businessPhone = formattedPhone;
       d.streetAddress = address;
-      d.country = _countryValue.trim();
-      d.currency = currencyForCountry(_countryValue.trim());
+      d.country = country;
+      d.currency = kCountryCurrency[country] ?? kDefaultCurrency;
     });
     setState(() => _storeError = null);
     _goTo(3);
@@ -944,7 +931,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   /// `complete_onboarding` RPC discarded the LGA on the first sync. `country`
   /// still drives the currency default.
   Widget _buildStoreDetailsStep() {
-    final currency = currencyForCountry(_countryValue.trim());
+    final currency = kCountryCurrency[_countryValue.trim()];
     return AuthFormShell(
       title: 'Your first store',
       subtitle: 'You can add more stores later.',
@@ -965,22 +952,6 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                     color: authTextPrimary(context).withValues(alpha: 0.35),
                   ),
                 ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        AuthInputCard(
-          child: TextField(
-            controller: _storePhoneCtrl,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-            ],
-            style: TextStyle(color: authTextPrimary(context)),
-            decoration: AppDecorations.authInputDecoration(
-              context,
-              label: 'Store phone number',
-              prefixIcon: Icons.phone_outlined,
-            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1010,6 +981,35 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ),
         ),
         const SizedBox(height: 12),
+        // Disabling the phone until a country resolves is also what stops a
+        // half-typed country falling through to the default currency.
+        // Anyone who later decides the disabled field is annoying and greys
+        // it out instead will reopen a currency bug without realising the
+        // two were connected.
+        AuthInputCard(
+          child: TextField(
+            controller: _storePhoneCtrl,
+            enabled: _dialCode.isNotEmpty,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+            ],
+            style: TextStyle(
+              color: _dialCode.isNotEmpty
+                  ? authTextPrimary(context)
+                  : authTextMuted(context, 0.4),
+            ),
+            decoration: AppDecorations.authInputDecoration(
+              context,
+              label: 'Store phone number',
+              prefixIcon: Icons.phone_outlined,
+              enabled: _dialCode.isNotEmpty,
+              prefixText: _dialCode.isNotEmpty ? '$_dialCode ' : null,
+              helperText: _dialCode.isEmpty ? 'Choose your country first' : null,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         Row(
           children: [
             Icon(
@@ -1019,7 +1019,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             ),
             const SizedBox(width: 8),
             Text(
-              'Currency: $currency',
+              'Currency: ${currency ?? '—'}',
               style: TextStyle(
                 color: authTextPrimary(context).withValues(alpha: 0.75),
                 fontSize: 14,

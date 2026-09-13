@@ -96,6 +96,10 @@ class AppDecorations {
     BuildContext context, {
     required String label,
     required IconData prefixIcon,
+    String? prefixText,
+    TextStyle? prefixStyle,
+    String? helperText,
+    bool enabled = true,
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -103,11 +107,37 @@ class AppDecorations {
 
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: baseColor.withValues(alpha: 0.7)),
-      prefixIcon: Icon(prefixIcon, color: baseColor.withValues(alpha: 0.7)),
+      labelStyle: TextStyle(
+        color: enabled
+            ? baseColor.withValues(alpha: 0.7)
+            : baseColor.withValues(alpha: 0.35),
+      ),
+      prefixIcon: Icon(
+        prefixIcon,
+        color: enabled
+            ? baseColor.withValues(alpha: 0.7)
+            : baseColor.withValues(alpha: 0.35),
+      ),
+      prefixText: prefixText,
+      prefixStyle: prefixStyle ??
+          TextStyle(
+            color: enabled
+                ? authTextPrimary(context)
+                : authTextMuted(context, 0.4),
+            fontWeight: FontWeight.w600,
+          ),
+      helperText: helperText,
+      helperStyle: TextStyle(
+        color: authTextMuted(context, 0.65),
+        fontSize: 12,
+      ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(color: baseColor.withValues(alpha: 0.3)),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: baseColor.withValues(alpha: 0.15)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
