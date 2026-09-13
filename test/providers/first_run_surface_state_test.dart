@@ -229,6 +229,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
+      await container.read(hasLocalProductsProvider.future);
       await container.read(allStoresProvider.future);
       expect(container.read(zeroStoresEmptySurfaceProvider), isTrue);
     });
@@ -244,6 +245,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
+      await container.read(hasLocalProductsProvider.future);
       await container.read(allStoresProvider.future);
       expect(container.read(zeroStoresEmptySurfaceProvider), isFalse);
     });
@@ -259,6 +261,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
+      await container.read(hasLocalProductsProvider.future);
       await container.read(allStoresProvider.future);
       expect(container.read(zeroStoresEmptySurfaceProvider), isFalse);
     });
