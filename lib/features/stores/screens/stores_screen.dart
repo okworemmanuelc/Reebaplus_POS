@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -568,10 +569,13 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
         ],
       ),
       floatingActionButton: canManage
-          ? AppFAB(
-              onPressed: () => _showAddSheet(context),
-              icon: Icons.add_rounded,
-              label: 'Add Store',
+          ? SpotlightTarget(
+              id: SpotlightTargetId.createStoreFab,
+              child: AppFAB(
+                onPressed: () => _showAddSheet(context),
+                icon: Icons.add_rounded,
+                label: 'Add Store',
+              ),
             )
           : null,
       body: !canSeeStores

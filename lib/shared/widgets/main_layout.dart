@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
 import 'package:reebaplus_pos/shared/widgets/sync_pull_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/push_permission_sheet.dart';
+import 'package:reebaplus_pos/features/dashboard/controllers/first_run_tour_controller.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 // The LazyIndexedStack has been replaced with the direct Offstage + Set approach
@@ -340,9 +341,12 @@ class _MainLayoutState extends ConsumerState<MainLayout>
             );
           }
 
-          return Scaffold(
-            key: nav.mainScaffoldKey,
-            body: bodyWidget,
+          return Stack(
+            children: [
+              Scaffold(
+                key: nav.mainScaffoldKey,
+                onDrawerChanged: (opened) => nav.drawerOpenNotifier.value = opened,
+                body: bodyWidget,
             bottomNavigationBar: context.isDesktop
                 ? null
                 : Builder(
@@ -483,10 +487,13 @@ class _MainLayoutState extends ConsumerState<MainLayout>
               );
             },
           ),
-          );
-        },
       ),
-    );
+      const FirstRunRailTourView(),
+    ],
+  );
+},
+),
+);
   }
 }
 

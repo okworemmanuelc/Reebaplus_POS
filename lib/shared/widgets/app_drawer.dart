@@ -22,6 +22,7 @@ import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
+import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 
 class AppDrawer extends ConsumerWidget {
@@ -331,11 +332,13 @@ class AppDrawer extends ConsumerWidget {
     final slug = ref.watch(currentUserRoleProvider)?.slug;
     final isBelowCeo = slug != null && slug != 'ceo';
 
-    return ListView(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(12),
-        vertical: context.getRSize(16),
-      ),
+    return SpotlightTarget(
+      id: SpotlightTargetId.drawerMenuList,
+      child: ListView(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(12),
+          vertical: context.getRSize(16),
+        ),
       children: [
         // §12.1 store picker — the one app-wide active-store control. Sits above
         // Home; only shows when the user can choose more than one store.
@@ -426,12 +429,15 @@ class AppDrawer extends ConsumerWidget {
         // The store list itself is read-only browsing for non-CEOs; full
         // per-store actions are gated inside the store details screen.
         if (Gates.viewStores.allows(ref))
-          _navItem(
-            context,
-            FontAwesomeIcons.store.data,
-            'Stores',
-            active: activeRoute == 'store',
-            onTap: () => _navigateTo(context, ref, 'store'),
+          SpotlightTarget(
+            id: SpotlightTargetId.drawerStoresItem,
+            child: _navItem(
+              context,
+              FontAwesomeIcons.store.data,
+              'Stores',
+              active: activeRoute == 'store',
+              onTap: () => _navigateTo(context, ref, 'store'),
+            ),
           ),
         // Van Sales (#141) — CEO + Manager (`van.manage`). Hidden entirely for
         // everyone else (hard rule #7 — hide, don't grey out), which includes
@@ -592,8 +598,9 @@ class AppDrawer extends ConsumerWidget {
         // Extra space for system navigation bar
         SizedBox(height: context.deviceBottomPadding + context.getRSize(20)),
       ],
-    );
-  }
+    ),
+  );
+}
 
   // ── Navigation logic — now uses NavigationService shell ────────────────────
   void _navigateTo(BuildContext context, WidgetRef ref, String route) {

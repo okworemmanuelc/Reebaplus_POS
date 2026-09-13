@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 
 class MenuButton extends StatelessWidget {
   const MenuButton({super.key});
@@ -10,10 +11,12 @@ class MenuButton extends StatelessWidget {
     final text = t.colorScheme.onSurface;
     final primary = t.colorScheme.primary;
 
-    return Builder(
-      builder: (ctx) => InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => Scaffold.of(ctx).openDrawer(),
+    return SpotlightTarget(
+      id: SpotlightTargetId.menuButton,
+      child: Builder(
+        builder: (ctx) => InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => Scaffold.of(ctx).openDrawer(),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -48,6 +51,7 @@ class MenuButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

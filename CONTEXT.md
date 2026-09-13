@@ -521,3 +521,27 @@ prevents drift (there is none — only shared fixtures).
 The signed-in web user attributed to a sale. On web the Supabase session is the
 operator directly — there is no PIN and no "Who's working?" picker (ADR 0011).
 _Avoid_: equating it with the mobile "active user" chosen via PIN.
+
+### Onboarding & Tour
+
+**Rail**:
+The guided multi-stop first-run onboarding path (PRD #229, ADR 0026) that walks
+a newly registered business owner from initial landing through core setup milestones.
+Derives its active stop exclusively from database state. Ends permanently once all
+stops are satisfied.
+_Avoid_: walkthrough, wizard (for the in-app post-login guidance), onboarding flow
+(ambiguous with sign-up).
+
+**Stop**:
+An individual milestone step along a **Rail** (Stop 1: create a Store, blocking;
+Stop 2: add a Product, non-blocking). A stop ends the exact moment its underlying data
+commits to the local database, never by reaching the end of an imperative script.
+_Avoid_: step (alone — ambiguous with form steps), tour (for a single milestone).
+
+**Spotlight Overlay**:
+The general presentation widget (`SpotlightOverlay`) that cuts a hole in a dark sheet
+over a designated UI target with an instructional caption. Reusable across tours,
+supporting both `blocking` and `non-blocking` modes. In blocking mode, taps outside
+the hole are swallowed while vertical drags pass through to underlying scrollables.
+_Avoid_: tooltip, coach mark, walkthrough modal.
+

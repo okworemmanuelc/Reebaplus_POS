@@ -76,14 +76,19 @@ class NavigationService {
   // Used by MainLayout to access and potentially close the drawer
   final GlobalKey<ScaffoldState> mainScaffoldKey = GlobalKey<ScaffoldState>();
 
-  bool get isDrawerOpen => mainScaffoldKey.currentState?.isDrawerOpen ?? false;
+  final ValueNotifier<bool> drawerOpenNotifier = ValueNotifier<bool>(false);
+
+  bool get isDrawerOpen =>
+      drawerOpenNotifier.value || (mainScaffoldKey.currentState?.isDrawerOpen ?? false);
 
   void openDrawer() {
     mainScaffoldKey.currentState?.openDrawer();
+    drawerOpenNotifier.value = true;
   }
 
   void closeDrawer() {
     mainScaffoldKey.currentState?.closeDrawer();
+    drawerOpenNotifier.value = false;
   }
 
   final ValueNotifier<bool> storeLocked = ValueNotifier<bool>(false);
@@ -283,6 +288,7 @@ class NavigationService {
       _tabCanPop[i] = false;
     }
     currentTabCanPop.value = false;
+    drawerOpenNotifier.value = false;
   }
 
   /// Manually update the active store (§12.1). [explicit] marks a deliberate

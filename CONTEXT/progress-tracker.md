@@ -8,7 +8,32 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-154 sessions logged. Codebase is live and being verified on-device.
+155 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #233 — A new owner is walked to a saved Store by the blocking rail (2026-09-13)
+Branch `feat/walk-to-first-store-233`, cut from `origin/main`. Slice 4 of PRD #229.
+
+**ADR & Domain Foundation:**
+- Created `docs/adr/0026-first-run-rail-and-spotlight-overlay.md` capturing the two-stop onboarding rail, the blocking-in-sequence rule, gesture arena mechanics, failure resilience, and pure live-data completion.
+- Updated `CONTEXT.md` with domain glossary definitions for `Rail`, `Stop`, and `Spotlight Overlay`.
+
+**Spotlight Target Registry & Overlay:**
+- Built `lib/shared/widgets/spotlight_target.dart` with `SpotlightTargetId` enum, `SpotlightTarget` widget, and `SpotlightTargetRegistry` (screen coordinate resolution, `isVisibleOnScreen`, and `registryRevision` reactive notifier).
+- Built `lib/shared/widgets/spotlight_overlay.dart` with custom `RenderSpotlightOverlay` cutting a rounded rectangular hole in a darkened sheet (~72% opacity) and `BlockingTapSwallowingRecognizer` which swallows taps outside the hole while vertical/horizontal drags pass through to underlying scrollable views. Supports `blocking` and `non-blocking` modes, and graceful fallback via `onMissingTarget`.
+
+**State Derivation & Sequence Controller:**
+- Built `lib/core/providers/first_run_tour_state.dart` with pure derivation function `computeTourStop` (precedence: remote off-switch -> none, non-owner -> none, abort count >= 3 -> none, session abort -> none, products & stores present -> none, zero stores -> createStore, zero products -> addProduct).
+- Wired `tourSessionAbortedProvider`, `tourDeviceAbortCountProvider` (persisted in SharedPreferences), `tourRemoteOffSwitchProvider`, and `firstRunTourStopProvider` gating on `firstLoadSkeletonActiveProvider` (Invariant #11).
+- Built `lib/features/dashboard/controllers/first_run_tour_controller.dart` with `computeStopOneStep`, captions, target IDs, `abortFirstRunTour`, and `FirstRunRailTourView` reactively tracking navigation and drawer state.
+- Mounted `FirstRunRailTourView` in `MainLayout` (`lib/shared/widgets/main_layout.dart`) within the root `Stack` above the `Scaffold`.
+- Tagged targets: `MenuButton` (`SpotlightTargetId.menuButton`), `AppDrawer` (`SpotlightTargetId.drawerMenuList` and `SpotlightTargetId.drawerStoresItem`), and `StoresScreen` (`SpotlightTargetId.createStoreFab`).
+- Extended `NavigationService` with `drawerOpenNotifier` and wired `Scaffold.onDrawerChanged`.
+
+**Tests:**
+- `test/providers/first_run_tour_state_test.dart`: 16 unit tests for pure derivation and live provider wiring.
+- `test/widgets/spotlight_overlay_test.dart`: 8 widget tests verifying cutout hole, blocking tap swallowing, drag pass-through, non-blocking pass-through, missing target fallback, and registry lookup.
+- `test/tour/first_run_tour_sequence_test.dart`: 10 widget/unit tests verifying step progression, captions, abort handling, and atomic tour completion when a store commits to Drift.
+- Static analysis and regression verification clean: `flutter analyze` clean with 0 issues; `test/auth/auth_landscape_screens_test.dart` passes (40 tests).
 
 ### Issue #232 — Sign-up completes without creating a Store (2026-09-13)
 Branch `feat/signup-without-store-232`, cut from `feat/country-before-phone-230` (#230's
