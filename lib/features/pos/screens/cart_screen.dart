@@ -133,6 +133,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _clearWithAnimation() async {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final cart = ref.read(cartProvider);
     if (cart.value.isEmpty) return;
     setState(() {
@@ -160,6 +161,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   /// being pushed onto a checkout screen quoting numbers they never saw. This
   /// mirrors how the price-staleness prompt returns to the cart.
   Future<void> _goToCheckout() async {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final bool moved;
     try {
       moved = await _crateSync.sync();
@@ -207,6 +209,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _saveCurrentCart() async {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final cart = ref.read(cartProvider);
     if (cart.value.isEmpty) {
       AppNotification.showError(context, 'Cannot save an empty cart');
@@ -276,6 +279,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   void _viewSavedCarts() {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final db = ref.read(databaseProvider);
     final custSvc = ref.read(customerServiceProvider);
     final cartSvc = ref.read(cartProvider);
@@ -437,6 +441,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       Theme.of(context).extension<AppSemanticColors>()?.success ?? success;
 
   void _showChangeCustomerModal() {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     // Default picker store — lone owner picks from POS lock.
     final String? defaultPickerStoreId = ref
         .read(navigationProvider)
@@ -763,6 +768,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _editItem(BuildContext ctx, Map<String, dynamic> item) async {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final removed = await EditItemModal.show(ctx, item);
     if (removed != null && mounted) {
       // Offer a 5s Undo for the removed line (§13.2).
@@ -1012,6 +1018,29 @@ class _CartScreenState extends ConsumerState<CartScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(zeroStoresEmptySurfaceProvider)) {
+      return SharedScaffold(
+        activeRoute: 'cart',
+        backgroundColor: _bg,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          elevation: 0,
+          leading: context.isDesktop ? null : const MenuButton(),
+          title: AppBarHeader(
+            icon: FontAwesomeIcons.cartShopping.data,
+            title: 'Cart',
+            subtitle: ref.watch(activeStoreLabelProvider),
+          ),
+          actions: const [
+            NotificationBell(),
+          ],
+        ),
+        body: const SafeArea(
+          child: FirstRunEmptyState(),
+        ),
+      );
+    }
+
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
@@ -1212,39 +1241,37 @@ class _CartScreenState extends ConsumerState<CartScreen>
             // ── Scrollable content: cart items + totals ──
             Expanded(
               child: cartItems.isEmpty
-                  ? (ref.watch(zeroStoresEmptySurfaceProvider)
-                      ? const FirstRunEmptyState()
-                      : Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.cartArrowDown.data,
-                                size: context.getRSize(48),
-                                color: _border,
-                              ),
-                              SizedBox(height: context.getRSize(16)),
-                              Text(
-                                'Cart is empty',
-                                style: TextStyle(
-                                  color: _subtext,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: context.getRFontSize(16),
-                                ),
-                              ),
-                              SizedBox(height: context.getRSize(20)),
-                              // Recall stays reachable with an empty cart so a
-                              // saved cart can be restored before adding items.
-                              AppButton(
-                                text: 'Recall',
-                                variant: AppButtonVariant.outline,
-                                icon: FontAwesomeIcons.clockRotateLeft.data,
-                                isFullWidth: false,
-                                onPressed: _viewSavedCarts,
-                              ),
-                            ],
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            FontAwesomeIcons.cartArrowDown.data,
+                            size: context.getRSize(48),
+                            color: _border,
                           ),
-                        ))
+                          SizedBox(height: context.getRSize(16)),
+                          Text(
+                            'Cart is empty',
+                            style: TextStyle(
+                              color: _subtext,
+                              fontWeight: FontWeight.bold,
+                              fontSize: context.getRFontSize(16),
+                            ),
+                          ),
+                          SizedBox(height: context.getRSize(20)),
+                          // Recall stays reachable with an empty cart so a
+                          // saved cart can be restored before adding items.
+                          AppButton(
+                            text: 'Recall',
+                            variant: AppButtonVariant.outline,
+                            icon: FontAwesomeIcons.clockRotateLeft.data,
+                            isFullWidth: false,
+                            onPressed: _viewSavedCarts,
+                          ),
+                        ],
+                      ),
+                    )
                   : CustomScrollView(
                       slivers: [
                         if (_showCartHint)
