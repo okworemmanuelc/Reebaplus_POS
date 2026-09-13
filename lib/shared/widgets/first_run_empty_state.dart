@@ -6,24 +6,23 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
+import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
-/// The persona-aware first-run empty body shared by the POS and Inventory
-/// screens (Seam 2 — issue #34, ADR 0006). Both screens hand their genuinely
-/// empty catalogue to this widget, which reads [firstRunSurfaceStateProvider]
+/// The persona-aware first-run empty body shared by the POS, Inventory, and
+/// reachable screens (Seam 2 — issue #34, ADR 0006, issue #231). Empty screens
+/// hand their empty state to this widget, which reads [firstRunSurfaceStateProvider]
 /// and renders the one surface that fits the user:
 ///
+/// - `createStoreCta` → a primary "Create a store" button that navigates to the
+///   Stores tab (for owners when business has zero stores).
 /// - `addProductCta` → a primary "Add your first product" button that opens the
 ///   Fast-Add form (`AddProductScreen` in direct, non-receive mode — #30).
 /// - `neutralEmpty` → a no-button "a manager can add them" message, for users
-///   who lack `products.add`.
+///   who lack store/product creation permissions.
 /// - `skeleton` → nothing here (the tab shows its own first-load skeleton at a
 ///   higher level; this only guards against a CTA flash — invariant #11).
 /// - `hasContent` → nothing (the catalogue has products; the grid renders).
-///
-/// A caller only routes here when its visible product list is empty AND the
-/// emptiness is catalogue-wide (not a filter/search miss); a filter miss keeps
-/// its own "no products matching filters" copy.
 class FirstRunEmptyState extends ConsumerWidget {
   const FirstRunEmptyState({super.key});
 
@@ -39,8 +38,25 @@ class FirstRunEmptyState extends ConsumerWidget {
       case FirstRunSurfaceState.hasContent:
       case FirstRunSurfaceState.skeleton:
         // The grid / the tab-level skeleton owns these; render nothing so no
-        // "Add your first product" CTA ever flashes over a streaming catalogue.
+        // CTA ever flashes over a streaming catalogue.
         return const SizedBox.shrink();
+
+      case FirstRunSurfaceState.createStoreCta:
+        return _EmptyMessage(
+          icon: FontAwesomeIcons.store.data,
+          title: 'No stores yet',
+          subtitle: 'Create a store to start adding products and selling.',
+          subtext: subtext,
+          action: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: context.getRSize(280)),
+            child: AppButton(
+              text: 'Create a store',
+              icon: FontAwesomeIcons.plus.data,
+              onPressed: () =>
+                  NavigationService().setIndex(NavigationService.storesTab),
+            ),
+          ),
+        );
 
       case FirstRunSurfaceState.neutralEmpty:
         return _EmptyMessage(

@@ -18,7 +18,9 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/crates/cart_crate_lines.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
@@ -1210,37 +1212,39 @@ class _CartScreenState extends ConsumerState<CartScreen>
             // ── Scrollable content: cart items + totals ──
             Expanded(
               child: cartItems.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            FontAwesomeIcons.cartArrowDown.data,
-                            size: context.getRSize(48),
-                            color: _border,
+                  ? (ref.watch(zeroStoresEmptySurfaceProvider)
+                      ? const FirstRunEmptyState()
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                FontAwesomeIcons.cartArrowDown.data,
+                                size: context.getRSize(48),
+                                color: _border,
+                              ),
+                              SizedBox(height: context.getRSize(16)),
+                              Text(
+                                'Cart is empty',
+                                style: TextStyle(
+                                  color: _subtext,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: context.getRFontSize(16),
+                                ),
+                              ),
+                              SizedBox(height: context.getRSize(20)),
+                              // Recall stays reachable with an empty cart so a
+                              // saved cart can be restored before adding items.
+                              AppButton(
+                                text: 'Recall',
+                                variant: AppButtonVariant.outline,
+                                icon: FontAwesomeIcons.clockRotateLeft.data,
+                                isFullWidth: false,
+                                onPressed: _viewSavedCarts,
+                              ),
+                            ],
                           ),
-                          SizedBox(height: context.getRSize(16)),
-                          Text(
-                            'Cart is empty',
-                            style: TextStyle(
-                              color: _subtext,
-                              fontWeight: FontWeight.bold,
-                              fontSize: context.getRFontSize(16),
-                            ),
-                          ),
-                          SizedBox(height: context.getRSize(20)),
-                          // Recall stays reachable with an empty cart so a
-                          // saved cart can be restored before adding items.
-                          AppButton(
-                            text: 'Recall',
-                            variant: AppButtonVariant.outline,
-                            icon: FontAwesomeIcons.clockRotateLeft.data,
-                            isFullWidth: false,
-                            onPressed: _viewSavedCarts,
-                          ),
-                        ],
-                      ),
-                    )
+                        ))
                   : CustomScrollView(
                       slivers: [
                         if (_showCartHint)

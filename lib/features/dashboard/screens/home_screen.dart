@@ -16,10 +16,12 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/get_started_card.dart';
@@ -405,7 +407,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             SizedBox(width: context.getRSize(8)),
           ],
         ),
-        body: NotificationListener<ScrollUpdateNotification>(
+        body: ref.watch(zeroStoresEmptySurfaceProvider)
+            ? const FirstRunEmptyState()
+            : NotificationListener<ScrollUpdateNotification>(
           onNotification: (notif) {
             if (notif.metrics.pixels > 10 && !_isScrolled) {
               setState(() => _isScrolled = true);

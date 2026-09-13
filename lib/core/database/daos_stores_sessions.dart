@@ -25,31 +25,87 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  /// Create a location for the current business (#140). [kind] is the only
+  /// Create a location for the current business (#140, #231). [kind] is the only
   /// thing that separates a warehouse from a van: pass [kStoreKindVan] and the
   /// row drops out of every normal store surface while still holding real
   /// per-SKU inventory (van-sales spec §4.1).
   ///
-  /// Explicit `id` + `lastUpdatedAt` so the cloud echo can't mint a different
-  /// row (synced-write invariant), and routed through the sync queue because
-  /// `stores` is a synced tenant table. Returns the new id.
+  /// Atomic first-store write path (#231):
+  /// - Writes the store row.
+  /// - When an owner/user is provided or bound ([userId] ?? [currentUserId]):
+  ///   - Writes the user-to-store binding (`user_stores`).
+  ///   - Sets `users.store_id` if currently null or empty.
+  /// - Writes an activity log entry (`activity_logs`).
+  /// - Enqueues sync queue upserts for all written rows.
+  /// All executed inside a single transaction.
   Future<String> createStore({
     required String name,
     String? location,
     String kind = kStoreKindStore,
+    String? userId,
   }) async {
     assert(kStoreKinds.contains(kind), 'unknown store kind: $kind');
-    final row = StoresCompanion.insert(
-      id: Value(UuidV7.generate()),
-      businessId: requireBusinessId(),
-      name: name,
-      location: Value(location == null || location.isEmpty ? null : location),
-      kind: Value(kind),
-      lastUpdatedAt: Value(DateTime.now()),
-    );
-    await into(stores).insert(row);
-    await db.syncDao.enqueueUpsert('stores', row);
-    return row.id.value;
+    final storeId = UuidV7.generate();
+    final now = DateTime.now();
+    final businessId = requireBusinessId();
+    final targetUserId = userId ?? currentUserId;
+
+    await transaction(() async {
+      final storeRow = StoresCompanion.insert(
+        id: Value(storeId),
+        businessId: businessId,
+        name: name,
+        location: Value(location == null || location.isEmpty ? null : location),
+        kind: Value(kind),
+        lastUpdatedAt: Value(now),
+      );
+      await into(stores).insert(storeRow);
+      await db.syncDao.enqueueUpsert('stores', storeRow);
+
+      if (targetUserId != null) {
+        final userStoreRow = UserStoresCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: businessId,
+          userId: targetUserId,
+          storeId: storeId,
+          lastUpdatedAt: Value(now),
+        );
+        await into(db.userStores).insert(userStoreRow);
+        await db.syncDao.enqueueUpsert('user_stores', userStoreRow);
+
+        final user = await (select(users)
+              ..where((u) => u.id.equals(targetUserId)))
+            .getSingleOrNull();
+        if (user != null && (user.storeId == null || user.storeId!.isEmpty)) {
+          final userUpdate = UsersCompanion(
+            storeId: Value(storeId),
+            lastUpdatedAt: Value(now),
+          );
+          await (update(users)..where((u) => u.id.equals(targetUserId)))
+              .write(userUpdate);
+          final updatedUser = await (select(users)
+                ..where((u) => u.id.equals(targetUserId)))
+              .getSingle();
+          await db.syncDao.enqueueUpsert('users', updatedUser);
+        }
+      }
+
+      final activityRow = ActivityLogsCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: businessId,
+        userId: Value(targetUserId),
+        action: 'store.create',
+        description: 'Created store "$name"',
+        entityType: const Value('store'),
+        entityId: Value(storeId),
+        storeId: Value(storeId),
+        lastUpdatedAt: Value(now),
+      );
+      await into(db.activityLogs).insert(activityRow);
+      await db.syncDao.enqueueUpsert('activity_logs', activityRow);
+    });
+
+    return storeId;
   }
 
   Stream<StoreData?> watchStore(String id) {
