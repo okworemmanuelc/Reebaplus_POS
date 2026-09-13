@@ -63,6 +63,15 @@ pick up #231. Slice 3 of PRD #229.
 - `flutter analyze` clean; `flutter test` 2011 passed / 131 skipped;
   `test/auth/auth_landscape_screens_test.dart` 40 passed.
 
+**Review follow-up — phone formatting (both sign-up screens):** `formatPhoneNumber` /
+`_formatPhoneNumber` no longer look for the dial code at the front of the input; they
+strip only a leading trunk zero. Since #230 the dial code is a read-only affix beside a
+digits-only box, so the box holds a local number by construction — and local numbers that
+legitimately begin with their own dial digits were being truncated (a French `03 34 56 78 90`
+typed without its trunk zero became `+334567890`, losing two digits; Indian `910…` mobiles
+and Egyptian `20…` lines collided the same way). Four regression tests added to
+`test/auth/sign_up_country_phone_test.dart`, verified to fail against the old formatter.
+
 **Consequence to note:** until #233/#234 land, a new owner signs up, lands with zero
 Stores and meets #231's empty-state path rather than the guided rail. Safe, just less
 good — a release call, not a blocker.

@@ -156,30 +156,24 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     super.dispose();
   }
 
+  /// Joins the local digits in the phone box to [dialCode], stripping only a
+  /// leading trunk zero.
+  ///
+  /// It does **not** look for [dialCode] at the front of the input. Since
+  /// #230 the dial code lives beside the box as a read-only affix and the box
+  /// itself is digits-only, so whatever is in it is a local number by
+  /// construction — and plenty of valid local numbers begin with their own
+  /// country's dial digits. A Grand-Est French line (`03 34 56 78 90`) typed
+  /// without its trunk zero is `334567890`; reading the leading `33` as
+  /// France's `+33` silently ate two digits and produced `+334567890`.
+  /// Indian `910…` mobiles and Egyptian `20…` lines collided the same way.
   String formatPhoneNumber(String rawNumber, String dialCode) {
-    var cleaned = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
-    if (cleaned.isEmpty) return '';
-    if (cleaned.startsWith('00')) {
-      cleaned = '+${cleaned.substring(2)}';
+    var local = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
+    if (local.isEmpty) return '';
+    if (local.startsWith('0')) {
+      local = local.substring(1);
     }
-    final hasPlus = cleaned.startsWith('+');
-    final digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
-
-    final dialDigits = dialCode.replaceAll('+', '');
-
-    if (digitsOnly.startsWith(dialDigits)) {
-      var local = digitsOnly.substring(dialDigits.length);
-      if (local.startsWith('0')) {
-        local = local.substring(1);
-      }
-      return '$dialCode$local';
-    } else {
-      var local = digitsOnly;
-      if (local.startsWith('0')) {
-        local = local.substring(1);
-      }
-      return '$dialCode$local';
-    }
+    return '$dialCode$local';
   }
 
   /// Swaps the dial-code prefix when the country changes.

@@ -218,6 +218,151 @@ void main() {
     });
   });
 
+  group('Phone formatting keeps local numbers that start with the dial code', () {
+    late AppDatabase db;
+
+    setUp(() {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    /// The phone box is digits-only with the dial code beside it as a
+    /// read-only affix, so its contents are a LOCAL number by construction.
+    /// Treating a leading `33` / `91` as an international prefix truncated
+    /// real numbers.
+    Future<String?> ceoDraftPhone(
+      WidgetTester tester,
+      AppDatabase db, {
+      required String country,
+      required String localDigits,
+    }) async {
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      container.read(onboardingDraftProvider.notifier).start();
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: CeoSignUpScreen(
+              verifiedEmail: 'ceo@test.com',
+              initialStep: 2,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(AutocompleteField, 'Country'),
+          matching: find.byType(TextField),
+        ),
+        country,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Business phone number'),
+        localDigits,
+      );
+      await tester.pump();
+
+      await tester.ensureVisible(find.text('Continue'));
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      return container.read(onboardingDraftProvider)!.businessPhone;
+    }
+
+    testWidgets('CEO: a French 03 3x line typed without its trunk zero', (
+      tester,
+    ) async {
+      // 03 34 56 78 90 → local digits 334567890. The old dial-code detection
+      // ate the leading "33" and produced +334567890, losing two digits.
+      expect(
+        await ceoDraftPhone(
+          tester,
+          db,
+          country: 'France',
+          localDigits: '334567890',
+        ),
+        '+33334567890',
+      );
+    });
+
+    testWidgets('CEO: an Indian 910… mobile keeps every digit', (tester) async {
+      expect(
+        await ceoDraftPhone(
+          tester,
+          db,
+          country: 'India',
+          localDigits: '9101234567',
+        ),
+        '+919101234567',
+      );
+    });
+
+    testWidgets('CEO: the trunk zero is still the only thing stripped', (
+      tester,
+    ) async {
+      expect(
+        await ceoDraftPhone(
+          tester,
+          db,
+          country: 'Nigeria',
+          localDigits: '08135216317',
+        ),
+        '+2348135216317',
+      );
+    });
+
+    testWidgets('Staff: digits matching the dial code are not eaten', (
+      tester,
+    ) async {
+      // The staff draft is screen-private, so the observable signal is
+      // whether the step advances past the 8-digit floor. Digits are chosen
+      // so that only the fixed formatter clears it: `2345678` under Nigeria
+      // becomes +2342345678 (10 digits, advances), where the old dial-code
+      // detection stripped the leading `234` to give +2345678 (7 digits,
+      // blocked). So this test fails on the unfixed code rather than merely
+      // passing on both.
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(home: StaffSignUpScreen(initialStep: 4)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(AutocompleteField, 'Country'),
+          matching: find.byType(TextField),
+        ),
+        'Nigeria',
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Phone number'),
+        '2345678',
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your address'), findsOneWidget);
+      expect(
+        find.text('Enter a valid phone number (at least 8 digits).'),
+        findsNothing,
+      );
+    });
+  });
+
   group('CeoSignUpScreen - sign-up asks for no Store (#232)', () {
     late AppDatabase db;
 

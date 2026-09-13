@@ -167,23 +167,15 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
   // ── Phone formatting ─────────────────────────────────────────────────────
 
-  /// Mirrors [_CeoSignUpScreenState.formatPhoneNumber] exactly.
+  /// Mirrors `_CeoSignUpScreenState.formatPhoneNumber` exactly: joins the
+  /// local digits to [dialCode], stripping only a leading trunk zero. It does
+  /// not look for [dialCode] at the front of the input — see the CEO screen
+  /// for why that detection was removed.
   String _formatPhoneNumber(String rawNumber, String dialCode) {
-    var cleaned = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
-    if (cleaned.isEmpty) return '';
-    if (cleaned.startsWith('00')) cleaned = '+${cleaned.substring(2)}';
-    final hasPlus = cleaned.startsWith('+');
-    final digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
-    final dialDigits = dialCode.replaceAll('+', '');
-    if (digitsOnly.startsWith(dialDigits)) {
-      var local = digitsOnly.substring(dialDigits.length);
-      if (local.startsWith('0')) local = local.substring(1);
-      return '$dialCode$local';
-    } else {
-      var local = digitsOnly;
-      if (local.startsWith('0')) local = local.substring(1);
-      return '$dialCode$local';
-    }
+    var local = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
+    if (local.isEmpty) return '';
+    if (local.startsWith('0')) local = local.substring(1);
+    return '$dialCode$local';
   }
 
   /// Swaps the dial-code prefix when the country changes.
