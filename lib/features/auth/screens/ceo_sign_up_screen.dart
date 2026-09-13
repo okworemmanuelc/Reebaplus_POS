@@ -39,8 +39,13 @@ class CeoSignUpScreen extends ConsumerStatefulWidget {
   /// PIN → ready (7 steps). When null (the Welcome path) the full 9-step flow
   /// runs and collects + verifies the email itself.
   final String? verifiedEmail;
+  final int? initialStep;
 
-  const CeoSignUpScreen({super.key, this.verifiedEmail});
+  const CeoSignUpScreen({
+    super.key,
+    this.verifiedEmail,
+    @visibleForTesting this.initialStep,
+  });
 
   @override
   ConsumerState<CeoSignUpScreen> createState() => _CeoSignUpScreenState();
@@ -64,8 +69,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     '333333',
   };
 
-  int _step = 0;
-  bool _booting = true;
+  late int _step = widget.initialStep ?? 0;
+  late bool _booting = widget.initialStep == null;
 
   /// True when the email was verified upstream — the email (4) and OTP (5)
   /// steps are skipped.
@@ -136,7 +141,9 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   void initState() {
     super.initState();
     _otpCtrl.addListener(_onOtpChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    if (widget.initialStep == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    }
   }
 
   @override
@@ -1027,11 +1034,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              '(editable later in Business Info)',
-              style: TextStyle(
-                color: authTextPrimary(context).withValues(alpha: 0.45),
-                fontSize: 12,
+            Flexible(
+              child: Text(
+                '(editable later in Business Info)',
+                style: TextStyle(
+                  color: authTextPrimary(context).withValues(alpha: 0.45),
+                  fontSize: 12,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

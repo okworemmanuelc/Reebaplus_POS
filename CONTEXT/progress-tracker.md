@@ -8,7 +8,15 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-153 sessions logged. Codebase is live and being verified on-device.
+154 sessions logged. Codebase is live and being verified on-device.
+
+### Country before phone with no defaults on sign-up (#230, Slice 1 of #229) (2026-09-13)
+Branch `feat/country-before-phone-230`. Resolves Issue #230 (parent PRD #229 / Slice 1).
+- **CEO Sign-up (`CeoSignUpScreen`)**: Country renders above phone field on Step 2 ("Your first store"). Starts blank with no pre-selected default. Phone field disabled with helper text "Choose your country first" until a valid country is selected. Dial code renders as read-only prefix affix beside phone input (`prefixText: '$_dialCode '`). Digits-only formatter drops `+` allowance. Full international format stored on submit. Preserves typed digits when switching country. Currency indicator renders placeholder `—` until country resolves. Added `Flexible` with ellipsis on secondary currency text to guarantee 0 overflow across viewports. Added `@visibleForTesting initialStep` hook.
+- **Staff Sign-up (`StaffSignUpScreen`)**: Country renders above phone on Step 4. Phone input is disabled until country resolves. Dial code renders as read-only affix. Duplicate country picker removed from Step 5 address step. Full international phone number formatted and saved with country into draft on submit.
+- **Theme Decorations (`lib/core/theme/app_decorations.dart`)**: Enhanced `authInputDecoration` with `prefixText`, `prefixStyle`, `helperText`, `enabled`, and `disabledBorder`.
+- **Tests (`test/auth/sign_up_country_phone_test.dart`)**: Comprehensive widget tests covering first-paint blank state, disabled phone until country resolution, rejection of half-typed countries, dial code affix updates, digit preservation across country change, and draft international phone formatting across both screens (6 tests passing).
+- `flutter analyze` clean (0 errors, 0 warnings); `test/auth/auth_landscape_screens_test.dart` (40 tests passing).
 
 ### Repo consolidation + two long-lived branches merged (2026-09-13)
 `origin` reduced from 35 branches to `main` alone, with 0 open PRs. Only two of
