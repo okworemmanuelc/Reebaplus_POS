@@ -144,6 +144,41 @@ void main() {
       expect(actions, isNot(contains('user_stores:upsert')));
       expect(actions, isNot(contains('users:upsert')));
     });
+
+    test('does not bind user_stores or update users when userId belongs to another business', () async {
+      final otherBizId = UuidV7.generate();
+      await db.into(db.businesses).insert(
+            BusinessesCompanion.insert(id: Value(otherBizId), name: 'Other Biz'),
+          );
+      final foreignUserId = UuidV7.generate();
+      // Insert user under a different businessId
+      final foreignUser = UsersCompanion.insert(
+        id: Value(foreignUserId),
+        businessId: otherBizId,
+        name: 'Foreign User',
+        email: const Value('foreign@test.com'),
+        pin: '1234',
+        storeId: const Value(null),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await db.into(db.users).insert(foreignUser);
+
+      final storeId = await db.storesDao.createStore(
+        name: 'Isolated Store',
+        userId: foreignUserId,
+      );
+
+      final storeRow = await (db.select(db.stores)..where((t) => t.id.equals(storeId))).getSingle();
+      expect(storeRow.name, 'Isolated Store');
+
+      // user_stores should NOT be inserted
+      final userStores = await (db.select(db.userStores)..where((t) => t.userId.equals(foreignUserId))).get();
+      expect(userStores, isEmpty);
+
+      // users.store_id should NOT be updated
+      final user = await (db.select(db.users)..where((t) => t.id.equals(foreignUserId))).getSingle();
+      expect(user.storeId, isNull);
+    });
   });
 
   group('StoresDao.updateStore', () {

@@ -51,6 +51,7 @@ Implements Issue #231 according to PRD #229 (Zero-Stores Empty States & First-St
 - In `first_run_surface_state.dart`, handled `allStoresProvider` error and loading states explicitly so unresolved/failed reads do not emit premature `createStoreCta` or `zeroStoresEmptySurfaceProvider == true`.
 - In `customers_screen.dart` and `expenses_screen.dart`, guarded FABs so they require confirmed non-empty stores before showing.
 - In `stores_screen.dart`, isolated `refreshCurrentUser()` error handling so post-commit refresh failures cannot trigger "Could not save store" or allow duplicate store creations.
+- In `daos_stores_sessions.dart` (`createStore`), scoped and validated `targetUserId` against the active `businessId` before inserting `user_stores` binding or updating `users.store_id`.
 
 ### Repo consolidation + two long-lived branches merged (2026-09-13)
 `origin` reduced from 35 branches to `main` alone, with 0 open PRs. Only two of

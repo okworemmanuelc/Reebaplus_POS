@@ -63,30 +63,38 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
       await db.syncDao.enqueueUpsert('stores', storeRow);
 
       if (targetUserId != null) {
-        final userStoreRow = UserStoresCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: businessId,
-          userId: targetUserId,
-          storeId: storeId,
-          lastUpdatedAt: Value(now),
-        );
-        await into(db.userStores).insert(userStoreRow);
-        await db.syncDao.enqueueUpsert('user_stores', userStoreRow);
-
         final user = await (select(users)
-              ..where((u) => u.id.equals(targetUserId)))
+              ..where((u) =>
+                  u.id.equals(targetUserId) & u.businessId.equals(businessId)))
             .getSingleOrNull();
-        if (user != null && (user.storeId == null || user.storeId!.isEmpty)) {
-          final userUpdate = UsersCompanion(
-            storeId: Value(storeId),
+        if (user != null) {
+          final userStoreRow = UserStoresCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: businessId,
+            userId: targetUserId,
+            storeId: storeId,
             lastUpdatedAt: Value(now),
           );
-          await (update(users)..where((u) => u.id.equals(targetUserId)))
-              .write(userUpdate);
-          final updatedUser = await (select(users)
-                ..where((u) => u.id.equals(targetUserId)))
-              .getSingle();
-          await db.syncDao.enqueueUpsert('users', updatedUser);
+          await into(db.userStores).insert(userStoreRow);
+          await db.syncDao.enqueueUpsert('user_stores', userStoreRow);
+
+          if (user.storeId == null || user.storeId!.isEmpty) {
+            final userUpdate = UsersCompanion(
+              storeId: Value(storeId),
+              lastUpdatedAt: Value(now),
+            );
+            await (update(users)
+                  ..where((u) =>
+                      u.id.equals(targetUserId) &
+                      u.businessId.equals(businessId)))
+                .write(userUpdate);
+            final updatedUser = await (select(users)
+                  ..where((u) =>
+                      u.id.equals(targetUserId) &
+                      u.businessId.equals(businessId)))
+                .getSingle();
+            await db.syncDao.enqueueUpsert('users', updatedUser);
+          }
         }
       }
 

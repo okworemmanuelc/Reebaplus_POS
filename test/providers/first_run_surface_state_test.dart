@@ -274,6 +274,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
+      await container.read(hasLocalProductsProvider.future);
       // Wait for stream to emit error
       try {
         await container.read(allStoresProvider.future);
