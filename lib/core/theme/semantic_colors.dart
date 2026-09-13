@@ -40,3 +40,28 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     );
   }
 }
+
+/// Resolves a notification `severity` string to a display colour.
+///
+/// The console raises a `console_broadcast` at one of three severities; this
+/// keeps an urgent announcement visually distinct from a routine one:
+///   * `warning` → [AppSemanticColors.warning]
+///   * `alert`   → [ColorScheme.error] (there is no semantic "alert" token —
+///                 an alert is the strongest signal, so it borrows error)
+///   * `info` (and any unknown value) → [AppSemanticColors.info]
+///
+/// Lives here — not inlined in the card — so OS-push rendering and the in-app
+/// card resolve severity to the same colour. The app always installs
+/// [AppSemanticColors], so the lookup is non-null.
+Color severityColor(BuildContext context, String severity) {
+  final semantic = Theme.of(context).extension<AppSemanticColors>()!;
+  switch (severity) {
+    case 'warning':
+      return semantic.warning;
+    case 'alert':
+      return Theme.of(context).colorScheme.error;
+    case 'info':
+    default:
+      return semantic.info;
+  }
+}

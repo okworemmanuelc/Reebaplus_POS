@@ -54,6 +54,43 @@ identity drift), moved to `sync_queue_orphans`. Still un-uploaded local data the
 Outbox invariant protects: visible and exportable, never silently dropped.
 _Avoid_: failed row, dead-letter.
 
+### Notifications
+
+**Notification**:
+An in-app message row in the `notifications` feed — `{type, message, severity}`,
+either business-wide or targeted at one user — shown in the bell/modal. The record
+of a noteworthy event; distinct from a **Push**, which merely alerts the user to one.
+_Avoid_: conflating the feed item with the OS alert; "alert" for the row itself.
+
+**Console Broadcast** *(user-facing: Announcement)*:
+A Notification of `type = 'console_broadcast'` the operator sends from the console to
+whole businesses (`recipient_user_id` NULL) — an official Reebaplus message every
+staff member at a targeted business sees. Its **Severity** (info/warning/alert) drives
+its colour and the Push title.
+_Avoid_: bare "broadcast" (ambiguous with the **Broadcast Signal**); a per-recipient
+row (a console broadcast is one business-wide row per targeted business).
+
+**Push** *(Push Notification)*:
+The OS-level alert (Android/iOS notification tray, delivered by FCM) that surfaces a
+Notification even when the app is backgrounded or killed. An **alert only** — never
+the transport of record; the Notification row still arrives through the Sync Engine,
+so a push that fails loses nothing.
+_Avoid_: treating push as the data path; assuming a missed push means a lost
+notification.
+
+**Broadcast Signal**:
+The realtime `realtime.send` pull-trigger emitted on the tenant topic
+`store_<business_id>` that tells a device to pull (architecture.md, "Live signal —
+Broadcast"). Infra plumbing, not a user-facing message.
+_Avoid_: calling a **Console Broadcast** a "broadcast" unqualified — a different thing
+that happens to share the word.
+
+**Device Token** *(FCM token)*:
+The per-install Firebase registration token that addresses one phone for **Push**,
+stored on the cloud-only `devices` row. Maps to exactly one `devices` row at a time
+(most recent login), so a push can never cross tenants.
+_Avoid_: conflating with `device_id` (the stable device identity) or a session.
+
 ### Orders
 
 **Order**:

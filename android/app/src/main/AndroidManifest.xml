@@ -3,6 +3,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
 
+    <!-- OS push notifications for console broadcasts (#138). Android 13+ (API 33)
+         gates notifications behind a runtime permission; requested via the
+         in-app soft-ask flow. Pre-33 devices grant it at install. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <!-- Camera: product photos (image_picker) and POS barcode scanning
          (mobile_scanner, #118). Requested at runtime on first use. -->
     <uses-permission android:name="android.permission.CAMERA"/>
@@ -65,6 +70,14 @@
                 <data android:scheme="reebaplus" />
             </intent-filter>
         </activity>
+        <!-- FCM (#138): the channel the system tray uses for a notification
+             message delivered while the app is backgrounded/killed. Must match
+             the channel the client registers (flutter_local_notifications) and
+             the send-push edge fn's ANNOUNCEMENTS_CHANNEL_ID. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="reebaplus_announcements" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

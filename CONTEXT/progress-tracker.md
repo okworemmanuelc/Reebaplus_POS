@@ -2369,6 +2369,87 @@ borrowed notifier. `flutter analyze` clean, 6 new tests green. Branch
 `fix/provider-disposes-service-owned-notifier`, commit `bd1f755` (PR pending). Details
 in BUILD_LOG.
 
+### Push notifications for console broadcasts (FCM) + severity rendering — CLOUD FOUNDATION DEPLOYED + VERIFIED; SEVERITY RENDERING (Slice 3) DONE (#138, PRD, ADR 0018, 2026-07-13)
+OS push (FCM) so a console `console_broadcast` announcement alerts staff even when
+the app is closed; also fixes cosmetically-dead severity on mobile. Branch
+`feat/push-notifications-fcm` off main (b89e0bb). The **reception half already
+existed** (bell/modal/`NotificationsDao`/severity model + the console inserts the
+rows) — this adds the **OS-push half** + severity rendering. ADR renumbered
+**0016→0018** (0016/0017 were taken by staff-offboarding/barcode on the fast-forward).
+- **Slice 1a — cloud migration `0159_push_notifications.sql` DEPLOYED + VERIFIED.**
+  Extends the cloud-only `devices` registry (0129) with `fcm_token` /
+  `push_permission_granted` / `fcm_token_updated_at` + a partial index;
+  `notifications.push_sent_at` (cloud-only observability, absent from Drift).
+  **Token-uniqueness** trigger `_devices_enforce_token_uniqueness` (SECURITY DEFINER)
+  — a token maps to exactly ONE devices row / most-recent login (invariant #5);
+  **functionally proven live** (older row's token nulled, new row keeps it, rolled
+  back — no test data left). **AFTER INSERT** trigger `trg_send_push_broadcast` on
+  `notifications` WHERE type='console_broadcast' → pg_net → send-push (mirrors 0126;
+  AFTER INSERT only so a re-push UPDATE never re-sends; Vault-secret guard →
+  unconfigured project degrades to "no push", never a broken insert). EXECUTE revoked
+  from public/anon/authenticated on both trigger fns → security advisor clean.
+- **Slice 1b — `send-push` Edge Function DEPLOYED + VERIFIED (`verify_jwt=false`).**
+  Shared-secret gate (`x-push-hook-secret` / `PUSH_HOOK_SECRET`) → resolve the
+  business's live tokens (service_role) → FCM HTTP v1 (OAuth2 minted from the service
+  account) → prune UNREGISTERED tokens → stamp `push_sent_at`. Pure
+  `buildFcmMessages` / `sendAll` / `titleForSeverity` in `fcm.ts` (+ `fcm_test.ts`
+  Deno unit tests — not yet CI-wired, no deno tier); I/O in `index.ts`. Live smoke
+  test: bad secret → `401 unauthenticated` envelope, OPTIONS → `200 ok`. (Deployed
+  == committed source functionally; the PEM-strip regex is provably equivalent.)
+- **USER PREREQUISITE (blocks go-live + Slice 2 end-to-end verification):** create a
+  Firebase project, add the Android app, place `google-services.json` (gitignored per
+  the secret guard), and set Edge Function secrets `FCM_SERVICE_ACCOUNT`
+  (service-account JSON) + `PUSH_HOOK_SECRET`, plus Vault `push_hook_secret` (same
+  value). Until then the whole pipeline is inert — "no push", never a broken
+  insert/login/sync.
+- **Slice 3 — in-app severity + megaphone rendering DONE (display-only; no
+  Firebase/cloud/push).** `_NotificationCard` → **public `NotificationCard`**
+  (`@visibleForTesting`) so it pumps without the modal's provider/DB harness. New
+  shared `severityColor(context, severity)` in `core/theme/semantic_colors.dart`
+  (`warning`→`semantic.warning`, `alert`→`colorScheme.error` [no semantic "alert"
+  token], `info`/default→`semantic.info`) — shared so Slice 2's push/tap rendering
+  resolves severity identically. A `console_broadcast` card now shows
+  `FontAwesomeIcons.bullhorn` coloured by `notification.severity`; every other type
+  keeps its existing icon + colour (regression-guarded). Widget test
+  `test/notifications/notification_card_widget_test.dart` asserts exact icon + colour
+  per severity (alert/warning/info) + the non-broadcast guard. `flutter analyze` clean;
+  `flutter test test/notifications/` green (7). No model/DB/DAO/sync change — severity
+  (0066) + business-wide recipient already existed.
+- **Slice 2 — Flutter FCM client DONE (this session).** Deps `firebase_core` +
+  `firebase_messaging` + `flutter_local_notifications`, **pinned to firebase 3.x /
+  messaging 15.x**: the latest 4.x/16.x pub pairing is broken (messaging 16.4.2
+  still `extends FirebasePlugin`, which `firebase_core_platform_interface` 7.1.0
+  renamed to `FirebasePluginPlatform` → won't compile). Native: core-library
+  desugaring (for FLN 18), `POST_NOTIFICATIONS` perm, FCM default-channel meta-data
+  (`reebaplus_announcements`); minSdk unchanged (firebase self-floors at 21).
+  `PushMessagingPort` seam (ADR 0001) + `FirebasePushMessaging` adapter (Android-
+  guarded, degrades to a no-op when unconfigured) + `InMemoryPushMessaging` fake
+  (`test/helpers/`). `PushNotificationService` orchestrates: register the token on
+  sign-in / permission-grant / token-refresh / reconnect via new
+  `DeviceRegistryService.recordPushToken`; clear on **full logout only**
+  (deviceUserId→null) via `clearPushToken` + `deleteToken` — a lock / sole-user
+  logout KEEPS the token so a locked device still receives broadcasts. Foreground
+  display + tap routing (`console_broadcast` → open the bell + `markAsRead`, which
+  tolerates the row not being local yet) + killed-app replay after `MainLayout`
+  mounts; wired from `main.dart` (sign-in/out edges + tap actions) and `MainLayout`
+  (replay + soft-ask). Once-per-install soft-ask sheet + a per-device **Notifications
+  tile on the Profile screen** (ungated, so every staff member manages their own).
+  Tests (`test/notifications/`): `push_notification_service_test` (11 — display / tap
+  routing / token lifecycle / reconnect), `push_messaging_contract_test` (channel-id +
+  payload keys vs `fcm.ts`), `device_registry_push_token_test` (error-swallow).
+  `flutter analyze` clean; full `flutter test` green **except one PRE-EXISTING
+  unrelated failure** (`who_is_working_screen_test` — confirmed failing at branch HEAD
+  `a528f1b` without this work).
+- **Firebase creds:** CONFIGURED + cloud pipeline VERIFIED LIVE (2026-07-13) — the
+  earlier "USER PREREQUISITE" is satisfied.
+- **REMAINING (user):** on-emulator eyeball — grant permission, confirm
+  `devices.fcm_token` populates, send a real `console_broadcast`, verify the OS buzz +
+  severity title + tap opens the bell. Then Slice 1+2+3 ship as ONE PR for #138 (branch
+  push needs the user — publication classifier on the public repo).
+- **New invariant** (architecture.md #13 / ADR 0018 / CONTEXT Notifications glossary):
+  **push never writes Drift** — it is an alert only; the notification row of record
+  still arrives via the Sync Engine, so a push failure loses nothing.
+
 ### 11-item feature/bug batch — PRD #106 + 13 issues filed; Phase 2 implementation STARTED (2026-07-11)
 Ran the full idea→issues flow (`/ask-matt` → `/grill-with-docs` → `/to-prd` →
 `/to-issues`) over a raw 11-item backlog (staff offboarding, optional units,

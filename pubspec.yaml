@@ -88,6 +88,15 @@ dependencies:
   device_info_plus: ^12.4.0
   package_info_plus: ^9.0.1
   mobile_scanner: ^7.2.0
+  # Pinned to the firebase_core 3.x / firebase_messaging 15.x major: the 4.x /
+  # 16.x pairing on pub is broken — firebase_messaging 16.4.2 still
+  # `extends FirebasePlugin`, but firebase_core_platform_interface 7.1.0 renamed
+  # that class to FirebasePluginPlatform, so the app fails to compile. The 3.x
+  # set predates the rename and is internally consistent. Bump deliberately once
+  # a matching 16.x lands, not via `flutter pub upgrade`.
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.0
+  flutter_local_notifications: ^18.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
