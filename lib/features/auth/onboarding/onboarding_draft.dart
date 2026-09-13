@@ -10,7 +10,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 /// `complete_onboarding` RPC. If the user abandons mid-flow, nothing reaches
 /// Supabase.
 ///
-/// Identifiers ([businessId], [storeId], [userId]) are generated at
+/// Identifiers ([businessId], [userId]) are generated at
 /// draft init so retries — same physical wizard run, second tap on PIN
 /// confirm — reuse them and the RPC's `ON CONFLICT (id) DO UPDATE`
 /// clauses keep the commit idempotent.
@@ -18,6 +18,12 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 /// The cloud's `complete_onboarding` RPC accepts [userId] as `p_user_id`
 /// so the cloud-side `public.users.id` matches the local Drift mirror's
 /// id exactly.
+///
+/// There are deliberately **no Store fields here** (#232). Sign-up no longer
+/// creates a Store — the owner lands in the app with none and is walked
+/// through creating one there. [country] and [businessPhone] look like Store
+/// fields because they were collected on the old Store step, but both are
+/// business-level: `stores` has no phone column and never had one.
 class OnboardingDraft {
   /// CEO email. In the §5 single-screen flow the business name comes first and
   /// email is collected at step 5, so the draft is created without an email
@@ -26,7 +32,6 @@ class OnboardingDraft {
 
   /// Generated client-side at construction so retries reuse the same id.
   final String businessId;
-  final String storeId;
   final String userId;
 
   String? ownerName;
@@ -38,8 +43,6 @@ class OnboardingDraft {
   String? businessPhone;
   String? businessEmail;
 
-  String? locationName;
-  String? streetAddress;
   String? country;
 
   String? currency;
@@ -49,28 +52,9 @@ class OnboardingDraft {
   OnboardingDraft({
     this.email = '',
     String? businessId,
-    String? storeId,
     String? userId,
   }) : businessId = businessId ?? UuidV7.generate(),
-       storeId = storeId ?? UuidV7.generate(),
        userId = userId ?? UuidV7.generate();
-
-  /// Combines the structured location parts into `stores.location`
-  /// ("street, country").
-  ///
-  /// Onboarding collects only street + country (no state / LGA pickers), and
-  /// this two-part shape is exactly what the cloud `complete_onboarding` RPC
-  /// rebuilds from `p_location` when its `city` key is null — so the local
-  /// mirror and the cloud row are byte-identical and the first pull can no
-  /// longer overwrite one with the other.
-  String? get locationCombined {
-    final parts = [
-      streetAddress?.trim(),
-      country?.trim(),
-    ].where((p) => p != null && p.isNotEmpty).toList();
-    if (parts.isEmpty) return null;
-    return parts.join(', ');
-  }
 }
 
 class OnboardingDraftNotifier extends StateNotifier<OnboardingDraft?> {

@@ -10,6 +10,72 @@ The human updates it when resolving open questions or making architectural decis
 
 154 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #232 — Sign-up completes without creating a Store (2026-09-13)
+Branch `feat/signup-without-store-232`, cut from `feat/country-before-phone-230` (#230's
+work was still unmerged on that branch when #232 started) and merged with `main` to
+pick up #231. Slice 3 of PRD #229.
+
+**Cloud half (deployed first, 2026-09-13):**
+- Migration `0178_complete_onboarding_without_store.sql` replaces `complete_onboarding`
+  in place with a **byte-identical parameter list** (verified by diffing 0123's signature)
+  — adding a parameter would have created a second overload and a PostgREST schema-cache
+  conflict (PGRST203).
+- The up-front null check now requires only `p_business_id`; `p_store_id` is optional.
+- §3 (the `stores` insert) and §8 (the owner-to-store `user_stores` binding) are each
+  wrapped in `IF p_store_id IS NOT NULL`. Everything else — businesses, profiles,
+  settings, users, `seed_default_roles_for_business`, the CEO `user_businesses` binding —
+  runs unchanged.
+- Called *with* a store id the function takes exactly its old path, so app versions
+  already in the field keep working. That is what made deploying the cloud side ahead
+  of the client safe.
+- Deployed to prod via `supabase db push --include-all`. Note: that run also re-applied
+  `0159_push_notifications.sql`, which was absent from the remote migration ledger but
+  already present in the schema — every statement logged `already exists, skipping`,
+  so it was a no-op that only reconciled the ledger.
+
+**Client half:**
+- `OnboardingDraft` drops `storeId`, `locationName`, `streetAddress` and the
+  `locationCombined` getter. `country`, `currency` and `businessPhone` stay — they are
+  business fields that only ever sat on the Store step by accident (`stores` has no
+  phone column).
+- New pure seam `lib/features/auth/onboarding/complete_onboarding_params.dart` builds the
+  RPC payload, so the shape of the payload — above all the null `p_store_id` and null
+  `p_location` — is assertable without a Supabase session.
+- `AuthService.completeOnboarding` calls that seam, drops the `stores` insert from the
+  local mirror, and no longer stamps `users.store_id` (nullable, and only a fallback
+  behind the app-wide active Store).
+- `CeoSignUpScreen` step 2 becomes the business-contact step: "How do we reach your
+  business?" with Country → Business phone number → currency indicator. Store name and
+  Street address are gone; `_submitStoreDetails`/`_buildStoreDetailsStep`/`_storeError`
+  are renamed to their business-contact equivalents. `StaffSignUpScreen` is untouched —
+  staff join an existing business and its `p_address` is the *user's* address.
+
+**Tests:**
+- `test/auth/onboarding_draft_location_test.dart` deleted, replaced by
+  `test/auth/complete_onboarding_params_test.dart` (5 tests) asserting the payload carries
+  no Store and that the key set still matches the RPC parameter list exactly.
+- `test/auth/sign_up_country_phone_test.dart` updated for the reshaped step, plus a new
+  `#232` group (2 tests): the step offers no store name / street address field, and
+  country + phone alone advance the wizard.
+- `test/integration/rpcs/complete_onboarding_test.dart` gains a null-store case (business,
+  user, roles and settings land; `stores` and `user_stores` stay empty) and a regression
+  asserting the with-a-store path is unchanged.
+- `flutter analyze` clean; `flutter test` 2011 passed / 131 skipped;
+  `test/auth/auth_landscape_screens_test.dart` 40 passed.
+
+**Review follow-up — phone formatting (both sign-up screens):** `formatPhoneNumber` /
+`_formatPhoneNumber` no longer look for the dial code at the front of the input; they
+strip only a leading trunk zero. Since #230 the dial code is a read-only affix beside a
+digits-only box, so the box holds a local number by construction — and local numbers that
+legitimately begin with their own dial digits were being truncated (a French `03 34 56 78 90`
+typed without its trunk zero became `+334567890`, losing two digits; Indian `910…` mobiles
+and Egyptian `20…` lines collided the same way). Four regression tests added to
+`test/auth/sign_up_country_phone_test.dart`, verified to fail against the old formatter.
+
+**Consequence to note:** until #233/#234 land, a new owner signs up, lands with zero
+Stores and meets #231's empty-state path rather than the guided rail. Safe, just less
+good — a release call, not a blocker.
+
 ### Issue #231 — First-Store Empty States & Atomic First-Store Write Path (2026-09-13)
 Branch `feat/first-store-empty-states-231` cut from `main`.
 Implements Issue #231 according to PRD #229 (Zero-Stores Empty States & First-Store Creation Flow):
@@ -52,6 +118,14 @@ Implements Issue #231 according to PRD #229 (Zero-Stores Empty States & First-St
 - In `customers_screen.dart` and `expenses_screen.dart`, guarded FABs so they require confirmed non-empty stores before showing.
 - In `stores_screen.dart`, isolated `refreshCurrentUser()` error handling so post-commit refresh failures cannot trigger "Could not save store" or allow duplicate store creations.
 - In `daos_stores_sessions.dart` (`createStore`), scoped and validated `targetUserId` against the active `businessId` before inserting `user_stores` binding or updating `users.store_id`.
+
+### Country before phone with no defaults on sign-up (#230, Slice 1 of #229) (2026-09-13)
+Branch `feat/country-before-phone-230`. Resolves Issue #230 (parent PRD #229 / Slice 1).
+- **CEO Sign-up (`CeoSignUpScreen`)**: Country renders above phone field on Step 2 ("Your first store"). Starts blank with no pre-selected default. Phone field disabled with helper text "Choose your country first" until a valid country is selected. Dial code renders as read-only prefix affix beside phone input (`prefixText: '$_dialCode '`). Digits-only formatter drops `+` allowance. Full international format stored on submit. Preserves typed digits when switching country. Currency indicator renders placeholder `—` until country resolves. Added `Flexible` with ellipsis on secondary currency text to guarantee 0 overflow across viewports. Added `@visibleForTesting initialStep` hook.
+- **Staff Sign-up (`StaffSignUpScreen`)**: Country renders above phone on Step 4. Phone input is disabled until country resolves. Dial code renders as read-only affix. Duplicate country picker removed from Step 5 address step. Full international phone number formatted and saved with country into draft on submit.
+- **Theme Decorations (`lib/core/theme/app_decorations.dart`)**: Enhanced `authInputDecoration` with `prefixText`, `prefixStyle`, `helperText`, `enabled`, and `disabledBorder`.
+- **Tests (`test/auth/sign_up_country_phone_test.dart`)**: Comprehensive widget tests covering first-paint blank state, disabled phone until country resolution, rejection of half-typed countries, dial code affix updates, digit preservation across country change, and draft international phone formatting across both screens (6 tests passing).
+- `flutter analyze` clean (0 errors, 0 warnings); `test/auth/auth_landscape_screens_test.dart` (40 tests passing).
 
 ### Repo consolidation + two long-lived branches merged (2026-09-13)
 `origin` reduced from 35 branches to `main` alone, with 0 open PRs. Only two of

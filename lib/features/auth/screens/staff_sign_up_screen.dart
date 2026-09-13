@@ -32,7 +32,8 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 /// branch is deferred to Phase 2. This Phase 1 flow handles a fresh device
 /// PIN setup.
 class StaffSignUpScreen extends ConsumerStatefulWidget {
-  const StaffSignUpScreen({super.key});
+  final int? initialStep;
+  const StaffSignUpScreen({super.key, @visibleForTesting this.initialStep});
 
   @override
   ConsumerState<StaffSignUpScreen> createState() => _StaffSignUpScreenState();
@@ -86,7 +87,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     '333333',
   };
 
-  int _step = 0;
+  late int _step = widget.initialStep ?? 0;
 
   final _draft = StaffSignUpDraft();
 
@@ -126,11 +127,11 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
   // Step 5 — address. Mirrors the CEO store-details step exactly.
   final _streetCtrl = TextEditingController();
-  String _countryValue = kDefaultCountry;
+  String _countryValue = '';
 
-  /// The dial code currently sitting in front of [_phoneCtrl] — see
-  /// [_applyDialCode].
-  String _dialCode = kCountryDialCodes[kDefaultCountry] ?? '';
+  /// The dial code for the resolved [_countryValue]. Renders as a read-only
+  /// affix beside [_phoneCtrl].
+  String _dialCode = '';
   String? _addressError;
 
   // Steps 6 & 7 — PIN. Distinct shake keys: the create (step 6) and confirm
@@ -149,8 +150,6 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   void initState() {
     super.initState();
     _otpCtrl.addListener(_onOtpChanged);
-    // Pre-populate the phone prefix for the default country (Nigeria).
-    _phoneCtrl.text = kCountryDialCodes[kDefaultCountry] ?? '';
   }
 
   @override
@@ -168,41 +167,25 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
   // ── Phone formatting ─────────────────────────────────────────────────────
 
-  /// Mirrors [_CeoSignUpScreenState.formatPhoneNumber] exactly.
+  /// Mirrors `_CeoSignUpScreenState.formatPhoneNumber` exactly: joins the
+  /// local digits to [dialCode], stripping only a leading trunk zero. It does
+  /// not look for [dialCode] at the front of the input — see the CEO screen
+  /// for why that detection was removed.
   String _formatPhoneNumber(String rawNumber, String dialCode) {
-    var cleaned = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
-    if (cleaned.isEmpty) return '';
-    if (cleaned.startsWith('00')) cleaned = '+${cleaned.substring(2)}';
-    final hasPlus = cleaned.startsWith('+');
-    final digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
-    final dialDigits = dialCode.replaceAll('+', '');
-    if (digitsOnly.startsWith(dialDigits)) {
-      var local = digitsOnly.substring(dialDigits.length);
-      if (local.startsWith('0')) local = local.substring(1);
-      return '$dialCode$local';
-    } else {
-      var local = digitsOnly;
-      if (local.startsWith('0')) local = local.substring(1);
-      return '$dialCode$local';
-    }
+    var local = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
+    if (local.isEmpty) return '';
+    if (local.startsWith('0')) local = local.substring(1);
+    return '$dialCode$local';
   }
 
-  /// Swaps the dial-code prefix on the phone box when the country changes.
+  /// Swaps the dial-code prefix when the country changes.
   ///
-  /// The country field is a free-text autocomplete whose `onChanged` fires on
-  /// every keystroke, so assigning the bare dial code (the previous behaviour)
-  /// discarded a number the staff member had already typed. Keep the local
-  /// digits, replace only the prefix, and do nothing until the typed country
-  /// resolves to a dial code.
+  /// The phone box holds only local digits, so swapping country updates the
+  /// [_dialCode] affix without touching or wiping the typed digits.
   void _applyDialCode(String country) {
     final next = kCountryDialCodes[country.trim()] ?? '';
-    if (next.isEmpty || next == _dialCode) return;
-    final text = _phoneCtrl.text.trim();
-    final local = text.startsWith(_dialCode)
-        ? text.substring(_dialCode.length)
-        : text;
+    if (next == _dialCode) return;
     _dialCode = next;
-    _phoneCtrl.text = '$next$local';
   }
 
   // ── Connectivity ─────────────────────────────────────────────────────────
@@ -499,7 +482,12 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   // ── Step 4: phone ────────────────────────────────────────────────────────
 
   void _submitPhone() {
-    final dialCode = kCountryDialCodes[_countryValue.trim()] ?? '';
+    final country = _countryValue.trim();
+    if (country.isEmpty || !kCountryDialCodes.containsKey(country)) {
+      setState(() => _phoneError = 'Choose a valid country from the list.');
+      return;
+    }
+    final dialCode = _dialCode;
     final formatted = _formatPhoneNumber(_phoneCtrl.text, dialCode);
     final digits = formatted.replaceAll(RegExp(r'\D'), '');
     if (digits.length < 8) {
@@ -508,8 +496,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       );
       return;
     }
-    _phoneCtrl.text = formatted;
     _draft.phone = formatted;
+    _draft.country = country;
     setState(() {
       _phoneError = null;
       _step = 5;
@@ -1108,23 +1096,49 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       subtitle: 'Enter the number your manager can reach you on.',
       children: [
         AuthInputCard(
+          child: AutocompleteField(
+            label: 'Country',
+            icon: Icons.public_outlined,
+            initial: _countryValue,
+            options: kCountries,
+            onChanged: (v) => setState(() {
+              _countryValue = v;
+              _applyDialCode(v);
+            }),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Disabling the phone until a country resolves is also what stops a
+        // half-typed country falling through to the default currency.
+        // Anyone who later decides the disabled field is annoying and greys
+        // it out instead will reopen a currency bug without realising the
+        // two were connected.
+        AuthInputCard(
           child: TextField(
             controller: _phoneCtrl,
+            enabled: _dialCode.isNotEmpty,
             keyboardType: TextInputType.phone,
             inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+              FilteringTextInputFormatter.digitsOnly,
             ],
             textInputAction: TextInputAction.done,
-            autofocus: true,
+            autofocus: false,
             onChanged: (_) {
               if (_phoneError != null) setState(() => _phoneError = null);
             },
             onSubmitted: (_) => _submitPhone(),
-            style: TextStyle(color: authTextPrimary(context)),
+            style: TextStyle(
+              color: _dialCode.isNotEmpty
+                  ? authTextPrimary(context)
+                  : authTextMuted(context, 0.4),
+            ),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Phone number',
               prefixIcon: Icons.phone_outlined,
+              enabled: _dialCode.isNotEmpty,
+              prefixText: _dialCode.isNotEmpty ? '$_dialCode ' : null,
+              helperText: _dialCode.isEmpty ? 'Choose your country first' : null,
             ),
           ),
         ),
@@ -1136,9 +1150,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     );
   }
 
-  /// Address step — street + country only. The State/Region and LGA/District
-  /// pickers were removed alongside the CEO onboarding ones: they were required
-  /// even when labelled "optional", and every keystroke in Country reset them.
+  /// Address step — street address only (country is already selected on the
+  /// phone step above).
   Widget _buildAddressStep() {
     return AuthFormShell(
       title: 'Your address',
@@ -1152,25 +1165,13 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             onChanged: (_) {
               if (_addressError != null) setState(() => _addressError = null);
             },
+            onSubmitted: (_) => _submitAddress(),
             style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Street address',
               prefixIcon: Icons.location_on_outlined,
             ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        AuthInputCard(
-          child: AutocompleteField(
-            label: 'Country',
-            icon: Icons.public_outlined,
-            initial: _countryValue,
-            options: kCountries,
-            onChanged: (v) => setState(() {
-              _countryValue = v;
-              _applyDialCode(v);
-            }),
           ),
         ),
         const SizedBox(height: 4),

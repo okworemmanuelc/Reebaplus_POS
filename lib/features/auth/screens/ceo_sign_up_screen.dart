@@ -22,7 +22,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// Master plan §5 — CEO Sign Up. One screen, content fades between 9 steps
-/// (business name → type → store details → full name → email → OTP →
+/// (business name → type → contact → full name → email → OTP →
 /// create PIN → confirm PIN → "business is ready"). A small dots indicator
 /// sits at the top. State lives in [onboardingDraftProvider]; the atomic
 /// commit (`complete_onboarding` RPC + local mirror) runs after Confirm PIN,
@@ -35,12 +35,17 @@ class CeoSignUpScreen extends ConsumerStatefulWidget {
   /// When non-null, the email has already been verified upstream (the Login
   /// flow's OTP → "No account found" → Create path). The Supabase session
   /// already exists, so the flow skips its own email (step 4) and OTP (step 5)
-  /// steps: business name → type → store → full name → create PIN → confirm
+  /// steps: business name → type → contact → full name → create PIN → confirm
   /// PIN → ready (7 steps). When null (the Welcome path) the full 9-step flow
   /// runs and collects + verifies the email itself.
   final String? verifiedEmail;
+  final int? initialStep;
 
-  const CeoSignUpScreen({super.key, this.verifiedEmail});
+  const CeoSignUpScreen({
+    super.key,
+    this.verifiedEmail,
+    @visibleForTesting this.initialStep,
+  });
 
   @override
   ConsumerState<CeoSignUpScreen> createState() => _CeoSignUpScreenState();
@@ -64,8 +69,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     '333333',
   };
 
-  int _step = 0;
-  bool _booting = true;
+  late int _step = widget.initialStep ?? 0;
+  late bool _booting = widget.initialStep == null;
 
   /// True when the email was verified upstream — the email (4) and OTP (5)
   /// steps are skipped.
@@ -83,25 +88,22 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
   // Step controllers (persist across step navigation so back keeps values).
   final _businessNameCtrl = TextEditingController();
-  final _storeNameCtrl = TextEditingController();
-  final _storePhoneCtrl = TextEditingController();
-  final _storeAddressCtrl = TextEditingController();
+  final _businessPhoneCtrl = TextEditingController();
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
 
   String? _businessType;
   bool _tracksEmptyCrates = true;
-  String _countryValue = kDefaultCountry;
+  String _countryValue = '';
 
-  /// The dial code currently sitting in front of [_storePhoneCtrl]. Tracked so
-  /// a country change can swap the prefix instead of wiping the number the
-  /// user already typed — see [_applyDialCode].
-  String _dialCode = kCountryDialCodes[kDefaultCountry] ?? '';
+  /// The dial code for the resolved [_countryValue]. Renders as a read-only
+  /// affix beside [_businessPhoneCtrl].
+  String _dialCode = '';
 
   // Per-step inline validation messages.
   String? _businessNameError;
-  String? _storeError;
+  String? _contactError;
   String? _fullNameError;
   String? _emailError;
 
@@ -137,15 +139,15 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   void initState() {
     super.initState();
     _otpCtrl.addListener(_onOtpChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    if (widget.initialStep == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    }
   }
 
   @override
   void dispose() {
     _businessNameCtrl.dispose();
-    _storeNameCtrl.dispose();
-    _storePhoneCtrl.dispose();
-    _storeAddressCtrl.dispose();
+    _businessPhoneCtrl.dispose();
     _fullNameCtrl.dispose();
     _emailCtrl.dispose();
     _otpCtrl.dispose();
@@ -154,51 +156,34 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     super.dispose();
   }
 
+  /// Joins the local digits in the phone box to [dialCode], stripping only a
+  /// leading trunk zero.
+  ///
+  /// It does **not** look for [dialCode] at the front of the input. Since
+  /// #230 the dial code lives beside the box as a read-only affix and the box
+  /// itself is digits-only, so whatever is in it is a local number by
+  /// construction — and plenty of valid local numbers begin with their own
+  /// country's dial digits. A Grand-Est French line (`03 34 56 78 90`) typed
+  /// without its trunk zero is `334567890`; reading the leading `33` as
+  /// France's `+33` silently ate two digits and produced `+334567890`.
+  /// Indian `910…` mobiles and Egyptian `20…` lines collided the same way.
   String formatPhoneNumber(String rawNumber, String dialCode) {
-    var cleaned = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
-    if (cleaned.isEmpty) return '';
-    if (cleaned.startsWith('00')) {
-      cleaned = '+${cleaned.substring(2)}';
+    var local = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
+    if (local.isEmpty) return '';
+    if (local.startsWith('0')) {
+      local = local.substring(1);
     }
-    final hasPlus = cleaned.startsWith('+');
-    final digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
-
-    final dialDigits = dialCode.replaceAll('+', '');
-
-    if (digitsOnly.startsWith(dialDigits)) {
-      var local = digitsOnly.substring(dialDigits.length);
-      if (local.startsWith('0')) {
-        local = local.substring(1);
-      }
-      return '$dialCode$local';
-    } else {
-      var local = digitsOnly;
-      if (local.startsWith('0')) {
-        local = local.substring(1);
-      }
-      return '$dialCode$local';
-    }
+    return '$dialCode$local';
   }
 
-  /// Swaps the dial-code prefix on the phone box when the country changes.
+  /// Swaps the dial-code prefix when the country changes.
   ///
-  /// The country field is a free-text autocomplete, so its `onChanged` fires on
-  /// every keystroke — not only when a suggestion is picked. Overwriting the
-  /// phone box outright (the previous behaviour) erased a number the user had
-  /// already entered, and blanked it completely while the country was still a
-  /// partial string with no dial code, producing a "phone is required" error on
-  /// a field that looked filled in. Keep the local digits, replace only the
-  /// prefix, and leave the box untouched until the typed country actually
-  /// resolves to a dial code.
+  /// The phone box holds only local digits, so swapping country updates the
+  /// [_dialCode] affix without touching or wiping the typed digits.
   void _applyDialCode(String country) {
     final next = kCountryDialCodes[country.trim()] ?? '';
-    if (next.isEmpty || next == _dialCode) return;
-    final text = _storePhoneCtrl.text.trim();
-    final local = text.startsWith(_dialCode)
-        ? text.substring(_dialCode.length)
-        : text;
+    if (next == _dialCode) return;
     _dialCode = next;
-    _storePhoneCtrl.text = '$next$local';
   }
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
@@ -250,8 +235,6 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       _emailCtrl.text = verified;
       draftNotifier.update((d) => d.email = verified);
     }
-    // Pre-populate the phone prefix for Nigeria
-    _storePhoneCtrl.text = kCountryDialCodes[kDefaultCountry] ?? '';
     if (mounted) setState(() => _booting = false);
   }
 
@@ -330,44 +313,34 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     _goTo(2);
   }
 
-  // ── Step 3: store details ────────────────────────────────────────────────
+  // ── Step 3: business contact ─────────────────────────────────────────────
 
-  void _submitStoreDetails() {
-    final storeName = _storeNameCtrl.text.trim();
-    final phone = _storePhoneCtrl.text.trim();
-    final address = _storeAddressCtrl.text.trim();
-    if (storeName.length < 2) {
-      setState(
-        () => _storeError = 'Enter a store name (at least 2 characters).',
-      );
+  /// Collects the two business-level fields that used to sit on the old Store
+  /// step: country (which fixes the currency) and the business phone. No Store
+  /// is created during sign-up any more (#232) — the owner creates their first
+  /// one in the app — so there is no store name and no street address here.
+  void _submitBusinessContact() {
+    final phone = _businessPhoneCtrl.text.trim();
+    final country = _countryValue.trim();
+
+    if (country.isEmpty || !kCountryDialCodes.containsKey(country)) {
+      setState(() => _contactError = 'Choose a valid country from the list.');
       return;
     }
-    final dialCode = kCountryDialCodes[_countryValue.trim()] ?? '';
-    final formattedPhone = formatPhoneNumber(phone, dialCode);
+    final formattedPhone = formatPhoneNumber(phone, _dialCode);
     final phoneDigits = formattedPhone.replaceAll(RegExp(r'\D'), '');
     if (phoneDigits.length < 8) {
       setState(
-        () => _storeError = 'Enter a valid phone number (at least 8 digits).',
+        () => _contactError = 'Enter a valid phone number (at least 8 digits).',
       );
       return;
     }
-    if (address.isEmpty) {
-      setState(() => _storeError = 'Enter the store address.');
-      return;
-    }
-    if (_countryValue.trim().isEmpty) {
-      setState(() => _storeError = 'Enter the country.');
-      return;
-    }
-    _storePhoneCtrl.text = formattedPhone;
     ref.read(onboardingDraftProvider.notifier).update((d) {
-      d.locationName = storeName;
       d.businessPhone = formattedPhone;
-      d.streetAddress = address;
-      d.country = _countryValue.trim();
-      d.currency = currencyForCountry(_countryValue.trim());
+      d.country = country;
+      d.currency = kCountryCurrency[country] ?? kDefaultCurrency;
     });
-    setState(() => _storeError = null);
+    setState(() => _contactError = null);
     _goTo(3);
   }
 
@@ -688,8 +661,9 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       setState(() => _step = 8);
 
       // Let the user read "your business is ready" before landing on POS,
-      // then hand off to the authed shell. Onboarding lands on POS with the
-      // empty-state "Add your first product" CTA (ADR 0006) — no auto-push.
+      // then hand off to the authed shell — no auto-push. With no Store yet
+      // (#232) POS shows the "Create a store" empty state from #231; once a
+      // Store exists it falls back to "Add your first product" (ADR 0006).
       await Future.delayed(const Duration(seconds: 3));
       auth.setCurrentUser(updatedUser);
     } catch (e, stack) {
@@ -848,7 +822,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       case 1:
         return _buildBusinessTypeStep();
       case 2:
-        return _buildStoreDetailsStep();
+        return _buildBusinessContactStep();
       case 3:
         return _buildFullNameStep();
       case 4:
@@ -937,66 +911,20 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     );
   }
 
-  /// Store step. Address is deliberately just **street + country** — the
-  /// State/Region and LGA/District pickers were removed: they were required
-  /// even where the label said "optional", every keystroke in Country reset
-  /// them, they accepted unconstrained free text anyway, and the cloud
-  /// `complete_onboarding` RPC discarded the LGA on the first sync. `country`
-  /// still drives the currency default.
-  Widget _buildStoreDetailsStep() {
-    final currency = currencyForCountry(_countryValue.trim());
+  /// Business contact step. Collects country (which fixes the currency for the
+  /// life of the business) and the business phone — the two fields that used
+  /// to live on the old "Your first store" step.
+  ///
+  /// The store name and street address are gone with the Store itself (#232):
+  /// sign-up creates no Store, so there is nothing for them to name or
+  /// address. The phone was never a Store field — `stores` has no phone
+  /// column — it only ever sat here by accident.
+  Widget _buildBusinessContactStep() {
+    final currency = kCountryCurrency[_countryValue.trim()];
     return AuthFormShell(
-      title: 'Your first store',
-      subtitle: 'You can add more stores later.',
+      title: 'How do we reach your business?',
+      subtitle: 'Your country sets the currency you sell in.',
       children: [
-        AuthInputCard(
-          child: TextField(
-            controller: _storeNameCtrl,
-            textCapitalization: TextCapitalization.words,
-            style: TextStyle(color: authTextPrimary(context)),
-            decoration:
-                AppDecorations.authInputDecoration(
-                  context,
-                  label: 'Store name',
-                  prefixIcon: Icons.store_mall_directory_outlined,
-                ).copyWith(
-                  hintText: 'Abuja Branch',
-                  hintStyle: TextStyle(
-                    color: authTextPrimary(context).withValues(alpha: 0.35),
-                  ),
-                ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        AuthInputCard(
-          child: TextField(
-            controller: _storePhoneCtrl,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-            ],
-            style: TextStyle(color: authTextPrimary(context)),
-            decoration: AppDecorations.authInputDecoration(
-              context,
-              label: 'Store phone number',
-              prefixIcon: Icons.phone_outlined,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        AuthInputCard(
-          child: TextField(
-            controller: _storeAddressCtrl,
-            textCapitalization: TextCapitalization.words,
-            style: TextStyle(color: authTextPrimary(context)),
-            decoration: AppDecorations.authInputDecoration(
-              context,
-              label: 'Street address',
-              prefixIcon: Icons.location_on_outlined,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
         AuthInputCard(
           child: _AutocompleteField(
             label: 'Country',
@@ -1010,6 +938,35 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ),
         ),
         const SizedBox(height: 12),
+        // Disabling the phone until a country resolves is also what stops a
+        // half-typed country falling through to the default currency.
+        // Anyone who later decides the disabled field is annoying and greys
+        // it out instead will reopen a currency bug without realising the
+        // two were connected.
+        AuthInputCard(
+          child: TextField(
+            controller: _businessPhoneCtrl,
+            enabled: _dialCode.isNotEmpty,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+            ],
+            style: TextStyle(
+              color: _dialCode.isNotEmpty
+                  ? authTextPrimary(context)
+                  : authTextMuted(context, 0.4),
+            ),
+            decoration: AppDecorations.authInputDecoration(
+              context,
+              label: 'Business phone number',
+              prefixIcon: Icons.phone_outlined,
+              enabled: _dialCode.isNotEmpty,
+              prefixText: _dialCode.isNotEmpty ? '$_dialCode ' : null,
+              helperText: _dialCode.isEmpty ? 'Choose your country first' : null,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         Row(
           children: [
             Icon(
@@ -1019,7 +976,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             ),
             const SizedBox(width: 8),
             Text(
-              'Currency: $currency',
+              'Currency: ${currency ?? '—'}',
               style: TextStyle(
                 color: authTextPrimary(context).withValues(alpha: 0.75),
                 fontSize: 14,
@@ -1027,19 +984,22 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              '(editable later in Business Info)',
-              style: TextStyle(
-                color: authTextPrimary(context).withValues(alpha: 0.45),
-                fontSize: 12,
+            Flexible(
+              child: Text(
+                '(editable later in Business Info)',
+                style: TextStyle(
+                  color: authTextPrimary(context).withValues(alpha: 0.45),
+                  fontSize: 12,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
         const SizedBox(height: 4),
-        AuthErrorText(_storeError),
+        AuthErrorText(_contactError),
         const SizedBox(height: 12),
-        AppButton(text: 'Continue', onPressed: _submitStoreDetails),
+        AppButton(text: 'Continue', onPressed: _submitBusinessContact),
       ],
     );
   }

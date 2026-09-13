@@ -129,9 +129,11 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
     var step = 'start';
     try {
       // New-business path: commit the wizard draft atomically NOW. The
-      // complete_onboarding RPC creates businesses + profiles + stores
-      // + settings server-side with onboarding_complete=true, then mirrors
-      // them locally in one Drift transaction. Returns the persisted user.
+      // complete_onboarding RPC creates businesses + profiles + settings
+      // server-side with onboarding_complete=true, then mirrors them locally
+      // in one Drift transaction. Returns the persisted user. No Store is
+      // created on either side (#232) — the owner creates their first one
+      // in the app.
       //
       // Join/reset paths: widget.user is already the persisted row.
       final UserData persistedUser;
