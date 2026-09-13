@@ -51,8 +51,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Now on Step 2: "Your first store"
-      expect(find.text('Your first store'), findsOneWidget);
+      // Now on Step 2: the business contact step (#232 took the Store out).
+      expect(find.text('How do we reach your business?'), findsOneWidget);
     }
 
     ProviderContainer createContainer() {
@@ -70,7 +70,7 @@ void main() {
       await navigateToStep2(tester, container);
 
       final countryFinder = find.widgetWithText(AutocompleteField, 'Country');
-      final phoneFinder = find.widgetWithText(TextField, 'Store phone number');
+      final phoneFinder = find.widgetWithText(TextField, 'Business phone number');
 
       expect(countryFinder, findsOneWidget);
       expect(phoneFinder, findsOneWidget);
@@ -112,19 +112,14 @@ void main() {
       await tester.pump();
 
       // Phone must remain disabled
-      final phoneFinder = find.widgetWithText(TextField, 'Store phone number');
+      final phoneFinder = find.widgetWithText(TextField, 'Business phone number');
       expect(tester.widget<TextField>(phoneFinder).enabled, isFalse);
       expect(find.text('Choose your country first'), findsOneWidget);
 
       // Currency must stay placeholder '—'
       expect(find.text('Currency: —'), findsOneWidget);
 
-      // Fill in Store Name and Address so only Country is invalid
-      final storeNameFinder = find.widgetWithText(TextField, 'Store name');
-      final addressFinder = find.widgetWithText(TextField, 'Street address');
-      await tester.enterText(storeNameFinder, 'Main Branch');
-      await tester.enterText(addressFinder, '123 Main St');
-
+      // Country is the only thing standing between here and step 3.
       // Attempt submit
       await tester.ensureVisible(find.text('Continue'));
       await tester.tap(find.text('Continue'));
@@ -140,16 +135,11 @@ void main() {
 
       await navigateToStep2(tester, container);
 
-      final storeNameFinder = find.widgetWithText(TextField, 'Store name');
-      final addressFinder = find.widgetWithText(TextField, 'Street address');
       final countryTextField = find.descendant(
         of: find.widgetWithText(AutocompleteField, 'Country'),
         matching: find.byType(TextField),
       );
-      final phoneFinder = find.widgetWithText(TextField, 'Store phone number');
-
-      await tester.enterText(storeNameFinder, 'Main Branch');
-      await tester.enterText(addressFinder, '123 Main St');
+      final phoneFinder = find.widgetWithText(TextField, 'Business phone number');
 
       // Select Nigeria
       await tester.enterText(countryTextField, 'Nigeria');
@@ -189,16 +179,11 @@ void main() {
 
       await navigateToStep2(tester, container);
 
-      final storeNameFinder = find.widgetWithText(TextField, 'Store name');
-      final addressFinder = find.widgetWithText(TextField, 'Street address');
       final countryTextField = find.descendant(
         of: find.widgetWithText(AutocompleteField, 'Country'),
         matching: find.byType(TextField),
       );
-      final phoneFinder = find.widgetWithText(TextField, 'Store phone number');
-
-      await tester.enterText(storeNameFinder, 'Main Branch');
-      await tester.enterText(addressFinder, '123 Main St');
+      final phoneFinder = find.widgetWithText(TextField, 'Business phone number');
 
       // First select Nigeria
       await tester.enterText(countryTextField, 'Nigeria');
@@ -230,6 +215,91 @@ void main() {
       expect(draft.businessPhone, '+2338135216317');
       expect(draft.country, 'Ghana');
       expect(draft.currency, 'GHS');
+    });
+  });
+
+  group('CeoSignUpScreen - sign-up asks for no Store (#232)', () {
+    late AppDatabase db;
+
+    setUp(() {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    testWidgets('the contact step collects no store name and no address', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      container.read(onboardingDraftProvider.notifier).start();
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: CeoSignUpScreen(
+              verifiedEmail: 'ceo@test.com',
+              initialStep: 2,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('How do we reach your business?'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Store name'), findsNothing);
+      expect(find.widgetWithText(TextField, 'Street address'), findsNothing);
+      expect(find.text('Your first store'), findsNothing);
+    });
+
+    testWidgets('country and phone alone advance the wizard', (tester) async {
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      container.read(onboardingDraftProvider.notifier).start();
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: CeoSignUpScreen(
+              verifiedEmail: 'ceo@test.com',
+              initialStep: 2,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(AutocompleteField, 'Country'),
+          matching: find.byType(TextField),
+        ),
+        'Nigeria',
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Business phone number'),
+        '08135216317',
+      );
+      await tester.pump();
+
+      await tester.ensureVisible(find.text('Continue'));
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text("What's your name?"), findsOneWidget);
+      final draft = container.read(onboardingDraftProvider)!;
+      expect(draft.businessPhone, '+2348135216317');
+      expect(draft.country, 'Nigeria');
+      expect(draft.currency, 'NGN');
     });
   });
 

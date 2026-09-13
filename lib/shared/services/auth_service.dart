@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/features/auth/onboarding/complete_onboarding_params.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
@@ -1712,11 +1713,17 @@ class AuthService extends ValueNotifier<UserData?> {
   }
 
   /// Atomic onboarding commit. Calls the `complete_onboarding` Postgres RPC
-  /// (migration 0018) which inserts businesses + profiles + stores +
-  /// settings in one server-side transaction with `onboarding_complete=true`,
-  /// then mirrors the same rows into local Drift in one client-side
-  /// transaction. PIN is NOT part of this — it's device-local and written
-  /// separately by [setUserPin] after this returns.
+  /// (migration 0018, last amended by 0178) which inserts businesses +
+  /// profiles + settings in one server-side transaction with
+  /// `onboarding_complete=true`, then mirrors the same rows into local Drift
+  /// in one client-side transaction. PIN is NOT part of this — it's
+  /// device-local and written separately by [setUserPin] after this returns.
+  ///
+  /// No Store is created on either side (#232). The owner lands in the app
+  /// with zero Stores and creates their first one there; until then
+  /// `users.store_id` stays null, which is legitimate — the column is a
+  /// fallback behind the app-wide active Store, which reads null as
+  /// "All Stores".
   ///
   /// Local-mirror best-effort: if the Drift transaction fails (rare —
   /// disk full, schema mismatch), the cloud is authoritative. We hydrate
@@ -1733,48 +1740,23 @@ class AuthService extends ValueNotifier<UserData?> {
       );
     }
 
-    // 1. Atomic cloud commit. Idempotent on (businesses.id, stores.id,
-    //    profiles.id, settings(business_id, key)) so a retry after a
-    //    transient network failure converges.
+    // 1. Atomic cloud commit. Idempotent on (businesses.id, profiles.id,
+    //    settings(business_id, key)) so a retry after a transient network
+    //    failure converges.
     debugPrint(
       '[AuthService] completeOnboarding: calling cloud RPC '
       'complete_onboarding(businessId=${draft.businessId}, '
-      'storeId=${draft.storeId}, userId=${draft.userId})',
+      'userId=${draft.userId})',
     );
     try {
       // p_user_id (migration 0041) makes the cloud's users.id agree with
-      // the local Drift mirror's id. The membership table is gone with
-      // staff management removed; cloud no longer mints/insertsa
-      // business_members row.
+      // the local Drift mirror's id. The payload is built by the pure
+      // `completeOnboardingParams` seam so its shape — in particular the
+      // null store and null location (#232) — is unit-assertable without a
+      // Supabase session.
       await _supabase.rpc(
         'complete_onboarding',
-        params: {
-          'p_business_id': draft.businessId,
-          'p_store_id': draft.storeId,
-          'p_owner_name': draft.ownerName,
-          'p_business_name': draft.businessName,
-          'p_business_type': draft.businessType,
-          'p_business_phone': draft.businessPhone,
-          'p_business_email': draft.businessEmail,
-          // `city` is deliberately absent: onboarding collects street +
-          // country only. The RPC builds `stores.location` with
-          // concat_ws(', ', street, city, country), which skips the missing
-          // key — so the cloud row is exactly `locationCombined`'s
-          // "street, country" and the first pull can no longer overwrite the
-          // local mirror with a differently-fused string.
-          'p_location': {
-            'name': draft.locationName,
-            'street': draft.streetAddress,
-            'country': draft.country,
-          },
-          'p_settings': {
-            'currency': draft.currency,
-            'timezone': draft.timezone,
-            'tax_reg_number': draft.taxRegNumber,
-          },
-          'p_user_id': draft.userId,
-          'p_tracks_empty_crates': draft.tracksEmptyCrates,
-        },
+        params: completeOnboardingParams(draft),
       );
       debugPrint('[AuthService] completeOnboarding: cloud RPC ok');
     } catch (e, stack) {
@@ -1822,17 +1804,9 @@ class AuthService extends ValueNotifier<UserData?> {
               ),
             );
 
-        await _db
-            .into(_db.stores)
-            .insertOnConflictUpdate(
-              StoresCompanion.insert(
-                id: Value(draft.storeId),
-                businessId: draft.businessId,
-                name: draft.locationName ?? 'Main Store',
-                location: Value(draft.locationCombined),
-                lastUpdatedAt: Value(now),
-              ),
-            );
+        // No stores row is mirrored: sign-up creates no Store (#232). The
+        // first one is written in-app by StoresDao.createStore, which also
+        // binds the owner to it and stamps users.store_id.
 
         await _db
             .into(_db.users)
@@ -1843,7 +1817,7 @@ class AuthService extends ValueNotifier<UserData?> {
                 name: draft.ownerName ?? '',
                 email: Value(draft.email),
                 pin: setupRequiredPin,
-                storeId: Value(draft.storeId),
+                // storeId stays absent (null): there is no Store yet (#232).
                 lastUpdatedAt: Value(now),
               ),
             );

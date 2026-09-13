@@ -7,7 +7,8 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import '../../helpers/supabase_test_clients.dart';
 import '../../helpers/supabase_test_env.dart';
 
-/// Tier-2 integration tests for public.complete_onboarding (migration 0018).
+/// Tier-2 integration tests for public.complete_onboarding (migration 0018,
+/// last amended by 0178 — p_store_id is optional from #232 onward).
 ///
 /// IMPORTANT — this RPC mutates the calling user's `profiles.business_id`
 /// (it onboards a brand-new business under auth.uid()). The other tests in
@@ -205,6 +206,137 @@ void main() {
           .eq('business_id', businessId);
       expect(settings, hasLength(2),
           reason: 'currency + timezone, no tax this time');
+    }, skip: _skipReason);
+
+    // ── #232: sign-up completes without creating a Store ──────────────────
+
+    test('a null store id seeds the business, user and roles without a store',
+        () async {
+      final businessId = UuidV7.generate();
+      createdBusinessIds.add(businessId);
+
+      await clients.userClient.rpc('complete_onboarding', params: {
+        'p_business_id': businessId,
+        'p_store_id': null,
+        'p_owner_name': 'Storeless Owner',
+        'p_business_name': 'Reeba Storeless',
+        'p_business_type': 'Liquor Store',
+        'p_business_phone': '+2348000000998',
+        'p_business_email': 'storeless@example.test',
+        'p_location': null,
+        'p_settings': {'currency': 'NGN', 'timezone': 'Africa/Lagos'},
+      });
+
+      final biz = await clients.adminClient
+          .from('businesses')
+          .select()
+          .eq('id', businessId)
+          .single();
+      expect(biz['name'], 'Reeba Storeless');
+      expect(biz['onboarding_complete'], isTrue);
+      expect(biz['owner_id'], clients.env.userId);
+
+      final profile = await clients.adminClient
+          .from('profiles')
+          .select('business_id, name')
+          .eq('id', clients.env.userId)
+          .single();
+      expect(profile['business_id'], businessId);
+      expect(profile['name'], 'Storeless Owner');
+
+      final user = await clients.adminClient
+          .from('users')
+          .select('id')
+          .eq('business_id', businessId)
+          .single();
+      final userId = user['id'] as String;
+
+      // Roles seeded, CEO bound — the whole point of still calling the RPC.
+      final roles = await clients.adminClient
+          .from('roles')
+          .select('id')
+          .eq('business_id', businessId);
+      expect(roles, isNotEmpty, reason: 'default roles must still seed');
+
+      final membership = await clients.adminClient
+          .from('user_businesses')
+          .select('status, role_id')
+          .eq('business_id', businessId)
+          .eq('user_id', userId)
+          .single();
+      expect(membership['status'], 'active');
+      expect(membership['role_id'], isNotNull);
+
+      final settings = await clients.adminClient
+          .from('settings')
+          .select('key')
+          .eq('business_id', businessId);
+      expect(settings, hasLength(2));
+
+      // The two guarded steps must both have been skipped.
+      final stores = await clients.adminClient
+          .from('stores')
+          .select('id')
+          .eq('business_id', businessId);
+      expect(stores, isEmpty, reason: 'the store insert must be skipped');
+
+      final userStores = await clients.adminClient
+          .from('user_stores')
+          .select('id')
+          .eq('business_id', businessId);
+      expect(userStores, isEmpty,
+          reason: 'the owner-to-store binding must be skipped');
+    }, skip: _skipReason);
+
+    test('regression: called WITH a store id, behaviour is unchanged',
+        () async {
+      // Old app versions still send a store id. They must keep working
+      // exactly as before — that is what makes deploying the cloud half
+      // ahead of the client safe.
+      final businessId = UuidV7.generate();
+      final storeId = UuidV7.generate();
+      createdBusinessIds.add(businessId);
+
+      await clients.userClient.rpc('complete_onboarding', params: {
+        'p_business_id': businessId,
+        'p_store_id': storeId,
+        'p_owner_name': 'Legacy Client Owner',
+        'p_business_name': 'Reeba Legacy',
+        'p_business_type': 'Liquor Store',
+        'p_business_phone': '+2348000000997',
+        'p_business_email': 'legacy@example.test',
+        'p_location': {
+          'name': 'Main Store',
+          'street': '12 Test Street',
+          'city': 'Lagos',
+          'country': 'Nigeria',
+        },
+        'p_settings': {'currency': 'NGN', 'timezone': 'Africa/Lagos'},
+      });
+
+      final store = await clients.adminClient
+          .from('stores')
+          .select('id, name, location, business_id, is_deleted')
+          .eq('id', storeId)
+          .single();
+      expect(store['business_id'], businessId);
+      expect(store['name'], 'Main Store');
+      expect(store['location'], '12 Test Street, Lagos, Nigeria');
+      expect(store['is_deleted'], isFalse);
+
+      final user = await clients.adminClient
+          .from('users')
+          .select('id')
+          .eq('business_id', businessId)
+          .single();
+
+      final binding = await clients.adminClient
+          .from('user_stores')
+          .select('user_id, store_id')
+          .eq('business_id', businessId)
+          .single();
+      expect(binding['user_id'], user['id']);
+      expect(binding['store_id'], storeId);
     }, skip: _skipReason);
 
     test('atomicity: empty owner name raises and creates nothing', () async {
