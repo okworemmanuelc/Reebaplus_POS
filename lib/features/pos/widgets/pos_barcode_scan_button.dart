@@ -11,8 +11,10 @@ import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
-/// The always-visible POS scan control (#118). It is never gated on a non-empty
-/// cart — tapping it opens the camera one-shot (via [barcodeScannerProvider]).
+/// The always-visible POS scan control (#118). Rendered as the bottom-right
+/// [AppFAB] that replaces the removed cart FAB (ADR 0017); it is never gated on
+/// a non-empty cart — tapping it opens the camera one-shot (via
+/// [barcodeScannerProvider]).
 ///
 /// On a successful scan:
 ///  - a matching product is added to the cart through the SAME add path a tap

@@ -8,7 +8,8 @@
 //   - an UNKNOWN barcode toasts and opens Add Product with the code pre-filled;
 //   - a dismissed scan (null) is a no-op.
 //
-// The button is placed in a bare AppBar to prove it is not gated on the cart.
+// The button is placed in a bare Scaffold's FAB slot (its real home, ADR 0017)
+// with an empty cart to prove it is not gated on the cart.
 
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
@@ -129,14 +130,10 @@ void main() {
       ],
       child: MaterialApp(
         home: Scaffold(
-          appBar: AppBar(
-            actions: [
-              PosBarcodeScanButton(
-                tier: tier,
-                loadedProducts: loaded,
-                onUnknownBarcode: onUnknown,
-              ),
-            ],
+          floatingActionButton: PosBarcodeScanButton(
+            tier: tier,
+            loadedProducts: loaded,
+            onUnknownBarcode: onUnknown,
           ),
         ),
       ),

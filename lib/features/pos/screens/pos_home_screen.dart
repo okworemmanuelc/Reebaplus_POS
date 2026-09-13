@@ -243,12 +243,16 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           activeRoute: 'pos',
           backgroundColor: bgCol,
           appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
-          // #118 barcode scan, moved from the app bar to a FAB (owner request)
-          // in the slot the old cart FAB used. Always visible (not cart-gated).
-          floatingActionButton: PosBarcodeScanButton(
-            tier: _controller!.selectedGroup,
-            loadedProducts: _controller!.allProducts,
-          ),
+          // #118: the always-visible one-shot scan control lives at the
+          // bottom-right (the FAB slot the removed cart FAB used, ADR 0017).
+          // Hidden only while a multi-store user still has to pick a store —
+          // there's no catalogue loaded to scan into yet.
+          floatingActionButton: needsStoreSelection
+              ? null
+              : PosBarcodeScanButton(
+                  tier: _controller!.selectedGroup,
+                  loadedProducts: _controller!.allProducts,
+                ),
           body: SafeArea(
             top: false,
             // Pull-to-refresh wraps the WHOLE body (above the header) so the
