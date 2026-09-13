@@ -19,8 +19,10 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 
 /// Friendly label for an expense payment-method code (§20). Codes are
 /// 'cash'/'transfer'/'pos'/'card'/'other'.
@@ -164,6 +166,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       appBar: _buildAppBar(context),
       body: Builder(
         builder: (context) {
+          if (ref.watch(zeroStoresEmptySurfaceProvider)) {
+            return const FirstRunEmptyState();
+          }
           // §20.8 — scoped to the active store (picker); "All Stores" = aggregate.
           final allExpenses = ref.watch(viewerScopedExpensesProvider);
           final categoryNames =
@@ -246,7 +251,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           );
         },
       ),
-      floatingActionButton: Gates.addExpense.allows(ref)
+      floatingActionButton: (ref.watch(allStoresProvider).valueOrNull?.isNotEmpty == true &&
+              !ref.watch(zeroStoresEmptySurfaceProvider) &&
+              Gates.addExpense.allows(ref))
           ? AppFAB(
               heroTag: 'expenses_fab',
               onPressed: () => AddExpenseScreen.show(context),

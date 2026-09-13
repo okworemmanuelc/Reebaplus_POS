@@ -15,6 +15,7 @@ class NavigationService {
   /// [indexToRoute].
   static const int homeTab = 0;
   static const int posTab = 1;
+  static const int storesTab = 7;
 
   /// The tab a role opens on at login, keyed by the stable role slug (§8.2 —
   /// the same slugs `roleRank` switches on in `shared/utils/role_display.dart`).

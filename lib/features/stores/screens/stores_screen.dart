@@ -20,7 +20,6 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/stores/screens/store_details_screen.dart';
 
@@ -180,9 +179,8 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                             : () async {
                                 if (!formKey.currentState!.validate()) return;
                                 // Re-check at the write boundary (hard rule #6).
-                                if (!ref
-                                    .read(currentUserPermissionsProvider)
-                                    .contains('stores.manage')) {
+                                if (!Gates.manageStores.allowsNow(ref)) {
+                                  showGateDenied(ctx, Gates.manageStores);
                                   return;
                                 }
                                 setSheet(() => saving = true);
@@ -195,30 +193,28 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                       .where((p) => p.isNotEmpty)
                                       .join(', ');
 
-                                  final whBusinessId = ref
-                                      .read(authProvider)
-                                      .currentUser
-                                      ?.businessId;
-                                  if (whBusinessId == null) return;
-                                  final whComp = StoresCompanion.insert(
-                                    id: Value(UuidV7.generate()),
+                                  final currentUserId =
+                                      ref.read(authProvider).currentUser?.id;
+                                  await db.storesDao.createStore(
                                     name: nameCtrl.text.trim(),
-                                    businessId: whBusinessId,
-                                    location: Value(combinedLocation),
-                                    lastUpdatedAt: Value(DateTime.now()),
+                                    location: combinedLocation,
+                                    userId: currentUserId,
                                   );
-                                  await db.into(db.stores).insert(whComp);
-                                  await db.syncDao.enqueueUpsert(
-                                    'stores',
-                                    whComp,
-                                  );
+                                  try {
+                                    await ref
+                                        .read(authProvider)
+                                        .refreshCurrentUser();
+                                  } catch (_) {
+                                    // Refresh failure after commit must not trigger
+                                    // "Could not save store" or allow a duplicate retry.
+                                  }
                                   if (ctx.mounted) Navigator.pop(ctx);
                                 } catch (e) {
                                   setSheet(() => saving = false);
                                   if (ctx.mounted) {
                                     AppNotification.showError(
                                       ctx,
-                                      'Error: $e',
+                                      'Could not save store. Please try again.',
                                     );
                                   }
                                 }
@@ -366,9 +362,8 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                             : () async {
                                 if (!formKey.currentState!.validate()) return;
                                 // Re-check at the write boundary (hard rule #6).
-                                if (!ref
-                                    .read(currentUserPermissionsProvider)
-                                    .contains('stores.manage')) {
+                                if (!Gates.manageStores.allowsNow(ref)) {
+                                  showGateDenied(ctx, Gates.manageStores);
                                   return;
                                 }
                                 setSheet(() => saving = true);
@@ -380,19 +375,11 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                     .where((p) => p.isNotEmpty)
                                     .join(', ');
 
-                                final whComp = StoresCompanion(
-                                  id: Value(store.id),
-                                  name: Value(nameCtrl.text.trim()),
-                                  location: Value(combinedLocation),
-                                  lastUpdatedAt: Value(DateTime.now()),
-                                );
                                 try {
-                                  await (db.update(db.stores)
-                                        ..where((t) => t.id.equals(store.id)))
-                                      .write(whComp);
-                                  await db.syncDao.enqueueUpsert(
-                                    'stores',
-                                    whComp,
+                                  await db.storesDao.updateStore(
+                                    id: store.id,
+                                    name: nameCtrl.text.trim(),
+                                    location: combinedLocation,
                                   );
                                   if (ctx.mounted) Navigator.pop(ctx);
                                 } catch (e) {
@@ -500,9 +487,8 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               Navigator.pop(ctx);
               // Re-check at the write boundary (hard rule #6) — deleting a
               // store needs `stores.manage`.
-              if (!ref
-                  .read(currentUserPermissionsProvider)
-                  .contains('stores.manage')) {
+              if (!Gates.manageStores.allowsNow(ref)) {
+                showGateDenied(context, Gates.manageStores);
                 return;
               }
               // Soft-delete the store: hard-delete would orphan

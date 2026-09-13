@@ -6,15 +6,17 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/models/activity_log.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
 import 'package:reebaplus_pos/features/stores/data/models/store.dart';
+import 'package:reebaplus_pos/shared/models/activity_log.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
-import 'package:reebaplus_pos/core/permissions/permissions.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 class ActivityLogScreen extends ConsumerStatefulWidget {
   const ActivityLogScreen({super.key});
@@ -173,6 +175,9 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           Expanded(
             child: Builder(
               builder: (context) {
+                if (ref.watch(zeroStoresEmptySurfaceProvider)) {
+                  return const FirstRunEmptyState();
+                }
                 final desiredStoreId = ref.watch(lockedStoreProvider).value;
                 final state = ref.watch(paginatedActivityLogsProvider(desiredStoreId));
 
