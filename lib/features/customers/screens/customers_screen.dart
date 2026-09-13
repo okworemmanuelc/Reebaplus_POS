@@ -5,12 +5,14 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
@@ -68,6 +70,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           Expanded(
             child: Builder(
               builder: (context) {
+                if (ref.watch(zeroStoresEmptySurfaceProvider)) {
+                  return const FirstRunEmptyState();
+                }
                 final customers = ref.watch(customerServiceProvider).value;
                 final balances =
                     ref.watch(creditBalancesKoboProvider).valueOrNull ??
@@ -145,7 +150,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           ),
         ],
       ),
-      floatingActionButton: Gates.addCustomer.allows(ref)
+      floatingActionButton: (ref.watch(allStoresProvider).valueOrNull?.isNotEmpty == true &&
+              !ref.watch(zeroStoresEmptySurfaceProvider) &&
+              Gates.addCustomer.allows(ref))
           ? AppFAB(
               heroTag: 'customers_fab',
               onPressed: () => AddCustomerSheet.show(context),

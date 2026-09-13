@@ -8,7 +8,50 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-153 sessions logged. Codebase is live and being verified on-device.
+154 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #231 — First-Store Empty States & Atomic First-Store Write Path (2026-09-13)
+Branch `feat/first-store-empty-states-231` cut from `main`.
+Implements Issue #231 according to PRD #229 (Zero-Stores Empty States & First-Store Creation Flow):
+
+**Half One (Empty States):**
+- Extended `FirstRunSurfaceState` with `createStoreCta` which outranks `addProductCta`.
+- Updated `computeFirstRunSurfaceState` to take `hasStores` and `canCreateStore`. Precedence:
+  1. `hasProducts: true` → `hasContent`
+  2. `firstLoadInProgress: true` → `skeleton`
+  3. `!hasStores`: `canCreateStore ? createStoreCta : neutralEmpty`
+  4. `hasStores`: `canAddProduct ? addProductCta : neutralEmpty`
+- In `firstRunSurfaceStateProvider`, wired `allStoresProvider` and `Gates.manageStores`.
+- Added `zeroStoresEmptySurfaceProvider` to cleanly identify zero-stores empty state across reachable screens.
+- Extended `FirstRunEmptyState` to render `createStoreCta` with store icon, title "No stores yet", subtitle "Create a store to start adding products and selling.", and "Create a store" button routing to Stores tab (`NavigationService.storesTab = 7`).
+- Wired reachable screens to display `FirstRunEmptyState` on zero stores: `HomeScreen`, `OrdersScreen`, `CustomersScreen`, `ExpensesScreen`, `ReceiveStockScreen`, `ActivityLogScreen`, `CartScreen`, and gated action buttons / FABs.
+
+**Half Two (Atomic First-Store Write Path):**
+- Refactored `StoresDao.createStore` to run inside an atomic `transaction`:
+  1. Creates store row with `kind: 'store'` (default) or provided kind.
+  2. Binds `user_stores` for the creator.
+  3. Updates `users.store_id` if currently null/empty.
+  4. Writes `activity_logs` entry (`action: 'store.create'`).
+  5. Enqueues all modified rows to `sync_queue` via `enqueueUpsert`.
+- In `StoresScreen`:
+  - Replaced direct `db.into(db.stores).insert(...)` with `db.storesDao.createStore`.
+  - Added immediate `await ref.read(authProvider).refreshCurrentUser()`.
+  - Repointed store edit sheet to `db.storesDao.updateStore`.
+  - Replaced silent return permission checks with `showGateDenied(ctx, Gates.manageStores)`.
+
+**Testing & Verification:**
+- Extended `test/providers/first_run_surface_state_test.dart` covering store presence, canCreateStore, zeroStoresEmptySurfaceProvider, loading/error stream states, and precedence.
+- Added `test/stores/first_store_write_path_test.dart` testing atomic store creation, user_stores binding, users.store_id updating, activity logging, and outbox enqueueing/coalescing.
+- Added `test/widgets/first_run_empty_state_test.dart` verifying widget rendering, route popping, and navigation.
+- Verified `flutter analyze` passes with 0 errors and 0 warnings.
+
+**Review Follow-ups (CodeRabbit Review):**
+- In `CartScreen`, evaluated `zeroStoresEmptySurfaceProvider` early in `build` to render `FirstRunEmptyState` before any cart calculations or controls, and guarded cart actions.
+- In `FirstRunEmptyState`, popped any pushed routes back to root before setting `NavigationService.storesTab`.
+- In `first_run_surface_state.dart`, handled `allStoresProvider` error and loading states explicitly so unresolved/failed reads do not emit premature `createStoreCta` or `zeroStoresEmptySurfaceProvider == true`.
+- In `customers_screen.dart` and `expenses_screen.dart`, guarded FABs so they require confirmed non-empty stores before showing.
+- In `stores_screen.dart`, isolated `refreshCurrentUser()` error handling so post-commit refresh failures cannot trigger "Could not save store" or allow duplicate store creations.
+- In `daos_stores_sessions.dart` (`createStore`), scoped and validated `targetUserId` against the active `businessId` before inserting `user_stores` binding or updating `users.store_id`.
 
 ### Repo consolidation + two long-lived branches merged (2026-09-13)
 `origin` reduced from 35 branches to `main` alone, with 0 open PRs. Only two of

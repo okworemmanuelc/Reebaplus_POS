@@ -1,19 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
+import 'package:reebaplus_pos/features/receiving/screens/receive_cart_screen.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_product_grid.dart';
-import 'package:reebaplus_pos/features/receiving/screens/receive_cart_screen.dart';
+import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
-import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
-import 'dart:async';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 
 class ReceiveStockScreen extends ConsumerStatefulWidget {
   const ReceiveStockScreen({super.key});
@@ -158,10 +162,14 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      bottomNavigationBar: _buildBottomBar(context),
+      bottomNavigationBar: ref.watch(zeroStoresEmptySurfaceProvider)
+          ? null
+          : _buildBottomBar(context),
       body: SafeArea(
-        child: Column(
-          children: [
+        child: ref.watch(zeroStoresEmptySurfaceProvider)
+            ? const FirstRunEmptyState()
+            : Column(
+                children: [
             if (_isSearching) _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
             if (!_isLoading)
               CategoryFilterBar(

@@ -17,11 +17,13 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/store_address.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -170,6 +172,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       appBar: _buildAppBar(context),
       body: Builder(
         builder: (context) {
+          if (ref.watch(zeroStoresEmptySurfaceProvider)) {
+            return const FirstRunEmptyState();
+          }
           final activeStoreId = ref.watch(lockedStoreProvider).value;
 
           return AppRefreshWrapper(

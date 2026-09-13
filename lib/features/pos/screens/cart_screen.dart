@@ -18,7 +18,9 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/crates/cart_crate_lines.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
@@ -131,6 +133,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _clearWithAnimation() async {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final cart = ref.read(cartProvider);
     if (cart.value.isEmpty) return;
     setState(() {
@@ -158,6 +161,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   /// being pushed onto a checkout screen quoting numbers they never saw. This
   /// mirrors how the price-staleness prompt returns to the cart.
   Future<void> _goToCheckout() async {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final bool moved;
     try {
       moved = await _crateSync.sync();
@@ -205,6 +209,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _saveCurrentCart() async {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final cart = ref.read(cartProvider);
     if (cart.value.isEmpty) {
       AppNotification.showError(context, 'Cannot save an empty cart');
@@ -274,6 +279,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   void _viewSavedCarts() {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final db = ref.read(databaseProvider);
     final custSvc = ref.read(customerServiceProvider);
     final cartSvc = ref.read(cartProvider);
@@ -435,6 +441,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       Theme.of(context).extension<AppSemanticColors>()?.success ?? success;
 
   void _showChangeCustomerModal() {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     // Default picker store — lone owner picks from POS lock.
     final String? defaultPickerStoreId = ref
         .read(navigationProvider)
@@ -761,6 +768,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _editItem(BuildContext ctx, Map<String, dynamic> item) async {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
     final removed = await EditItemModal.show(ctx, item);
     if (removed != null && mounted) {
       // Offer a 5s Undo for the removed line (§13.2).
@@ -1010,6 +1018,29 @@ class _CartScreenState extends ConsumerState<CartScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(zeroStoresEmptySurfaceProvider)) {
+      return SharedScaffold(
+        activeRoute: 'cart',
+        backgroundColor: _bg,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          elevation: 0,
+          leading: context.isDesktop ? null : const MenuButton(),
+          title: AppBarHeader(
+            icon: FontAwesomeIcons.cartShopping.data,
+            title: 'Cart',
+            subtitle: ref.watch(activeStoreLabelProvider),
+          ),
+          actions: const [
+            NotificationBell(),
+          ],
+        ),
+        body: const SafeArea(
+          child: FirstRunEmptyState(),
+        ),
+      );
+    }
+
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
