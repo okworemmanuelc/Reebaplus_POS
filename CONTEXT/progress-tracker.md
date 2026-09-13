@@ -10,6 +10,41 @@ The human updates it when resolving open questions or making architectural decis
 
 153 sessions logged. Codebase is live and being verified on-device.
 
+### Repo consolidation + two long-lived branches merged (2026-09-13)
+`origin` reduced from 35 branches to `main` alone, with 0 open PRs. Only two of
+26 branches held work absent from main; the rest were squash-merged (a MERGED PR
+whose tip is not an ancestor of main still shows as "unmerged" in `git branch
+--no-merged` — check the PR, not the graph) or obsolete (web-pos lives in the
+reebaplus-web repo).
+
+**Merged 1 — `fix/pos-and-login-stability` (the July fix that was never landed):**
+- [supabase_sync_service.dart](lib/core/services/supabase_sync_service.dart) —
+  `syncMinimumLogin` now pulls `roles`, `role_permissions` and `user_businesses`
+  in addition to `profiles`/`businesses`/`stores`/`users` (`tablesTotal` 4 → 7),
+  so the permission set resolves *before* `MainLayout` builds. Previously a fresh
+  device-join with a stalled background full pull was stranded on a hidden POS
+  tab with no bottom nav. **Precondition for the first-run rail (#231/#233)**,
+  which assume `Gates.viewStores` / `stores.manage` resolve for a new owner.
+- [pos_home_screen.dart](lib/features/pos/screens/pos_home_screen.dart) — the
+  scan FAB is hidden while a multi-store user has yet to pick a store.
+- Superseded halves of that branch were deliberately NOT taken: `mirrorNotifier`
+  (#153) beats its plain-`Provider` fix, and the single combined POS coach banner
+  (#148) beats its two-banner version, whose `hintPosTapAdd` key no longer exists.
+
+**Merged 2 — `feat/push-notifications-fcm` (#138), all three slices:** cloud
+foundation (`0159_push_notifications.sql` — slotted into the gap main left
+between 0158 and 0160, no renumber), `send-push` Edge Function, and the Flutter
+client (`PushMessagingPort` seam, token lifecycle, soft-ask sheet, tap routing,
+killed-app replay) plus severity/megaphone rendering. ADR 0018 landed with no
+collision. Firebase pinned to core 3.x / messaging 15.x — the 4.x/16.x pairing
+does not compile.
+
+**Open, not done:** #138 has never been verified on a device (permission →
+`devices.fcm_token` populates → a real `console_broadcast` buzzes), and cloud
+0159 has not been applied to prod under that number.
+
+`flutter analyze` clean; full suite 1986 passed, 129 skipped, 0 failures.
+
 ### Phase 1 — Responsive Auth & Onboarding in Landscape (2026-09-08)
 Branch `fix/responsive-auth-landscape` cut from `fix/responsive-short-viewport-seam`.
 Implements Phase 1 of `docs/design/responsive-layout-plan.md` to ensure all auth
