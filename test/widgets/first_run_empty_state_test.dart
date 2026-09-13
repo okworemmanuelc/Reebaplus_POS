@@ -52,6 +52,53 @@ void main() {
     expect(NavigationService().currentIndex.value, 7);
   });
 
+  testWidgets('createStoreCta pops pushed route back to root before selecting stores tab', (tester) async {
+    NavigationService().currentIndex.value = 0;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          firstRunSurfaceStateProvider.overrideWithValue(FirstRunSurfaceState.createStoreCta),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const Scaffold(
+                          body: FirstRunEmptyState(),
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Push Route'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Push the child route containing FirstRunEmptyState
+    await tester.tap(find.text('Push Route'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No stores yet'), findsOneWidget);
+
+    // Tap "Create a store"
+    await tester.tap(find.text('Create a store'));
+    await tester.pumpAndSettle();
+
+    // Pushed route should have popped back to home
+    expect(find.text('Push Route'), findsOneWidget);
+    expect(find.text('No stores yet'), findsNothing);
+    expect(NavigationService().currentIndex.value, NavigationService.storesTab);
+  });
+
   testWidgets('renders neutralEmpty with no button and no mention of the owner', (tester) async {
     await tester.pumpWidget(_wrap(
       const FirstRunEmptyState(),

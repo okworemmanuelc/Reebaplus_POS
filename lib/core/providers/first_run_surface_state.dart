@@ -96,8 +96,9 @@ final firstRunSurfaceStateProvider = Provider<FirstRunSurfaceState>((ref) {
   final firstLoadInProgress = ref.watch(firstLoadSkeletonActiveProvider);
 
   final storesAsync = ref.watch(allStoresProvider);
+  final storesStillResolving =
+      (storesAsync.isLoading || storesAsync.hasError) && !hasProducts;
   final stores = storesAsync.valueOrNull;
-  final storesStillResolving = storesAsync.isLoading && !hasProducts;
 
   final canAddProduct = Gates.addProduct.rule.evaluate(
     ref.watch(gateContextProvider),
@@ -121,7 +122,9 @@ final zeroStoresEmptySurfaceProvider = Provider<bool>((ref) {
   final surface = ref.watch(firstRunSurfaceStateProvider);
   if (surface == FirstRunSurfaceState.createStoreCta) return true;
   if (surface == FirstRunSurfaceState.neutralEmpty) {
-    final stores = ref.watch(allStoresProvider).valueOrNull;
+    final storesAsync = ref.watch(allStoresProvider);
+    if (storesAsync.isLoading || storesAsync.hasError) return false;
+    final stores = storesAsync.valueOrNull;
     return stores != null && stores.isEmpty;
   }
   return false;

@@ -40,10 +40,17 @@ Implements Issue #231 according to PRD #229 (Zero-Stores Empty States & First-St
   - Replaced silent return permission checks with `showGateDenied(ctx, Gates.manageStores)`.
 
 **Testing & Verification:**
-- Extended `test/providers/first_run_surface_state_test.dart` covering store presence, canCreateStore, zeroStoresEmptySurfaceProvider, and precedence.
+- Extended `test/providers/first_run_surface_state_test.dart` covering store presence, canCreateStore, zeroStoresEmptySurfaceProvider, loading/error stream states, and precedence.
 - Added `test/stores/first_store_write_path_test.dart` testing atomic store creation, user_stores binding, users.store_id updating, activity logging, and outbox enqueueing/coalescing.
-- Added `test/widgets/first_run_empty_state_test.dart` verifying widget rendering and navigation.
+- Added `test/widgets/first_run_empty_state_test.dart` verifying widget rendering, route popping, and navigation.
 - Verified `flutter analyze` passes with 0 errors and 0 warnings.
+
+**Review Follow-ups (CodeRabbit Review):**
+- In `CartScreen`, evaluated `zeroStoresEmptySurfaceProvider` early in `build` to render `FirstRunEmptyState` before any cart calculations or controls, and guarded cart actions.
+- In `FirstRunEmptyState`, popped any pushed routes back to root before setting `NavigationService.storesTab`.
+- In `first_run_surface_state.dart`, handled `allStoresProvider` error and loading states explicitly so unresolved/failed reads do not emit premature `createStoreCta` or `zeroStoresEmptySurfaceProvider == true`.
+- In `customers_screen.dart` and `expenses_screen.dart`, guarded FABs so they require confirmed non-empty stores before showing.
+- In `stores_screen.dart`, isolated `refreshCurrentUser()` error handling so post-commit refresh failures cannot trigger "Could not save store" or allow duplicate store creations.
 
 ### Repo consolidation + two long-lived branches merged (2026-09-13)
 `origin` reduced from 35 branches to `main` alone, with 0 open PRs. Only two of

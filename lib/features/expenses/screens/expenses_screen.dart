@@ -251,7 +251,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           );
         },
       ),
-      floatingActionButton: (!ref.watch(zeroStoresEmptySurfaceProvider) &&
+      floatingActionButton: (ref.watch(allStoresProvider).valueOrNull?.isNotEmpty == true &&
+              !ref.watch(zeroStoresEmptySurfaceProvider) &&
               Gates.addExpense.allows(ref))
           ? AppFAB(
               heroTag: 'expenses_fab',

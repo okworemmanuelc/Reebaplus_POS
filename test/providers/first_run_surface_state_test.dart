@@ -262,5 +262,25 @@ void main() {
       await container.read(allStoresProvider.future);
       expect(container.read(zeroStoresEmptySurfaceProvider), isFalse);
     });
+
+    test('returns false and skeleton when allStoresProvider emits an error', () async {
+      final container = ProviderContainer(
+        overrides: [
+          hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
+          allStoresProvider.overrideWith((ref) => Stream<List<StoreData>>.error(Exception('db error'))),
+          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          gateContextProvider.overrideWithValue(_ctx(canCreateStore: true)),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Wait for stream to emit error
+      try {
+        await container.read(allStoresProvider.future);
+      } catch (_) {}
+
+      expect(container.read(firstRunSurfaceStateProvider), FirstRunSurfaceState.skeleton);
+      expect(container.read(zeroStoresEmptySurfaceProvider), isFalse);
+    });
   });
 }

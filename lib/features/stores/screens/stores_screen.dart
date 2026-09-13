@@ -200,9 +200,14 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                     location: combinedLocation,
                                     userId: currentUserId,
                                   );
-                                  await ref
-                                      .read(authProvider)
-                                      .refreshCurrentUser();
+                                  try {
+                                    await ref
+                                        .read(authProvider)
+                                        .refreshCurrentUser();
+                                  } catch (_) {
+                                    // Refresh failure after commit must not trigger
+                                    // "Could not save store" or allow a duplicate retry.
+                                  }
                                   if (ctx.mounted) Navigator.pop(ctx);
                                 } catch (e) {
                                   setSheet(() => saving = false);

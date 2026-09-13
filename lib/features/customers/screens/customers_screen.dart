@@ -150,7 +150,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           ),
         ],
       ),
-      floatingActionButton: (!ref.watch(zeroStoresEmptySurfaceProvider) &&
+      floatingActionButton: (ref.watch(allStoresProvider).valueOrNull?.isNotEmpty == true &&
+              !ref.watch(zeroStoresEmptySurfaceProvider) &&
               Gates.addCustomer.allows(ref))
           ? AppFAB(
               heroTag: 'customers_fab',

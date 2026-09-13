@@ -52,8 +52,10 @@ class FirstRunEmptyState extends ConsumerWidget {
             child: AppButton(
               text: 'Create a store',
               icon: FontAwesomeIcons.plus.data,
-              onPressed: () =>
-                  NavigationService().setIndex(NavigationService.storesTab),
+              onPressed: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+                NavigationService().setIndex(NavigationService.storesTab);
+              },
             ),
           ),
         );
