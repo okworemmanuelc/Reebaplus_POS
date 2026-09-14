@@ -77,9 +77,12 @@ class NavigationService {
   final GlobalKey<ScaffoldState> mainScaffoldKey = GlobalKey<ScaffoldState>();
 
   final ValueNotifier<bool> drawerOpenNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> isDesktopNotifier = ValueNotifier<bool>(false);
 
   bool get isDrawerOpen =>
-      drawerOpenNotifier.value || (mainScaffoldKey.currentState?.isDrawerOpen ?? false);
+      isDesktopNotifier.value ||
+      drawerOpenNotifier.value ||
+      (mainScaffoldKey.currentState?.isDrawerOpen ?? false);
 
   void openDrawer() {
     mainScaffoldKey.currentState?.openDrawer();

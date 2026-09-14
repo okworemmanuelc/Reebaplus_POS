@@ -363,7 +363,8 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
         ),
 
         // 2. Caption card positioned relative to hole
-        if (hole != null) _buildCaption(context, hole, screenSize),
+        if (hole != null)
+          _buildCaption(context, hole, screenSize),
       ],
     );
   }
@@ -385,7 +386,8 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
       bottom: bottomPos,
       left: context.getRSize(24),
       right: context.getRSize(24),
-      child: Center(
+      child: IgnorePointer(
+        child: Center(
         child: Container(
           constraints: BoxConstraints(maxWidth: context.getRSize(320)),
           padding: EdgeInsets.symmetric(
@@ -433,6 +435,7 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

@@ -61,6 +61,28 @@ void main() {
         StopOneStep.storesMenuItem,
       );
     });
+
+    test('form sheet open -> createStoreForm regardless of other flags', () {
+      expect(
+        computeStopOneStep(
+          isStoresTab: true,
+          isDrawerOpen: false,
+          isStoresItemVisible: false,
+          isCreateStoreFormOpen: true,
+        ),
+        StopOneStep.createStoreForm,
+      );
+
+      expect(
+        computeStopOneStep(
+          isStoresTab: false,
+          isDrawerOpen: true,
+          isStoresItemVisible: true,
+          isCreateStoreFormOpen: true,
+        ),
+        StopOneStep.createStoreForm,
+      );
+    });
   });
 
   group('Stop 1 captions and targets', () {
@@ -76,6 +98,9 @@ void main() {
 
       expect(captionForStopOneStep(StopOneStep.createStoreAction), 'Tap to create your first store');
       expect(targetIdForStopOneStep(StopOneStep.createStoreAction), SpotlightTargetId.createStoreFab);
+
+      expect(captionForStopOneStep(StopOneStep.createStoreForm), 'Enter store details and tap Save Store');
+      expect(targetIdForStopOneStep(StopOneStep.createStoreForm), SpotlightTargetId.createStoreForm);
     });
   });
 
@@ -238,6 +263,71 @@ void main() {
 
       // Overlay disappears atomically
       expect(find.byType(SpotlightOverlay), findsNothing);
+    });
+
+    testWidgets('points to createStoreForm when form target is mounted', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            firstRunTourStopProvider.overrideWithValue(TourStop.createStore),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Stack(
+                children: [
+                  SpotlightTarget(
+                    id: SpotlightTargetId.createStoreForm,
+                    child: SizedBox(
+                      width: 300,
+                      height: 400,
+                      child: Text('Store Form'),
+                    ),
+                  ),
+                  FirstRunRailTourView(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SpotlightOverlay), findsOneWidget);
+      expect(find.text('Enter store details and tap Save Store'), findsOneWidget);
+    });
+
+    testWidgets('renders non-blocking SpotlightOverlay when tourStop is addProduct', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            firstRunTourStopProvider.overrideWithValue(TourStop.addProduct),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Stack(
+                children: [
+                  SpotlightTarget(
+                    id: SpotlightTargetId.addProductFab,
+                    child: SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: Icon(Icons.add),
+                    ),
+                  ),
+                  FirstRunRailTourView(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SpotlightOverlay), findsOneWidget);
+      expect(find.text('Tap to add your first product'), findsOneWidget);
+
+      final overlayWidget = tester.widget<SpotlightOverlay>(find.byType(SpotlightOverlay));
+      expect(overlayWidget.blocking, isFalse);
     });
   });
 }

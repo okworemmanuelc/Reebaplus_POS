@@ -14,6 +14,9 @@ enum SpotlightTargetId {
   /// The "Add Store" action / FAB on [StoresScreen].
   createStoreFab,
 
+  /// The "New Store" form / save action on [StoresScreen].
+  createStoreForm,
+
   /// The "Add Product" action on [InventoryScreen] (Stop 2).
   addProductFab,
 }
@@ -25,46 +28,78 @@ enum SpotlightTargetId {
 class SpotlightTargetRegistry {
   SpotlightTargetRegistry._();
 
-  static final Map<SpotlightTargetId, GlobalKey> _targets = {};
+  static final Map<SpotlightTargetId, Set<GlobalKey>> _targets = {};
 
   /// Incremented whenever a target is registered, unregistered, or cleared.
   static final ValueNotifier<int> registryRevision = ValueNotifier<int>(0);
 
   /// Registers a target [id] with its [key].
   static void register(SpotlightTargetId id, GlobalKey key) {
-    _targets[id] = key;
+    _targets.putIfAbsent(id, () => <GlobalKey>{}).add(key);
     registryRevision.value++;
   }
 
   /// Unregisters a target [id] if the registered key matches [key].
   static void unregister(SpotlightTargetId id, GlobalKey key) {
-    if (_targets[id] == key) {
-      _targets.remove(id);
+    final set = _targets[id];
+    if (set != null) {
+      set.remove(key);
+      if (set.isEmpty) {
+        _targets.remove(id);
+      }
       registryRevision.value++;
     }
   }
 
-  /// Looks up the [GlobalKey] registered for [id].
-  static GlobalKey? getKey(SpotlightTargetId id) => _targets[id];
+  /// Looks up the best active [GlobalKey] registered for [id].
+  static GlobalKey? getKey(SpotlightTargetId id) {
+    final keys = _targets[id];
+    if (keys == null || keys.isEmpty) return null;
+    for (final key in keys) {
+      final ctx = key.currentContext;
+      if (ctx != null) {
+        final rb = ctx.findRenderObject() as RenderBox?;
+        if (rb != null && rb.attached && rb.hasSize && rb.size.width > 0 && rb.size.height > 0) {
+          return key;
+        }
+      }
+    }
+    for (final key in keys) {
+      if (key.currentContext != null) return key;
+    }
+    return keys.first;
+  }
 
   /// Computes the bounding [Rect] in global screen coordinates for [id].
   ///
   /// Returns `null` if the target is unmounted, not attached, or has no size.
   static Rect? getTargetRect(SpotlightTargetId id) {
-    final key = _targets[id];
-    if (key == null) return null;
-    final ctx = key.currentContext;
-    if (ctx == null) return null;
-    final renderBox = ctx.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize || !renderBox.attached) {
-      return null;
+    final keys = _targets[id];
+    if (keys == null || keys.isEmpty) return null;
+
+    for (final key in keys) {
+      final ctx = key.currentContext;
+      if (ctx == null) continue;
+      final renderBox = ctx.findRenderObject() as RenderBox?;
+      if (renderBox == null || !renderBox.hasSize || !renderBox.attached) {
+        continue;
+      }
+      if (renderBox.size.width <= 0 || renderBox.size.height <= 0) {
+        continue;
+      }
+      try {
+        final offset = renderBox.localToGlobal(Offset.zero);
+        return offset & renderBox.size;
+      } catch (_) {
+        continue;
+      }
     }
-    try {
-      final offset = renderBox.localToGlobal(Offset.zero);
-      return offset & renderBox.size;
-    } catch (_) {
-      return null;
-    }
+    return null;
+  }
+
+  /// Notifies listeners that targets may have moved (e.g. on scroll).
+  static void notifyTargetsMoved() {
+    registryRevision.value++;
   }
 
   /// Checks whether target [id] is currently visible within the screen bounds.

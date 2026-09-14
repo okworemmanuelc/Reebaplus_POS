@@ -129,6 +129,14 @@ class SystemConfigDao extends DatabaseAccessor<AppDatabase>
     return row?.value;
   }
 
+  Stream<String?> watch(String key) {
+    return (select(systemConfig)
+          ..where((t) => t.key.equals(key))
+          ..limit(1))
+        .watchSingleOrNull()
+        .map((row) => row?.value);
+  }
+
   Future<void> set(String key, String? value) async {
     await customStatement(
       'INSERT INTO system_config ("key", value) VALUES (?, ?) '

@@ -254,6 +254,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     // `applyRoleLanding` is a one-shot — re-scheduling it on every build until
     // the role resolves is cheap, and it will not yank a user who has already
     // moved to another tab.
+    nav.isDesktopNotifier.value = context.isDesktop;
     final canSell = Gates.makeSale.allows(ref);
     final role = ref.watch(currentUserRoleProvider);
     final permsResolved =

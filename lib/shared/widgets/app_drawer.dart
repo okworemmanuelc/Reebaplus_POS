@@ -334,12 +334,17 @@ class AppDrawer extends ConsumerWidget {
 
     return SpotlightTarget(
       id: SpotlightTargetId.drawerMenuList,
-      child: ListView(
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(12),
-          vertical: context.getRSize(16),
-        ),
-      children: [
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          SpotlightTargetRegistry.notifyTargetsMoved();
+          return false;
+        },
+        child: ListView(
+          padding: EdgeInsets.symmetric(
+            horizontal: context.getRSize(12),
+            vertical: context.getRSize(16),
+          ),
+          children: [
         // §12.1 store picker — the one app-wide active-store control. Sits above
         // Home; only shows when the user can choose more than one store.
         _buildStorePicker(context, ref),
@@ -599,7 +604,8 @@ class AppDrawer extends ConsumerWidget {
         SizedBox(height: context.deviceBottomPadding + context.getRSize(20)),
       ],
     ),
-  );
+  ),
+);
 }
 
   // ── Navigation logic — now uses NavigationService shell ────────────────────

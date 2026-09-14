@@ -32,8 +32,19 @@ Branch `feat/walk-to-first-store-233`, cut from `origin/main`. Slice 4 of PRD #2
 **Tests:**
 - `test/providers/first_run_tour_state_test.dart`: 16 unit tests for pure derivation and live provider wiring.
 - `test/widgets/spotlight_overlay_test.dart`: 8 widget tests verifying cutout hole, blocking tap swallowing, drag pass-through, non-blocking pass-through, missing target fallback, and registry lookup.
-- `test/tour/first_run_tour_sequence_test.dart`: 10 widget/unit tests verifying step progression, captions, abort handling, and atomic tour completion when a store commits to Drift.
+- `test/tour/first_run_tour_sequence_test.dart`: 13 widget/unit tests verifying step progression, captions, abort handling, atomic tour completion when a store commits to Drift, `createStoreForm` sub-step, and non-blocking `addProduct` bridge.
 - Static analysis and regression verification clean: `flutter analyze` clean with 0 issues; `test/auth/auth_landscape_screens_test.dart` passes (40 tests).
+
+**Review Follow-ups & Hardening (2026-09-14):**
+- **Hydration Race in `TourDeviceAbortCountNotifier`:** Updated `recordAbort()` to read persisted abort count from `SharedPreferences` before incrementing and set `_hasRecordedAbort = true`, preventing subsequent `_hydrate()` completion from clobbering incremented state.
+- **Production `tourRemoteOffSwitchProvider`:** Added `watch(String key)` stream to `SystemConfigDao`, wiring `tourRemoteOffSwitchStreamProvider` to `system_config` table key `feature.first_run_rail.disabled` with graceful fallback to `false` when unavailable or unset.
+- **Loading Guard in `firstRunTourStopProvider`:** Added check for `productsAsync.isLoading || productsAsync.hasError` returning `TourStop.none`, preventing premature fallback to `false` before product query settles.
+- **Desktop Navigation Compatibility:** Added `isDesktopNotifier` to `NavigationService` and updated `isDrawerOpen` to return `true` on desktop where sidebar is pinned open; wired in `MainLayout.build`.
+- **Caption Pointer Transparency:** Wrapped `_buildCaption` inside `Positioned` with `IgnorePointer` so spotlight captions never swallow pointer events or impede interactions.
+- **Multi-key Target Registry:** Upgraded `SpotlightTargetRegistry` to retain `Set<GlobalKey>` per target ID, resolving the mounted and attached `RenderBox` with non-zero dimensions to avoid transient animation collisions. Added `notifyTargetsMoved()`.
+- **Drawer Scroll Notification:** Wrapped `AppDrawer` `ListView` with `NotificationListener<ScrollNotification>` calling `SpotlightTargetRegistry.notifyTargetsMoved()` so off-screen targets dynamically flip to on-screen when scrolled into view.
+- **Store Form Sub-step:** Added `SpotlightTargetId.createStoreForm` and wrapped `AddStoreSheet` form in `stores_screen.dart`, extending `StopOneStep.createStoreForm` with caption "Enter store details and tap Save Store" to keep spotlight active until Drift commits the store row.
+- **Stop 2 Bridge (`addProduct`):** Added non-blocking handler in `FirstRunRailTourView` for `TourStop.addProduct` and tagged `SpotlightTargetId.addProductFab` on `AppSpeedDialFab` in `inventory_screen.dart`.
 
 ### Issue #232 — Sign-up completes without creating a Store (2026-09-13)
 Branch `feat/signup-without-store-232`, cut from `feat/country-before-phone-230` (#230's

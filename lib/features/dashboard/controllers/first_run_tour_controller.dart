@@ -20,6 +20,9 @@ enum StopOneStep {
 
   /// Point at Add Store action / FAB on Stores screen.
   createStoreAction,
+
+  /// Point at Add Store form sheet when open.
+  createStoreForm,
 }
 
 /// Pure derivation of the current sub-step in Stop 1.
@@ -27,7 +30,9 @@ StopOneStep computeStopOneStep({
   required bool isStoresTab,
   required bool isDrawerOpen,
   required bool isStoresItemVisible,
+  bool isCreateStoreFormOpen = false,
 }) {
+  if (isCreateStoreFormOpen) return StopOneStep.createStoreForm;
   if (isStoresTab) return StopOneStep.createStoreAction;
   if (isDrawerOpen) {
     return isStoresItemVisible
@@ -48,6 +53,8 @@ String captionForStopOneStep(StopOneStep step) {
       return 'Tap Stores';
     case StopOneStep.createStoreAction:
       return 'Tap to create your first store';
+    case StopOneStep.createStoreForm:
+      return 'Enter store details and tap Save Store';
   }
 }
 
@@ -62,6 +69,8 @@ SpotlightTargetId targetIdForStopOneStep(StopOneStep step) {
       return SpotlightTargetId.drawerStoresItem;
     case StopOneStep.createStoreAction:
       return SpotlightTargetId.createStoreFab;
+    case StopOneStep.createStoreForm:
+      return SpotlightTargetId.createStoreForm;
   }
 }
 
@@ -74,8 +83,8 @@ void abortFirstRunTour(WidgetRef ref) {
 
 /// The overlay widget rendering the active stop and sub-steps of the first-run rail.
 ///
-/// Mounted at the top of [MainLayout]'s Stack. Active only when [firstRunTourStopProvider]
-/// evaluates to [TourStop.createStore].
+/// Mounted at the top of [MainLayout]'s Stack. Handles Stop 1 (Create Store, blocking)
+/// and non-blocking bridge to Stop 2 (Add Product).
 class FirstRunRailTourView extends ConsumerWidget {
   const FirstRunRailTourView({
     super.key,
@@ -87,8 +96,24 @@ class FirstRunRailTourView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tourStop = ref.watch(firstRunTourStopProvider);
-    if (tourStop != TourStop.createStore) {
+    if (tourStop == TourStop.none) {
       return const SizedBox.shrink();
+    }
+
+    if (tourStop == TourStop.addProduct) {
+      return ListenableBuilder(
+        listenable: SpotlightTargetRegistry.registryRevision,
+        builder: (context, _) {
+          final hasTarget =
+              SpotlightTargetRegistry.getKey(SpotlightTargetId.addProductFab) != null;
+          if (!hasTarget) return const SizedBox.shrink();
+          return const SpotlightOverlay(
+            targetId: SpotlightTargetId.addProductFab,
+            caption: 'Tap to add your first product',
+            blocking: false,
+          );
+        },
+      );
     }
 
     final nav = ref.watch(navigationProvider);
@@ -108,11 +133,14 @@ class FirstRunRailTourView extends ConsumerWidget {
           SpotlightTargetId.drawerStoresItem,
           screenSize: screenSize,
         );
+        final isCreateStoreFormOpen =
+            SpotlightTargetRegistry.getKey(SpotlightTargetId.createStoreForm) != null;
 
         final step = computeStopOneStep(
           isStoresTab: isStoresTab,
           isDrawerOpen: isDrawerOpen,
           isStoresItemVisible: isStoresItemVisible,
+          isCreateStoreFormOpen: isCreateStoreFormOpen,
         );
 
         return SpotlightOverlay(

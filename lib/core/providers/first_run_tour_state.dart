@@ -74,6 +74,7 @@ final tourSessionAbortedProvider =
 /// If a device fails 3 times, the tour is suppressed permanently on this device.
 class TourDeviceAbortCountNotifier extends Notifier<int> {
   static const prefKey = 'first_run_rail_device_abort_count_v1';
+  bool _hasRecordedAbort = false;
 
   @override
   int build() {
@@ -83,15 +84,18 @@ class TourDeviceAbortCountNotifier extends Notifier<int> {
 
   Future<void> _hydrate() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_hasRecordedAbort) return;
     final count = prefs.getInt(prefKey) ?? 0;
     state = count;
   }
 
   /// Increments the abort count, persists it, and returns the new count.
   Future<int> recordAbort() async {
-    final newCount = state + 1;
-    state = newCount;
     final prefs = await SharedPreferences.getInstance();
+    final persisted = prefs.getInt(prefKey) ?? state;
+    final newCount = persisted + 1;
+    _hasRecordedAbort = true;
+    state = newCount;
     await prefs.setInt(prefKey, newCount);
     return newCount;
   }
@@ -107,10 +111,26 @@ final tourDeviceAbortCountProvider =
       TourDeviceAbortCountNotifier.new,
     );
 
+/// Stream provider watching system_config for the remote off-switch.
+final tourRemoteOffSwitchStreamProvider = StreamProvider<bool>((ref) {
+  try {
+    final db = ref.watch(databaseProvider);
+    return db.systemConfigDao
+        .watch('feature.first_run_rail.disabled')
+        .map((val) => val == 'true' || val == '"true"' || val == '1');
+  } catch (_) {
+    return Stream.value(false);
+  }
+});
+
 /// Remote off-switch for the first-run rail.
 ///
-/// Can be wired to remote config or server settings. Defaults to `false` (tour enabled).
-final tourRemoteOffSwitchProvider = Provider<bool>((ref) => false);
+/// Backed by production system_config table (`feature.first_run_rail.disabled`).
+/// Falls back to `false` (tour enabled) when unset or unavailable.
+final tourRemoteOffSwitchProvider = Provider<bool>((ref) {
+  final asyncVal = ref.watch(tourRemoteOffSwitchStreamProvider);
+  return asyncVal.valueOrNull ?? false;
+});
 
 /// The active tour stop for the running application.
 ///
@@ -132,6 +152,8 @@ final firstRunTourStopProvider = Provider<TourStop>((ref) {
   final hasStores = stores != null && stores.isNotEmpty;
 
   final productsAsync = ref.watch(hasLocalProductsProvider);
+  // While products are resolving or in error, do not show tour
+  if (productsAsync.isLoading || productsAsync.hasError) return TourStop.none;
   final hasProducts = productsAsync.valueOrNull ?? false;
 
   final abortedThisSession = ref.watch(tourSessionAbortedProvider);

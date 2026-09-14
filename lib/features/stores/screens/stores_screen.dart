@@ -90,8 +90,10 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                 rSize(ctx, 24),
                 rSize(ctx, 32),
               ),
-              child: Form(
-                key: formKey,
+              child: SpotlightTarget(
+                id: SpotlightTargetId.createStoreForm,
+                child: Form(
+                  key: formKey,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -225,6 +227,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                   ),
                 ),
               ),
+            ),
             ),
           );
         },
