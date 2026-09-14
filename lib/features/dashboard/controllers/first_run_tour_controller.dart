@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_overlay.dart';
@@ -128,7 +129,7 @@ class FirstRunRailTourView extends ConsumerWidget {
         final isStoresTab = nav.currentIndex.value == NavigationService.storesTab;
         final isDrawerOpen = nav.isDrawerOpen;
 
-        final screenSize = MediaQuery.of(context).size;
+        final screenSize = Size(context.screenWidth, context.screenHeight);
         final isStoresItemVisible = SpotlightTargetRegistry.isVisibleOnScreen(
           SpotlightTargetId.drawerStoresItem,
           screenSize: screenSize,

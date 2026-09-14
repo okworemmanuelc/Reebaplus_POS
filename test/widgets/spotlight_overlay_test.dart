@@ -11,6 +11,47 @@ void main() {
     SpotlightTargetRegistry.clear();
   });
 
+  group('SpotlightOverlay target tracking', () {
+    testWidgets('hole follows a target that animates into place', (
+      tester,
+    ) async {
+      // The drawer slides in over ~250 ms. Resolving the rect once, on the
+      // frame the target mounts, freezes the hole off-screen and leaves the
+      // owner under a fully dark sheet with nothing to tap.
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                _SlidingTarget(),
+                SpotlightOverlay(
+                  targetId: SpotlightTargetId.drawerStoresItem,
+                  caption: 'Tap Stores',
+                  blocking: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final hole = tester
+          .renderObject<RenderSpotlightOverlay>(
+            find.byWidgetPredicate(
+              (w) => w is LeafRenderObjectWidget && w.runtimeType.toString() ==
+                  '_SpotlightOverlayBackground',
+            ),
+          )
+          .paddedHoleRect;
+
+      expect(hole, isNotNull);
+      // Target settles at left: 0, top: 100, 60x40, with 6px hole padding.
+      expect(hole!.left, -6);
+      expect(hole.top, 94);
+    });
+  });
+
   group('SpotlightOverlay', () {
     testWidgets('renders cutout hole over target rect with caption', (tester) async {
       const targetRect = Rect.fromLTWH(50, 50, 100, 40);
@@ -241,4 +282,42 @@ void main() {
       expect(targetRect.height, 48.0);
     });
   });
+}
+
+
+/// A target that slides in from off-screen, mimicking the navigation drawer.
+class _SlidingTarget extends StatefulWidget {
+  const _SlidingTarget();
+
+  @override
+  State<_SlidingTarget> createState() => _SlidingTargetState();
+}
+
+class _SlidingTargetState extends State<_SlidingTarget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 250),
+  )..forward();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => Positioned(
+        left: -300 + 300 * _controller.value,
+        top: 100,
+        child: const SpotlightTarget(
+          id: SpotlightTargetId.drawerStoresItem,
+          child: SizedBox(width: 60, height: 40),
+        ),
+      ),
+    );
+  }
 }

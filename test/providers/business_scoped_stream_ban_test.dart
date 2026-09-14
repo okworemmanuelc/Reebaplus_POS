@@ -41,6 +41,11 @@ const _allowlist = <String>{
   'localBusinessesProvider', // all businesses on the device
   'pendingCrateReturnsProvider', // raw select, no session filter
   'pendingReturnsWithDetailsProvider', // raw join, no session filter
+  // Global, pull-only feature-flag table: `system_config` is keyed on `key`
+  // alone and carries no business_id column (see SupabaseCloudTransport, which
+  // pulls it unfiltered). The first-run rail off-switch is deliberately
+  // app-wide, not per-tenant.
+  'tourRemoteOffSwitchStreamProvider',
 };
 
 /// Matches a top-level raw stream provider declaration —

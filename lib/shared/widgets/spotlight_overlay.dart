@@ -272,11 +272,16 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
   void initState() {
     super.initState();
     SpotlightTargetRegistry.registryRevision.addListener(_onRegistryChanged);
+    // While this overlay is up, the registry re-resolves target rects every
+    // painted frame so the hole follows a target that is still animating into
+    // place (the drawer slides in over ~250 ms).
+    SpotlightTargetRegistry.beginTracking();
     _startTargetLookup();
   }
 
   @override
   void dispose() {
+    SpotlightTargetRegistry.endTracking();
     SpotlightTargetRegistry.registryRevision.removeListener(_onRegistryChanged);
     _lookupTimer?.cancel();
     _timeoutTimer?.cancel();
@@ -347,7 +352,7 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
+    final screenSize = Size(context.screenWidth, context.screenHeight);
     final hole = _resolvedRect;
 
     return Stack(

@@ -57,6 +57,48 @@ A saved position inside a stop may remember internal sub-steps, but **cannot mar
 
 Within Stop 1, the step directing the user to scroll the drawer menu is **strictly conditional on the Stores nav item being off-screen**. On tablets, desktop, or large phones where the item is already within the viewport, the scroll step is skipped automatically.
 
+### 7. The Target Registry Never Notifies Mid-Frame
+
+Targets register from `initState` and unregister from `dispose`, both of which run
+while the framework is building or finalising the tree. `registryRevision` is a
+`ValueNotifier` that tour widgets listen to, so mutating it there synchronously calls
+`markNeedsBuild()` on a listener that is **not** an ancestor of the widget being built —
+which Flutter rejects outright (`setState() or markNeedsBuild() called during build`).
+Because `MainLayout` warms each tab offstage one per frame and every tab carries a
+`MenuButton`, this fires on a brand-new owner's first seconds in the app.
+
+**Invariant:** every revision bump goes through one phase-aware path. Mid-frame, the
+bump is deferred to the end of that frame — which also coalesces a burst of
+registrations into a single notification.
+
+### 8. A Target Must Be Painted, Not Merely Laid Out
+
+`MainLayout` keeps every visited tab mounted under an `Offstage`, and an offstage
+subtree is still laid out: it is attached, has a size, and reports a plausible global
+offset. Selecting a target on size alone can therefore hand back the `MenuButton` of a
+tab nobody is looking at and cut the hole over empty screen.
+
+**Invariant:** target resolution walks the render tree and rejects any target an
+ancestor declines to paint (`RenderObject.paintsChild`). A target with no painted
+registration resolves to `null`, which is the missing-target path in §4.1 — the rail
+aborts safely rather than pointing at nothing.
+
+### 9. Target Rects Are Re-Resolved Every Painted Frame
+
+A target moves after it registers: the drawer slides in over ~250 ms, a sheet animates
+up, a list settles. Resolving once, on the frame the target mounts, freezes everything
+derived from that rect — the hole position, and whether the Stores entry counts as
+on-screen. For the drawer the first frame is entirely off-screen, so a one-shot read
+leaves the owner under a fully dark sheet with a caption and nothing to tap, and the
+rail saying "scroll down to find Stores" while Stores sits in plain view.
+
+**Invariant:** while a `SpotlightOverlay` is mounted, the registry re-resolves every
+registered rect after each painted frame and bumps `registryRevision` **only when a rect
+actually changed**. Bumping unconditionally would rebuild a listener, which schedules
+another frame, which ticks again — a frame loop that never idles. Tracking is
+refcounted to the mounted overlays, and a post-frame callback does not itself request a
+frame, so the chain costs nothing once the app is idle.
+
 ## Domain Language Additions
 
 - **Rail:** The guided multi-stop first-run onboarding path that walks a new shop owner through initial setup.

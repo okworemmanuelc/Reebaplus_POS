@@ -46,6 +46,50 @@ Branch `feat/walk-to-first-store-233`, cut from `origin/main`. Slice 4 of PRD #2
 - **Store Form Sub-step:** Added `SpotlightTargetId.createStoreForm` and wrapped `AddStoreSheet` form in `stores_screen.dart`, extending `StopOneStep.createStoreForm` with caption "Enter store details and tap Save Store" to keep spotlight active until Drift commits the store row.
 - **Stop 2 Bridge (`addProduct`):** Added non-blocking handler in `FirstRunRailTourView` for `TourStop.addProduct` and tagged `SpotlightTargetId.addProductFab` on `AppSpeedDialFab` in `inventory_screen.dart`.
 
+**Crash fix — spotlight registry notified mid-build (2026-09-14):**
+- **The crash:** `FlutterError: setState() or markNeedsBuild() called during build. This
+  ListenableBuilder widget cannot be marked as needing to build ... The widget which was
+  currently being built when the offending call was made was: MenuButton`. Reproduced on
+  every brand-new owner: `_SpotlightTargetState.initState` bumped `registryRevision`
+  synchronously, and `FirstRunRailTourView`'s `ListenableBuilder` — a sibling in
+  `MainLayout`'s `Stack`, never an ancestor of the target — was marked dirty mid-build.
+  `MainLayout` warms each tab offstage one per frame and every tab carries a `MenuButton`,
+  so the rail crashed the app within seconds of landing. The `dispose` path threw the
+  "widget tree was locked" variant of the same error.
+- **Fix:** all revision bumps now route through one phase-aware `_bumpRevision()` in
+  `SpotlightTargetRegistry`, deferring to a post-frame callback while the framework is
+  mid-frame (ADR 0026 §7). Deferral also coalesces a burst of registrations into one
+  notification.
+- **Offstage duplicates (ADR 0026 §8):** an offstage tab is still laid out — attached,
+  sized, with a plausible global offset — so the multi-key registry could resolve the
+  `MenuButton` of a tab nobody was looking at and cut the hole over empty screen.
+  Resolution now walks `RenderObject.paintsChild` up the render tree and rejects any
+  target an ancestor declines to paint. This completes the multi-key hardening above,
+  which selected on size alone.
+- **Stale rects (ADR 0026 §9):** the rect was resolved once, on the frame the target
+  mounted. For the drawer that frame is entirely off-screen — verified: the hole settled
+  at `left: -306` for a target that ends at `left: 0`, i.e. a fully dark screen with a
+  caption and nothing to tap. The same staleness made `isStoresItemVisible` read false
+  after the drawer finished sliding, so the rail said "Scroll down to find Stores" with
+  Stores in plain view (the drawer's scroll `NotificationListener` only covers scrolling,
+  not the open animation). While an overlay is mounted the registry now re-resolves every
+  registered rect per painted frame and bumps only on an actual change — refcounted to the
+  mounted overlays, and no frame loop.
+- **Ban-test violations introduced by the review follow-ups, now fixed:**
+  `tourRemoteOffSwitchStreamProvider` is allowlisted in
+  `test/providers/business_scoped_stream_ban_test.dart` (`system_config` is keyed on `key`
+  alone, carries no `business_id`, and is pulled unfiltered — genuinely global, so the
+  factory would be wrong); the two raw `MediaQuery.of(context).size` reads in
+  `spotlight_overlay.dart` and `first_run_tour_controller.dart` now go through
+  `context.screenWidth` / `context.screenHeight`.
+- **Tests:** new `test/widgets/spotlight_target_registry_test.dart` (8 tests: mid-build
+  register/unregister, offstage rejection, per-frame movement tracking, tracking teardown)
+  plus a moving-target case in `test/widgets/spotlight_overlay_test.dart`. Each was
+  confirmed to fail against the pre-fix code. `flutter analyze` clean; full suite 2058
+  passed / 131 skipped / 0 failed.
+- **Still outstanding:** the issue's manual-QA criterion — verify on a slow, small Android
+  device that hole position and the scroll step resolve correctly there.
+
 ### Issue #232 — Sign-up completes without creating a Store (2026-09-13)
 Branch `feat/signup-without-store-232`, cut from `feat/country-before-phone-230` (#230's
 work was still unmerged on that branch when #232 started) and merged with `main` to

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 /// Target identifiers for spotlight tour overlays (PRD #229, ADR 0026).
 enum SpotlightTargetId {
@@ -33,10 +34,51 @@ class SpotlightTargetRegistry {
   /// Incremented whenever a target is registered, unregistered, or cleared.
   static final ValueNotifier<int> registryRevision = ValueNotifier<int>(0);
 
+  static bool _bumpScheduled = false;
+
+  /// Bumps [registryRevision] without ever marking a listener dirty mid-build.
+  ///
+  /// Targets register from [State.initState] and unregister from
+  /// [State.dispose], both of which run while the framework is building or
+  /// finalising the tree. Mutating the notifier there synchronously calls
+  /// `markNeedsBuild()` on every listening `ListenableBuilder` — and a listener
+  /// that is not an ancestor of the widget currently being built throws
+  /// "setState() or markNeedsBuild() called during build". Tagging a
+  /// [SpotlightTarget] anywhere outside the tour's own subtree would crash the
+  /// app while the rail is on screen.
+  ///
+  /// During a frame's build/layout/paint phase the bump is deferred to the end
+  /// of that frame, which also coalesces a burst of registrations (a whole tab
+  /// warming up) into one notification.
+  static void _bumpRevision() {
+    if (!_isFrameLocked()) {
+      registryRevision.value++;
+      return;
+    }
+    if (_bumpScheduled) return;
+    _bumpScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _bumpScheduled = false;
+      registryRevision.value++;
+    });
+  }
+
+  /// Whether the framework is mid-frame, where notifying listeners is unsafe.
+  static bool _isFrameLocked() {
+    try {
+      final phase = SchedulerBinding.instance.schedulerPhase;
+      return phase == SchedulerPhase.persistentCallbacks ||
+          phase == SchedulerPhase.midFrameMicrotasks;
+    } catch (_) {
+      // No binding (pure unit test) — nothing can be mid-build.
+      return false;
+    }
+  }
+
   /// Registers a target [id] with its [key].
   static void register(SpotlightTargetId id, GlobalKey key) {
     _targets.putIfAbsent(id, () => <GlobalKey>{}).add(key);
-    registryRevision.value++;
+    _bumpRevision();
   }
 
   /// Unregisters a target [id] if the registered key matches [key].
@@ -47,8 +89,37 @@ class SpotlightTargetRegistry {
       if (set.isEmpty) {
         _targets.remove(id);
       }
-      registryRevision.value++;
+      _bumpRevision();
     }
+  }
+
+  /// Whether [object] is actually painted, i.e. no ancestor is suppressing it.
+  ///
+  /// [MainLayout] keeps every visited tab mounted under an [Offstage], and an
+  /// offstage subtree is still laid out — it has a size, is attached, and
+  /// reports a plausible global offset. Without this check the registry can
+  /// hand back the [MenuButton] of a tab nobody is looking at and the hole is
+  /// cut over empty screen.
+  static bool _isPainted(RenderObject object) {
+    RenderObject child = object;
+    RenderObject? parent = object.parent;
+    while (parent != null) {
+      if (!parent.paintsChild(child)) return false;
+      child = parent;
+      parent = parent.parent;
+    }
+    return true;
+  }
+
+  /// The [RenderBox] behind [key] when it is mounted, laid out and painted.
+  static RenderBox? _liveRenderBox(GlobalKey key) {
+    final ctx = key.currentContext;
+    if (ctx == null) return null;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !box.hasSize) return null;
+    if (box.size.width <= 0 || box.size.height <= 0) return null;
+    if (!_isPainted(box)) return null;
+    return box;
   }
 
   /// Looks up the best active [GlobalKey] registered for [id].
@@ -56,13 +127,7 @@ class SpotlightTargetRegistry {
     final keys = _targets[id];
     if (keys == null || keys.isEmpty) return null;
     for (final key in keys) {
-      final ctx = key.currentContext;
-      if (ctx != null) {
-        final rb = ctx.findRenderObject() as RenderBox?;
-        if (rb != null && rb.attached && rb.hasSize && rb.size.width > 0 && rb.size.height > 0) {
-          return key;
-        }
-      }
+      if (_liveRenderBox(key) != null) return key;
     }
     for (final key in keys) {
       if (key.currentContext != null) return key;
@@ -78,15 +143,8 @@ class SpotlightTargetRegistry {
     if (keys == null || keys.isEmpty) return null;
 
     for (final key in keys) {
-      final ctx = key.currentContext;
-      if (ctx == null) continue;
-      final renderBox = ctx.findRenderObject() as RenderBox?;
-      if (renderBox == null || !renderBox.hasSize || !renderBox.attached) {
-        continue;
-      }
-      if (renderBox.size.width <= 0 || renderBox.size.height <= 0) {
-        continue;
-      }
+      final renderBox = _liveRenderBox(key);
+      if (renderBox == null) continue;
       try {
         final offset = renderBox.localToGlobal(Offset.zero);
         return offset & renderBox.size;
@@ -97,9 +155,66 @@ class SpotlightTargetRegistry {
     return null;
   }
 
+  // ── Per-frame movement tracking ────────────────────────────────────────
+  //
+  // Registration alone is not enough to keep a spotlight aligned. A target
+  // moves after it registers: the drawer slides in over ~250 ms, a sheet
+  // animates up, a list settles. Anything derived from a target's rect — the
+  // hole position, and whether the Stores entry counts as on-screen — is stale
+  // the moment it is computed from the target's very first frame.
+  //
+  // While a [SpotlightOverlay] is mounted, re-resolve every registered rect
+  // after each painted frame and bump [registryRevision] only when one has
+  // actually moved. Bumping unconditionally would rebuild a listener, which
+  // schedules another frame, which ticks again — a frame loop that never idles.
+
+  static int _trackers = 0;
+  static bool _watchScheduled = false;
+  static final Map<SpotlightTargetId, Rect?> _lastRects = {};
+
+  /// Starts per-frame movement tracking. Paired with [endTracking].
+  static void beginTracking() {
+    _trackers++;
+    _scheduleRectWatch();
+  }
+
+  /// Stops per-frame movement tracking started by [beginTracking].
+  static void endTracking() {
+    if (_trackers > 0) _trackers--;
+    if (_trackers == 0) _lastRects.clear();
+  }
+
+  static void _scheduleRectWatch() {
+    if (_watchScheduled || _trackers == 0) return;
+    _watchScheduled = true;
+    // A post-frame callback does not itself request a frame, so this chain is
+    // passive: it fires only when something else painted, and idles for free.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _watchScheduled = false;
+      if (_trackers == 0) return;
+      if (_refreshRects()) registryRevision.value++;
+      _scheduleRectWatch();
+    });
+  }
+
+  /// Re-resolves every registered target, returning whether any rect changed.
+  static bool _refreshRects() {
+    var moved = false;
+    for (final id in _targets.keys) {
+      final rect = getTargetRect(id);
+      if (_lastRects[id] != rect) {
+        _lastRects[id] = rect;
+        moved = true;
+      }
+    }
+    // A target that unregistered between frames leaves a stale entry behind.
+    _lastRects.removeWhere((id, _) => !_targets.containsKey(id));
+    return moved;
+  }
+
   /// Notifies listeners that targets may have moved (e.g. on scroll).
   static void notifyTargetsMoved() {
-    registryRevision.value++;
+    _bumpRevision();
   }
 
   /// Checks whether target [id] is currently visible within the screen bounds.
@@ -116,10 +231,17 @@ class SpotlightTargetRegistry {
         rect.right <= screenSize.width;
   }
 
+  /// Whether per-frame movement tracking is currently running.
+  @visibleForTesting
+  static bool get debugIsTracking => _trackers > 0;
+
   /// Clears all registrations (for testing).
   @visibleForTesting
   static void clear() {
     _targets.clear();
+    _lastRects.clear();
+    _trackers = 0;
+    _bumpScheduled = false;
     registryRevision.value++;
   }
 }
