@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import 'package:reebaplus_pos/core/utils/frame_safe.dart';
+
 /// Target identifiers for spotlight tour overlays (PRD #229, ADR 0026).
 enum SpotlightTargetId {
   /// The app bar menu / drawer toggle button.
@@ -51,7 +53,7 @@ class SpotlightTargetRegistry {
   /// of that frame, which also coalesces a burst of registrations (a whole tab
   /// warming up) into one notification.
   static void _bumpRevision() {
-    if (!_isFrameLocked()) {
+    if (!isFrameLocked()) {
       registryRevision.value++;
       return;
     }
@@ -61,18 +63,6 @@ class SpotlightTargetRegistry {
       _bumpScheduled = false;
       registryRevision.value++;
     });
-  }
-
-  /// Whether the framework is mid-frame, where notifying listeners is unsafe.
-  static bool _isFrameLocked() {
-    try {
-      final phase = SchedulerBinding.instance.schedulerPhase;
-      return phase == SchedulerPhase.persistentCallbacks ||
-          phase == SchedulerPhase.midFrameMicrotasks;
-    } catch (_) {
-      // No binding (pure unit test) — nothing can be mid-build.
-      return false;
-    }
   }
 
   /// Registers a target [id] with its [key].
@@ -220,15 +210,23 @@ class SpotlightTargetRegistry {
   /// Checks whether target [id] is currently visible within the screen bounds.
   ///
   /// If the rect extends outside vertical or horizontal viewport bounds, returns `false`.
-  static bool isVisibleOnScreen(SpotlightTargetId id, {required Size screenSize}) {
+  ///
+  /// [verticalOnly] drops the horizontal test. Ask for it when the question is
+  /// "has this scrolled below the fold?" and the target lives in something that
+  /// moves sideways — a drawer slides in over ~250 ms, so a horizontal test
+  /// answers "off-screen" for the whole animation and a caption derived from it
+  /// flickers from "scroll down to find it" to "tap it" once the slide lands.
+  static bool isVisibleOnScreen(
+    SpotlightTargetId id, {
+    required Size screenSize,
+    bool verticalOnly = false,
+  }) {
     final rect = getTargetRect(id);
     if (rect == null) return false;
     if (rect.isEmpty) return false;
-    // Check if within screen height and width
-    return rect.top >= 0 &&
-        rect.bottom <= screenSize.height &&
-        rect.left >= 0 &&
-        rect.right <= screenSize.width;
+    if (rect.top < 0 || rect.bottom > screenSize.height) return false;
+    if (verticalOnly) return true;
+    return rect.left >= 0 && rect.right <= screenSize.width;
   }
 
   /// Whether per-frame movement tracking is currently running.

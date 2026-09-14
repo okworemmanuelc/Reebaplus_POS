@@ -90,6 +90,59 @@ Branch `feat/walk-to-first-store-233`, cut from `origin/main`. Slice 4 of PRD #2
 - **Still outstanding:** the issue's manual-QA criterion — verify on a slow, small Android
   device that hole position and the scroll step resolve correctly there.
 
+**Rail design settled + stuck-on-menu fix (2026-09-14)**
+On-device the rail sat on "Tap the menu to get started" with the drawer wide open. Root
+cause: `MainLayout`'s Scaffold declares **no `drawer:`** — every screen builds its own via
+`SharedScaffold` — so `onDrawerChanged` never fired and `mainScaffoldKey.currentState
+.isDrawerOpen` reported a drawer it does not own as closed. `nav.isDrawerOpen` was
+therefore hard-false on every phone, `computeStopOneStep` fell through to `menuButton`
+forever, and the hole was cut over a button the open drawer covered — a blocking dark
+sheet with nothing to tap. A `/grilling` session with the owner then settled what the rail
+should actually be; ADR 0026 gained §§10–14 and the shape below.
+
+- **Drawer state now comes from the drawer (ADR 0026 §12).** `AppDrawer` wraps its content
+  in `DrawerPresence`, which refcounts into `NavigationService.drawerOpenNotifier` on mount
+  and unmount. Flutter's `DrawerController` does not build its child while dismissed, so
+  "an `AppDrawer` is mounted" *is* "a drawer is open", and it holds wherever the drawer was
+  declared. Both edges go through the new shared `frameSafe()` (`lib/core/utils/
+  frame_safe.dart`, extracted from the §7 registry fix) — a direct write reproduces the
+  original mid-build crash, which a test asserts. `openDrawer`/`closeDrawer` no longer
+  write the notifier: they are no-ops on a drawerless Scaffold and could only desync it.
+- **The rail opens and closes stop 1 with a card (§10).** A welcome card (greeting, what a
+  store is for, *Set up my store* / *I'll look around first*) precedes the first
+  instruction; a hand-off card follows the store saving (*Add a product* → Inventory tab /
+  *Not now*). Before this, the rail ended by vanishing: stop 2's pointer is on the
+  Inventory FAB, so an owner who saved their store on the Stores screen saw nothing at all.
+  The hand-off fires on the `createStore → addProduct` **transition**, never on the store
+  count, so an owner who already had a store never sees it.
+- **The scroll step cuts no hole (§11).** It used to cut one over the whole drawer list —
+  most of the screen on a phone — and pointer events inside a hole pass through completely,
+  so every other destination was tappable during the one blocking stop. Now: centred
+  caption, bouncing chevron, drags still pass through. `targetIdForStopOneStep` returns
+  `SpotlightTargetId?`, and the overlay renders a centred caption when there is no hole.
+- **Declining ≠ aborting (§13).** `declineFirstRunTour` ends the session only;
+  `abortFirstRunTour` also counts a device strike. Three "not right now"s can never retire
+  the rail; three failures still do.
+- **Stall net (§14).** A step unchanged for ~20 s, or three swallowed taps, surfaces
+  "Having trouble? Skip setup" under the caption, which aborts properly. Both reset on a
+  step change. Only genuine taps count — a press past touch slop is a drag heading for the
+  scrollable underneath. This is the net that catches a *wrong* step, which §4.1's
+  missing-target teardown structurally cannot see.
+- **Visibility is vertical-only for the scroll decision.** The drawer slides in sideways
+  over ~250 ms; a horizontal bounds test answers "off-screen" for the whole animation and
+  flickered the caption. `isVisibleOnScreen` gained `verticalOnly`.
+- **Overlay gained three generic slots** — `content` (centred interactive panel),
+  `footer` (tappable, under the caption), `onBlockedTap` — plus `tourOwnerFirstNameProvider`
+  / `tourFirstStoreNameProvider` as test seams. It still knows nothing about stores,
+  products or rails.
+- **Tests:** new `test/tour/first_run_rail_flow_test.dart` (14: intro gating, decline vs
+  strike, both stall signals, stall reset on progress, no-hole scroll step, hand-off
+  transition + "already had a store" + "Not now", and two drawer-presence regressions) and
+  `test/tour/drawer_presence_ban_test.dart` (every `drawer:` in `lib/` is an `AppDrawer`;
+  `AppDrawer` reports through `frameSafe`). Both drawer fixes were confirmed to fail when
+  reverted — the mid-build one reproduces the exact `markNeedsBuild() during build` error.
+  `flutter analyze` clean; full suite **2074 passed / 131 skipped / 0 failed**.
+
 ### Issue #232 — Sign-up completes without creating a Store (2026-09-13)
 Branch `feat/signup-without-store-232`, cut from `feat/country-before-phone-230` (#230's
 work was still unmerged on that branch when #232 started) and merged with `main` to

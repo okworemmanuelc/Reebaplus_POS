@@ -543,5 +543,14 @@ The general presentation widget (`SpotlightOverlay`) that cuts a hole in a dark 
 over a designated UI target with an instructional caption. Reusable across tours,
 supporting both `blocking` and `non-blocking` modes. In blocking mode, taps outside
 the hole are swallowed while vertical drags pass through to underlying scrollables.
+A hole is cut only over something the caption asks the owner to tap; a step with
+nothing to point at renders its caption centred on the sheet.
 _Avoid_: tooltip, coach mark, walkthrough modal.
+
+**Card**:
+A panel on a **Rail**'s sheet that asks the owner for a decision rather than for a tap
+on the app behind it — the welcome card that opens Stop 1 and the hand-off card that
+closes it. Rendered by the **Spotlight Overlay** with no hole cut, so it is
+configuration of the same widget rather than a second presentation surface.
+_Avoid_: dialog, modal (both imply a route), prompt.
 

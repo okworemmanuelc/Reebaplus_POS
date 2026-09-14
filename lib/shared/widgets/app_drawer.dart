@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
+import 'package:reebaplus_pos/core/utils/frame_safe.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -21,6 +22,7 @@ import 'package:reebaplus_pos/features/van_sales/screens/van_sales_hub_screen.da
 import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
+import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -47,11 +49,13 @@ class AppDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
-    final content = Column(
-      children: [
-        _buildHeader(context, ref),
-        Expanded(child: _buildNavList(context, ref)),
-      ],
+    final content = DrawerPresence(
+      child: Column(
+        children: [
+          _buildHeader(context, ref),
+          Expanded(child: _buildNavList(context, ref)),
+        ],
+      ),
     );
 
     if (context.isDesktop) {
@@ -917,3 +921,41 @@ class AppDrawer extends ConsumerWidget {
 // These were used to break circular imports before the MainLayout shell refactor.
 // Current MainLayout directly imports screens, but keeping definitions for reference
 // or until all feature-to-drawer links are fully migrated to NvigationService.
+
+/// Reports the drawer's existence to [NavigationService] for as long as it is
+/// mounted.
+///
+/// Flutter's `DrawerController` does not build its child while the drawer is
+/// dismissed, so "an [AppDrawer] is mounted" is the same statement as "a drawer
+/// is open or animating" — and unlike `Scaffold.onDrawerChanged`, it is true
+/// wherever the drawer was declared. On desktop the drawer is a permanent
+/// sidebar and therefore permanently open, which is also what this reports.
+///
+/// Both edges are deferred past the current frame: the tour's overlay listens
+/// to `drawerOpenNotifier` from a sibling `Stack` entry, and marking a sibling
+/// dirty from `initState`/`dispose` is the crash ADR 0026 §7 exists to prevent.
+class DrawerPresence extends StatefulWidget {
+  const DrawerPresence({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<DrawerPresence> createState() => _DrawerPresenceState();
+}
+
+class _DrawerPresenceState extends State<DrawerPresence> {
+  @override
+  void initState() {
+    super.initState();
+    frameSafe(NavigationService().drawerMounted);
+  }
+
+  @override
+  void dispose() {
+    frameSafe(NavigationService().drawerDismounted);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}

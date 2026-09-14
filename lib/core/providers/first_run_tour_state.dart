@@ -69,6 +69,52 @@ final tourSessionAbortedProvider =
       TourSessionAbortedNotifier.new,
     );
 
+/// Session-scoped: has the owner tapped through the welcome card yet?
+///
+/// Not persisted, and deliberately so. The rail's progress comes from the data
+/// on every launch, so an owner who chose "I'll look around first" is offered
+/// the introduction again on the next cold start rather than being written off
+/// on the strength of one tap. Nothing here can mark a stop done.
+class TourIntroAcknowledgedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void acknowledge() {
+    state = true;
+  }
+
+  @visibleForTesting
+  void reset() {
+    state = false;
+  }
+}
+
+final tourIntroAcknowledgedProvider =
+    NotifierProvider<TourIntroAcknowledgedNotifier, bool>(
+      TourIntroAcknowledgedNotifier.new,
+    );
+
+/// Session-scoped: stop one finished while the owner was being walked, so the
+/// rail still owes them a hand-off to stop two.
+///
+/// Set from the stop transition rather than from the store count, so an owner
+/// who already had a store when the app opened never sees it.
+class TourHandoffNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void owe() {
+    state = true;
+  }
+
+  void settle() {
+    state = false;
+  }
+}
+
+final tourHandoffProvider =
+    NotifierProvider<TourHandoffNotifier, bool>(TourHandoffNotifier.new);
+
 /// Device-local abort count persisted in [SharedPreferences].
 ///
 /// If a device fails 3 times, the tour is suppressed permanently on this device.
@@ -130,6 +176,24 @@ final tourRemoteOffSwitchStreamProvider = StreamProvider<bool>((ref) {
 final tourRemoteOffSwitchProvider = Provider<bool>((ref) {
   final asyncVal = ref.watch(tourRemoteOffSwitchStreamProvider);
   return asyncVal.valueOrNull ?? false;
+});
+
+/// The signed-in owner's first name, for the welcome card. Empty when unknown.
+///
+/// A named seam rather than an inline read: the card is the one part of the
+/// rail that greets a person, and a test of the walking steps should not have
+/// to stand up an auth service to get past it.
+final tourOwnerFirstNameProvider = Provider<String>((ref) {
+  final name = ref.watch(authProvider).currentUser?.name.trim() ?? '';
+  if (name.isEmpty) return '';
+  return name.split(' ').first;
+});
+
+/// The name of the store the owner just created, for the hand-off card.
+final tourFirstStoreNameProvider = Provider<String?>((ref) {
+  final stores = ref.watch(allStoresProvider).valueOrNull;
+  if (stores == null || stores.isEmpty) return null;
+  return stores.first.name;
 });
 
 /// The active tour stop for the running application.

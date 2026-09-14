@@ -7,6 +7,17 @@ import 'package:reebaplus_pos/shared/widgets/spotlight_overlay.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// The rail opens with a welcome card, so a test of any later step has to say
+/// that the owner has already tapped through it.
+final _introAlreadyAcknowledged = [
+  tourIntroAcknowledgedProvider.overrideWith(_AcknowledgedIntro.new),
+];
+
+class _AcknowledgedIntro extends TourIntroAcknowledgedNotifier {
+  @override
+  bool build() => true;
+}
+
 void main() {
   group('computeStopOneStep (pure derivation)', () {
     test('on Stores tab -> createStoreAction regardless of drawer state', () {
@@ -87,11 +98,14 @@ void main() {
 
   group('Stop 1 captions and targets', () {
     test('each step has expected caption and targetId', () {
+      expect(targetIdForStopOneStep(StopOneStep.intro), isNull);
       expect(captionForStopOneStep(StopOneStep.menuButton), 'Tap the menu to get started');
       expect(targetIdForStopOneStep(StopOneStep.menuButton), SpotlightTargetId.menuButton);
 
       expect(captionForStopOneStep(StopOneStep.scrollDrawer), 'Scroll down to find Stores');
-      expect(targetIdForStopOneStep(StopOneStep.scrollDrawer), SpotlightTargetId.drawerMenuList);
+      // No target: a hole over the menu list would make every other
+      // destination in the drawer tappable during the blocking stop.
+      expect(targetIdForStopOneStep(StopOneStep.scrollDrawer), isNull);
 
       expect(captionForStopOneStep(StopOneStep.storesMenuItem), 'Tap Stores');
       expect(targetIdForStopOneStep(StopOneStep.storesMenuItem), SpotlightTargetId.drawerStoresItem);
@@ -99,7 +113,7 @@ void main() {
       expect(captionForStopOneStep(StopOneStep.createStoreAction), 'Tap to create your first store');
       expect(targetIdForStopOneStep(StopOneStep.createStoreAction), SpotlightTargetId.createStoreFab);
 
-      expect(captionForStopOneStep(StopOneStep.createStoreForm), 'Enter store details and tap Save Store');
+      expect(captionForStopOneStep(StopOneStep.createStoreForm), 'Name your store and tap Save Store');
       expect(targetIdForStopOneStep(StopOneStep.createStoreForm), SpotlightTargetId.createStoreForm);
     });
   });
@@ -149,6 +163,7 @@ void main() {
         ProviderScope(
           overrides: [
             firstRunTourStopProvider.overrideWithValue(TourStop.createStore),
+            ..._introAlreadyAcknowledged,
           ],
           child: const MaterialApp(
             home: Scaffold(
@@ -178,6 +193,7 @@ void main() {
     testWidgets('missing target triggers abort and hides tour', (tester) async {
       final container = ProviderContainer(
         overrides: [
+          ..._introAlreadyAcknowledged,
           firstRunTourStopProvider.overrideWith((ref) {
             final aborted = ref.watch(tourSessionAbortedProvider);
             return aborted ? TourStop.none : TourStop.createStore;
@@ -236,6 +252,7 @@ void main() {
                     firstRunTourStopProvider.overrideWithValue(
                       hasStores ? TourStop.none : TourStop.createStore,
                     ),
+                    ..._introAlreadyAcknowledged,
                   ],
                   child: const Stack(
                     children: [
@@ -270,6 +287,7 @@ void main() {
         ProviderScope(
           overrides: [
             firstRunTourStopProvider.overrideWithValue(TourStop.createStore),
+            ..._introAlreadyAcknowledged,
           ],
           child: const MaterialApp(
             home: Scaffold(
@@ -293,7 +311,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(SpotlightOverlay), findsOneWidget);
-      expect(find.text('Enter store details and tap Save Store'), findsOneWidget);
+      expect(find.text('Name your store and tap Save Store'), findsOneWidget);
     });
 
     testWidgets('renders non-blocking SpotlightOverlay when tourStop is addProduct', (tester) async {

@@ -11,8 +11,17 @@ import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 class BlockingTapSwallowingRecognizer extends OneSequenceGestureRecognizer {
   BlockingTapSwallowingRecognizer();
 
+  /// Called when a swallowed tap lands — a press and release outside the hole
+  /// that never travelled far enough to become a drag. A tap that goes nowhere
+  /// is the only evidence the overlay has that the owner is trying to do
+  /// something the sheet is refusing to let them do.
+  VoidCallback? onBlockedTap;
+
+  final Map<int, Offset> _downPositions = {};
+
   @override
   void addAllowedPointer(PointerDownEvent event) {
+    _downPositions[event.pointer] = event.position;
     startTrackingPointer(event.pointer, event.transform);
   }
 
@@ -22,9 +31,14 @@ class BlockingTapSwallowingRecognizer extends OneSequenceGestureRecognizer {
       // Swallows the tap outside the hole by resolving accepted,
       // preventing any underlying tap recognizers from firing.
       resolve(GestureDisposition.accepted);
+      final down = _downPositions.remove(event.pointer);
+      if (down != null && (event.position - down).distance <= kTouchSlop) {
+        onBlockedTap?.call();
+      }
       stopTrackingPointer(event.pointer);
     } else if (event is PointerCancelEvent) {
       resolve(GestureDisposition.rejected);
+      _downPositions.remove(event.pointer);
       stopTrackingPointer(event.pointer);
     }
   }
@@ -45,11 +59,14 @@ class RenderSpotlightOverlay extends RenderBox {
     required Color overlayColor,
     required double borderRadius,
     required EdgeInsets padding,
+    VoidCallback? onBlockedTap,
   })  : _targetRect = targetRect,
         _blocking = blocking,
         _overlayColor = overlayColor,
         _borderRadius = borderRadius,
-        _padding = padding;
+        _padding = padding {
+    _tapSwallower.onBlockedTap = onBlockedTap;
+  }
 
   Rect? _targetRect;
   set targetRect(Rect? val) {
@@ -89,6 +106,8 @@ class RenderSpotlightOverlay extends RenderBox {
       markNeedsPaint();
     }
   }
+
+  set onBlockedTap(VoidCallback? val) => _tapSwallower.onBlockedTap = val;
 
   final BlockingTapSwallowingRecognizer _tapSwallower =
       BlockingTapSwallowingRecognizer();
@@ -180,6 +199,7 @@ class _SpotlightOverlayBackground extends LeafRenderObjectWidget {
     required this.overlayColor,
     required this.borderRadius,
     required this.padding,
+    this.onBlockedTap,
   });
 
   final Rect? targetRect;
@@ -187,6 +207,7 @@ class _SpotlightOverlayBackground extends LeafRenderObjectWidget {
   final Color overlayColor;
   final double borderRadius;
   final EdgeInsets padding;
+  final VoidCallback? onBlockedTap;
 
   @override
   RenderSpotlightOverlay createRenderObject(BuildContext context) {
@@ -196,6 +217,7 @@ class _SpotlightOverlayBackground extends LeafRenderObjectWidget {
       overlayColor: overlayColor,
       borderRadius: borderRadius,
       padding: padding,
+      onBlockedTap: onBlockedTap,
     );
   }
 
@@ -209,7 +231,8 @@ class _SpotlightOverlayBackground extends LeafRenderObjectWidget {
       ..blocking = blocking
       ..overlayColor = overlayColor
       ..borderRadius = borderRadius
-      ..padding = padding;
+      ..padding = padding
+      ..onBlockedTap = onBlockedTap;
   }
 }
 
@@ -222,8 +245,11 @@ class SpotlightOverlay extends StatefulWidget {
     this.targetId,
     this.targetRect,
     required this.caption,
+    this.content,
+    this.footer,
     this.blocking = true,
     this.onMissingTarget,
+    this.onBlockedTap,
     this.overlayColor = const Color(0xB8000000), // ~72% black
     this.holeRadius = 12.0,
     this.holePadding = const EdgeInsets.all(6.0),
@@ -237,7 +263,20 @@ class SpotlightOverlay extends StatefulWidget {
   final Rect? targetRect;
 
   /// The user-facing instruction (e.g. "Tap the menu to get started").
+  ///
+  /// With no target to point at, the caption is centred on the sheet instead of
+  /// being tucked beside a hole. A step that has something to say but nothing
+  /// to circle is still a step.
   final String caption;
+
+  /// Replaces the caption bubble entirely with an interactive panel, centred on
+  /// the sheet. For a step that asks the reader for a decision rather than a
+  /// tap on the app behind it.
+  final Widget? content;
+
+  /// Rendered beneath the caption bubble, and unlike the bubble it receives
+  /// pointer events. For a hint or an escape hatch that belongs to the step.
+  final Widget? footer;
 
   /// In blocking mode, outside taps are swallowed while drags pass through.
   /// In non-blocking mode, outside interactions pass through.
@@ -245,6 +284,9 @@ class SpotlightOverlay extends StatefulWidget {
 
   /// Called when target cannot be found or is missing after [targetLookupTimeout].
   final VoidCallback? onMissingTarget;
+
+  /// Called each time a tap outside the hole is swallowed in blocking mode.
+  final VoidCallback? onBlockedTap;
 
   /// Color of the darkened sheet.
   final Color overlayColor;
@@ -365,17 +407,48 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
           overlayColor: widget.overlayColor,
           borderRadius: widget.holeRadius,
           padding: widget.holePadding,
+          onBlockedTap: widget.onBlockedTap,
         ),
 
-        // 2. Caption card positioned relative to hole
-        if (hole != null)
-          _buildCaption(context, hole, screenSize),
+        // 2. Either a panel asking for a decision, or the instruction — beside
+        //    the hole when there is one, centred on the sheet when there isn't.
+        if (widget.content != null)
+          _buildContentPanel(context)
+        else if (hole != null)
+          _buildCaption(context, hole, screenSize)
+        else
+          _buildCentredCaption(context),
       ],
     );
   }
 
+  Widget _buildContentPanel(BuildContext context) {
+    return Positioned.fill(
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: context.getRSize(24)),
+            child: widget.content,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCentredCaption(BuildContext context) {
+    return Positioned.fill(
+      child: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: context.getRSize(24)),
+            child: _captionColumn(context),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCaption(BuildContext context, Rect hole, Size screenSize) {
-    final theme = Theme.of(context);
     final isTopHalf = hole.center.dy < screenSize.height * 0.55;
 
     // Position above or below hole
@@ -391,56 +464,74 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
       bottom: bottomPos,
       left: context.getRSize(24),
       right: context.getRSize(24),
-      child: IgnorePointer(
-        child: Center(
-        child: Container(
-          constraints: BoxConstraints(maxWidth: context.getRSize(320)),
-          padding: EdgeInsets.symmetric(
-            horizontal: context.getRSize(16),
-            vertical: context.getRSize(12),
-          ),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.4),
-              width: 1.5,
+      child: Center(child: _captionColumn(context)),
+    );
+  }
+
+  /// The instruction bubble, plus whatever the step hung under it.
+  ///
+  /// Only the bubble ignores pointers — a footer exists to be tapped, and
+  /// wrapping the whole column would make the one escape the owner has as
+  /// dead as the sheet around it.
+  Widget _captionColumn(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IgnorePointer(
+          child: Container(
+            constraints: BoxConstraints(maxWidth: context.getRSize(320)),
+            padding: EdgeInsets.symmetric(
+              horizontal: context.getRSize(16),
+              vertical: context.getRSize(12),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                width: 1.5,
               ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: context.getRSize(8),
-                height: context.getRSize(8),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: theme.colorScheme.primary,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-              SizedBox(width: context.getRSize(10)),
-              Flexible(
-                child: Text(
-                  widget.caption,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: context.getRSize(8),
+                  height: context.getRSize(8),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: theme.colorScheme.primary,
                   ),
-                  textAlign: TextAlign.left,
                 ),
-              ),
-            ],
+                SizedBox(width: context.getRSize(10)),
+                Flexible(
+                  child: Text(
+                    widget.caption,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    ),
-  );
-}
+        if (widget.footer != null) ...[
+          SizedBox(height: context.getRSize(12)),
+          widget.footer!,
+        ],
+      ],
+    );
+  }
 }

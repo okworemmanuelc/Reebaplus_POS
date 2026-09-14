@@ -79,19 +79,45 @@ class NavigationService {
   final ValueNotifier<bool> drawerOpenNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<bool> isDesktopNotifier = ValueNotifier<bool>(false);
 
+  /// How many [AppDrawer]s are mounted right now.
+  ///
+  /// The drawer does **not** belong to MainLayout's Scaffold — every screen
+  /// builds its own via [SharedScaffold], and a handful build one directly. So
+  /// MainLayout's `onDrawerChanged` never fires and `mainScaffoldKey`'s state
+  /// reports a drawer it does not own as permanently closed. Counting the
+  /// drawer widget itself is the one signal that is true wherever the drawer
+  /// was declared: Flutter's `DrawerController` does not build its child while
+  /// dismissed, so an [AppDrawer] exists exactly while a drawer is open or
+  /// animating.
+  int _drawersMounted = 0;
+
+  /// Called by [AppDrawer] as it mounts. Paired with [drawerDismounted].
+  void drawerMounted() {
+    _drawersMounted++;
+    if (_drawersMounted == 1) drawerOpenNotifier.value = true;
+  }
+
+  /// Called by [AppDrawer] as it unmounts. Paired with [drawerMounted].
+  void drawerDismounted() {
+    if (_drawersMounted > 0) _drawersMounted--;
+    if (_drawersMounted == 0) drawerOpenNotifier.value = false;
+  }
+
   bool get isDrawerOpen =>
       isDesktopNotifier.value ||
       drawerOpenNotifier.value ||
       (mainScaffoldKey.currentState?.isDrawerOpen ?? false);
 
+  // Neither of these writes [drawerOpenNotifier]: the mount refcount above owns
+  // it, and a second writer can only desync it — `mainScaffoldKey`'s Scaffold
+  // has no drawer, so these calls are no-ops on it and would leave the notifier
+  // asserting a state that never happened.
   void openDrawer() {
     mainScaffoldKey.currentState?.openDrawer();
-    drawerOpenNotifier.value = true;
   }
 
   void closeDrawer() {
     mainScaffoldKey.currentState?.closeDrawer();
-    drawerOpenNotifier.value = false;
   }
 
   final ValueNotifier<bool> storeLocked = ValueNotifier<bool>(false);
@@ -291,6 +317,7 @@ class NavigationService {
       _tabCanPop[i] = false;
     }
     currentTabCanPop.value = false;
+    _drawersMounted = 0;
     drawerOpenNotifier.value = false;
   }
 
