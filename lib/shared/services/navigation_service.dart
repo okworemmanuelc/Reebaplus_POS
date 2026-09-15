@@ -103,6 +103,33 @@ class NavigationService {
     if (_drawersMounted == 0) drawerOpenNotifier.value = false;
   }
 
+  /// How many app-owned surfaces are currently covering the screen without
+  /// being routes.
+  ///
+  /// [currentTabCanPop] answers this for pushed pages. It cannot answer it for
+  /// a surface built as an `OverlayEntry` — Inventory's speed dial being the
+  /// one that matters — and those sit in the *tab's* Overlay, inside
+  /// MainLayout's body, which is below the first-run rail in the same Stack.
+  /// The rail's non-blocking pointer reads this to stand aside: once the owner
+  /// has opened the menu the pointer asked them to open, its caption is stale
+  /// and the menu carries better labels of its own.
+  int _coversMounted = 0;
+
+  /// True while any [ScreenCover] is mounted. See [_coversMounted].
+  final ValueNotifier<bool> coverOpenNotifier = ValueNotifier<bool>(false);
+
+  /// Called by [ScreenCover] as it mounts. Paired with [coverDismounted].
+  void coverMounted() {
+    _coversMounted++;
+    if (_coversMounted == 1) coverOpenNotifier.value = true;
+  }
+
+  /// Called by [ScreenCover] as it unmounts. Paired with [coverMounted].
+  void coverDismounted() {
+    if (_coversMounted > 0) _coversMounted--;
+    if (_coversMounted == 0) coverOpenNotifier.value = false;
+  }
+
   bool get isDrawerOpen =>
       isDesktopNotifier.value ||
       drawerOpenNotifier.value ||
@@ -319,6 +346,8 @@ class NavigationService {
     currentTabCanPop.value = false;
     _drawersMounted = 0;
     drawerOpenNotifier.value = false;
+    _coversMounted = 0;
+    coverOpenNotifier.value = false;
   }
 
   /// Manually update the active store (§12.1). [explicit] marks a deliberate

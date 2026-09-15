@@ -103,18 +103,27 @@ unreadable grey slabs. The rail was painting over them. ADR 0026 gained §15.
   now paints a haloed ring around the target and nothing else; blocking is unchanged. Two
   tests pin the pair via the `paints` matcher (ring = two stroked `RRect`s and no `Path`;
   sheet = a `Path`). `set blocking` now `markNeedsPaint()`s, since it chooses what is drawn.
-- **The pointer stands aside for a pushed page.** Add Product and Receive Stock are
-  `PageRouteBuilder`s pushed onto the tab's nested `Navigator`, also below the rail, so the
-  pointer hung over the form it had just asked the owner to fill in, still circling a
-  covered button. It now hides while `NavigationService.currentTabCanPop` is true — the
-  signal the bottom nav already hides itself by — and returns on pop.
+- **The pointer stands aside for anything over the tab.** Two signals, because a covering
+  surface arrives two ways. Add Product and Receive Stock are `PageRouteBuilder`s pushed
+  onto the tab's nested `Navigator`, also below the rail, so the pointer hung over the form
+  it had just asked the owner to fill in — handled by `currentTabCanPop`, the signal the
+  bottom nav already hides itself by. The nearer case is the "+" itself: it is a speed dial
+  whose options open into the tab's own `Overlay`, so once the ring made them readable the
+  pointer simply printed its caption over "Add Product"'s description and its *Not now*
+  over "Receive Stock"'s label — in the way of the very tap it was asking for. An
+  `OverlayEntry` announces nothing to a `NavigatorObserver`, so it reports itself: new
+  `ScreenCover` (`lib/shared/widgets/screen_cover.dart`) refcounts into
+  `NavigationService.coverOpenNotifier` through `frameSafe`, the `DrawerPresence` idiom
+  applied to a second signal that had no observer. An instruction is stale the moment it is
+  obeyed, and the menu names both choices better than the caption did.
 - **Stop 2 has a way out.** It is the rail's last stop and it is reached via a card that has
   already dismissed itself, so there was no way to put the rail away at all. A *Not now*
   footer calls `declineFirstRunTour` — session only, no device strike (§13). `_EscapeLink`
   took a `label`; the stall net keeps its own wording.
 
-Suite: 2078 passed / 131 skipped / 0 failed. `flutter analyze` clean. **Not yet run on a
-device** — the ring, the stand-down and the *Not now* footer are all unverified on hardware.
+Suite: 2079 passed / 131 skipped / 0 failed. `flutter analyze` clean. The ring and the
+first stand-down were confirmed on-device; the speed-dial stand-down is covered by a test
+that drives a real `AppSpeedDialFab` but is **not yet run on hardware**.
 
 **Rail design settled + stuck-on-menu fix (2026-09-14)**
 On-device the rail sat on "Tap the menu to get started" with the drawer wide open. Root

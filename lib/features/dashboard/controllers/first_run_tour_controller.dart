@@ -245,16 +245,28 @@ class FirstRunRailTourView extends ConsumerWidget {
   /// hang over the very form it asked the owner to fill in, still circling a
   /// button that page has covered. `currentTabCanPop` is the signal the bottom
   /// nav already uses to hide itself for the same reason.
+  ///
+  /// The "+" itself is the nearer case: it is a speed dial, and its two options
+  /// open into the tab's own Overlay — also below this — so the pointer printed
+  /// its caption and its "Not now" straight across both of them. A surface like
+  /// that is not a route and announces nothing, so it reports itself through
+  /// [ScreenCover] / `coverOpenNotifier`.
   Widget _buildAddProductPointer(BuildContext context, WidgetRef ref) {
     final nav = ref.watch(navigationProvider);
 
     return ListenableBuilder(
       listenable: Listenable.merge([
         nav.currentTabCanPop,
+        nav.coverOpenNotifier,
         SpotlightTargetRegistry.registryRevision,
       ]),
       builder: (context, _) {
-        if (nav.currentTabCanPop.value) return const SizedBox.shrink();
+        // Obeyed, or overtaken. Either way the caption is stale: the "+" has
+        // become an X, and the menu it opened names both options better than
+        // this one line does.
+        if (nav.currentTabCanPop.value || nav.coverOpenNotifier.value) {
+          return const SizedBox.shrink();
+        }
 
         final hasTarget =
             SpotlightTargetRegistry.getKey(SpotlightTargetId.addProductFab) !=

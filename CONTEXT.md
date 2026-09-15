@@ -550,10 +550,18 @@ _Avoid_: tooltip, coach mark, walkthrough modal.
 
 **Pointer**:
 A non-blocking **Stop**: it rings a target and asks for a tap, but takes nothing over.
-It draws no sheet (a dark sheet would bury whatever the target itself opens — the
-Inventory "+" expands into a menu living in the tab's own `Overlay`, below the rail),
-stands aside while a page route is open over the tab root, and carries its own way out.
+It draws no sheet, stands aside the moment anything opens over the tab root — a pushed
+page, or a **Screen Cover** — and carries its own way out. Its instruction is stale the
+moment it is obeyed.
 _Avoid_: hint, nudge, non-blocking overlay (describes the widget, not the stop).
+
+**Screen Cover**:
+A surface a screen opens over itself as an `OverlayEntry` rather than a route — Inventory's
+speed dial is the one that matters. It lives in the *tab's* Overlay, inside MainLayout's
+body, so the first-run rail renders above it; unlike a route it announces nothing to a
+`NavigatorObserver`, so it reports its own presence (`ScreenCover` →
+`NavigationService.coverOpenNotifier`) for a **Pointer** to stand aside for.
+_Avoid_: popup, modal (both imply a route), sheet (taken by the blocking overlay).
 
 **Card**:
 A panel on a **Rail**'s sheet that asks the owner for a decision rather than for a tap

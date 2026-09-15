@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
+import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
 import 'package:reebaplus_pos/features/dashboard/controllers/first_run_tour_controller.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
@@ -57,6 +58,7 @@ void main() {
     // NavigationService is a singleton, so a test that pushes a page has to
     // hand the next one a clean tab stack.
     NavigationService().currentTabCanPop.value = false;
+    NavigationService().resetNavigation();
   });
 
   group('the introduction', () {
@@ -418,6 +420,66 @@ void main() {
 
       expect(find.text('Tap to add your first product'), findsOneWidget,
           reason: 'backing out without saving should bring it back');
+    });
+
+    testWidgets('stands aside once the target opens its own menu',
+        (tester) async {
+      final container = ProviderContainer(overrides: [
+        firstRunTourStopProvider.overrideWithValue(TourStop.addProduct),
+        tourOwnerFirstNameProvider.overrideWithValue('Okwor'),
+        tourFirstStoreNameProvider.overrideWithValue(null),
+        tourIntroAcknowledgedProvider.overrideWith(_AcknowledgedIntro.new),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        _harness(container, targets: [
+          Align(
+            alignment: Alignment.bottomRight,
+            child: SpotlightTarget(
+              id: SpotlightTargetId.addProductFab,
+              child: AppSpeedDialFab(
+                reserveBottomInset: false,
+                actions: [
+                  AppSpeedDialAction(
+                    icon: Icons.sell,
+                    label: 'Add Product',
+                    description: 'Create a product and set what’s on your shelf',
+                    onPressed: () {},
+                  ),
+                  AppSpeedDialAction(
+                    icon: Icons.local_shipping,
+                    label: 'Receive Stock',
+                    description: 'Log a delivery from a supplier',
+                    onPressed: () {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Tap to add your first product'), findsOneWidget);
+
+      // The "+" is a speed dial; its options open into an Overlay the pointer
+      // renders above, so the caption and its "Not now" landed straight across
+      // both of them.
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add Product'), findsOneWidget);
+      expect(find.text('Receive Stock'), findsOneWidget);
+      expect(find.text('Tap to add your first product'), findsNothing,
+          reason: 'the instruction is stale the moment it is obeyed');
+      expect(find.text('Not now'), findsNothing);
+
+      // Backing out of the menu brings the pointer back. Tapped on the dial's
+      // own scrim rather than the toggle, which the scrim now covers.
+      await tester.tapAt(const Offset(100, 100));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tap to add your first product'), findsOneWidget);
     });
 
     testWidgets('rings the target instead of darkening the app',

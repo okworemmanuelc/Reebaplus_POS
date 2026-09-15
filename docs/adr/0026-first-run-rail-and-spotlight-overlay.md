@@ -221,9 +221,22 @@ to fill in, still circling a button that page had covered.
 nothing else — no sheet, no dimming, nothing over the app. Only a blocking stop
 covers the screen, because only a blocking stop has a reason to.
 
-**Invariant:** the non-blocking pointer stands down while a page route is open
-over the tab root, and returns when it is popped. `currentTabCanPop` is the
-existing signal the bottom nav already hides itself by, for the same reason.
+**Invariant:** the non-blocking pointer stands down while anything is open over
+the tab root, and returns when it closes. Two signals, because a covering
+surface arrives two ways. A pushed page announces itself through the tab's
+`NavigatorObserver` — `currentTabCanPop`, the signal the bottom nav already
+hides itself by. An `OverlayEntry` announces nothing, so it says so itself:
+`ScreenCover` refcounts into `coverOpenNotifier` across its mount, through the
+§7 phase-aware path, exactly as `DrawerPresence` does for a drawer MainLayout's
+Scaffold does not own.
+
+The `OverlayEntry` half is not a corner case; it is the "+" the pointer points
+at. Inventory's FAB is a speed dial, so obeying the pointer opened two options
+*underneath* it and the pointer printed its caption and its *Not now* across
+both — the caption sitting over "Add Product"'s description, the escape link
+over "Receive Stock"'s label and squarely in the way of tapping it. An
+instruction is stale the moment it is obeyed, and the menu that opened names
+both choices better than one line of caption ever could.
 
 **Invariant:** every stop the owner can be left sitting on carries its own way
 out. Stop 2 is the last one, and it is reached by a card that has already
