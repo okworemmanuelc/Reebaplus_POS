@@ -10,6 +10,34 @@ The human updates it when resolving open questions or making architectural decis
 
 155 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #234 — The rail points at the first Product, then hands off to the Get-started card (2026-09-15)
+Branch `feat/product-rail-handoff-234`, cut from `feat/walk-to-first-store-233`. Final slice of PRD #229.
+
+- **Stop 2 (Add Product):** Non-blocking pointer targeting the Inventory "+" action (`SpotlightTargetId.addProductFab`), allowing taps to pass through everywhere. Completes whenever product-presence signal (`hasLocalProductsProvider`) flips to true.
+- **Product Pointer Dismissal & Screen Clearance:**
+  - Tapping "Add a product" on the hand-off card sets `tourProductPointerDismissedProvider` to true upon navigating to the Inventory screen, preventing the "Tap to add your first product" bubble from covering the Inventory screen and empty-state CTA.
+  - Added `onCaptionTap` to `SpotlightOverlay` so tapping the instruction bubble itself directly dismisses the pointer.
+  - Preserved hand-off transition: when the product is saved, `firstRunTourStopProvider` still transitions `addProduct` → `none`, owing `tourCardHandoffProvider` and navigating to Home.
+- **Product Save Confirmation Dialog:** Added `_confirmSaveProduct(name)` confirmation dialog in `AddProductScreen` before persisting products across all creation paths (fast-add direct, existing product stock add, and receive mode).
+- **Hand-off to Get-started card:** On transition from Stop 2 to none (`TourStop.addProduct` → `TourStop.none`), `tourCardHandoffProvider` is owed and the active tab navigates to Home, rendering a non-blocking pointer at `SpotlightTargetId.getStartedCard` with caption "Finish your setup here" and "Got it" escape link.
+- **Get-started Checklist & Card Overhaul:**
+  - Added `createStore` as Step 1 in `GetStartedStepId`.
+  - Added `locked` state: downstream steps (`addProduct`, `makeSale`, `inviteTeam`) are visibly locked with `FontAwesomeIcons.lock` and disabled from tapping while `hasStores == false`.
+  - Prevented card dismissal while `hasStores == false`.
+  - Suppressed card visibility while the spotlight rail is active (`tourActive == true`).
+  - Completed steps are ticked on first appearance at hand-off.
+  - Review feedback updates:
+    - Set `optional: true` on `GetStartedStepId.makeSale` while preserving done and locked state.
+    - Updated `getStartedChecklistProvider` to distinguish unresolved `allStoresProvider` states (`isLoading || !hasValue || hasError`), keeping `GetStartedCard` hidden and preventing computation until store data resolves.
+    - Added `cardHandoffPending` to `computeGetStartedChecklist`: a pending `tourCardHandoffProvider` keeps `GetStartedCard` visible even if previously dismissed, ensuring `SpotlightTargetId.getStartedCard` is mounted and registered for handoff settlement, and restores dismissal once settled.
+- **Add Product Confirmation Ordering:**
+  - Reordered existing-product and classic receive-mode paths in `AddProductScreen` so category validation does not insert records before user confirmation: validates typed category without calling `_getOrCreateCategory`, invokes `_confirmSaveProduct` before any `_getOrCreateManufacturer`, `_getOrCreateSupplier`, or `_getOrCreateCategory` calls, and creates related records only after confirmation succeeds.
+- **Tests & Verification:**
+  - `test/dashboard/get_started_checklist_test.dart` (21 tests): pure derivation, handoff visibility during dismissal, unresolved store guard, and live provider wiring.
+  - `test/tour/first_run_rail_flow_test.dart` (23 tests): rail progression, pointer dismissal on navigation and caption tap, card hand-off pointer, drawer presence.
+  - `test/inventory/add_product_confirmation_test.dart` (2 tests): Fast-Add confirmation dialog and classic receive mode confirmation ordering preventing related record insertion on cancel.
+  - `flutter analyze`: clean with 0 errors and 0 warnings.
+
 ### Drawer seam — the back button and `open/closeDrawer()` pointed at a Scaffold with no drawer (2026-09-15)
 Branch `feat/walk-to-first-store-233` (fixes raised in review of the #233 rail work).
 

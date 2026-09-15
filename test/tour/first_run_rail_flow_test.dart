@@ -16,6 +16,11 @@ class _AcknowledgedIntro extends TourIntroAcknowledgedNotifier {
   bool build() => true;
 }
 
+class _OwedCardHandoff extends TourCardHandoffNotifier {
+  @override
+  bool build() => true;
+}
+
 /// Everything the rail reads that is not the thing under test.
 List<Override> _baseOverrides({
   TourStop stop = TourStop.createStore,
@@ -354,6 +359,39 @@ void main() {
       expect(container.read(tourHandoffProvider), isFalse);
       expect(find.text('Tap to add your first product'), findsOneWidget);
     });
+
+    testWidgets(
+        'tapping "Add a product" navigates to inventory and suppresses the product pointer',
+        (tester) async {
+      final container = ProviderContainer(
+        overrides: _baseOverrides(
+          stop: TourStop.addProduct,
+          introAcknowledged: true,
+          storeName: 'Main Shop',
+        ),
+      );
+      addTearDown(container.dispose);
+      container.read(tourHandoffProvider.notifier).owe();
+
+      await tester.pumpWidget(
+        _harness(container, targets: const [
+          SpotlightTarget(
+            id: SpotlightTargetId.addProductFab,
+            child: SizedBox(width: 56, height: 56),
+          ),
+        ]),
+      );
+      await tester.pump();
+      expect(find.text('Main Shop is ready.'), findsOneWidget);
+
+      await tester.tap(find.text('Add a product'));
+      await tester.pump();
+
+      expect(container.read(tourHandoffProvider), isFalse);
+      expect(container.read(tourProductPointerDismissedProvider), isTrue);
+      expect(NavigationService().currentIndex.value, 2);
+      expect(find.text('Tap to add your first product'), findsNothing);
+    });
   });
 
   group('the product pointer', () {
@@ -400,6 +438,55 @@ void main() {
       expect(container.read(tourDeviceAbortCountProvider), 0,
           reason: 'putting a pointer away is a preference, not a rail that '
               'failed on this device');
+    });
+
+    testWidgets(
+        'tapping caption bubble dismisses the pointer without aborting session',
+        (tester) async {
+      final container = await pumpPointer(tester);
+      expect(find.text('Tap to add your first product'), findsOneWidget);
+
+      await tester.tap(find.text('Tap to add your first product'));
+      await tester.pump();
+
+      expect(find.text('Tap to add your first product'), findsNothing);
+      expect(container.read(tourProductPointerDismissedProvider), isTrue);
+      expect(container.read(tourSessionAbortedProvider), isFalse);
+      expect(container.read(tourDeviceAbortCountProvider), 0);
+    });
+
+    testWidgets(
+        'saving product when pointer was dismissed still triggers handoff to GetStartedCard',
+        (tester) async {
+      final stopSource = StateProvider<TourStop>((ref) => TourStop.addProduct);
+      final container = ProviderContainer(overrides: [
+        firstRunTourStopProvider.overrideWith((ref) => ref.watch(stopSource)),
+        tourOwnerFirstNameProvider.overrideWithValue('Okwor'),
+        tourFirstStoreNameProvider.overrideWithValue(null),
+        tourIntroAcknowledgedProvider.overrideWith(_AcknowledgedIntro.new),
+      ]);
+      addTearDown(container.dispose);
+
+      container.read(tourProductPointerDismissedProvider.notifier).dismiss();
+
+      await tester.pumpWidget(
+        _harness(container, targets: const [
+          SpotlightTarget(
+            id: SpotlightTargetId.getStartedCard,
+            child: SizedBox(width: 200, height: 100),
+          ),
+        ]),
+      );
+      await tester.pump();
+      expect(find.text('Tap to add your first product'), findsNothing);
+      expect(find.text('Finish your setup here'), findsNothing);
+
+      // Product saved -> TourStop.none
+      container.read(stopSource.notifier).state = TourStop.none;
+      await tester.pump();
+
+      expect(container.read(tourCardHandoffProvider), isTrue);
+      expect(find.text('Finish your setup here'), findsOneWidget);
     });
 
     testWidgets('stands aside while a page is open over the tab',
@@ -521,6 +608,36 @@ void main() {
 
       expect(render, paints..path(),
           reason: 'stop 1 blocks by covering everything but the hole');
+    });
+  });
+
+  group('the get-started card hand-off', () {
+    testWidgets('points at the GetStartedCard when stop 2 finishes and settles on Got it',
+        (tester) async {
+      final container = ProviderContainer(overrides: [
+        firstRunTourStopProvider.overrideWithValue(TourStop.none),
+        tourCardHandoffProvider.overrideWith(_OwedCardHandoff.new),
+        tourOwnerFirstNameProvider.overrideWithValue('Okwor'),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        _harness(container, targets: const [
+          SpotlightTarget(
+            id: SpotlightTargetId.getStartedCard,
+            child: SizedBox(width: 300, height: 150),
+          ),
+        ]),
+      );
+      await tester.pump();
+
+      expect(find.text('Finish your setup here'), findsOneWidget);
+      expect(find.text('Got it'), findsOneWidget);
+
+      await tester.tap(find.text('Got it'));
+      await tester.pump();
+
+      expect(container.read(tourCardHandoffProvider), isFalse);
     });
   });
 
