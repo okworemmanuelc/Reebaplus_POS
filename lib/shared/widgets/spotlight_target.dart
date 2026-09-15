@@ -22,6 +22,9 @@ enum SpotlightTargetId {
 
   /// The "Add Product" action on [InventoryScreen] (Stop 2).
   addProductFab,
+
+  /// The "Get started" checklist card on [HomeScreen] (Hand-off).
+  getStartedCard,
 }
 
 /// Registry storing active [GlobalKey] references for tagged spotlight targets.

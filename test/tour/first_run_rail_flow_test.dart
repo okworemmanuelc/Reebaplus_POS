@@ -16,6 +16,11 @@ class _AcknowledgedIntro extends TourIntroAcknowledgedNotifier {
   bool build() => true;
 }
 
+class _OwedCardHandoff extends TourCardHandoffNotifier {
+  @override
+  bool build() => true;
+}
+
 /// Everything the rail reads that is not the thing under test.
 List<Override> _baseOverrides({
   TourStop stop = TourStop.createStore,
@@ -521,6 +526,36 @@ void main() {
 
       expect(render, paints..path(),
           reason: 'stop 1 blocks by covering everything but the hole');
+    });
+  });
+
+  group('the get-started card hand-off', () {
+    testWidgets('points at the GetStartedCard when stop 2 finishes and settles on Got it',
+        (tester) async {
+      final container = ProviderContainer(overrides: [
+        firstRunTourStopProvider.overrideWithValue(TourStop.none),
+        tourCardHandoffProvider.overrideWith(_OwedCardHandoff.new),
+        tourOwnerFirstNameProvider.overrideWithValue('Okwor'),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        _harness(container, targets: const [
+          SpotlightTarget(
+            id: SpotlightTargetId.getStartedCard,
+            child: SizedBox(width: 300, height: 150),
+          ),
+        ]),
+      );
+      await tester.pump();
+
+      expect(find.text('Finish your setup here'), findsOneWidget);
+      expect(find.text('Got it'), findsOneWidget);
+
+      await tester.tap(find.text('Got it'));
+      await tester.pump();
+
+      expect(container.read(tourCardHandoffProvider), isFalse);
     });
   });
 

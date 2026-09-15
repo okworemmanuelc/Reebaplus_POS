@@ -574,6 +574,43 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     return (parseCurrency(raw) * 100).round();
   }
 
+  Future<bool> _confirmSaveProduct(String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Save ${_lexicon.item}?',
+          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to save "$name"?',
+          style: Theme.of(ctx).textTheme.bodyMedium,
+        ),
+        actions: [
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          AppButton(
+            text: 'Save',
+            variant: AppButtonVariant.primary,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _save() async {
     final db = ref.read(databaseProvider);
     final auth = ref.read(authProvider);
@@ -648,6 +685,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         }
         return;
       }
+
+      final confirmed = await _confirmSaveProduct(existingName);
+      if (!confirmed) return;
 
       setState(() => _isSaving = true);
       try {
@@ -814,6 +854,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       return;
     }
 
+    final confirmed = await _confirmSaveProduct(name);
+    if (!confirmed) return;
+
     setState(() => _isSaving = true);
     try {
       // Auto-handle Manufacturer & Supplier if they were typed but not explicitly "selected"
@@ -972,6 +1015,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         }
         AppNotification.showError(context, message);
       case FastAddIntent():
+        final confirmed = await _confirmSaveProduct(result.name);
+        if (!confirmed) return;
         await _persistNewProduct(result);
     }
   }

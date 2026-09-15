@@ -22,24 +22,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
+import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
-/// The three first-run milestones, in display order.
-enum GetStartedStepId { addProduct, makeSale, inviteTeam }
+/// The four first-run milestones, in display order (PRD #229, Issue #234).
+enum GetStartedStepId { createStore, addProduct, makeSale, inviteTeam }
 
 /// One checklist row: which milestone, whether it is done (derived from data),
-/// and whether it is optional (only "Invite your team" is — a solo CEO can
-/// finish setup without it, via manual dismissal).
+/// whether it is optional (only "Invite your team" is — a solo CEO can finish
+/// setup without it, via manual dismissal), and whether it is locked (later steps
+/// are visibly locked while the Store step is undone).
 class GetStartedStep {
   const GetStartedStep({
     required this.id,
     required this.done,
     this.optional = false,
+    this.locked = false,
   });
 
   final GetStartedStepId id;
   final bool done;
   final bool optional;
+  final bool locked;
 }
 
 /// The derived card state: whether to render it, and the per-step done-state.
@@ -52,28 +56,55 @@ class GetStartedChecklistState {
 
 /// Pure derivation of the Get-started card state.
 ///
-/// Rules (ADR 0006):
-/// - The three steps are always present, in fixed order; each `done` flag is a
-///   pure projection of a data count crossing its threshold (products > 0,
-///   orders > 0, staff > 1). "Invite your team" is the sole optional step.
+/// Rules (ADR 0006, PRD #229, Issue #234):
+/// - The four steps are always present, in fixed order; each `done` flag is a
+///   pure projection of a data count crossing its threshold (stores > 0,
+///   products > 0, orders > 0, staff > 1).
+/// - The `createStore` step is first and acts as the recovery surface when the
+///   first-run rail aborted or never ran.
+/// - Later steps (`addProduct`, `makeSale`, `inviteTeam`) are visibly locked
+///   while the Store step is undone.
+/// - The card cannot be dismissed while the Store step is undone.
+/// - The card is hidden while the first-run rail is up ([tourActive]), avoiding
+///   conflicting duplicate guidance.
 /// - The card is visible only when the current role is CEO, not every step is
-///   done, and it has not been manually dismissed on this device. A non-CEO
-///   never sees it regardless of counts; once all three steps are done (or the
-///   CEO dismisses it) it disappears.
+///   done, it has not been manually dismissed on this device (when dismissal is
+///   allowed), and the rail is not active. Once all steps are done it disappears.
 GetStartedChecklistState computeGetStartedChecklist({
   required bool isCeo,
+  required bool hasStores,
   required bool hasProducts,
   required bool hasOrders,
   required bool hasTeam,
   required bool dismissed,
+  bool tourActive = false,
 }) {
   final steps = <GetStartedStep>[
-    GetStartedStep(id: GetStartedStepId.addProduct, done: hasProducts),
-    GetStartedStep(id: GetStartedStepId.makeSale, done: hasOrders),
-    GetStartedStep(id: GetStartedStepId.inviteTeam, done: hasTeam, optional: true),
+    GetStartedStep(
+      id: GetStartedStepId.createStore,
+      done: hasStores,
+      locked: false,
+    ),
+    GetStartedStep(
+      id: GetStartedStepId.addProduct,
+      done: hasProducts,
+      locked: !hasStores,
+    ),
+    GetStartedStep(
+      id: GetStartedStepId.makeSale,
+      done: hasOrders,
+      locked: !hasStores,
+    ),
+    GetStartedStep(
+      id: GetStartedStepId.inviteTeam,
+      done: hasTeam,
+      optional: true,
+      locked: !hasStores,
+    ),
   ];
   final allDone = steps.every((s) => s.done);
-  final visible = isCeo && !allDone && !dismissed;
+  final canDismiss = hasStores;
+  final visible = isCeo && !allDone && (!dismissed || !canDismiss) && !tourActive;
   return GetStartedChecklistState(visible: visible, steps: steps);
 }
 
@@ -119,11 +150,14 @@ final getStartedChecklistDismissedProvider =
     );
 
 /// The derived Get-started checklist state for the Home tab (Seam 3). Composes
-/// the live role, the products-exist and orders-exist streams, the active-staff
-/// count, and the device-local dismissal through [computeGetStartedChecklist].
+/// the live role, the store-exists, products-exist and orders-exist streams,
+/// the active-staff count, the tour state, and the device-local dismissal through
+/// [computeGetStartedChecklist].
 /// Consumed only by the Home-tab card; never on POS.
 final getStartedChecklistProvider = Provider<GetStartedChecklistState>((ref) {
   final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
+  final storesAsync = ref.watch(allStoresProvider);
+  final hasStores = storesAsync.valueOrNull?.isNotEmpty ?? false;
   final hasProducts = ref.watch(hasLocalProductsProvider).valueOrNull ?? false;
   final hasOrders = ref.watch(hasAnyOrderProvider).valueOrNull ?? false;
 
@@ -137,12 +171,15 @@ final getStartedChecklistProvider = Provider<GetStartedChecklistState>((ref) {
   final hasTeam = staffCount > 1;
 
   final dismissed = ref.watch(getStartedChecklistDismissedProvider);
+  final tourActive = ref.watch(firstRunTourStopProvider) != TourStop.none;
 
   return computeGetStartedChecklist(
     isCeo: isCeo,
+    hasStores: hasStores,
     hasProducts: hasProducts,
     hasOrders: hasOrders,
     hasTeam: hasTeam,
     dismissed: dismissed,
+    tourActive: tourActive,
   );
 });

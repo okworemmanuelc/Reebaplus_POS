@@ -115,6 +115,29 @@ class TourHandoffNotifier extends Notifier<bool> {
 final tourHandoffProvider =
     NotifierProvider<TourHandoffNotifier, bool>(TourHandoffNotifier.new);
 
+/// Session-scoped: stop two finished while the owner was being walked, so the
+/// rail owes a final hand-off mark to the Get-started card on Home.
+///
+/// Set from the stop transition (addProduct -> none), so an owner who already had
+/// products when the app opened never sees it.
+class TourCardHandoffNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void owe() {
+    state = true;
+  }
+
+  void settle() {
+    state = false;
+  }
+}
+
+final tourCardHandoffProvider =
+    NotifierProvider<TourCardHandoffNotifier, bool>(
+      TourCardHandoffNotifier.new,
+    );
+
 /// Device-local abort count persisted in [SharedPreferences].
 ///
 /// If a device fails 3 times, the tour is suppressed permanently on this device.

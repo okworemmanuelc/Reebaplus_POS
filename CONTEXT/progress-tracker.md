@@ -10,6 +10,24 @@ The human updates it when resolving open questions or making architectural decis
 
 155 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #234 — The rail points at the first Product, then hands off to the Get-started card (2026-09-15)
+Branch `feat/product-rail-handoff-234`, cut from `feat/walk-to-first-store-233`. Final slice of PRD #229.
+
+- **Stop 2 (Add Product):** Non-blocking pointer targeting the Inventory "+" action (`SpotlightTargetId.addProductFab`), allowing taps to pass through everywhere. Completes whenever product-presence signal (`hasLocalProductsProvider`) flips to true.
+- **Product Save Confirmation Dialog:** Added `_confirmSaveProduct(name)` confirmation dialog in `AddProductScreen` before persisting products across all creation paths (fast-add direct, existing product stock add, and receive mode).
+- **Hand-off to Get-started card:** On transition from Stop 2 to none (`TourStop.addProduct` → `TourStop.none`), `tourCardHandoffProvider` is owed and the active tab navigates to Home, rendering a non-blocking pointer at `SpotlightTargetId.getStartedCard` with caption "Finish your setup here" and "Got it" escape link.
+- **Get-started Checklist & Card Overhaul:**
+  - Added `createStore` as Step 1 in `GetStartedStepId`.
+  - Added `locked` state: downstream steps (`addProduct`, `makeSale`, `inviteTeam`) are visibly locked with `FontAwesomeIcons.lock` and disabled from tapping while `hasStores == false`.
+  - Prevented card dismissal while `hasStores == false`.
+  - Suppressed card visibility while the spotlight rail is active (`tourActive == true`).
+  - Completed steps are ticked on first appearance at hand-off.
+- **Tests & Verification:**
+  - `test/dashboard/get_started_checklist_test.dart` (19 tests): pure derivation + live provider wiring.
+  - `test/tour/first_run_rail_flow_test.dart` (20 tests): rail progression, card hand-off pointer, drawer presence.
+  - `test/inventory/add_product_confirmation_test.dart`: widget test asserting confirmation dialog appears and guards product persistence.
+  - `flutter analyze`: clean with 0 errors and 0 warnings.
+
 ### Drawer seam — the back button and `open/closeDrawer()` pointed at a Scaffold with no drawer (2026-09-15)
 Branch `feat/walk-to-first-store-233` (fixes raised in review of the #233 rail work).
 

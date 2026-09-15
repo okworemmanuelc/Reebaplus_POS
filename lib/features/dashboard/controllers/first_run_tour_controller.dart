@@ -152,10 +152,17 @@ class FirstRunRailTourView extends ConsumerWidget {
       if (previous == TourStop.createStore && next == TourStop.addProduct) {
         ref.read(tourHandoffProvider.notifier).owe();
       }
+      if (previous == TourStop.addProduct && next == TourStop.none) {
+        ref.read(tourCardHandoffProvider.notifier).owe();
+        ref.read(navigationProvider).setIndex(NavigationService.homeTab);
+      }
     });
 
     final tourStop = ref.watch(firstRunTourStopProvider);
     if (tourStop == TourStop.none) {
+      if (ref.watch(tourCardHandoffProvider)) {
+        return _buildCardHandoffPointer(context, ref);
+      }
       return const SizedBox.shrink();
     }
 
@@ -329,6 +336,42 @@ class FirstRunRailTourView extends ConsumerWidget {
         secondaryLabel: 'Not now',
         onSecondary: () => ref.read(tourHandoffProvider.notifier).settle(),
       ),
+    );
+  }
+
+  Widget _buildCardHandoffPointer(BuildContext context, WidgetRef ref) {
+    final nav = ref.watch(navigationProvider);
+
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        nav.currentIndex,
+        nav.currentTabCanPop,
+        nav.coverOpenNotifier,
+        SpotlightTargetRegistry.registryRevision,
+      ]),
+      builder: (context, _) {
+        if (nav.currentIndex.value != NavigationService.homeTab) {
+          return const SizedBox.shrink();
+        }
+        if (nav.currentTabCanPop.value || nav.coverOpenNotifier.value) {
+          return const SizedBox.shrink();
+        }
+
+        final hasTarget =
+            SpotlightTargetRegistry.getKey(SpotlightTargetId.getStartedCard) !=
+                null;
+        if (!hasTarget) return const SizedBox.shrink();
+
+        return SpotlightOverlay(
+          targetId: SpotlightTargetId.getStartedCard,
+          caption: 'Finish your setup here',
+          blocking: false,
+          footer: _EscapeLink(
+            label: 'Got it',
+            onTap: () => ref.read(tourCardHandoffProvider.notifier).settle(),
+          ),
+        );
+      },
     );
   }
 
