@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
+import 'package:reebaplus_pos/shared/widgets/screen_cover.dart';
 
 /// One labelled choice in an [AppSpeedDialFab]: an icon, a short [label], a
 /// one-line [description] (the teaching surface — ADR 0006), and the action to
@@ -104,7 +105,12 @@ class _AppSpeedDialFabState extends State<AppSpeedDialFab>
 
   void _open() {
     if (_isOpen) return;
-    _entry = OverlayEntry(builder: _buildOverlay);
+    // Wrapped so the expanded dial announces itself: it lives in the tab's own
+    // Overlay, which the first-run rail's pointer renders above. See
+    // [ScreenCover].
+    _entry = OverlayEntry(
+      builder: (ctx) => ScreenCover(child: _buildOverlay(ctx)),
+    );
     Overlay.of(context).insert(_entry!);
     _controller.forward();
     setState(() {});

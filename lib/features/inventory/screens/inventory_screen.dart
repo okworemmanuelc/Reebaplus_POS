@@ -47,6 +47,7 @@ import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
+import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -425,9 +426,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       backgroundColor: _bg,
       appBar: _buildAppBar(context),
       floatingActionButton: onProductsTab
-          ? AppSpeedDialFab(
-              actions: speedDialActions,
-              reserveBottomInset: false,
+          ? SpotlightTarget(
+              id: SpotlightTargetId.addProductFab,
+              child: AppSpeedDialFab(
+                actions: speedDialActions,
+                reserveBottomInset: false,
+              ),
             )
           : null,
       body: SafeArea(

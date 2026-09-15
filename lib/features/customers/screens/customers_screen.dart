@@ -65,7 +65,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         backgroundColor: Colors.transparent,
         appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),
         drawer: const AppDrawer(activeRoute: 'customers'),
-        body: Column(
+        body: DrawerHost(child: Column(
           children: [
           Expanded(
             child: Builder(
@@ -149,7 +149,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             ),
           ),
         ],
-      ),
+      )),
       floatingActionButton: (ref.watch(allStoresProvider).valueOrNull?.isNotEmpty == true &&
               !ref.watch(zeroStoresEmptySurfaceProvider) &&
               Gates.addCustomer.allows(ref))

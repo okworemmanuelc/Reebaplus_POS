@@ -23,3 +23,4 @@ Before implementing, making any architectural decision, starting any work, or re
 - Do not run `dart format`.
 - Never `git checkout` a file to discard changes; re-edit or stash.
 - Verify `flutter analyze` passes with zero errors and zero warnings before committing.
+- Never run `coderabbit review` (or `coderabbit review --agent`); leave all CodeRabbit invocations to the user as it posts code to an external service.

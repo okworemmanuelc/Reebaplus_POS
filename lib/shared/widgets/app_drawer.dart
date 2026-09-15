@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
+import 'package:reebaplus_pos/core/utils/frame_safe.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -21,7 +22,9 @@ import 'package:reebaplus_pos/features/van_sales/screens/van_sales_hub_screen.da
 import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
+import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
+import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 
 class AppDrawer extends ConsumerWidget {
@@ -46,11 +49,13 @@ class AppDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
-    final content = Column(
-      children: [
-        _buildHeader(context, ref),
-        Expanded(child: _buildNavList(context, ref)),
-      ],
+    final content = DrawerPresence(
+      child: Column(
+        children: [
+          _buildHeader(context, ref),
+          Expanded(child: _buildNavList(context, ref)),
+        ],
+      ),
     );
 
     if (context.isDesktop) {
@@ -331,12 +336,19 @@ class AppDrawer extends ConsumerWidget {
     final slug = ref.watch(currentUserRoleProvider)?.slug;
     final isBelowCeo = slug != null && slug != 'ceo';
 
-    return ListView(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(12),
-        vertical: context.getRSize(16),
-      ),
-      children: [
+    return SpotlightTarget(
+      id: SpotlightTargetId.drawerMenuList,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          SpotlightTargetRegistry.notifyTargetsMoved();
+          return false;
+        },
+        child: ListView(
+          padding: EdgeInsets.symmetric(
+            horizontal: context.getRSize(12),
+            vertical: context.getRSize(16),
+          ),
+          children: [
         // §12.1 store picker — the one app-wide active-store control. Sits above
         // Home; only shows when the user can choose more than one store.
         _buildStorePicker(context, ref),
@@ -426,12 +438,15 @@ class AppDrawer extends ConsumerWidget {
         // The store list itself is read-only browsing for non-CEOs; full
         // per-store actions are gated inside the store details screen.
         if (Gates.viewStores.allows(ref))
-          _navItem(
-            context,
-            FontAwesomeIcons.store.data,
-            'Stores',
-            active: activeRoute == 'store',
-            onTap: () => _navigateTo(context, ref, 'store'),
+          SpotlightTarget(
+            id: SpotlightTargetId.drawerStoresItem,
+            child: _navItem(
+              context,
+              FontAwesomeIcons.store.data,
+              'Stores',
+              active: activeRoute == 'store',
+              onTap: () => _navigateTo(context, ref, 'store'),
+            ),
           ),
         // Van Sales (#141) — CEO + Manager (`van.manage`). Hidden entirely for
         // everyone else (hard rule #7 — hide, don't grey out), which includes
@@ -592,8 +607,10 @@ class AppDrawer extends ConsumerWidget {
         // Extra space for system navigation bar
         SizedBox(height: context.deviceBottomPadding + context.getRSize(20)),
       ],
-    );
-  }
+    ),
+  ),
+);
+}
 
   // ── Navigation logic — now uses NavigationService shell ────────────────────
   void _navigateTo(BuildContext context, WidgetRef ref, String route) {
@@ -904,3 +921,119 @@ class AppDrawer extends ConsumerWidget {
 // These were used to break circular imports before the MainLayout shell refactor.
 // Current MainLayout directly imports screens, but keeping definitions for reference
 // or until all feature-to-drawer links are fully migrated to NvigationService.
+
+/// Reports the drawer's existence to [NavigationService] for as long as it is
+/// mounted.
+///
+/// Flutter's `DrawerController` does not build its child while the drawer is
+/// dismissed, so "an [AppDrawer] is mounted" is the same statement as "a drawer
+/// is open or animating" — and unlike `Scaffold.onDrawerChanged`, it is true
+/// wherever the drawer was declared. On desktop the drawer is a permanent
+/// sidebar and therefore permanently open, which is also what this reports.
+///
+/// Both edges are deferred past the current frame: the tour's overlay listens
+/// to `drawerOpenNotifier` from a sibling `Stack` entry, and marking a sibling
+/// dirty from `initState`/`dispose` is the crash ADR 0026 §7 exists to prevent.
+class DrawerPresence extends StatefulWidget {
+  const DrawerPresence({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<DrawerPresence> createState() => _DrawerPresenceState();
+}
+
+class _DrawerPresenceState extends State<DrawerPresence> {
+  /// Closes the drawer through the Scaffold that actually declares it — this
+  /// widget sits inside that Scaffold's `drawer:`, so it can reach it, while
+  /// `NavigationService.mainScaffoldKey` cannot. Resolved lazily: the lookup is
+  /// illegal from `initState` and the owning Scaffold can change under us.
+  ///
+  /// Registered and unregistered as a tear-off, which Dart canonicalises per
+  /// instance, so the `dispose` unregister matches the `initState` register.
+  void _closeOwningDrawer() {
+    if (!mounted) return;
+    Scaffold.maybeOf(context)?.closeDrawer();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    frameSafe(NavigationService().drawerMounted);
+    NavigationService().registerModalDrawerCloser(_closeOwningDrawer);
+  }
+
+  @override
+  void dispose() {
+    NavigationService().unregisterModalDrawerCloser(_closeOwningDrawer);
+    frameSafe(NavigationService().drawerDismounted);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// Publishes "the Scaffold I sit in can open a drawer" to [NavigationService],
+/// so `NavigationService.openDrawer()` can reach the drawer of whichever screen
+/// is actually on show.
+///
+/// Counterpart to [DrawerPresence], and necessarily a *separate* widget: that
+/// one lives inside [AppDrawer], which Flutter builds only while the drawer is
+/// open, so it is absent at exactly the moment you want to open one. This widget
+/// goes in the Scaffold's `body`, where it stays mounted whether the drawer is
+/// open or shut.
+///
+/// Placement rule: it must be a *descendant* of the Scaffold that declares the
+/// drawer — wrapping the Scaffold instead would resolve `Scaffold.maybeOf` to
+/// MainLayout's drawerless one and reintroduce the very bug this fixes.
+/// `test/tour/drawer_presence_ban_test.dart` enforces that every file declaring
+/// a `drawer:` also mounts one of these.
+class DrawerHost extends StatefulWidget {
+  const DrawerHost({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<DrawerHost> createState() => _DrawerHostState();
+}
+
+class _DrawerHostState extends State<DrawerHost> {
+  /// Opens the drawer of the Scaffold this widget sits in, but only if that
+  /// Scaffold is the one the user can see. Returns whether it opened anything,
+  /// which is how [NavigationService.openDrawer] skips past the hosts belonging
+  /// to offstage tabs and pages buried under a pushed route.
+  ///
+  /// Registered as an instance tear-off, which Dart canonicalises per object, so
+  /// the `dispose` unregister matches the `initState` register.
+  bool _openOwningDrawer() {
+    if (!mounted) return false;
+    final scaffold = Scaffold.maybeOf(context);
+    // No drawer to open — notably every screen on desktop, where SharedScaffold
+    // passes `drawer: null` and the sidebar is permanent instead.
+    if (scaffold == null || !scaffold.hasDrawer) return false;
+    // Buried under a pushed page within this tab.
+    if (ModalRoute.of(context)?.isCurrent == false) return false;
+    // Belongs to a tab that is mounted but offstage.
+    if (!NavigationService().isActiveTabNavigator(Navigator.maybeOf(context))) {
+      return false;
+    }
+    scaffold.openDrawer();
+    return true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    NavigationService().registerDrawerOpener(_openOwningDrawer);
+  }
+
+  @override
+  void dispose() {
+    NavigationService().unregisterDrawerOpener(_openOwningDrawer);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}

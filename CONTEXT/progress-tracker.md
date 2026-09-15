@@ -8,7 +8,229 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-154 sessions logged. Codebase is live and being verified on-device.
+155 sessions logged. Codebase is live and being verified on-device.
+
+### Drawer seam — the back button and `open/closeDrawer()` pointed at a Scaffold with no drawer (2026-09-15)
+Branch `feat/walk-to-first-store-233` (fixes raised in review of the #233 rail work).
+
+**The shared root cause.** `NavigationService` holds `mainScaffoldKey`, and both
+`openDrawer()` and `closeDrawer()` routed through it — but MainLayout's Scaffold
+**declares no drawer**. Every screen builds its own (via `SharedScaffold`, plus six
+direct sites). So both calls were silent no-ops, on every platform. Nothing failed
+loudly; the drawer simply never moved.
+
+**Fix 1 — back press was dead on desktop.** `isDrawerOpen` ORs in `isDesktopNotifier`,
+and on desktop the drawer is a *permanent* 280dp sidebar, so the getter is hard-**true**
+there. `handleBackPress` step 1 read it, called the no-op `closeDrawer()`, and returned —
+swallowing **every** back press: no nested pop, no tab fallback, no double-back exit.
+- Split the question in two: `isDrawerOpen` keeps its *visibility* meaning (the first-run
+  rail needs desktop to count, so it must not change), and a new **`isModalDrawerOpen`** —
+  which excludes desktop — answers the *dismissable* question the back button asks.
+- `DrawerPresence` now publishes a closer (`registerModalDrawerCloser`) resolving
+  `Scaffold.maybeOf(context)` lazily, so `closeDrawer()` asks the Scaffold that actually
+  owns the drawer. This also repaired the store picker's `nav.closeDrawer()`, which had a
+  real caller and had been dead the whole time.
+
+**Fix 2 — `openDrawer()` had the same wrong target.** It could **not** reuse the closing
+seam: `DrawerPresence` lives inside `AppDrawer`, and Flutter does not build a drawer's
+child while it is shut, so at the moment you want to *open* one there is nothing mounted
+to ask.
+- Added **`DrawerHost`**, mounted in the Scaffold's `body` by all 7 drawer-declaring sites
+  (`shared_scaffold.dart`, `customers_screen.dart`, `payments_screen.dart`,
+  `expenses_screen.dart` ×3, `activity_log_screen.dart`). It stays mounted whether the
+  drawer is open or shut.
+- **Offstage tabs made this non-trivial**: MainLayout keeps every *visited* tab mounted
+  behind `Offstage` rather than disposing it, so several hosts are alive at once and
+  "most recently registered wins" would open a drawer on a screen the user cannot see.
+  Each host vets itself — Scaffold `hasDrawer`, route `isCurrent`, and
+  `isActiveTabNavigator` — and `openDrawer()` walks them newest-first, taking the first
+  that says yes.
+
+**Fix 3 — the ban test could not see `endDrawer:`.** `drawer_presence_ban_test`'s
+`(?:end)?drawer:` pattern was case-**sensitive**, so Flutter's actual `endDrawer:` (capital
+D) matched nothing and escaped the ban entirely. Now `caseSensitive: false`; the leading
+`\b` still keeps `AppDrawer:`-style identifiers out.
+
+**Keeping it from rotting.** `openDrawer()` still has **no callers** in the app — every
+open goes through the affordance (`Scaffold.of(ctx).openDrawer()`), which is precisely why
+it stayed broken unnoticed. Two guards now stand in for the missing caller:
+- `test/tour/drawer_host_open_test.dart` — 4 widget tests pinning that `openDrawer()`
+  reaches the visible screen's drawer, skips an offstage tab, follows the active tab, and
+  leaves nothing stale behind on dispose. **Mutation-checked**: reverting `openDrawer()` to
+  the old target fails 3 of 4; removing the offstage check fails the offstage test.
+- `drawer_presence_ban_test` gained a third rule — every file declaring a `drawer:` must
+  also mount a `DrawerHost`.
+
+**Verification:** `flutter analyze lib test` clean. Full suite **2084 pass / 131 skipped /
+0 failures**. Also logged in `BUILD_LOG.md`.
+
+### Issue #233 — A new owner is walked to a saved Store by the blocking rail (2026-09-13)
+Branch `feat/walk-to-first-store-233`, cut from `origin/main`. Slice 4 of PRD #229.
+
+**ADR & Domain Foundation:**
+- Created `docs/adr/0026-first-run-rail-and-spotlight-overlay.md` capturing the two-stop onboarding rail, the blocking-in-sequence rule, gesture arena mechanics, failure resilience, and pure live-data completion.
+- Updated `CONTEXT.md` with domain glossary definitions for `Rail`, `Stop`, and `Spotlight Overlay`.
+
+**Spotlight Target Registry & Overlay:**
+- Built `lib/shared/widgets/spotlight_target.dart` with `SpotlightTargetId` enum, `SpotlightTarget` widget, and `SpotlightTargetRegistry` (screen coordinate resolution, `isVisibleOnScreen`, and `registryRevision` reactive notifier).
+- Built `lib/shared/widgets/spotlight_overlay.dart` with custom `RenderSpotlightOverlay` cutting a rounded rectangular hole in a darkened sheet (~72% opacity) and `BlockingTapSwallowingRecognizer` which swallows taps outside the hole while vertical/horizontal drags pass through to underlying scrollable views. Supports `blocking` and `non-blocking` modes, and graceful fallback via `onMissingTarget`.
+
+**State Derivation & Sequence Controller:**
+- Built `lib/core/providers/first_run_tour_state.dart` with pure derivation function `computeTourStop` (precedence: remote off-switch -> none, non-owner -> none, abort count >= 3 -> none, session abort -> none, products & stores present -> none, zero stores -> createStore, zero products -> addProduct).
+- Wired `tourSessionAbortedProvider`, `tourDeviceAbortCountProvider` (persisted in SharedPreferences), `tourRemoteOffSwitchProvider`, and `firstRunTourStopProvider` gating on `firstLoadSkeletonActiveProvider` (Invariant #11).
+- Built `lib/features/dashboard/controllers/first_run_tour_controller.dart` with `computeStopOneStep`, captions, target IDs, `abortFirstRunTour`, and `FirstRunRailTourView` reactively tracking navigation and drawer state.
+- Mounted `FirstRunRailTourView` in `MainLayout` (`lib/shared/widgets/main_layout.dart`) within the root `Stack` above the `Scaffold`.
+- Tagged targets: `MenuButton` (`SpotlightTargetId.menuButton`), `AppDrawer` (`SpotlightTargetId.drawerMenuList` and `SpotlightTargetId.drawerStoresItem`), and `StoresScreen` (`SpotlightTargetId.createStoreFab`).
+- Extended `NavigationService` with `drawerOpenNotifier` and wired `Scaffold.onDrawerChanged`.
+
+**Tests:**
+- `test/providers/first_run_tour_state_test.dart`: 16 unit tests for pure derivation and live provider wiring.
+- `test/widgets/spotlight_overlay_test.dart`: 8 widget tests verifying cutout hole, blocking tap swallowing, drag pass-through, non-blocking pass-through, missing target fallback, and registry lookup.
+- `test/tour/first_run_tour_sequence_test.dart`: 13 widget/unit tests verifying step progression, captions, abort handling, atomic tour completion when a store commits to Drift, `createStoreForm` sub-step, and non-blocking `addProduct` bridge.
+- Static analysis and regression verification clean: `flutter analyze` clean with 0 issues; `test/auth/auth_landscape_screens_test.dart` passes (40 tests).
+
+**Review Follow-ups & Hardening (2026-09-14):**
+- **Hydration Race in `TourDeviceAbortCountNotifier`:** Updated `recordAbort()` to read persisted abort count from `SharedPreferences` before incrementing and set `_hasRecordedAbort = true`, preventing subsequent `_hydrate()` completion from clobbering incremented state.
+- **Production `tourRemoteOffSwitchProvider`:** Added `watch(String key)` stream to `SystemConfigDao`, wiring `tourRemoteOffSwitchStreamProvider` to `system_config` table key `feature.first_run_rail.disabled` with graceful fallback to `false` when unavailable or unset.
+- **Loading Guard in `firstRunTourStopProvider`:** Added check for `productsAsync.isLoading || productsAsync.hasError` returning `TourStop.none`, preventing premature fallback to `false` before product query settles.
+- **Desktop Navigation Compatibility:** Added `isDesktopNotifier` to `NavigationService` and updated `isDrawerOpen` to return `true` on desktop where sidebar is pinned open; wired in `MainLayout.build`.
+- **Caption Pointer Transparency:** Wrapped `_buildCaption` inside `Positioned` with `IgnorePointer` so spotlight captions never swallow pointer events or impede interactions.
+- **Multi-key Target Registry:** Upgraded `SpotlightTargetRegistry` to retain `Set<GlobalKey>` per target ID, resolving the mounted and attached `RenderBox` with non-zero dimensions to avoid transient animation collisions. Added `notifyTargetsMoved()`.
+- **Drawer Scroll Notification:** Wrapped `AppDrawer` `ListView` with `NotificationListener<ScrollNotification>` calling `SpotlightTargetRegistry.notifyTargetsMoved()` so off-screen targets dynamically flip to on-screen when scrolled into view.
+- **Store Form Sub-step:** Added `SpotlightTargetId.createStoreForm` and wrapped `AddStoreSheet` form in `stores_screen.dart`, extending `StopOneStep.createStoreForm` with caption "Enter store details and tap Save Store" to keep spotlight active until Drift commits the store row.
+- **Stop 2 Bridge (`addProduct`):** Added non-blocking handler in `FirstRunRailTourView` for `TourStop.addProduct` and tagged `SpotlightTargetId.addProductFab` on `AppSpeedDialFab` in `inventory_screen.dart`.
+
+**Crash fix — spotlight registry notified mid-build (2026-09-14):**
+- **The crash:** `FlutterError: setState() or markNeedsBuild() called during build. This
+  ListenableBuilder widget cannot be marked as needing to build ... The widget which was
+  currently being built when the offending call was made was: MenuButton`. Reproduced on
+  every brand-new owner: `_SpotlightTargetState.initState` bumped `registryRevision`
+  synchronously, and `FirstRunRailTourView`'s `ListenableBuilder` — a sibling in
+  `MainLayout`'s `Stack`, never an ancestor of the target — was marked dirty mid-build.
+  `MainLayout` warms each tab offstage one per frame and every tab carries a `MenuButton`,
+  so the rail crashed the app within seconds of landing. The `dispose` path threw the
+  "widget tree was locked" variant of the same error.
+- **Fix:** all revision bumps now route through one phase-aware `_bumpRevision()` in
+  `SpotlightTargetRegistry`, deferring to a post-frame callback while the framework is
+  mid-frame (ADR 0026 §7). Deferral also coalesces a burst of registrations into one
+  notification.
+- **Offstage duplicates (ADR 0026 §8):** an offstage tab is still laid out — attached,
+  sized, with a plausible global offset — so the multi-key registry could resolve the
+  `MenuButton` of a tab nobody was looking at and cut the hole over empty screen.
+  Resolution now walks `RenderObject.paintsChild` up the render tree and rejects any
+  target an ancestor declines to paint. This completes the multi-key hardening above,
+  which selected on size alone.
+- **Stale rects (ADR 0026 §9):** the rect was resolved once, on the frame the target
+  mounted. For the drawer that frame is entirely off-screen — verified: the hole settled
+  at `left: -306` for a target that ends at `left: 0`, i.e. a fully dark screen with a
+  caption and nothing to tap. The same staleness made `isStoresItemVisible` read false
+  after the drawer finished sliding, so the rail said "Scroll down to find Stores" with
+  Stores in plain view (the drawer's scroll `NotificationListener` only covers scrolling,
+  not the open animation). While an overlay is mounted the registry now re-resolves every
+  registered rect per painted frame and bumps only on an actual change — refcounted to the
+  mounted overlays, and no frame loop.
+- **Ban-test violations introduced by the review follow-ups, now fixed:**
+  `tourRemoteOffSwitchStreamProvider` is allowlisted in
+  `test/providers/business_scoped_stream_ban_test.dart` (`system_config` is keyed on `key`
+  alone, carries no `business_id`, and is pulled unfiltered — genuinely global, so the
+  factory would be wrong); the two raw `MediaQuery.of(context).size` reads in
+  `spotlight_overlay.dart` and `first_run_tour_controller.dart` now go through
+  `context.screenWidth` / `context.screenHeight`.
+- **Tests:** new `test/widgets/spotlight_target_registry_test.dart` (8 tests: mid-build
+  register/unregister, offstage rejection, per-frame movement tracking, tracking teardown)
+  plus a moving-target case in `test/widgets/spotlight_overlay_test.dart`. Each was
+  confirmed to fail against the pre-fix code. `flutter analyze` clean; full suite 2058
+  passed / 131 skipped / 0 failed.
+- **Still outstanding:** the issue's manual-QA criterion — verify on a slow, small Android
+  device that hole position and the scroll step resolve correctly there.
+
+**Stop 2 stops covering the app (2026-09-15)**
+On-device, tapping the "+" the rail had just circled produced a dead end: Inventory's
+speed dial opened and both of its options — Add Product, Receive Stock — rendered as
+unreadable grey slabs. The rail was painting over them. ADR 0026 gained §15.
+
+- **A pointer draws a ring, not a sheet (§15).** `SpotlightOverlay` was written for stop 1,
+  where the ~72% black sheet *is* the blocking. Stop 2 reused it with `blocking: false`,
+  which switched off hit-testing but kept the sheet. Layering did the rest: the speed
+  dial's options are an `OverlayEntry` in the **tab's own** `Overlay`, inside `MainLayout`'s
+  body — below the rail's slot in the same `Stack` — so the sheet covered them. Non-blocking
+  now paints a haloed ring around the target and nothing else; blocking is unchanged. Two
+  tests pin the pair via the `paints` matcher (ring = two stroked `RRect`s and no `Path`;
+  sheet = a `Path`). `set blocking` now `markNeedsPaint()`s, since it chooses what is drawn.
+- **The pointer stands aside for anything over the tab.** Two signals, because a covering
+  surface arrives two ways. Add Product and Receive Stock are `PageRouteBuilder`s pushed
+  onto the tab's nested `Navigator`, also below the rail, so the pointer hung over the form
+  it had just asked the owner to fill in — handled by `currentTabCanPop`, the signal the
+  bottom nav already hides itself by. The nearer case is the "+" itself: it is a speed dial
+  whose options open into the tab's own `Overlay`, so once the ring made them readable the
+  pointer simply printed its caption over "Add Product"'s description and its *Not now*
+  over "Receive Stock"'s label — in the way of the very tap it was asking for. An
+  `OverlayEntry` announces nothing to a `NavigatorObserver`, so it reports itself: new
+  `ScreenCover` (`lib/shared/widgets/screen_cover.dart`) refcounts into
+  `NavigationService.coverOpenNotifier` through `frameSafe`, the `DrawerPresence` idiom
+  applied to a second signal that had no observer. An instruction is stale the moment it is
+  obeyed, and the menu names both choices better than the caption did.
+- **Stop 2 has a way out.** It is the rail's last stop and it is reached via a card that has
+  already dismissed itself, so there was no way to put the rail away at all. A *Not now*
+  footer calls `declineFirstRunTour` — session only, no device strike (§13). `_EscapeLink`
+  took a `label`; the stall net keeps its own wording.
+
+Suite: 2079 passed / 131 skipped / 0 failed. `flutter analyze` clean. The ring and the
+first stand-down were confirmed on-device; the speed-dial stand-down is covered by a test
+that drives a real `AppSpeedDialFab` but is **not yet run on hardware**.
+
+**Rail design settled + stuck-on-menu fix (2026-09-14)**
+On-device the rail sat on "Tap the menu to get started" with the drawer wide open. Root
+cause: `MainLayout`'s Scaffold declares **no `drawer:`** — every screen builds its own via
+`SharedScaffold` — so `onDrawerChanged` never fired and `mainScaffoldKey.currentState
+.isDrawerOpen` reported a drawer it does not own as closed. `nav.isDrawerOpen` was
+therefore hard-false on every phone, `computeStopOneStep` fell through to `menuButton`
+forever, and the hole was cut over a button the open drawer covered — a blocking dark
+sheet with nothing to tap. A `/grilling` session with the owner then settled what the rail
+should actually be; ADR 0026 gained §§10–14 and the shape below.
+
+- **Drawer state now comes from the drawer (ADR 0026 §12).** `AppDrawer` wraps its content
+  in `DrawerPresence`, which refcounts into `NavigationService.drawerOpenNotifier` on mount
+  and unmount. Flutter's `DrawerController` does not build its child while dismissed, so
+  "an `AppDrawer` is mounted" *is* "a drawer is open", and it holds wherever the drawer was
+  declared. Both edges go through the new shared `frameSafe()` (`lib/core/utils/
+  frame_safe.dart`, extracted from the §7 registry fix) — a direct write reproduces the
+  original mid-build crash, which a test asserts. `openDrawer`/`closeDrawer` no longer
+  write the notifier: they are no-ops on a drawerless Scaffold and could only desync it.
+- **The rail opens and closes stop 1 with a card (§10).** A welcome card (greeting, what a
+  store is for, *Set up my store* / *I'll look around first*) precedes the first
+  instruction; a hand-off card follows the store saving (*Add a product* → Inventory tab /
+  *Not now*). Before this, the rail ended by vanishing: stop 2's pointer is on the
+  Inventory FAB, so an owner who saved their store on the Stores screen saw nothing at all.
+  The hand-off fires on the `createStore → addProduct` **transition**, never on the store
+  count, so an owner who already had a store never sees it.
+- **The scroll step cuts no hole (§11).** It used to cut one over the whole drawer list —
+  most of the screen on a phone — and pointer events inside a hole pass through completely,
+  so every other destination was tappable during the one blocking stop. Now: centred
+  caption, bouncing chevron, drags still pass through. `targetIdForStopOneStep` returns
+  `SpotlightTargetId?`, and the overlay renders a centred caption when there is no hole.
+- **Declining ≠ aborting (§13).** `declineFirstRunTour` ends the session only;
+  `abortFirstRunTour` also counts a device strike. Three "not right now"s can never retire
+  the rail; three failures still do.
+- **Stall net (§14).** A step unchanged for ~20 s, or three swallowed taps, surfaces
+  "Having trouble? Skip setup" under the caption, which aborts properly. Both reset on a
+  step change. Only genuine taps count — a press past touch slop is a drag heading for the
+  scrollable underneath. This is the net that catches a *wrong* step, which §4.1's
+  missing-target teardown structurally cannot see.
+- **Visibility is vertical-only for the scroll decision.** The drawer slides in sideways
+  over ~250 ms; a horizontal bounds test answers "off-screen" for the whole animation and
+  flickered the caption. `isVisibleOnScreen` gained `verticalOnly`.
+- **Overlay gained three generic slots** — `content` (centred interactive panel),
+  `footer` (tappable, under the caption), `onBlockedTap` — plus `tourOwnerFirstNameProvider`
+  / `tourFirstStoreNameProvider` as test seams. It still knows nothing about stores,
+  products or rails.
+- **Tests:** new `test/tour/first_run_rail_flow_test.dart` (14: intro gating, decline vs
+  strike, both stall signals, stall reset on progress, no-hole scroll step, hand-off
+  transition + "already had a store" + "Not now", and two drawer-presence regressions) and
+  `test/tour/drawer_presence_ban_test.dart` (every `drawer:` in `lib/` is an `AppDrawer`;
+  `AppDrawer` reports through `frameSafe`). Both drawer fixes were confirmed to fail when
+  reverted — the mid-build one reproduces the exact `markNeedsBuild() during build` error.
+  `flutter analyze` clean; full suite **2074 passed / 131 skipped / 0 failed**.
 
 ### Issue #232 — Sign-up completes without creating a Store (2026-09-13)
 Branch `feat/signup-without-store-232`, cut from `feat/country-before-phone-230` (#230's
@@ -5597,29 +5819,31 @@ outside this fix. Documented at the call site; not filed by this session.
 Read this file first, then `CLAUDE.md`, then the master plan section relevant
 to the unit being picked up.
 
-**Repository state:**
-- Drift client schema: **v54** (v54 = `sales.set_custom_price` permission seed;
-  v53 = §3.13 supplier_crate_ledger + supplier_crate_balances).
-- Cloud migrations deployed through: **0118** (0117 supplier crate tracking +
-  0118 `sales.set_custom_price` pushed 2026-06-19; verified: catalogue row
-  present, granted to all CEO roles, 0 non-CEO grants).
-- **2026-07-01 — `0129_devices` deployed (device registry for console analytics).**
-  Cloud-only `public.devices` table (make/model/os/app_version/is_physical_device/
-  last-seen per `(business_id, device_id)`), written by a direct authenticated
-  `supabase.upsert` from `DeviceRegistryService` on sign-in / app-open / reconnect
-  (no offline sync-queue wiring; no in-app screen). Deps `device_info_plus` +
-  `package_info_plus` added. Applied via the Management API (see divergence note).
-  ⚠️ **Migration-history divergence:** remote applied 0125/0126/0128 under
-  timestamp versions + a remote-only `enable_pg_cron`; **0127 appears un-deployed**.
-  A blind `supabase db push` would fail on 0126's `CREATE TRIGGER`. Reconcile with
-  `migration repair` + deploy 0127 as follow-up.
-- `flutter test test/sync/` — **115 pass** (Session 141 baseline).
-- Full suite last confirmed: 452 pass / 58 skipped / 1 pre-existing unrelated
-  failure (`invite_staff_sheet_test`) (2026-06-19).
-- `flutter analyze lib` — clean. 18 pre-existing `avoid_print` infos in
-  `test/database/roles_v13_report.dart` only; not regressions.
-- iOS build enabled; free Apple ID cert expires after 7 days — re-run
-  `flutter run` to refresh.
+**Repository state:** _(refreshed 2026-09-15 — the block below had been frozen at
+2026-06-19 while the session log above kept moving; everything here is measured, not
+carried over.)_
+- Toolchain: **Flutter 3.44.2** (stable, framework `c9a6c48`, 2026-06-10) • **Dart 3.12.2**
+  • DevTools 2.57.0.
+- Drift client schema: **v81**.
+- Cloud migrations **in the repo** through **`0178_complete_onboarding_without_store.sql`**
+  (162 files). The `0174` gap is **deliberate** — commit `015e8ff` renumbered the #203
+  slice migrations around #209's `0173`; there is nothing missing to hunt for.
+  ⚠️ *Deployed*-through could **not** be verified this session: the Supabase MCP server is
+  unauthenticated in a non-interactive run, so no remote query was possible. Last recorded
+  deploy state is cloud **0168–0170** on prod (2026-07-29, flags still OFF) per
+  `BUILD_LOG.md`; treat anything after 0170 as **unconfirmed on remote** and check before
+  a `db push`.
+- Full suite: **2084 pass / 131 skipped / 0 failures** (2026-09-15).
+- `flutter test test/sync/` — **237 pass** (2026-09-15; was 115 at the Session 141 baseline).
+- `flutter analyze lib test` — **clean, 0 issues** (2026-09-15).
+- Known-flaky: `test/van_sales/van_returns_test.dart` flakes intermittently in a
+  full-suite run (issue **#228**, on hold). It passed in the runs above.
+- All open GitHub issues are currently labelled **`on-hold`** (#138, #186, #204, #221,
+  #222, #227, #228) — parked 2026-09-09 at the owner's request to clear the decks.
+  `ready-for-agent` was stripped from #227 and #138 so an AFK agent would not pick them
+  up past the hold; re-add it when unparking.
+- iOS build enabled; free Apple ID cert expires after 7 days — re-run `flutter run` to
+  refresh.
 
 **Three things to check before every unit:**
 1. `flutter analyze` clean before and after.

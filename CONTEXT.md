@@ -521,3 +521,52 @@ prevents drift (there is none — only shared fixtures).
 The signed-in web user attributed to a sale. On web the Supabase session is the
 operator directly — there is no PIN and no "Who's working?" picker (ADR 0011).
 _Avoid_: equating it with the mobile "active user" chosen via PIN.
+
+### Onboarding & Tour
+
+**Rail**:
+The guided multi-stop first-run onboarding path (PRD #229, ADR 0026) that walks
+a newly registered business owner from initial landing through core setup milestones.
+Derives its active stop exclusively from database state. Ends permanently once all
+stops are satisfied.
+_Avoid_: walkthrough, wizard (for the in-app post-login guidance), onboarding flow
+(ambiguous with sign-up).
+
+**Stop**:
+An individual milestone step along a **Rail** (Stop 1: create a Store, blocking;
+Stop 2: add a Product, non-blocking). A stop ends the exact moment its underlying data
+commits to the local database, never by reaching the end of an imperative script.
+_Avoid_: step (alone — ambiguous with form steps), tour (for a single milestone).
+
+**Spotlight Overlay**:
+The general presentation widget (`SpotlightOverlay`) that marks a designated UI target
+with an instructional caption. Reusable across tours, supporting both `blocking` and
+`non-blocking` modes. Blocking cuts a hole in a dark sheet: taps outside the hole are
+swallowed while vertical drags pass through to underlying scrollables. Non-blocking
+draws a ring over the untouched app and covers nothing — see **Pointer**. A hole or
+ring is drawn only over something the caption asks the owner to tap; a step with
+nothing to point at renders its caption centred on the sheet.
+_Avoid_: tooltip, coach mark, walkthrough modal.
+
+**Pointer**:
+A non-blocking **Stop**: it rings a target and asks for a tap, but takes nothing over.
+It draws no sheet, stands aside the moment anything opens over the tab root — a pushed
+page, or a **Screen Cover** — and carries its own way out. Its instruction is stale the
+moment it is obeyed.
+_Avoid_: hint, nudge, non-blocking overlay (describes the widget, not the stop).
+
+**Screen Cover**:
+A surface a screen opens over itself as an `OverlayEntry` rather than a route — Inventory's
+speed dial is the one that matters. It lives in the *tab's* Overlay, inside MainLayout's
+body, so the first-run rail renders above it; unlike a route it announces nothing to a
+`NavigatorObserver`, so it reports its own presence (`ScreenCover` →
+`NavigationService.coverOpenNotifier`) for a **Pointer** to stand aside for.
+_Avoid_: popup, modal (both imply a route), sheet (taken by the blocking overlay).
+
+**Card**:
+A panel on a **Rail**'s sheet that asks the owner for a decision rather than for a tap
+on the app behind it — the welcome card that opens Stop 1 and the hand-off card that
+closes it. Rendered by the **Spotlight Overlay** with no hole cut, so it is
+configuration of the same widget rather than a second presentation surface.
+_Avoid_: dialog, modal (both imply a route), prompt.
+

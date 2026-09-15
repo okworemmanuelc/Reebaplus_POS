@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
 import 'package:reebaplus_pos/shared/widgets/sync_pull_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/push_permission_sheet.dart';
+import 'package:reebaplus_pos/features/dashboard/controllers/first_run_tour_controller.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 // The LazyIndexedStack has been replaced with the direct Offstage + Set approach
@@ -253,6 +254,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     // `applyRoleLanding` is a one-shot — re-scheduling it on every build until
     // the role resolves is cheap, and it will not yank a user who has already
     // moved to another tab.
+    nav.isDesktopNotifier.value = context.isDesktop;
     final canSell = Gates.makeSale.allows(ref);
     final role = ref.watch(currentUserRoleProvider);
     final permsResolved =
@@ -340,9 +342,12 @@ class _MainLayoutState extends ConsumerState<MainLayout>
             );
           }
 
-          return Scaffold(
-            key: nav.mainScaffoldKey,
-            body: bodyWidget,
+          return Stack(
+            children: [
+              Scaffold(
+                key: nav.mainScaffoldKey,
+                onDrawerChanged: (opened) => nav.drawerOpenNotifier.value = opened,
+                body: bodyWidget,
             bottomNavigationBar: context.isDesktop
                 ? null
                 : Builder(
@@ -483,10 +488,13 @@ class _MainLayoutState extends ConsumerState<MainLayout>
               );
             },
           ),
-          );
-        },
       ),
-    );
+      const FirstRunRailTourView(),
+    ],
+  );
+},
+),
+);
   }
 }
 

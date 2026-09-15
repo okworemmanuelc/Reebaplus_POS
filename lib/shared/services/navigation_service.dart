@@ -76,13 +76,164 @@ class NavigationService {
   // Used by MainLayout to access and potentially close the drawer
   final GlobalKey<ScaffoldState> mainScaffoldKey = GlobalKey<ScaffoldState>();
 
-  bool get isDrawerOpen => mainScaffoldKey.currentState?.isDrawerOpen ?? false;
+  final ValueNotifier<bool> drawerOpenNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> isDesktopNotifier = ValueNotifier<bool>(false);
 
+  /// How many [AppDrawer]s are mounted right now.
+  ///
+  /// The drawer does **not** belong to MainLayout's Scaffold — every screen
+  /// builds its own via [SharedScaffold], and a handful build one directly. So
+  /// MainLayout's `onDrawerChanged` never fires and `mainScaffoldKey`'s state
+  /// reports a drawer it does not own as permanently closed. Counting the
+  /// drawer widget itself is the one signal that is true wherever the drawer
+  /// was declared: Flutter's `DrawerController` does not build its child while
+  /// dismissed, so an [AppDrawer] exists exactly while a drawer is open or
+  /// animating.
+  int _drawersMounted = 0;
+
+  /// Called by [AppDrawer] as it mounts. Paired with [drawerDismounted].
+  void drawerMounted() {
+    _drawersMounted++;
+    if (_drawersMounted == 1) drawerOpenNotifier.value = true;
+  }
+
+  /// Called by [AppDrawer] as it unmounts. Paired with [drawerMounted].
+  void drawerDismounted() {
+    if (_drawersMounted > 0) _drawersMounted--;
+    if (_drawersMounted == 0) drawerOpenNotifier.value = false;
+  }
+
+  /// How many app-owned surfaces are currently covering the screen without
+  /// being routes.
+  ///
+  /// [currentTabCanPop] answers this for pushed pages. It cannot answer it for
+  /// a surface built as an `OverlayEntry` — Inventory's speed dial being the
+  /// one that matters — and those sit in the *tab's* Overlay, inside
+  /// MainLayout's body, which is below the first-run rail in the same Stack.
+  /// The rail's non-blocking pointer reads this to stand aside: once the owner
+  /// has opened the menu the pointer asked them to open, its caption is stale
+  /// and the menu carries better labels of its own.
+  int _coversMounted = 0;
+
+  /// True while any [ScreenCover] is mounted. See [_coversMounted].
+  final ValueNotifier<bool> coverOpenNotifier = ValueNotifier<bool>(false);
+
+  /// Called by [ScreenCover] as it mounts. Paired with [coverDismounted].
+  void coverMounted() {
+    _coversMounted++;
+    if (_coversMounted == 1) coverOpenNotifier.value = true;
+  }
+
+  /// Called by [ScreenCover] as it unmounts. Paired with [coverMounted].
+  void coverDismounted() {
+    if (_coversMounted > 0) _coversMounted--;
+    if (_coversMounted == 0) coverOpenNotifier.value = false;
+  }
+
+  /// "Is the nav drawer covering content right now?" — the *visibility*
+  /// question, which is what the first-run rail asks before cutting a hole over
+  /// a button the drawer may be sitting on. Desktop counts: there the drawer is
+  /// a permanent sidebar, so it is always on screen.
+  bool get isDrawerOpen =>
+      isDesktopNotifier.value ||
+      drawerOpenNotifier.value ||
+      (mainScaffoldKey.currentState?.isDrawerOpen ?? false);
+
+  /// "Is there a *dismissable* drawer open?" — the back-button question, which
+  /// is not the same as [isDrawerOpen]. Desktop's sidebar is permanent: there is
+  /// nothing to dismiss, so answering the visibility question on desktop
+  /// swallowed every back press into a no-op close and stranded the user (no
+  /// nested pop, no tab fallback, no double-back exit).
+  bool get isModalDrawerOpen =>
+      !isDesktopNotifier.value &&
+      (drawerOpenNotifier.value ||
+          (mainScaffoldKey.currentState?.isDrawerOpen ?? false));
+
+  /// Close callbacks published by the [AppDrawer]s currently mounted, innermost
+  /// last. The drawer belongs to each screen's own Scaffold, never to
+  /// `mainScaffoldKey`'s — see [_drawersMounted] — so closing it means asking
+  /// the Scaffold that actually owns it.
+  final List<VoidCallback> _modalDrawerClosers = <VoidCallback>[];
+
+  /// Called by [DrawerPresence] as a dismissable drawer mounts.
+  void registerModalDrawerCloser(VoidCallback closer) {
+    _modalDrawerClosers.add(closer);
+  }
+
+  /// Called by [DrawerPresence] as that drawer unmounts.
+  void unregisterModalDrawerCloser(VoidCallback closer) {
+    _modalDrawerClosers.remove(closer);
+  }
+
+  /// Openers published by the Scaffolds that *declare* a drawer, in mount order.
+  ///
+  /// Deliberately a separate registry from [_modalDrawerClosers], because the
+  /// closing seam cannot answer the opening question: [DrawerPresence] lives
+  /// inside [AppDrawer], and Flutter does not build a drawer's child while it is
+  /// shut — at the moment you want to *open* one, there is nothing mounted to
+  /// ask. [DrawerHost] is mounted by the screen's own Scaffold whether the
+  /// drawer is open or shut, so it can.
+  ///
+  /// Every tab the user has visited stays mounted (MainLayout keeps them
+  /// `Offstage` rather than disposing them), so several hosts are alive at once
+  /// and "the most recently registered" is *not* the one on screen. Each opener
+  /// therefore vets itself and returns false when it is not the visible one;
+  /// [openDrawer] walks them newest-first and takes the first that says yes.
+  final List<bool Function()> _drawerOpeners = <bool Function()>[];
+
+  /// Called by [DrawerHost] as a drawer-declaring Scaffold mounts.
+  void registerDrawerOpener(bool Function() opener) {
+    _drawerOpeners.add(opener);
+  }
+
+  /// Called by [DrawerHost] as that Scaffold unmounts.
+  void unregisterDrawerOpener(bool Function() opener) {
+    _drawerOpeners.remove(opener);
+  }
+
+  /// True when [navigator] is the tab navigator the user is actually looking at.
+  /// Used by [DrawerHost] to rule itself out when it belongs to an offstage tab.
+  /// With no tab shell in play (auth flow, widget tests) there is nothing to be
+  /// offstage behind, so any navigator qualifies.
+  bool isActiveTabNavigator(NavigatorState? navigator) {
+    if (navigator == null) return false;
+    if (tabNavigatorKeys.isEmpty) return true;
+    final index = currentIndex.value;
+    if (index >= tabNavigatorKeys.length) return false;
+    return identical(tabNavigatorKeys[index].currentState, navigator);
+  }
+
+  // Neither of these writes [drawerOpenNotifier]: the mount refcount above owns
+  // it, and a second writer can only desync it — `mainScaffoldKey`'s Scaffold
+  // has no drawer, so a call routed there is a no-op and would leave the
+  // notifier asserting a state that never happened.
+
+  /// Open the nav drawer of the screen currently on show. Asks the [DrawerHost]s
+  /// published by drawer-declaring Scaffolds; `mainScaffoldKey` is only a
+  /// fallback for a drawer that really does belong to MainLayout's Scaffold.
+  ///
+  /// Nothing in the app calls this yet — every open today goes through the
+  /// affordance itself (`Scaffold.of(ctx).openDrawer()` in [MenuButton] and the
+  /// per-screen menu buttons). It exists so code with a [NavigationService] but
+  /// no Scaffold context can open the drawer, and it is covered by
+  /// `test/tour/drawer_host_open_test.dart` precisely because no caller would
+  /// notice if it silently stopped working — which is exactly how it was broken
+  /// for as long as it pointed at the drawerless `mainScaffoldKey`.
   void openDrawer() {
+    for (var i = _drawerOpeners.length - 1; i >= 0; i--) {
+      if (_drawerOpeners[i]()) return;
+    }
     mainScaffoldKey.currentState?.openDrawer();
   }
 
+  /// Dismiss the open nav drawer. Prefers the owning Scaffold published by
+  /// [DrawerPresence]; `mainScaffoldKey` is only a fallback for a drawer that
+  /// really does belong to MainLayout's Scaffold.
   void closeDrawer() {
+    if (_modalDrawerClosers.isNotEmpty) {
+      _modalDrawerClosers.last();
+      return;
+    }
     mainScaffoldKey.currentState?.closeDrawer();
   }
 
@@ -193,8 +344,10 @@ class NavigationService {
 
     debugPrint('[NavigationService] handleBackPress triggered at $now');
 
-    // Step 1: close drawer if open
-    if (isDrawerOpen) {
+    // Step 1: close the drawer if one is open *and dismissable*. Desktop's
+    // sidebar is permanent, so it must not consume the press — see
+    // [isModalDrawerOpen].
+    if (isModalDrawerOpen) {
       closeDrawer();
       return;
     }
@@ -283,6 +436,12 @@ class NavigationService {
       _tabCanPop[i] = false;
     }
     currentTabCanPop.value = false;
+    _drawersMounted = 0;
+    drawerOpenNotifier.value = false;
+    _modalDrawerClosers.clear();
+    _drawerOpeners.clear();
+    _coversMounted = 0;
+    coverOpenNotifier.value = false;
   }
 
   /// Manually update the active store (§12.1). [explicit] marks a deliberate
