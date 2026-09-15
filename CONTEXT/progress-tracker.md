@@ -14,6 +14,10 @@ The human updates it when resolving open questions or making architectural decis
 Branch `feat/product-rail-handoff-234`, cut from `feat/walk-to-first-store-233`. Final slice of PRD #229.
 
 - **Stop 2 (Add Product):** Non-blocking pointer targeting the Inventory "+" action (`SpotlightTargetId.addProductFab`), allowing taps to pass through everywhere. Completes whenever product-presence signal (`hasLocalProductsProvider`) flips to true.
+- **Product Pointer Dismissal & Screen Clearance:**
+  - Tapping "Add a product" on the hand-off card sets `tourProductPointerDismissedProvider` to true upon navigating to the Inventory screen, preventing the "Tap to add your first product" bubble from covering the Inventory screen and empty-state CTA.
+  - Added `onCaptionTap` to `SpotlightOverlay` so tapping the instruction bubble itself directly dismisses the pointer.
+  - Preserved hand-off transition: when the product is saved, `firstRunTourStopProvider` still transitions `addProduct` → `none`, owing `tourCardHandoffProvider` and navigating to Home.
 - **Product Save Confirmation Dialog:** Added `_confirmSaveProduct(name)` confirmation dialog in `AddProductScreen` before persisting products across all creation paths (fast-add direct, existing product stock add, and receive mode).
 - **Hand-off to Get-started card:** On transition from Stop 2 to none (`TourStop.addProduct` → `TourStop.none`), `tourCardHandoffProvider` is owed and the active tab navigates to Home, rendering a non-blocking pointer at `SpotlightTargetId.getStartedCard` with caption "Finish your setup here" and "Got it" escape link.
 - **Get-started Checklist & Card Overhaul:**
@@ -24,7 +28,7 @@ Branch `feat/product-rail-handoff-234`, cut from `feat/walk-to-first-store-233`.
   - Completed steps are ticked on first appearance at hand-off.
 - **Tests & Verification:**
   - `test/dashboard/get_started_checklist_test.dart` (19 tests): pure derivation + live provider wiring.
-  - `test/tour/first_run_rail_flow_test.dart` (20 tests): rail progression, card hand-off pointer, drawer presence.
+  - `test/tour/first_run_rail_flow_test.dart` (23 tests): rail progression, pointer dismissal on navigation and caption tap, card hand-off pointer, drawer presence.
   - `test/inventory/add_product_confirmation_test.dart`: widget test asserting confirmation dialog appears and guards product persistence.
   - `flutter analyze`: clean with 0 errors and 0 warnings.
 

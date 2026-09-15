@@ -138,6 +138,28 @@ final tourCardHandoffProvider =
       TourCardHandoffNotifier.new,
     );
 
+/// Session-scoped: has the owner dismissed the product pointer, either by
+/// tapping "Add a product" on the hand-off card to navigate to Inventory,
+/// or tapping the pointer message itself?
+class TourProductPointerDismissedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void dismiss() {
+    state = true;
+  }
+
+  @visibleForTesting
+  void reset() {
+    state = false;
+  }
+}
+
+final tourProductPointerDismissedProvider =
+    NotifierProvider<TourProductPointerDismissedNotifier, bool>(
+      TourProductPointerDismissedNotifier.new,
+    );
+
 /// Device-local abort count persisted in [SharedPreferences].
 ///
 /// If a device fails 3 times, the tour is suppressed permanently on this device.

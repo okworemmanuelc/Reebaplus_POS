@@ -153,8 +153,10 @@ class FirstRunRailTourView extends ConsumerWidget {
         ref.read(tourHandoffProvider.notifier).owe();
       }
       if (previous == TourStop.addProduct && next == TourStop.none) {
-        ref.read(tourCardHandoffProvider.notifier).owe();
-        ref.read(navigationProvider).setIndex(NavigationService.homeTab);
+        if (!ref.read(tourSessionAbortedProvider)) {
+          ref.read(tourCardHandoffProvider.notifier).owe();
+          ref.read(navigationProvider).setIndex(NavigationService.homeTab);
+        }
       }
     });
 
@@ -169,6 +171,9 @@ class FirstRunRailTourView extends ConsumerWidget {
     if (tourStop == TourStop.addProduct) {
       if (ref.watch(tourHandoffProvider)) {
         return _buildHandoff(context, ref);
+      }
+      if (ref.watch(tourProductPointerDismissedProvider)) {
+        return const SizedBox.shrink();
       }
       return _buildAddProductPointer(context, ref);
     }
@@ -284,6 +289,8 @@ class FirstRunRailTourView extends ConsumerWidget {
           targetId: SpotlightTargetId.addProductFab,
           caption: 'Tap to add your first product',
           blocking: false,
+          onCaptionTap: () =>
+              ref.read(tourProductPointerDismissedProvider.notifier).dismiss(),
           // Dismissing the last stop is a preference, not a failure, so it
           // costs the device nothing (ADR 0026 section 13). The rail is derived
           // from the data, so it offers again on the next cold start until a
@@ -330,6 +337,7 @@ class FirstRunRailTourView extends ConsumerWidget {
         body: 'Next, add something to sell.',
         primaryLabel: 'Add a product',
         onPrimary: () {
+          ref.read(tourProductPointerDismissedProvider.notifier).dismiss();
           ref.read(tourHandoffProvider.notifier).settle();
           nav.currentIndex.value = _inventoryTab;
         },

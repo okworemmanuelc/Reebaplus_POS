@@ -307,6 +307,7 @@ class SpotlightOverlay extends StatefulWidget {
     this.blocking = true,
     this.onMissingTarget,
     this.onBlockedTap,
+    this.onCaptionTap,
     this.overlayColor = const Color(0xB8000000), // ~72% black
     this.ringColor,
     this.holeRadius = 12.0,
@@ -345,6 +346,11 @@ class SpotlightOverlay extends StatefulWidget {
 
   /// Called each time a tap outside the hole is swallowed in blocking mode.
   final VoidCallback? onBlockedTap;
+
+  /// Called when the caption bubble itself is tapped.
+  ///
+  /// When null, the bubble ignores pointer events ([IgnorePointer]).
+  final VoidCallback? onCaptionTap;
 
   /// Color of the darkened sheet. Blocking mode only.
   final Color overlayColor;
@@ -534,63 +540,73 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
 
   /// The instruction bubble, plus whatever the step hung under it.
   ///
-  /// Only the bubble ignores pointers — a footer exists to be tapped, and
-  /// wrapping the whole column would make the one escape the owner has as
-  /// dead as the sheet around it.
+  /// The bubble ignores pointers by default unless [onCaptionTap] is provided.
+  /// A footer exists to be tapped, and wrapping the whole column would make
+  /// the one escape the owner has as dead as the sheet around it.
   Widget _captionColumn(BuildContext context) {
     final theme = Theme.of(context);
+
+    Widget bubble = Container(
+      constraints: BoxConstraints(maxWidth: context.getRSize(320)),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(16),
+        vertical: context.getRSize(12),
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: context.getRSize(8),
+            height: context.getRSize(8),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Flexible(
+            child: Text(
+              widget.caption,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+              textAlign: TextAlign.left,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (widget.onCaptionTap != null) {
+      bubble = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onCaptionTap,
+        child: bubble,
+      );
+    } else {
+      bubble = IgnorePointer(child: bubble);
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IgnorePointer(
-          child: Container(
-            constraints: BoxConstraints(maxWidth: context.getRSize(320)),
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(16),
-              vertical: context.getRSize(12),
-            ),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: 0.4),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: context.getRSize(8),
-                  height: context.getRSize(8),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                SizedBox(width: context.getRSize(10)),
-                Flexible(
-                  child: Text(
-                    widget.caption,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                    textAlign: TextAlign.left,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        bubble,
         if (widget.footer != null) ...[
           SizedBox(height: context.getRSize(12)),
           widget.footer!,
