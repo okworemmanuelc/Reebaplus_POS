@@ -144,11 +144,38 @@ void main() {
       expect(_locked(s, GetStartedStepId.makeSale), isTrue);
       expect(_locked(s, GetStartedStepId.inviteTeam), isTrue);
 
-      // Only "Invite your team" is optional.
+      // "Make a sale" and "Invite your team" are optional.
       expect(
         s.steps.where((e) => e.optional).map((e) => e.id),
-        [GetStartedStepId.inviteTeam],
+        [GetStartedStepId.makeSale, GetStartedStepId.inviteTeam],
       );
+    });
+
+    test('cardHandoffPending keeps the card visible even when dismissed with stores', () {
+      final s = computeGetStartedChecklist(
+        isCeo: true,
+        hasStores: true,
+        hasProducts: false,
+        hasOrders: false,
+        hasTeam: false,
+        dismissed: true,
+        cardHandoffPending: true,
+      );
+
+      expect(s.visible, isTrue);
+
+      // Once handoff settles, dismissal takes effect
+      final settled = computeGetStartedChecklist(
+        isCeo: true,
+        hasStores: true,
+        hasProducts: false,
+        hasOrders: false,
+        hasTeam: false,
+        dismissed: true,
+        cardHandoffPending: false,
+      );
+
+      expect(settled.visible, isFalse);
     });
 
     test('dismissal does NOT hide the card while the store step is undone', () {
@@ -250,6 +277,20 @@ void main() {
   });
 
   group('getStartedChecklistProvider (input overrides)', () {
+    test('unresolved storesAsync → keeps card hidden and computation prevented', () async {
+      final container = ProviderContainer(
+        overrides: [
+          currentUserRoleProvider.overrideWith((ref) => _role('ceo')),
+          allStoresProvider.overrideWith((ref) => const Stream.empty()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final state = container.read(getStartedChecklistProvider);
+      expect(state.visible, isFalse);
+      expect(state.steps, isEmpty);
+    });
+
     test('a fresh CEO with zero stores → visible, createStore unticked, downstream locked', () async {
       final s = await _evaluate(roleSlug: 'ceo', hasStores: false);
       expect(s.visible, isTrue);

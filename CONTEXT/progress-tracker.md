@@ -26,10 +26,16 @@ Branch `feat/product-rail-handoff-234`, cut from `feat/walk-to-first-store-233`.
   - Prevented card dismissal while `hasStores == false`.
   - Suppressed card visibility while the spotlight rail is active (`tourActive == true`).
   - Completed steps are ticked on first appearance at hand-off.
+  - Review feedback updates:
+    - Set `optional: true` on `GetStartedStepId.makeSale` while preserving done and locked state.
+    - Updated `getStartedChecklistProvider` to distinguish unresolved `allStoresProvider` states (`isLoading || !hasValue || hasError`), keeping `GetStartedCard` hidden and preventing computation until store data resolves.
+    - Added `cardHandoffPending` to `computeGetStartedChecklist`: a pending `tourCardHandoffProvider` keeps `GetStartedCard` visible even if previously dismissed, ensuring `SpotlightTargetId.getStartedCard` is mounted and registered for handoff settlement, and restores dismissal once settled.
+- **Add Product Confirmation Ordering:**
+  - Reordered existing-product and classic receive-mode paths in `AddProductScreen` so category validation does not insert records before user confirmation: validates typed category without calling `_getOrCreateCategory`, invokes `_confirmSaveProduct` before any `_getOrCreateManufacturer`, `_getOrCreateSupplier`, or `_getOrCreateCategory` calls, and creates related records only after confirmation succeeds.
 - **Tests & Verification:**
-  - `test/dashboard/get_started_checklist_test.dart` (19 tests): pure derivation + live provider wiring.
+  - `test/dashboard/get_started_checklist_test.dart` (21 tests): pure derivation, handoff visibility during dismissal, unresolved store guard, and live provider wiring.
   - `test/tour/first_run_rail_flow_test.dart` (23 tests): rail progression, pointer dismissal on navigation and caption tap, card hand-off pointer, drawer presence.
-  - `test/inventory/add_product_confirmation_test.dart`: widget test asserting confirmation dialog appears and guards product persistence.
+  - `test/inventory/add_product_confirmation_test.dart` (2 tests): Fast-Add confirmation dialog and classic receive mode confirmation ordering preventing related record insertion on cancel.
   - `flutter analyze`: clean with 0 errors and 0 warnings.
 
 ### Drawer seam — the back button and `open/closeDrawer()` pointed at a Scaffold with no drawer (2026-09-15)

@@ -78,6 +78,7 @@ GetStartedChecklistState computeGetStartedChecklist({
   required bool hasTeam,
   required bool dismissed,
   bool tourActive = false,
+  bool cardHandoffPending = false,
 }) {
   final steps = <GetStartedStep>[
     GetStartedStep(
@@ -93,6 +94,7 @@ GetStartedChecklistState computeGetStartedChecklist({
     GetStartedStep(
       id: GetStartedStepId.makeSale,
       done: hasOrders,
+      optional: true,
       locked: !hasStores,
     ),
     GetStartedStep(
@@ -104,7 +106,10 @@ GetStartedChecklistState computeGetStartedChecklist({
   ];
   final allDone = steps.every((s) => s.done);
   final canDismiss = hasStores;
-  final visible = isCeo && !allDone && (!dismissed || !canDismiss) && !tourActive;
+  final visible = isCeo &&
+      !allDone &&
+      (!dismissed || !canDismiss || cardHandoffPending) &&
+      !tourActive;
   return GetStartedChecklistState(visible: visible, steps: steps);
 }
 
@@ -155,9 +160,13 @@ final getStartedChecklistDismissedProvider =
 /// [computeGetStartedChecklist].
 /// Consumed only by the Home-tab card; never on POS.
 final getStartedChecklistProvider = Provider<GetStartedChecklistState>((ref) {
-  final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
   final storesAsync = ref.watch(allStoresProvider);
-  final hasStores = storesAsync.valueOrNull?.isNotEmpty ?? false;
+  if (storesAsync.isLoading || storesAsync.hasError || !storesAsync.hasValue) {
+    return const GetStartedChecklistState(visible: false, steps: []);
+  }
+
+  final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
+  final hasStores = storesAsync.requireValue.isNotEmpty;
   final hasProducts = ref.watch(hasLocalProductsProvider).valueOrNull ?? false;
   final hasOrders = ref.watch(hasAnyOrderProvider).valueOrNull ?? false;
 
@@ -172,6 +181,7 @@ final getStartedChecklistProvider = Provider<GetStartedChecklistState>((ref) {
 
   final dismissed = ref.watch(getStartedChecklistDismissedProvider);
   final tourActive = ref.watch(firstRunTourStopProvider) != TourStop.none;
+  final cardHandoffPending = ref.watch(tourCardHandoffProvider);
 
   return computeGetStartedChecklist(
     isCeo: isCeo,
@@ -181,5 +191,6 @@ final getStartedChecklistProvider = Provider<GetStartedChecklistState>((ref) {
     hasTeam: hasTeam,
     dismissed: dismissed,
     tourActive: tourActive,
+    cardHandoffPending: cardHandoffPending,
   );
 });

@@ -154,4 +154,110 @@ void main() {
     container.dispose();
     await tester.pump(Duration.zero);
   });
+
+  testWidgets(
+      'Receive mode classic path does not insert related records before confirmation',
+      (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        currentUserPermissionsProvider.overrideWithValue({
+          'products.edit_buying_price',
+          'products.edit_price',
+          'products.add',
+        }),
+      ],
+    );
+
+    final user = await db.storesDao.getUserById(userId);
+    container.read(authProvider).value = user;
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: AddProductScreen(receiveMode: true),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> enterField(String labelPart, String text) async {
+      final finder = find.descendant(
+        of: find.byWidgetPredicate(
+          (w) =>
+              w is AppInput &&
+              (w.labelText?.toLowerCase().contains(labelPart.toLowerCase()) ??
+                  false),
+        ),
+        matching: find.byType(TextFormField),
+      );
+      await tester.ensureVisible(finder);
+      await tester.enterText(finder, text);
+      await tester.pumpAndSettle();
+    }
+
+    // Fill in required fields in classic receive mode
+    await enterField('Product Name', 'Coke 50cl');
+    await enterField('Category', 'Beverages');
+    await enterField('Description', 'Soft drink');
+    await enterField('Retailer Price', '300');
+    await enterField('Wholesaler Price', '280');
+    await enterField('Buying Price', '250');
+    await enterField('Low Stock Alert', '5');
+    await enterField('Manufacturer', 'Coca-Cola');
+    await enterField('Initial Quantity', '20');
+
+    final saveButtonFinder = find.widgetWithText(AppButton, 'Add Product');
+    await tester.ensureVisible(saveButtonFinder);
+    await tester.tap(saveButtonFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Save Product?'), findsOneWidget);
+
+    // Cancel confirmation
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    // Verify NO categories, manufacturers, or suppliers were inserted
+    var categories = await (db.select(db.categories)
+          ..where((t) => t.businessId.equals(businessId)))
+        .get();
+    var manufacturers = await (db.select(db.manufacturers)
+          ..where((t) => t.businessId.equals(businessId)))
+        .get();
+    var suppliers = await (db.select(db.suppliers)
+          ..where((t) => t.businessId.equals(businessId)))
+        .get();
+
+    expect(categories.isEmpty, isTrue);
+    expect(manufacturers.isEmpty, isTrue);
+    expect(suppliers.isEmpty, isTrue);
+
+    // Tap Add Product again and confirm
+    await tester.tap(saveButtonFinder);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Now records should exist
+    categories = await (db.select(db.categories)
+          ..where((t) => t.businessId.equals(businessId)))
+        .get();
+    expect(categories.isNotEmpty, isTrue);
+    expect(categories.first.name, 'Beverages');
+
+    manufacturers = await (db.select(db.manufacturers)
+          ..where((t) => t.businessId.equals(businessId)))
+        .get();
+    expect(manufacturers.isNotEmpty, isTrue);
+    expect(manufacturers.first.name, 'Coca-Cola');
+
+    await tester.pump(const Duration(seconds: 5));
+    container.dispose();
+    await tester.pump(Duration.zero);
+  });
 }

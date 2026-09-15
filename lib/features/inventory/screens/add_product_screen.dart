@@ -657,32 +657,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         return;
       }
 
-      // Auto-handle manufacturer/supplier if typed but not selected
-      if (_selectedManufacturer == null &&
-          _manufacturerCtrl.text.trim().isNotEmpty) {
-        _selectedManufacturer = await _getOrCreateManufacturer(
-          _manufacturerCtrl.text.trim(),
+      final hasManufacturer = _selectedManufacturer != null ||
+          _manufacturerCtrl.text.trim().isNotEmpty;
+      if (_effectiveTrackEmpties && !hasManufacturer) {
+        AppNotification.showError(
+          context,
+          'Manufacturer is required to track empty crates.',
         );
-      }
-      if (_selectedSupplier == null && _supplierCtrl.text.trim().isNotEmpty) {
-        _selectedSupplier = await _getOrCreateSupplier(
-          _supplierCtrl.text.trim(),
-        );
-      }
-      if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
-        _selectedCategory = await _getOrCreateCategory(
-          _categoryCtrl.text.trim(),
-        );
-      }
-
-      if (_effectiveTrackEmpties && _selectedManufacturer == null) {
-        setState(() => _isSaving = false);
-        if (mounted) {
-          AppNotification.showError(
-            context,
-            'Manufacturer is required to track empty crates.',
-          );
-        }
         return;
       }
 
@@ -691,6 +672,24 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
       setState(() => _isSaving = true);
       try {
+        // Auto-handle manufacturer/supplier/category if typed but not selected
+        if (_selectedManufacturer == null &&
+            _manufacturerCtrl.text.trim().isNotEmpty) {
+          _selectedManufacturer = await _getOrCreateManufacturer(
+            _manufacturerCtrl.text.trim(),
+          );
+        }
+        if (_selectedSupplier == null && _supplierCtrl.text.trim().isNotEmpty) {
+          _selectedSupplier = await _getOrCreateSupplier(
+            _supplierCtrl.text.trim(),
+          );
+        }
+        if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
+          _selectedCategory = await _getOrCreateCategory(
+            _categoryCtrl.text.trim(),
+          );
+        }
+
         final productId = _selectedExistingProduct!.id;
         final retailKobo = (existingRetail * 100).round();
         final wholesaleKobo = (existingWholesale * 100).round();
@@ -780,25 +779,18 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
     // ── NEW PRODUCT ─────────────────────────────────────────────────────────
     // Direct-mode (Fast-Add) creates run through the pure Fast-Add form model
-    // (Seam 1). Receive Stock's mini-form (receiveMode) keeps its classic
-    // validation + persist below, untouched.
+    // (Seam 1). Receive Stock's mini-form and the "add stock to an existing
+    // product" path keep the full classic layout untouched.
     if (!widget.receiveMode) {
       await _saveFastAddNewProduct();
       return;
     }
 
     final name = _nameCtrl.text.trim();
-
-    if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
-      setState(() => _isSaving = true);
-      try {
-        _selectedCategory = await _getOrCreateCategory(_categoryCtrl.text.trim());
-      } finally {
-        if (mounted) {
-          setState(() => _isSaving = false);
-        }
-      }
-    }
+    final hasCategory =
+        _selectedCategory != null || _categoryCtrl.text.trim().isNotEmpty;
+    final hasManufacturer = _selectedManufacturer != null ||
+        _manufacturerCtrl.text.trim().isNotEmpty;
 
     if (!mounted) return;
 
@@ -807,7 +799,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       missingField = '${_lexicon.item} Name';
     } else if (_subtitleCtrl.text.trim().isEmpty) {
       missingField = 'Description / Subtitle';
-    } else if (_selectedCategory == null) {
+    } else if (!hasCategory) {
       missingField = _lexicon.category;
     } else if (_retailPriceCtrl.text.trim().isEmpty) {
       missingField = 'Retailer Price';
@@ -825,6 +817,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
     if (missingField != null) {
       AppNotification.showError(context, '$missingField is required.');
+      return;
+    }
+
+    if (_effectiveTrackEmpties && !hasManufacturer) {
+      AppNotification.showError(
+        context,
+        'Manufacturer is required to track empty crates.',
+      );
       return;
     }
 
@@ -859,6 +859,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
     setState(() => _isSaving = true);
     try {
+      if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
+        _selectedCategory = await _getOrCreateCategory(_categoryCtrl.text.trim());
+      }
       // Auto-handle Manufacturer & Supplier if they were typed but not explicitly "selected"
       if (_selectedManufacturer == null &&
           _manufacturerCtrl.text.trim().isNotEmpty) {
