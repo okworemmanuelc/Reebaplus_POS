@@ -90,6 +90,32 @@ Branch `feat/walk-to-first-store-233`, cut from `origin/main`. Slice 4 of PRD #2
 - **Still outstanding:** the issue's manual-QA criterion — verify on a slow, small Android
   device that hole position and the scroll step resolve correctly there.
 
+**Stop 2 stops covering the app (2026-09-15)**
+On-device, tapping the "+" the rail had just circled produced a dead end: Inventory's
+speed dial opened and both of its options — Add Product, Receive Stock — rendered as
+unreadable grey slabs. The rail was painting over them. ADR 0026 gained §15.
+
+- **A pointer draws a ring, not a sheet (§15).** `SpotlightOverlay` was written for stop 1,
+  where the ~72% black sheet *is* the blocking. Stop 2 reused it with `blocking: false`,
+  which switched off hit-testing but kept the sheet. Layering did the rest: the speed
+  dial's options are an `OverlayEntry` in the **tab's own** `Overlay`, inside `MainLayout`'s
+  body — below the rail's slot in the same `Stack` — so the sheet covered them. Non-blocking
+  now paints a haloed ring around the target and nothing else; blocking is unchanged. Two
+  tests pin the pair via the `paints` matcher (ring = two stroked `RRect`s and no `Path`;
+  sheet = a `Path`). `set blocking` now `markNeedsPaint()`s, since it chooses what is drawn.
+- **The pointer stands aside for a pushed page.** Add Product and Receive Stock are
+  `PageRouteBuilder`s pushed onto the tab's nested `Navigator`, also below the rail, so the
+  pointer hung over the form it had just asked the owner to fill in, still circling a
+  covered button. It now hides while `NavigationService.currentTabCanPop` is true — the
+  signal the bottom nav already hides itself by — and returns on pop.
+- **Stop 2 has a way out.** It is the rail's last stop and it is reached via a card that has
+  already dismissed itself, so there was no way to put the rail away at all. A *Not now*
+  footer calls `declineFirstRunTour` — session only, no device strike (§13). `_EscapeLink`
+  took a `label`; the stall net keeps its own wording.
+
+Suite: 2078 passed / 131 skipped / 0 failed. `flutter analyze` clean. **Not yet run on a
+device** — the ring, the stand-down and the *Not now* footer are all unverified on hardware.
+
 **Rail design settled + stuck-on-menu fix (2026-09-14)**
 On-device the rail sat on "Tap the menu to get started" with the drawer wide open. Root
 cause: `MainLayout`'s Scaffold declares **no `drawer:`** — every screen builds its own via

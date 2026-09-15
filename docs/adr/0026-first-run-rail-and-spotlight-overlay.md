@@ -200,9 +200,40 @@ whenever the step changes, because a step change is progress. The taps counted
 are taps only: a press that travels beyond touch slop is a drag on its way to a
 scrollable underneath, and scrolling a list is not a cry for help.
 
+### 15. A Pointer Does Not Take the Screen
+
+The overlay was written for stop 1, where darkening everything *is* the
+blocking: the sheet is what stops the owner reaching a screen that cannot work
+yet. Stop 2 reused the same widget with `blocking: false`, which switched off
+the hit-testing but kept the sheet, and a ~72% black sheet over a screen the
+owner is free to use is the wrong object entirely.
+
+It broke the one thing stop 2 exists to make them do. Inventory's "+" is a
+speed dial: its two options (Add Product, Receive Stock) are rendered into the
+tab's own `Overlay`, which lives inside `MainLayout`'s body — *below* the rail's
+slot in the same `Stack`. So tapping the button the rail circled painted both
+options underneath the sheet as unreadable grey slabs. The same layering hits
+the pushed pages: Add Product and Receive Stock go onto the tab's nested
+`Navigator`, so the pointer also hung over the form it had just asked the owner
+to fill in, still circling a button that page had covered.
+
+**Invariant:** a non-blocking spotlight draws a ring around its target and
+nothing else — no sheet, no dimming, nothing over the app. Only a blocking stop
+covers the screen, because only a blocking stop has a reason to.
+
+**Invariant:** the non-blocking pointer stands down while a page route is open
+over the tab root, and returns when it is popped. `currentTabCanPop` is the
+existing signal the bottom nav already hides itself by, for the same reason.
+
+**Invariant:** every stop the owner can be left sitting on carries its own way
+out. Stop 2 is the last one, and it is reached by a card that has already
+dismissed itself, so without one there was no way to put the rail away at all.
+Dismissing a pointer is a decline, not a failure (§13).
+
 ## Domain Language Additions
 
 - **Rail:** The guided multi-stop first-run onboarding path that walks a new shop owner through initial setup.
 - **Stop:** An individual milestone step in a rail (Stop 1: create a Store, blocking; Stop 2: add a Product, non-blocking).
-- **Spotlight Overlay:** A generic UI presentation widget cutting a hole in a dark sheet over a designated target with a guidance caption.
+- **Spotlight Overlay:** A generic UI presentation widget marking a designated target with a guidance caption — a hole in a dark sheet when the stop is blocking, a ring drawn over the untouched app when it is not (§15).
+- **Pointer:** A non-blocking stop: it marks a target and asks for a tap, but covers nothing and stands aside when the app opens something over it.
 - **Card:** A panel on the rail's sheet that asks the owner for a decision rather than for a tap on the app behind it (the welcome and hand-off panels).

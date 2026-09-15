@@ -539,13 +539,21 @@ commits to the local database, never by reaching the end of an imperative script
 _Avoid_: step (alone — ambiguous with form steps), tour (for a single milestone).
 
 **Spotlight Overlay**:
-The general presentation widget (`SpotlightOverlay`) that cuts a hole in a dark sheet
-over a designated UI target with an instructional caption. Reusable across tours,
-supporting both `blocking` and `non-blocking` modes. In blocking mode, taps outside
-the hole are swallowed while vertical drags pass through to underlying scrollables.
-A hole is cut only over something the caption asks the owner to tap; a step with
+The general presentation widget (`SpotlightOverlay`) that marks a designated UI target
+with an instructional caption. Reusable across tours, supporting both `blocking` and
+`non-blocking` modes. Blocking cuts a hole in a dark sheet: taps outside the hole are
+swallowed while vertical drags pass through to underlying scrollables. Non-blocking
+draws a ring over the untouched app and covers nothing — see **Pointer**. A hole or
+ring is drawn only over something the caption asks the owner to tap; a step with
 nothing to point at renders its caption centred on the sheet.
 _Avoid_: tooltip, coach mark, walkthrough modal.
+
+**Pointer**:
+A non-blocking **Stop**: it rings a target and asks for a tap, but takes nothing over.
+It draws no sheet (a dark sheet would bury whatever the target itself opens — the
+Inventory "+" expands into a menu living in the tab's own `Overlay`, below the rail),
+stands aside while a page route is open over the tab root, and carries its own way out.
+_Avoid_: hint, nudge, non-blocking overlay (describes the widget, not the stop).
 
 **Card**:
 A panel on a **Rail**'s sheet that asks the owner for a decision rather than for a tap

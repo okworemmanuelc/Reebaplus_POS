@@ -54,6 +54,9 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     SpotlightTargetRegistry.clear();
+    // NavigationService is a singleton, so a test that pushes a page has to
+    // hand the next one a clean tab stack.
+    NavigationService().currentTabCanPop.value = false;
   });
 
   group('the introduction', () {
@@ -348,6 +351,114 @@ void main() {
 
       expect(container.read(tourHandoffProvider), isFalse);
       expect(find.text('Tap to add your first product'), findsOneWidget);
+    });
+  });
+
+  group('the product pointer', () {
+    /// Stop 2 with its target mounted and nothing in the way.
+    Future<ProviderContainer> pumpPointer(WidgetTester tester) async {
+      // The stop is derived rather than pinned, so standing the rail down
+      // actually takes the pointer off the screen.
+      final container = ProviderContainer(overrides: [
+        firstRunTourStopProvider.overrideWith(
+          (ref) => ref.watch(tourSessionAbortedProvider)
+              ? TourStop.none
+              : TourStop.addProduct,
+        ),
+        tourOwnerFirstNameProvider.overrideWithValue('Okwor'),
+        tourFirstStoreNameProvider.overrideWithValue(null),
+        tourIntroAcknowledgedProvider.overrideWith(_AcknowledgedIntro.new),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        _harness(container, targets: const [
+          SpotlightTarget(
+            id: SpotlightTargetId.addProductFab,
+            child: SizedBox(width: 56, height: 56),
+          ),
+        ]),
+      );
+      await tester.pump();
+      return container;
+    }
+
+    testWidgets('can be put away, and putting it away is not a strike',
+        (tester) async {
+      final container = await pumpPointer(tester);
+      expect(find.text('Tap to add your first product'), findsOneWidget);
+
+      await tester.tap(find.text('Not now'));
+      await tester.pump();
+
+      expect(find.text('Tap to add your first product'), findsNothing,
+          reason: 'the last stop needs a way out of its own — the hand-off '
+              'card is gone by the time the pointer is up');
+      expect(container.read(tourSessionAbortedProvider), isTrue);
+      expect(container.read(tourDeviceAbortCountProvider), 0,
+          reason: 'putting a pointer away is a preference, not a rail that '
+              'failed on this device');
+    });
+
+    testWidgets('stands aside while a page is open over the tab',
+        (tester) async {
+      await pumpPointer(tester);
+      expect(find.text('Tap to add your first product'), findsOneWidget);
+
+      // Add Product and Receive Stock are both pushed onto the tab's own
+      // Navigator, which sits below this overlay. Left up, the pointer would
+      // hang over the form it just asked the owner to fill in.
+      NavigationService().currentTabCanPop.value = true;
+      await tester.pump();
+
+      expect(find.text('Tap to add your first product'), findsNothing);
+
+      NavigationService().currentTabCanPop.value = false;
+      await tester.pump();
+
+      expect(find.text('Tap to add your first product'), findsOneWidget,
+          reason: 'backing out without saving should bring it back');
+    });
+
+    testWidgets('rings the target instead of darkening the app',
+        (tester) async {
+      await pumpPointer(tester);
+
+      final render = tester.allRenderObjects
+          .whereType<RenderSpotlightOverlay>()
+          .single;
+
+      // The sheet is a full-size Path with the hole subtracted; the ring is a
+      // pair of stroked RRects over an untouched app. Painting the sheet here
+      // buried the Inventory "+" menu, which lives in the tab's Overlay below
+      // this one, under ~72% black.
+      expect(render, isNot(paints..path()),
+          reason: 'a non-blocking pointer must not cover the app');
+      expect(render, paints..rrect()..rrect());
+    });
+
+    testWidgets('the blocking sheet still covers the app', (tester) async {
+      final container = ProviderContainer(
+        overrides: _baseOverrides(introAcknowledged: true),
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        _harness(container, targets: const [
+          SpotlightTarget(
+            id: SpotlightTargetId.menuButton,
+            child: SizedBox(width: 48, height: 48),
+          ),
+        ]),
+      );
+      await tester.pump();
+
+      final render = tester.allRenderObjects
+          .whereType<RenderSpotlightOverlay>()
+          .single;
+
+      expect(render, paints..path(),
+          reason: 'stop 1 blocks by covering everything but the hole');
     });
   });
 

@@ -163,19 +163,7 @@ class FirstRunRailTourView extends ConsumerWidget {
       if (ref.watch(tourHandoffProvider)) {
         return _buildHandoff(context, ref);
       }
-      return ListenableBuilder(
-        listenable: SpotlightTargetRegistry.registryRevision,
-        builder: (context, _) {
-          final hasTarget =
-              SpotlightTargetRegistry.getKey(SpotlightTargetId.addProductFab) != null;
-          if (!hasTarget) return const SizedBox.shrink();
-          return const SpotlightOverlay(
-            targetId: SpotlightTargetId.addProductFab,
-            caption: 'Tap to add your first product',
-            blocking: false,
-          );
-        },
-      );
+      return _buildAddProductPointer(context, ref);
     }
 
     final nav = ref.watch(navigationProvider);
@@ -245,6 +233,48 @@ class FirstRunRailTourView extends ConsumerWidget {
         if (showChevron && escape != null) SizedBox(height: context.getRSize(12)),
         if (escape != null) escape,
       ],
+    );
+  }
+
+  /// Stop 2: a pointer at the Inventory "+", and a way to put it away.
+  ///
+  /// Unlike stop 1 this stop asks for nothing and blocks nothing, so it must
+  /// also know when to stand aside. Every screen the "+" leads to — Add
+  /// Product, Receive Stock — is pushed onto the tab's own Navigator, which
+  /// sits below this overlay in MainLayout's Stack. Left up, the pointer would
+  /// hang over the very form it asked the owner to fill in, still circling a
+  /// button that page has covered. `currentTabCanPop` is the signal the bottom
+  /// nav already uses to hide itself for the same reason.
+  Widget _buildAddProductPointer(BuildContext context, WidgetRef ref) {
+    final nav = ref.watch(navigationProvider);
+
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        nav.currentTabCanPop,
+        SpotlightTargetRegistry.registryRevision,
+      ]),
+      builder: (context, _) {
+        if (nav.currentTabCanPop.value) return const SizedBox.shrink();
+
+        final hasTarget =
+            SpotlightTargetRegistry.getKey(SpotlightTargetId.addProductFab) !=
+                null;
+        if (!hasTarget) return const SizedBox.shrink();
+
+        return SpotlightOverlay(
+          targetId: SpotlightTargetId.addProductFab,
+          caption: 'Tap to add your first product',
+          blocking: false,
+          // Dismissing the last stop is a preference, not a failure, so it
+          // costs the device nothing (ADR 0026 section 13). The rail is derived
+          // from the data, so it offers again on the next cold start until a
+          // product exists.
+          footer: _EscapeLink(
+            label: 'Not now',
+            onTap: () => declineFirstRunTour(ref),
+          ),
+        );
+      },
     );
   }
 
@@ -516,9 +546,16 @@ class _StallWatchState extends State<_StallWatch> {
 }
 
 class _EscapeLink extends StatelessWidget {
-  const _EscapeLink({required this.onTap});
+  const _EscapeLink({
+    required this.onTap,
+    this.label = 'Having trouble? Skip setup',
+  });
 
   final VoidCallback onTap;
+
+  /// What the way out is called. The stall net's wording names the trouble it
+  /// just detected; stop 2's pointer is simply being put away.
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -536,7 +573,7 @@ class _EscapeLink extends StatelessWidget {
         ),
       ),
       child: Text(
-        'Having trouble? Skip setup',
+        label,
         style: t.textTheme.bodySmall?.copyWith(
           fontWeight: FontWeight.w600,
           color: t.colorScheme.onSurface.withValues(alpha: 0.8),

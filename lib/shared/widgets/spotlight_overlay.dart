@@ -57,12 +57,14 @@ class RenderSpotlightOverlay extends RenderBox {
     required Rect? targetRect,
     required bool blocking,
     required Color overlayColor,
+    required Color ringColor,
     required double borderRadius,
     required EdgeInsets padding,
     VoidCallback? onBlockedTap,
   })  : _targetRect = targetRect,
         _blocking = blocking,
         _overlayColor = overlayColor,
+        _ringColor = ringColor,
         _borderRadius = borderRadius,
         _padding = padding {
     _tapSwallower.onBlockedTap = onBlockedTap;
@@ -80,6 +82,9 @@ class RenderSpotlightOverlay extends RenderBox {
   set blocking(bool val) {
     if (_blocking != val) {
       _blocking = val;
+      // Not just a hit-test switch: blocking and non-blocking paint two
+      // different things (a sheet with a hole, versus a ring).
+      markNeedsPaint();
     }
   }
 
@@ -87,6 +92,14 @@ class RenderSpotlightOverlay extends RenderBox {
   set overlayColor(Color val) {
     if (_overlayColor != val) {
       _overlayColor = val;
+      markNeedsPaint();
+    }
+  }
+
+  Color _ringColor;
+  set ringColor(Color val) {
+    if (_ringColor != val) {
+      _ringColor = val;
       markNeedsPaint();
     }
   }
@@ -168,6 +181,17 @@ class RenderSpotlightOverlay extends RenderBox {
     final canvas = context.canvas;
     final hole = paddedHoleRect;
 
+    // A non-blocking spotlight points at something; it does not take the
+    // screen. Darkening everything is how the blocking sheet blocks, and
+    // borrowing that look for a pointer buries whatever the target itself
+    // opens: the Inventory "+" expands into a menu that lives in the tab's
+    // own Overlay — below this one — so the sheet rendered its two options
+    // as unreadable grey slabs. A ring says "here" without covering the app.
+    if (!_blocking) {
+      if (hole != null) _paintRing(canvas, hole.shift(offset));
+      return;
+    }
+
     final fullRect = offset & size;
     final path = Path()..addRect(fullRect);
 
@@ -184,6 +208,35 @@ class RenderSpotlightOverlay extends RenderBox {
     }
   }
 
+  /// A soft halo plus a crisp outline around [hole], drawn over the app rather
+  /// than over a sheet. Nothing here is hit-testable — see [hitTest].
+  void _paintRing(Canvas canvas, Rect hole) {
+    final rrect = RRect.fromRectAndRadius(
+      hole,
+      Radius.circular(_borderRadius),
+    );
+
+    canvas.drawRRect(
+      rrect.inflate(_ringHaloWidth / 2),
+      Paint()
+        ..color = _ringColor.withValues(alpha: 0.30)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _ringHaloWidth
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+    );
+
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = _ringColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _ringStrokeWidth,
+    );
+  }
+
+  static const double _ringHaloWidth = 12.0;
+  static const double _ringStrokeWidth = 3.0;
+
   @override
   void dispose() {
     _tapSwallower.dispose();
@@ -197,6 +250,7 @@ class _SpotlightOverlayBackground extends LeafRenderObjectWidget {
     required this.targetRect,
     required this.blocking,
     required this.overlayColor,
+    required this.ringColor,
     required this.borderRadius,
     required this.padding,
     this.onBlockedTap,
@@ -205,6 +259,7 @@ class _SpotlightOverlayBackground extends LeafRenderObjectWidget {
   final Rect? targetRect;
   final bool blocking;
   final Color overlayColor;
+  final Color ringColor;
   final double borderRadius;
   final EdgeInsets padding;
   final VoidCallback? onBlockedTap;
@@ -215,6 +270,7 @@ class _SpotlightOverlayBackground extends LeafRenderObjectWidget {
       targetRect: targetRect,
       blocking: blocking,
       overlayColor: overlayColor,
+      ringColor: ringColor,
       borderRadius: borderRadius,
       padding: padding,
       onBlockedTap: onBlockedTap,
@@ -230,6 +286,7 @@ class _SpotlightOverlayBackground extends LeafRenderObjectWidget {
       ..targetRect = targetRect
       ..blocking = blocking
       ..overlayColor = overlayColor
+      ..ringColor = ringColor
       ..borderRadius = borderRadius
       ..padding = padding
       ..onBlockedTap = onBlockedTap;
@@ -251,6 +308,7 @@ class SpotlightOverlay extends StatefulWidget {
     this.onMissingTarget,
     this.onBlockedTap,
     this.overlayColor = const Color(0xB8000000), // ~72% black
+    this.ringColor,
     this.holeRadius = 12.0,
     this.holePadding = const EdgeInsets.all(6.0),
     this.targetLookupTimeout = const Duration(milliseconds: 600),
@@ -288,8 +346,12 @@ class SpotlightOverlay extends StatefulWidget {
   /// Called each time a tap outside the hole is swallowed in blocking mode.
   final VoidCallback? onBlockedTap;
 
-  /// Color of the darkened sheet.
+  /// Color of the darkened sheet. Blocking mode only.
   final Color overlayColor;
+
+  /// Color of the ring drawn around the target in non-blocking mode, where
+  /// there is no sheet. Defaults to the theme's primary colour.
+  final Color? ringColor;
 
   /// Corner radius of the cutout hole.
   final double holeRadius;
@@ -405,6 +467,8 @@ class _SpotlightOverlayState extends State<SpotlightOverlay> {
           targetRect: hole,
           blocking: widget.blocking,
           overlayColor: widget.overlayColor,
+          ringColor:
+              widget.ringColor ?? Theme.of(context).colorScheme.primary,
           borderRadius: widget.holeRadius,
           padding: widget.holePadding,
           onBlockedTap: widget.onBlockedTap,
