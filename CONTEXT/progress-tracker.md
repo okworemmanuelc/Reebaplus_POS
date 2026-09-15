@@ -10,6 +10,60 @@ The human updates it when resolving open questions or making architectural decis
 
 155 sessions logged. Codebase is live and being verified on-device.
 
+### Drawer seam — the back button and `open/closeDrawer()` pointed at a Scaffold with no drawer (2026-09-15)
+Branch `feat/walk-to-first-store-233` (fixes raised in review of the #233 rail work).
+
+**The shared root cause.** `NavigationService` holds `mainScaffoldKey`, and both
+`openDrawer()` and `closeDrawer()` routed through it — but MainLayout's Scaffold
+**declares no drawer**. Every screen builds its own (via `SharedScaffold`, plus six
+direct sites). So both calls were silent no-ops, on every platform. Nothing failed
+loudly; the drawer simply never moved.
+
+**Fix 1 — back press was dead on desktop.** `isDrawerOpen` ORs in `isDesktopNotifier`,
+and on desktop the drawer is a *permanent* 280dp sidebar, so the getter is hard-**true**
+there. `handleBackPress` step 1 read it, called the no-op `closeDrawer()`, and returned —
+swallowing **every** back press: no nested pop, no tab fallback, no double-back exit.
+- Split the question in two: `isDrawerOpen` keeps its *visibility* meaning (the first-run
+  rail needs desktop to count, so it must not change), and a new **`isModalDrawerOpen`** —
+  which excludes desktop — answers the *dismissable* question the back button asks.
+- `DrawerPresence` now publishes a closer (`registerModalDrawerCloser`) resolving
+  `Scaffold.maybeOf(context)` lazily, so `closeDrawer()` asks the Scaffold that actually
+  owns the drawer. This also repaired the store picker's `nav.closeDrawer()`, which had a
+  real caller and had been dead the whole time.
+
+**Fix 2 — `openDrawer()` had the same wrong target.** It could **not** reuse the closing
+seam: `DrawerPresence` lives inside `AppDrawer`, and Flutter does not build a drawer's
+child while it is shut, so at the moment you want to *open* one there is nothing mounted
+to ask.
+- Added **`DrawerHost`**, mounted in the Scaffold's `body` by all 7 drawer-declaring sites
+  (`shared_scaffold.dart`, `customers_screen.dart`, `payments_screen.dart`,
+  `expenses_screen.dart` ×3, `activity_log_screen.dart`). It stays mounted whether the
+  drawer is open or shut.
+- **Offstage tabs made this non-trivial**: MainLayout keeps every *visited* tab mounted
+  behind `Offstage` rather than disposing it, so several hosts are alive at once and
+  "most recently registered wins" would open a drawer on a screen the user cannot see.
+  Each host vets itself — Scaffold `hasDrawer`, route `isCurrent`, and
+  `isActiveTabNavigator` — and `openDrawer()` walks them newest-first, taking the first
+  that says yes.
+
+**Fix 3 — the ban test could not see `endDrawer:`.** `drawer_presence_ban_test`'s
+`(?:end)?drawer:` pattern was case-**sensitive**, so Flutter's actual `endDrawer:` (capital
+D) matched nothing and escaped the ban entirely. Now `caseSensitive: false`; the leading
+`\b` still keeps `AppDrawer:`-style identifiers out.
+
+**Keeping it from rotting.** `openDrawer()` still has **no callers** in the app — every
+open goes through the affordance (`Scaffold.of(ctx).openDrawer()`), which is precisely why
+it stayed broken unnoticed. Two guards now stand in for the missing caller:
+- `test/tour/drawer_host_open_test.dart` — 4 widget tests pinning that `openDrawer()`
+  reaches the visible screen's drawer, skips an offstage tab, follows the active tab, and
+  leaves nothing stale behind on dispose. **Mutation-checked**: reverting `openDrawer()` to
+  the old target fails 3 of 4; removing the offstage check fails the offstage test.
+- `drawer_presence_ban_test` gained a third rule — every file declaring a `drawer:` must
+  also mount a `DrawerHost`.
+
+**Verification:** `flutter analyze lib test` clean. Full suite **2084 pass / 131 skipped /
+0 failures**. Also logged in `BUILD_LOG.md`.
+
 ### Issue #233 — A new owner is walked to a saved Store by the blocking rail (2026-09-13)
 Branch `feat/walk-to-first-store-233`, cut from `origin/main`. Slice 4 of PRD #229.
 
@@ -5765,29 +5819,31 @@ outside this fix. Documented at the call site; not filed by this session.
 Read this file first, then `CLAUDE.md`, then the master plan section relevant
 to the unit being picked up.
 
-**Repository state:**
-- Drift client schema: **v54** (v54 = `sales.set_custom_price` permission seed;
-  v53 = §3.13 supplier_crate_ledger + supplier_crate_balances).
-- Cloud migrations deployed through: **0118** (0117 supplier crate tracking +
-  0118 `sales.set_custom_price` pushed 2026-06-19; verified: catalogue row
-  present, granted to all CEO roles, 0 non-CEO grants).
-- **2026-07-01 — `0129_devices` deployed (device registry for console analytics).**
-  Cloud-only `public.devices` table (make/model/os/app_version/is_physical_device/
-  last-seen per `(business_id, device_id)`), written by a direct authenticated
-  `supabase.upsert` from `DeviceRegistryService` on sign-in / app-open / reconnect
-  (no offline sync-queue wiring; no in-app screen). Deps `device_info_plus` +
-  `package_info_plus` added. Applied via the Management API (see divergence note).
-  ⚠️ **Migration-history divergence:** remote applied 0125/0126/0128 under
-  timestamp versions + a remote-only `enable_pg_cron`; **0127 appears un-deployed**.
-  A blind `supabase db push` would fail on 0126's `CREATE TRIGGER`. Reconcile with
-  `migration repair` + deploy 0127 as follow-up.
-- `flutter test test/sync/` — **115 pass** (Session 141 baseline).
-- Full suite last confirmed: 452 pass / 58 skipped / 1 pre-existing unrelated
-  failure (`invite_staff_sheet_test`) (2026-06-19).
-- `flutter analyze lib` — clean. 18 pre-existing `avoid_print` infos in
-  `test/database/roles_v13_report.dart` only; not regressions.
-- iOS build enabled; free Apple ID cert expires after 7 days — re-run
-  `flutter run` to refresh.
+**Repository state:** _(refreshed 2026-09-15 — the block below had been frozen at
+2026-06-19 while the session log above kept moving; everything here is measured, not
+carried over.)_
+- Toolchain: **Flutter 3.44.2** (stable, framework `c9a6c48`, 2026-06-10) • **Dart 3.12.2**
+  • DevTools 2.57.0.
+- Drift client schema: **v81**.
+- Cloud migrations **in the repo** through **`0178_complete_onboarding_without_store.sql`**
+  (162 files). The `0174` gap is **deliberate** — commit `015e8ff` renumbered the #203
+  slice migrations around #209's `0173`; there is nothing missing to hunt for.
+  ⚠️ *Deployed*-through could **not** be verified this session: the Supabase MCP server is
+  unauthenticated in a non-interactive run, so no remote query was possible. Last recorded
+  deploy state is cloud **0168–0170** on prod (2026-07-29, flags still OFF) per
+  `BUILD_LOG.md`; treat anything after 0170 as **unconfirmed on remote** and check before
+  a `db push`.
+- Full suite: **2084 pass / 131 skipped / 0 failures** (2026-09-15).
+- `flutter test test/sync/` — **237 pass** (2026-09-15; was 115 at the Session 141 baseline).
+- `flutter analyze lib test` — **clean, 0 issues** (2026-09-15).
+- Known-flaky: `test/van_sales/van_returns_test.dart` flakes intermittently in a
+  full-suite run (issue **#228**, on hold). It passed in the runs above.
+- All open GitHub issues are currently labelled **`on-hold`** (#138, #186, #204, #221,
+  #222, #227, #228) — parked 2026-09-09 at the owner's request to clear the decks.
+  `ready-for-agent` was stripped from #227 and #138 so an AFK agent would not pick them
+  up past the hold; re-add it when unparking.
+- iOS build enabled; free Apple ID cert expires after 7 days — re-run `flutter run` to
+  refresh.
 
 **Three things to check before every unit:**
 1. `flutter analyze` clean before and after.
