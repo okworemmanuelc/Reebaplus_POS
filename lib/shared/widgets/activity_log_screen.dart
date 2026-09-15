@@ -170,7 +170,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
         ],
       ),
       drawer: const AppDrawer(activeRoute: 'activity_logs'),
-      body: Column(
+      body: DrawerHost(child: Column(
         children: [
           Expanded(
             child: Builder(
@@ -249,7 +249,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 

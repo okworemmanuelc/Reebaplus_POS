@@ -26,7 +26,16 @@ const _appDrawerFile = 'lib/shared/widgets/app_drawer.dart';
 
 /// Matches a `drawer:` / `endDrawer:` argument and captures what follows, so we
 /// can check the widget assigned to it.
-final _drawerArgPattern = RegExp(r'\b(?:end)?drawer:\s*(.{0,60})');
+///
+/// Case-insensitive because Flutter spells the second one `endDrawer:` with a
+/// capital D — a case-sensitive `(?:end)?drawer:` silently matched neither it
+/// nor anything else ending in `Drawer:`, so an `endDrawer` escaped the ban
+/// entirely. The leading `\b` still keeps `AppDrawer:`-style identifiers out:
+/// there is no word boundary in the middle of a word.
+final _drawerArgPattern = RegExp(
+  r'\b(?:end)?drawer:\s*(.{0,60})',
+  caseSensitive: false,
+);
 
 void main() {
   test('every drawer declared in lib/ is an AppDrawer', () {
@@ -59,6 +68,41 @@ void main() {
           'These Scaffolds declare a drawer that is not an AppDrawer, so opening '
           'them will not reach NavigationService.drawerOpenNotifier and the '
           'first-run rail will never notice the drawer opened:\n'
+          '${offenders.join('\n')}',
+    );
+  });
+
+  test('every file declaring a drawer also mounts a DrawerHost', () {
+    final offenders = <String>[];
+
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+
+      final lines = entity.readAsLinesSync();
+      // `startsWith`, not `contains`: SharedScaffold assigns
+      // `context.isDesktop ? null : AppDrawer(...)`, which really does declare a
+      // drawer on phones. Only a flat `drawer: null` declares nothing.
+      final declaresDrawer = lines.any(
+        (l) =>
+            !l.trimLeft().startsWith('//') &&
+            _drawerArgPattern.hasMatch(l) &&
+            !_drawerArgPattern.firstMatch(l)!.group(1)!.startsWith('null'),
+      );
+      if (!declaresDrawer) continue;
+
+      if (!lines.any((l) => l.contains('DrawerHost('))) {
+        offenders.add(entity.path);
+      }
+    }
+
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'These files declare a Scaffold drawer but mount no DrawerHost inside '
+          'it, so NavigationService.openDrawer() cannot reach that drawer and '
+          'falls back to mainScaffoldKey — whose Scaffold has no drawer, making '
+          'the call a silent no-op. Wrap the Scaffold\'s body in a DrawerHost:\n'
           '${offenders.join('\n')}',
     );
   });

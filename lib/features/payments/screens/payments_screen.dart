@@ -38,7 +38,7 @@ class PaymentsScreen extends ConsumerWidget {
       backgroundColor: bg,
       drawer: const AppDrawer(activeRoute: 'supplier_accounts'),
       appBar: _buildAppBar(context, ref),
-      body: !canManage
+      body: DrawerHost(child: !canManage
           ? Center(
               child: perms.isEmpty
                   ? const CircularProgressIndicator()
@@ -50,7 +50,7 @@ class PaymentsScreen extends ConsumerWidget {
                       ),
                     ),
             )
-          : _buildSuppliersBody(context, ref),
+          : _buildSuppliersBody(context, ref)),
       floatingActionButton: canManage
           ? AppFAB(
               heroTag: 'suppliers_fab',

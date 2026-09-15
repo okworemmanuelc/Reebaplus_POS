@@ -132,13 +132,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
         backgroundColor: _bg,
         drawer: const AppDrawer(activeRoute: 'expenses'),
         appBar: _buildAppBar(context),
-        body: const SizedBox.shrink(),
+        body: const DrawerHost(child: SizedBox.shrink()),
       ),
       denied: Scaffold(
         backgroundColor: _bg,
         drawer: const AppDrawer(activeRoute: 'expenses'),
         appBar: _buildAppBar(context),
-        body: Center(
+        body: DrawerHost(child: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Text(
@@ -150,7 +150,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               ),
             ),
           ),
-        ),
+        )),
       ),
       builder: _buildExpenses,
     );
@@ -164,7 +164,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       backgroundColor: _bg,
       drawer: const AppDrawer(activeRoute: 'expenses'),
       appBar: _buildAppBar(context),
-      body: Builder(
+      body: DrawerHost(child: Builder(
         builder: (context) {
           if (ref.watch(zeroStoresEmptySurfaceProvider)) {
             return const FirstRunEmptyState();
@@ -250,7 +250,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             ],
           );
         },
-      ),
+      )),
       floatingActionButton: (ref.watch(allStoresProvider).valueOrNull?.isNotEmpty == true &&
               !ref.watch(zeroStoresEmptySurfaceProvider) &&
               Gates.addExpense.allows(ref))

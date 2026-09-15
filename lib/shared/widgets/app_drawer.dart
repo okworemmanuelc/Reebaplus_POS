@@ -944,15 +944,93 @@ class DrawerPresence extends StatefulWidget {
 }
 
 class _DrawerPresenceState extends State<DrawerPresence> {
+  /// Closes the drawer through the Scaffold that actually declares it — this
+  /// widget sits inside that Scaffold's `drawer:`, so it can reach it, while
+  /// `NavigationService.mainScaffoldKey` cannot. Resolved lazily: the lookup is
+  /// illegal from `initState` and the owning Scaffold can change under us.
+  ///
+  /// Registered and unregistered as a tear-off, which Dart canonicalises per
+  /// instance, so the `dispose` unregister matches the `initState` register.
+  void _closeOwningDrawer() {
+    if (!mounted) return;
+    Scaffold.maybeOf(context)?.closeDrawer();
+  }
+
   @override
   void initState() {
     super.initState();
     frameSafe(NavigationService().drawerMounted);
+    NavigationService().registerModalDrawerCloser(_closeOwningDrawer);
   }
 
   @override
   void dispose() {
+    NavigationService().unregisterModalDrawerCloser(_closeOwningDrawer);
     frameSafe(NavigationService().drawerDismounted);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// Publishes "the Scaffold I sit in can open a drawer" to [NavigationService],
+/// so `NavigationService.openDrawer()` can reach the drawer of whichever screen
+/// is actually on show.
+///
+/// Counterpart to [DrawerPresence], and necessarily a *separate* widget: that
+/// one lives inside [AppDrawer], which Flutter builds only while the drawer is
+/// open, so it is absent at exactly the moment you want to open one. This widget
+/// goes in the Scaffold's `body`, where it stays mounted whether the drawer is
+/// open or shut.
+///
+/// Placement rule: it must be a *descendant* of the Scaffold that declares the
+/// drawer — wrapping the Scaffold instead would resolve `Scaffold.maybeOf` to
+/// MainLayout's drawerless one and reintroduce the very bug this fixes.
+/// `test/tour/drawer_presence_ban_test.dart` enforces that every file declaring
+/// a `drawer:` also mounts one of these.
+class DrawerHost extends StatefulWidget {
+  const DrawerHost({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<DrawerHost> createState() => _DrawerHostState();
+}
+
+class _DrawerHostState extends State<DrawerHost> {
+  /// Opens the drawer of the Scaffold this widget sits in, but only if that
+  /// Scaffold is the one the user can see. Returns whether it opened anything,
+  /// which is how [NavigationService.openDrawer] skips past the hosts belonging
+  /// to offstage tabs and pages buried under a pushed route.
+  ///
+  /// Registered as an instance tear-off, which Dart canonicalises per object, so
+  /// the `dispose` unregister matches the `initState` register.
+  bool _openOwningDrawer() {
+    if (!mounted) return false;
+    final scaffold = Scaffold.maybeOf(context);
+    // No drawer to open — notably every screen on desktop, where SharedScaffold
+    // passes `drawer: null` and the sidebar is permanent instead.
+    if (scaffold == null || !scaffold.hasDrawer) return false;
+    // Buried under a pushed page within this tab.
+    if (ModalRoute.of(context)?.isCurrent == false) return false;
+    // Belongs to a tab that is mounted but offstage.
+    if (!NavigationService().isActiveTabNavigator(Navigator.maybeOf(context))) {
+      return false;
+    }
+    scaffold.openDrawer();
+    return true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    NavigationService().registerDrawerOpener(_openOwningDrawer);
+  }
+
+  @override
+  void dispose() {
+    NavigationService().unregisterDrawerOpener(_openOwningDrawer);
     super.dispose();
   }
 
