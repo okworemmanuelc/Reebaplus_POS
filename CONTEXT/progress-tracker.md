@@ -10,6 +10,32 @@ The human updates it when resolving open questions or making architectural decis
 
 156 sessions logged. Codebase is live and being verified on-device.
 
+### Van Sales switched off behind a kill switch (2026-09-16)
+Branch `feat/van-sales-kill-switch`, cut from `origin/main` (`b4d251e`). No issue filed. The owner wants Van Sales v1 (PRD #139) hidden until they have fully tested it.
+
+- **Prod had nothing to strand**, checked before switching off: 0 vans, 0 trips, 0 driver-ledger rows, 0 trip-tagged orders, 0 `van_remittance` payments, 0 Driver-role memberships and 0 Driver invites across all 15 businesses. The only trace is the seeded (empty) Driver role, one per business.
+- **The switch (`lib/core/van_sales/van_sales_switch.dart`)** — `kVanSalesEnabled = false`. Turning it back on means flipping that constant and releasing. `debugOverrideVanSalesEnabled` lets tests force it either way.
+- **What it hides:**
+  - `Gates.vanManage` and `Gates.vanSell` become `AndGate(Gate.when(isVanSalesEnabled), Gate.key(...))`. They deny for everyone, the CEO included. That removes the Van Sales drawer entry and every hub screen, the driver-terminal takeover in `main.dart`, the Vans section of Settings → Stores, and a driver's ability to select a van. `Gate.when` / `SwitchGate` is a new atom in `gate.dart`.
+  - The Driver role, via `rolesOnOffer`, in Invite Staff, Change Role, Roles & Permissions, and the Activity Logs and Sync Issues access lists. This matters because a Driver invited while the feature is off holds only `van.sell`, so they would sign in to a shell with nothing they are allowed to do.
+  - The `van.manage` / `van.sell` toggles, via `isPermissionKeyHidden` (it replaces the direct `kHiddenPermissionKeys.contains` checks; the set literal itself is unchanged because `permission_enforcement_test` parses it).
+  - Vans in the staff store-assignment sheet, via `assignableStores`. An existing van assignment stays in `selected`, so saving never silently removes it.
+- **What it deliberately leaves on**, because it does nothing while no van exists and protects money once one does:
+  - the van exclusion in store pickers and reports;
+  - `saleContextForStore` in `createOrder`, and the costing fences;
+  - the van-leg cancel refusal;
+  - sync of the four van tables, and the late-sale restatement sweep;
+  - the driver offboarding guard, and the reconciliation Van card (which only renders on activity);
+  - Drift v74 and cloud 0161–0165.
+
+  No cloud change: CEO and Manager still hold `van.manage` in the cloud; the app-side switch overrides it.
+- **Invariant #6 check.** Permissions are still read from data. The switch is ANDed with the key and never grants anything. `rolesOnOffer` filters a *display* list by the `driver` slug; it is not an access decision, and every gate still asks the registry.
+- **Tests:**
+  - The van suites (`driver_terminal_gate_test`, `van_payment_gate_test`, `van_close_barrier_test`, `van_sales_trade_neutral_test`, and the two van cases in `stores_settings_screen_test`) run with the switch forced on, so they keep guarding the feature.
+  - The permission-count assertions read `isVanSalesEnabled()` (37 off / 39 on).
+  - New: `test/van_sales/van_sales_switch_test.dart`, a Driver-card on/off pair in `roles_permissions_screen_test`, and a no-Vans-section case in `stores_settings_screen_test`.
+- **Verification.** `flutter analyze` is clean. The full suite passes with the switch off (+2134, ~131 skipped). The settings, van_sales and permissions suites also pass with `kVanSalesEnabled = true` (+333). Before the tests were updated, the switch-off produced exactly 25 failures, and none of them exist with the switch on.
+
 ### Issue #243 — Inventory holds its content at every viewport (2026-09-16)
 Branch `feat/inventory-tabbed-sliver-scaffold-243`, cut from `origin/main` (`688a523`). Keystone slice of PRD #239; unblocked by #240.
 
