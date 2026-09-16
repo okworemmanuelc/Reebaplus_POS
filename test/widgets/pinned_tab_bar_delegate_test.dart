@@ -41,21 +41,28 @@ void main() {
       expect(delegate.effectiveExtent, equals(kMinInteractiveDimension));
     });
 
-    test('shouldRebuild returns false for unchanged configuration', () {
-      final child1 = Container(color: Colors.red);
-      final child2 = Container(color: Colors.blue);
+    test('shouldRebuild returns false for an identical configuration', () {
+      const child = SizedBox();
 
+      final delegate1 = PinnedTabBarDelegate(extent: 60.0, child: child);
+      final delegate2 = PinnedTabBarDelegate(extent: 60.0, child: child);
+
+      expect(delegate2.shouldRebuild(delegate1), isFalse);
+    });
+
+    test('shouldRebuild returns true for differently configured unkeyed children', () {
+      // No host passes a key, so a key-only comparison would miss this and the
+      // pinned header would go on painting its first child forever.
       final delegate1 = PinnedTabBarDelegate(
         extent: 60.0,
-        child: child1,
+        child: Container(color: Colors.red),
       );
       final delegate2 = PinnedTabBarDelegate(
         extent: 60.0,
-        child: child2,
+        child: Container(color: Colors.blue),
       );
 
-      // Distinct child widget instances without keys do not trigger rebuild
-      expect(delegate2.shouldRebuild(delegate1), isFalse);
+      expect(delegate2.shouldRebuild(delegate1), isTrue);
     });
 
     test('shouldRebuild returns true when extent changes', () {
@@ -82,6 +89,83 @@ void main() {
       );
 
       expect(delegate2.shouldRebuild(delegate1), isTrue);
+    });
+
+    testWidgets('pinned header follows a state change in its child', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: _FilterHost()));
+      expect(find.text('header: Today'), findsOneWidget);
+
+      await tester.tap(find.text('change filter'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('body: This Week'), findsOneWidget,
+          reason: 'sanity check: the scroll body rebuilt');
+      expect(find.text('header: This Week'), findsOneWidget,
+          reason: 'the pinned header must not paint a stale child');
+    });
+
+    test('withChrome reserves the chrome on top of the interactive floor', () {
+      // 800x360: getRSize(60) = 42.0, getRSize(8) = 5.6.
+      final delegate = PinnedTabBarDelegate.withChrome(
+        extent: 42.0,
+        chromeExtent: 5.6,
+        child: const SizedBox(),
+      );
+
+      expect(delegate.effectiveExtent, equals(kMinInteractiveDimension + 5.6));
+    });
+
+    test('withChrome leaves a comfortable extent alone', () {
+      // Baseline scale: getRSize(60) = 60.0 already clears 48 + 8.
+      final delegate = PinnedTabBarDelegate.withChrome(
+        extent: 60.0,
+        chromeExtent: 8.0,
+        child: const SizedBox(),
+      );
+
+      expect(delegate.effectiveExtent, equals(60.0));
+    });
+
+    testWidgets('withChrome keeps the tab bar itself at the interactive floor', (tester) async {
+      await pumpWithViewport(
+        tester,
+        size: androidCompactLandscape,
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) {
+              final margin = context.getRSize(8);
+              return Scaffold(
+                body: CustomScrollView(
+                  slivers: [
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: PinnedTabBarDelegate.withChrome(
+                        extent: context.getRSize(60),
+                        chromeExtent: margin,
+                        // The margin sits outside the keyed box, so the
+                        // measurement below is the interactive area itself,
+                        // not the header that contains it.
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: margin),
+                          child: Container(
+                            key: const ValueKey('bar_with_margin'),
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 600)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      final barHeight =
+          tester.getSize(find.byKey(const ValueKey('bar_with_margin'))).height;
+      expect(barHeight, greaterThanOrEqualTo(kMinInteractiveDimension));
     });
 
     testWidgets('forces child height to declared extent', (tester) async {
@@ -171,4 +255,50 @@ void main() {
       },
     );
   });
+}
+
+/// Host that rebuilds its pinned header's child from its own state, the way
+/// every real caller does (Orders' period dropdown and search-field clear
+/// button, Inventory's visible tab set).
+class _FilterHost extends StatefulWidget {
+  const _FilterHost();
+
+  @override
+  State<_FilterHost> createState() => _FilterHostState();
+}
+
+class _FilterHostState extends State<_FilterHost> {
+  String filter = 'Today';
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          ElevatedButton(
+            onPressed: () => setState(() => filter = 'This Week'),
+            child: const Text('change filter'),
+          ),
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: PinnedTabBarDelegate(
+                    extent: 64.0,
+                    child: Container(
+                      color: Colors.amber,
+                      alignment: Alignment.center,
+                      child: Text('header: $filter'),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(child: Text('body: $filter')),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

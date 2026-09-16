@@ -22,10 +22,15 @@ import 'package:flutter/material.dart';
 ///    cannot compact below the 48dp accessibility floor. [effectiveExtent]
 ///    clamps at [kMinInteractiveDimension].
 ///
-/// 3. **Stable rebuild predicate**: Unlike naive delegates that compare widget
-///    instances (`oldDelegate.child != child`), [shouldRebuild] compares
-///    [effectiveExtent] and child [Key]s, avoiding spurious rebuilds on every
-///    scroll frame.
+/// 3. **Rebuild predicate**: [shouldRebuild] compares [effectiveExtent] and the
+///    child itself. The child must be part of the comparison: every host builds
+///    it fresh from screen state (a filter selection, a search field's clear
+///    button, the visible tab set), and a predicate that ignores it leaves the
+///    pinned header painting the widget it was first given. Comparing child
+///    *keys* is not enough either — no host passes a key, so every comparison
+///    would be `null == null`. This costs one child rebuild per rebuild of the
+///    host screen, which is not a per-frame cost: the predicate runs only when
+///    a new delegate instance is installed, not while scrolling.
 class PinnedTabBarDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   final double extent;
@@ -34,6 +39,17 @@ class PinnedTabBarDelegate extends SliverPersistentHeaderDelegate {
     required this.child,
     this.extent = kMinInteractiveDimension,
   });
+
+  /// For a child that spends part of [extent] on non-interactive decoration —
+  /// a bottom margin under the tab bar, say. The margin must come out of the
+  /// header's own height rather than the tab bar's, or the floor in
+  /// [effectiveExtent] guarantees 48dp of *header* while the control inside it
+  /// is still short. Reserves [chromeExtent] on top of the interactive floor.
+  PinnedTabBarDelegate.withChrome({
+    required this.child,
+    required double extent,
+    required double chromeExtent,
+  }) : extent = math.max(extent, kMinInteractiveDimension + chromeExtent);
 
   /// The extent floored at Flutter's [kMinInteractiveDimension] (48.0dp).
   double get effectiveExtent => math.max(kMinInteractiveDimension, extent);
@@ -59,7 +75,7 @@ class PinnedTabBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(PinnedTabBarDelegate oldDelegate) {
     return oldDelegate.effectiveExtent != effectiveExtent ||
-        oldDelegate.child.key != child.key;
+        oldDelegate.child != child;
   }
 }
 
