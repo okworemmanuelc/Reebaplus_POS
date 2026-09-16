@@ -10,6 +10,32 @@ The human updates it when resolving open questions or making architectural decis
 
 156 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #243 — Inventory holds its content at every viewport (2026-09-16)
+Branch `feat/inventory-tabbed-sliver-scaffold-243`, cut from `origin/main` (`688a523`). Keystone slice of PRD #239; unblocked by #240.
+
+- **Shared seam (`lib/shared/widgets/tabbed_sliver_scaffold.dart`)** — `TabbedSliverScaffold` + `TabSliverView`:
+  - Header slivers scroll away, the tab bar pins through `PinnedTabBarDelegate` (#240), and **each tab is its own `CustomScrollView`** whose filter band is a sliver above its list.
+  - Owns the **`SliverOverlapAbsorber` / `SliverOverlapInjector` pairing**, which existed nowhere in the codebase. Without it a tab's scroll view starts at the top of the body box and paints its first rows *under* the pinned tab bar.
+  - `TabSliverView.storageKey` gives each tab a `PageStorageKey`, so a tab keeps its scroll offset across tab switches.
+  - Fixed **unconditionally** — no orientation branch, no short-viewport predicate. 320x568 portrait is above the existing threshold and still broken, so a gated fix would have missed a real device.
+- **Root cause**: `RenderSliverFillRemainingWithScrollable` lays a `NestedScrollView` body out at `viewportMainAxisExtent - precedingScrollExtent`, so the body is charged for the scroll extent of headers that scroll away. Measured before the fix (Products tab, populated, real insets + bottom nav):
+
+  | viewport | tab body | filter band | list height | rows | overflow |
+  |---|---|---|---|---|---|
+  | 320x568 portrait | 297.3dp | 113.8dp | 105.3dp | 1 | none |
+  | 800x360 landscape | 95.6dp | 92.6dp | **0.0dp** | **0** | 67px |
+  | 915x412 landscape | 147.6dp | 92.6dp | **0.0dp** | **0** | 15px |
+  | 412x915 portrait | 626.9dp | 103.8dp | 427.9dp | 5 | none |
+
+  After the fix: tab body 420.0 / 212.0 / 264.0 / 767.0dp, **no overflow at any viewport**, and 4 / 2 / 3 / 7 complete rows after a single 160dp scroll.
+- **Migration**: `_buildProductsTab`, `_buildSuppliersTab`, `_buildCratesTab` became `_productsTabSlivers`, `_suppliersTabSlivers`, `_cratesTabSlivers`; `_tabBody` became `_tabSliverView`. `InventoryHistoryTab` now **builds a sliver** (`SliverMainAxisGroup`) rather than a box, so the History tab is no longer a fixed band over an `Expanded` either. Empty states sit in `SliverFillRemaining(hasScrollBody: false)`, which sizes to the larger of the remaining viewport and the child's natural height — `FirstRunEmptyState` itself is **untouched**, per the PRD.
+- **Shared screen harness (`test/helpers/screen_harness.dart`)** — the in-memory Drift DB, Supabase init, provider overrides, `pumpScreen`, `disposeScreen`, and the two assertions (`expectNoOverflow`, `expectContentRowVisible`). `pos_home_harness.dart` is now a thin POS-specific wrapper over it; the POS overflow suite is unchanged and still green. A screen costs roughly ten lines to cover.
+- **Tests** — `test/inventory/inventory_viewport_test.dart` (12 tests): four viewports × populated and empty catalogue, each asserting **both** no overflow **and** a complete hit-testable product row, plus scroll retention across tab switches, sideways tab swipe, summary-card filtering, and pull-to-refresh. Demonstrated **red before** (4 failures: both landscape viewports in both data states) and green after. No per-screen pixel budget is asserted.
+- **Docs** — `docs/adr/0027-tabbed-sliver-scaffold.md`; `CONTEXT.md` gains a **Layout** section (Tabbed-Sliver Scaffold, Content Row, Starved Content); dated `BUILD_LOG.md` entry.
+- **Verification** — `flutter analyze lib test` clean (0 errors, 0 warnings).
+
+**Open question raised by this unit (filed back on #239, not resolved here):** PRD #239's prose promises "at least one complete row … visible and tappable **without scrolling**" on every supported phone. At 800x360 that is arithmetically unreachable — app bar + summary cards + tab bar + filter band exceed the whole 360dp viewport before a row is laid out, and closing the gap would mean hiding a control or shrinking a tap target, both of which the PRD forbids. This slice delivers the PRD's *Solution* wording instead (one scrollable surface; the row exists at full height and one scroll reaches it) and records the at-rest number honestly. If a row at rest is genuinely required on a 360dp-tall phone, the lever is the 25dp stacked label above each dropdown field — a floating-label re-flow, which the PRD parks as separate work — not a squeeze.
+
 ### Issue #240 — Prefactor: one shared pinned tab-bar delegate (2026-09-16)
 Branch `feat/shared-pinned-tab-bar-delegate-240`, cut from `origin/main` (`259b1ed`). Slice 1 of PRD #239.
 
