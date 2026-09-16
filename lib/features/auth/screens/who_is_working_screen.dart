@@ -352,11 +352,13 @@ class _PickerListState extends ConsumerState<_PickerList> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    dateStr,
-                    style: TextStyle(
-                      color: authTextPrimary(context).withValues(alpha: 0.5),
-                      fontSize: context.getRFontSize(12),
+                  Expanded(
+                    child: Text(
+                      dateStr,
+                      style: TextStyle(
+                        color: authTextPrimary(context).withValues(alpha: 0.5),
+                        fontSize: context.getRFontSize(12),
+                      ),
                     ),
                   ),
                   IconButton(

@@ -8,7 +8,29 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-155 sessions logged. Codebase is live and being verified on-device.
+156 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #240 — Prefactor: one shared pinned tab-bar delegate (2026-09-16)
+Branch `feat/shared-pinned-tab-bar-delegate-240`, cut from `origin/main` (`259b1ed`). Slice 1 of PRD #239.
+
+- **Unified Seam (`lib/shared/widgets/pinned_tab_bar_delegate.dart`)**:
+  - Consolidated four duplicate private pinned tab-bar delegates into a single shared `PinnedTabBarDelegate` (`typedef PinnedHeaderDelegate = PinnedTabBarDelegate`).
+  - **Height Forcing**: Returns `SizedBox(height: effectiveExtent, child: child)` so loosely-constrained children cannot render shorter than declared maxExtent and trip the framework's `layoutExtent exceeds paintExtent` assertion under `NestedScrollView`.
+  - **48dp Tap-Target Floor**: Clamps `effectiveExtent` to `math.max(kMinInteractiveDimension, extent)` so responsive scaling (e.g. `getRSize(60)` resolving to 42dp on 800×360 short landscape viewports) cannot compress interactive tab bars below the 48dp accessibility floor.
+  - **Stable Rebuild Predicate**: Compares `effectiveExtent` and child `Key`s rather than comparing freshly instantiated widget instances, eliminating unnecessary rebuilds on every scroll frame.
+- **Deletions & Migrations**:
+  - Deleted private `_StickyTabBarDelegate` in `lib/features/inventory/screens/inventory_screen.dart`.
+  - Deleted private `_SliverTabBarDelegate` in `lib/features/customers/screens/customer_detail_screen.dart`.
+  - Deleted private `_SliverTabBarDelegate` in `lib/features/inventory/screens/supplier_detail_screen.dart`.
+  - Deleted private `_SliverTabBarDelegate` in `lib/features/van_sales/screens/driver_profile_screen.dart`.
+  - Deleted private `_PinnedHeaderDelegate` in `lib/features/orders/screens/orders_screen.dart`.
+  - Migrated all five screens onto `PinnedTabBarDelegate`.
+- **Ancillary Fix**:
+  - Wrapped `dateStr` `Text` widget in `Expanded` within `who_is_working_screen.dart` top bar row, eliminating a 2.8px `RenderFlex` overflow on long date strings.
+- **Tests & Verification**:
+  - `test/widgets/pinned_tab_bar_delegate_test.dart` (8 tests): height forcing, short-viewport 48dp flooring at `androidCompactLandscape` (800×360), extent preservation, and rebuild predicate behavior.
+  - `flutter analyze`: clean (0 errors, 0 warnings).
+  - Full test suite: 2108 passed, 131 skipped, 0 failed.
 
 ### Fix — Labelled `AppFAB` painted full-width with its left edge off screen (2026-09-16)
 Branch `fix/app-fab-full-width`, cut from `main` (7a34b7a). Reported from device screenshots of Stores and Customers; no issue filed.

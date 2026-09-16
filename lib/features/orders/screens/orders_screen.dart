@@ -33,6 +33,7 @@ import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
+import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
@@ -446,8 +447,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
             SliverPersistentHeader(
               pinned: true,
-              delegate: _PinnedHeaderDelegate(
-                height: searchBarHeight,
+              delegate: PinnedTabBarDelegate(
+                extent: searchBarHeight,
                 child: _buildSearchBar(context),
               ),
             ),
@@ -506,8 +507,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
             SliverPersistentHeader(
               pinned: true,
-              delegate: _PinnedHeaderDelegate(
-                height: searchBarHeight,
+              delegate: PinnedTabBarDelegate(
+                extent: searchBarHeight,
                 child: _buildSearchBar(
                   context,
                   selectedFilter: _completedFilter,
@@ -579,8 +580,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
             SliverPersistentHeader(
               pinned: true,
-              delegate: _PinnedHeaderDelegate(
-                height: searchBarHeight,
+              delegate: PinnedTabBarDelegate(
+                extent: searchBarHeight,
                 child: _buildSearchBar(
                   context,
                   selectedFilter: _cancelledFilter,
@@ -2182,30 +2183,6 @@ class _PaymentBadge extends StatelessWidget {
   }
 }
 
-// ═══════════════════════ PINNED HEADER DELEGATE ══════════════════════════════
-
-class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final double height;
-  final Widget child;
-
-  _PinnedHeaderDelegate({required this.height, required this.child});
-
-  @override
-  double get minExtent => height;
-
-  @override
-  double get maxExtent => height;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => SizedBox(height: height, child: child);
-
-  @override
-  bool shouldRebuild(_PinnedHeaderDelegate oldDelegate) => true;
-}
 
 class _CreditDebtBadge extends StatelessWidget {
   final int balanceKobo;

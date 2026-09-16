@@ -34,6 +34,7 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
+import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 
 class CustomerDetailScreen extends ConsumerStatefulWidget {
@@ -1446,7 +1447,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           SliverToBoxAdapter(child: _buildCreditCard(theme)),
           SliverPersistentHeader(
             pinned: true,
-            delegate: _SliverTabBarDelegate(
+            delegate: PinnedTabBarDelegate(
               extent: context.getRSize(60),
               child: Container(
                 color: Colors.transparent,
@@ -2714,36 +2715,5 @@ class _SheetField extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  final double extent;
-  _SliverTabBarDelegate({required this.child, this.extent = 60});
-
-  @override
-  double get minExtent => extent;
-  @override
-  double get maxExtent => extent;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    // Pin the child to exactly [extent]. Under a NestedScrollView a pinned
-    // header reports paintExtent from the child's *actual* rendered height but
-    // layoutExtent from the declared maxExtent; if the (loosely-constrained)
-    // child renders even fractionally shorter than [extent], paintExtent drops
-    // below layoutExtent and the framework asserts "layoutExtent exceeds
-    // paintExtent". Forcing the height keeps childExtent == maxExtent.
-    return SizedBox(height: extent, child: child);
-  }
-
-  @override
-  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
-    return oldDelegate.extent != extent;
   }
 }

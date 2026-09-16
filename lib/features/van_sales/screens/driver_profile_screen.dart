@@ -23,6 +23,7 @@ import 'package:reebaplus_pos/features/van_sales/widgets/driver_ledger_entry_til
 import 'package:reebaplus_pos/features/van_sales/widgets/van_sale_receipt_sheet.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 
@@ -204,7 +205,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
             SliverToBoxAdapter(child: _balanceCard(context, balanceKobo)),
             SliverPersistentHeader(
               pinned: true,
-              delegate: _SliverTabBarDelegate(
+              delegate: PinnedTabBarDelegate(
                 extent: context.getRSize(60),
                 child: Padding(
                   padding: EdgeInsets.symmetric(
@@ -1296,28 +1297,4 @@ class _EmptyTab extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  final double extent;
-
-  _SliverTabBarDelegate({required this.child, required this.extent});
-
-  @override
-  double get minExtent => extent;
-  @override
-  double get maxExtent => extent;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlaps) {
-    // Force the height: under a NestedScrollView a pinned header reports
-    // paintExtent from the child's rendered height but layoutExtent from
-    // maxExtent, and a fractionally shorter child trips the framework's
-    // "layoutExtent exceeds paintExtent" assert.
-    return SizedBox(height: extent, child: child);
-  }
-
-  @override
-  bool shouldRebuild(_SliverTabBarDelegate old) => old.extent != extent;
 }
