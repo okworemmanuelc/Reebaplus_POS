@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -87,7 +88,8 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
           .where((r) => r.slug == 'cashier' || r.slug == 'stock_keeper')
           .toList();
     }
-    return all;
+    // The Driver role is not offered while Van Sales is switched off.
+    return rolesOnOffer(all);
   }
 
   String _randomCode() {

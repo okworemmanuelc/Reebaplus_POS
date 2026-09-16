@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart'
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
@@ -55,7 +56,7 @@ class RolesPermissionsScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    for (final role in list) ...[
+                    for (final role in rolesOnOffer(list)) ...[
                       _RoleCard(role: role),
                       const SizedBox(height: 16),
                     ],
@@ -81,7 +82,7 @@ class _RoleCard extends ConsumerWidget {
     final count =
         (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??
                 const <RolePermissionData>[])
-            .where((g) => !kHiddenPermissionKeys.contains(g.permissionKey))
+            .where((g) => !isPermissionKeyHidden(g.permissionKey))
             .length;
     // Derive the denominator from the global catalogue so it never goes stale
     // if permission keys are added. Falls back to the seed count (42 minus the
@@ -89,7 +90,7 @@ class _RoleCard extends ConsumerWidget {
     final allPerms = ref.watch(allPermissionsProvider).valueOrNull;
     final total = allPerms == null
         ? 42 - kHiddenPermissionKeys.length
-        : allPerms.where((p) => !kHiddenPermissionKeys.contains(p.key)).length;
+        : allPerms.where((p) => !isPermissionKeyHidden(p.key)).length;
     // CEO is locked all-on; show the full count regardless of sync state.
     final subtitle = isCeo
         ? 'All $total permissions'

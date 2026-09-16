@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_permissions_screen.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
@@ -88,7 +89,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
           .where((r) => r.slug == 'cashier' || r.slug == 'stock_keeper')
           .toList();
     }
-    return all;
+    // The Driver role is not offered while Van Sales is switched off.
+    return rolesOnOffer(all);
   }
 
   Future<void> _changeRole(
@@ -622,7 +624,10 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                           // (vans included). Assigning a driver to a van is the
                           // existing staff-to-store assignment; vans are hidden
                           // from *pickers*, not from the place they are set up.
-                          for (final s in allStores)
+                          // While Van Sales is switched off vans are dropped
+                          // here too; an existing van assignment stays in
+                          // `selected`, so saving never silently removes it.
+                          for (final s in assignableStores(allStores))
                             CheckboxListTile(
                               contentPadding: EdgeInsets.zero,
                               controlAffinity: ListTileControlAffinity.leading,

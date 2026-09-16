@@ -29,6 +29,7 @@ import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_run_screen.dart';
 
 GateContext ctx({
@@ -60,6 +61,11 @@ bool terminalFor(GateContext gate) {
 }
 
 void main() {
+  // Van Sales ships switched off (`kVanSalesEnabled`); these tests guard the
+  // feature itself, so they run with it on.
+  setUpAll(() => debugOverrideVanSalesEnabled(true));
+  tearDownAll(() => debugOverrideVanSalesEnabled(null));
+
   group('who lands on the driver terminal', () {
     test('a Driver-role user does', () {
       expect(terminalFor(driverCtx()), isTrue);

@@ -25,6 +25,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/stores_settings_screen.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 import '../helpers/dispatch_test_utils.dart';
 
@@ -174,6 +175,8 @@ void main() {
 
   testWidgets('Add a van inserts a van location without disposing its fields',
       (tester) async {
+    debugOverrideVanSalesEnabled(true);
+    addTearDown(() => debugOverrideVanSalesEnabled(null));
     await pumpScreen(tester, ceoUserId);
 
     await addLocation(
@@ -196,6 +199,8 @@ void main() {
 
   testWidgets('a van never lands in the store list, and vice versa',
       (tester) async {
+    debugOverrideVanSalesEnabled(true);
+    addTearDown(() => debugOverrideVanSalesEnabled(null));
     await pumpScreen(tester, ceoUserId);
 
     await addLocation(
@@ -218,6 +223,17 @@ void main() {
       containsAll(['Main Warehouse', 'Second Branch']),
     );
     expect(onlyVans(stores).map((s) => s.name), ['Blue Hilux']);
+  });
+
+  testWidgets('switched off: no Vans section, even for the CEO',
+      (tester) async {
+    debugOverrideVanSalesEnabled(false);
+    addTearDown(() => debugOverrideVanSalesEnabled(null));
+    await pumpScreen(tester, ceoUserId);
+
+    expect(find.text('Add a store'), findsOneWidget);
+    expect(find.text('Vans'), findsNothing);
+    expect(find.text('Add a van'), findsNothing);
   });
 
   testWidgets('an empty name is rejected — no row, sheet stays open',

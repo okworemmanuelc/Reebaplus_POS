@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 const _kSyncView = 'sync.view';
@@ -60,7 +61,7 @@ class SyncIssuesAccessScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    for (final role in list) ...[
+                    for (final role in rolesOnOffer(list)) ...[
                       _RoleToggle(role: role),
                       const SizedBox(height: 16),
                     ],

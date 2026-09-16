@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 void main() {
   late AppDatabase db;
@@ -121,9 +122,41 @@ void main() {
     expect(find.text('Cashier'), findsOneWidget);
     expect(find.text('Stock keeper'), findsOneWidget);
 
-    // 42 seeded keys − 3 hidden (#140 added van.manage + van.sell).
-    expect(find.text('All 39 permissions'), findsOneWidget); // CEO, locked
-    expect(find.text('2 of 39 permissions'), findsOneWidget); // Cashier
+    // 42 seeded keys − 3 hidden (#140 added van.manage + van.sell), less those
+    // two van keys while Van Sales is switched off.
+    final shown = isVanSalesEnabled() ? 39 : 37;
+    expect(find.text('All $shown permissions'), findsOneWidget); // CEO, locked
+    expect(find.text('2 of $shown permissions'), findsOneWidget); // Cashier
+  });
+
+  group('the Driver role follows the Van Sales switch', () {
+    setUp(() async {
+      await db.into(db.roles).insert(
+            RolesCompanion.insert(
+              id: const Value('role-driver'),
+              businessId: businessId,
+              name: 'Driver',
+              slug: 'driver',
+              isSystemDefault: const Value(true),
+            ),
+          );
+    });
+    tearDown(() => debugOverrideVanSalesEnabled(null));
+
+    testWidgets('switched off: no Driver card', (tester) async {
+      debugOverrideVanSalesEnabled(false);
+      await pumpList(tester);
+
+      expect(find.text('Stock keeper'), findsOneWidget);
+      expect(find.text('Driver'), findsNothing);
+    });
+
+    testWidgets('switched on: the Driver card is back', (tester) async {
+      debugOverrideVanSalesEnabled(true);
+      await pumpList(tester);
+
+      expect(find.text('Driver'), findsOneWidget);
+    });
   });
 
   testWidgets('tapping a role card opens its detail', (tester) async {
