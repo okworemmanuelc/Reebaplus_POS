@@ -7,6 +7,13 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
+/// The Inventory screen's History tab.
+///
+/// **This widget builds a sliver, not a box.** It is placed directly into the
+/// tab's [CustomScrollView] by [TabbedSliverScaffold], so the period chips and
+/// the table header scroll away with the list instead of sitting in a fixed
+/// band above an [Expanded] remainder — the shape that starved the list to zero
+/// height on short viewports (PRD #239).
 class InventoryHistoryTab extends ConsumerStatefulWidget {
   final String? storeId;
 
@@ -44,7 +51,10 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
     );
 
     if (pageState.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (pageState.transactions.isEmpty) {
@@ -58,16 +68,22 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
     final txns = pageState.transactions;
     final childCount = txns.length + (pageState.isLoadingMore ? 1 : 0);
 
-    return Column(
-      children: [
-        _buildPeriodSelector(context, colorScheme),
-        SizedBox(height: context.spacingS),
-        _buildSummaryRow(context, colorScheme, totalIn, totalOut),
-        SizedBox(height: context.spacingS),
-        _buildTableHeader(context, colorScheme),
-        Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.symmetric(horizontal: context.spacingM),
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
+              _buildPeriodSelector(context, colorScheme),
+              SizedBox(height: context.spacingS),
+              _buildSummaryRow(context, colorScheme, totalIn, totalOut),
+              SizedBox(height: context.spacingS),
+              _buildTableHeader(context, colorScheme),
+            ],
+          ),
+        ),
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: context.spacingM),
+          sliver: SliverList.builder(
             itemCount: childCount,
             itemBuilder: (context, index) {
               if (pageState.hasMore &&
@@ -424,10 +440,13 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
   }
 
   Widget _buildEmptyState(BuildContext context, ColorScheme colorScheme) {
-    return Column(
-      children: [
-        _buildPeriodSelector(context, colorScheme),
-        Expanded(
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: _buildPeriodSelector(context, colorScheme),
+        ),
+        SliverFillRemaining(
+          hasScrollBody: false,
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,

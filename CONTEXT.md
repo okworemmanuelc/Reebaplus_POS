@@ -570,3 +570,31 @@ closes it. Rendered by the **Spotlight Overlay** with no hole cut, so it is
 configuration of the same widget rather than a second presentation surface.
 _Avoid_: dialog, modal (both imply a route), prompt.
 
+
+### Layout
+
+**Tabbed-Sliver Scaffold**:
+The one shape behind every tabbed screen with scroll-away headers
+(`TabbedSliverScaffold`, ADR 0027): header slivers that scroll out of the way,
+a tab bar pinned beneath them, and one scroll view per tab whose filter band is
+a sliver above its list. It owns the overlap absorber/injector pairing so a tab
+never paints under its own pinned tab bar. A tab's body is given as slivers, so
+a nested tab widget builds a sliver, not a box.
+_Avoid_: nested scroll view (names the framework part, not the shape), tabbed
+screen (says nothing about the layout contract).
+
+**Content Row**:
+One complete unit of a screen's real content — a product, an order, a customer.
+The unit the viewport regression suite asserts on: a row must be laid out at
+full height and hit-testable, never squeezed toward zero. Chrome is not content;
+a filter, a summary strip and a tab bar are never rows.
+_Avoid_: item, list tile (both name the widget rather than the invariant).
+
+**Starved Content**:
+A screen where fixed chrome has taken so much vertical room that the scrollable
+beneath it is laid out at or near zero height. It is the *silent* failure mode:
+the list shows nothing and reports no error, unlike the *loud* mode, where a
+fixed-height body spills past the bottom edge and paints the red overflow band.
+An overflow-only test passes a starved screen, which is why the suite asserts a
+visible **Content Row** as well.
+_Avoid_: overflow (names only the loud mode), squashed, clipped.

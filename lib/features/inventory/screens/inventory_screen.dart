@@ -42,13 +42,23 @@ import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
+import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
 import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
+
+/// Key prefix marking one complete product row in the Products tab. The
+/// viewport regression suite (PRD #239) asserts that at least one row carrying
+/// this prefix is laid out and hit-testable at every supported viewport. Keys
+/// are per-product because sibling rows in a sliver list may not share one.
+const String kInventoryProductRowKeyPrefix = 'inventory-product-row-';
+
+/// The row key for [productId].
+ValueKey<String> inventoryProductRowKey(String productId) =>
+    ValueKey<String>('$kInventoryProductRowKeyPrefix$productId');
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -199,14 +209,34 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _ => ref.watch(industryLexiconProvider).itemPlural,
   };
 
-  Widget _tabBody(BuildContext context, String key) => switch (key) {
-    'suppliers' => _buildSuppliersTab(context),
-    'crates' => _buildCratesTab(context),
-    'history' => InventoryHistoryTab(
-      storeId: _selectedStoreId == 'all' ? null : _selectedStoreId,
-    ),
-    _ => _buildProductsTab(context),
-  };
+  /// One tab's body as slivers. Every tab is a scroll view of its own, so no
+  /// band inside a tab may depend on a height the parent supplies — that
+  /// dependency is what starved the stock list to zero (PRD #239).
+  ///
+  /// The storage keys keep each tab's scroll offset across tab switches.
+  TabSliverView _tabSliverView(BuildContext context, String key) =>
+      switch (key) {
+        'suppliers' => TabSliverView(
+          storageKey: 'inventory-suppliers',
+          slivers: _suppliersTabSlivers(context),
+        ),
+        'crates' => TabSliverView(
+          storageKey: 'inventory-crates',
+          slivers: _cratesTabSlivers(context),
+        ),
+        'history' => TabSliverView(
+          storageKey: 'inventory-history',
+          slivers: [
+            InventoryHistoryTab(
+              storeId: _selectedStoreId == 'all' ? null : _selectedStoreId,
+            ),
+          ],
+        ),
+        _ => TabSliverView(
+          storageKey: 'inventory-products',
+          slivers: _productsTabSlivers(context),
+        ),
+      };
 
   // Currently-visible tab keys, in order. Recomputed in build() from role /
   // permission / business-type guards (§16.7 / §16.10); the TabController is
@@ -439,25 +469,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         top: false,
         child: !tabsReady
             ? const Center(child: CircularProgressIndicator())
+            // One scrollable surface (PRD #239): the summary cards scroll
+            // away, the tab bar pins, and each tab is its own scroll view whose
+            // filter band is a sliver above its list. Nothing inside a tab
+            // depends on a supplied height, so the short body a NestedScrollView
+            // hands its child can no longer crush the stock list to zero.
             : AppRefreshWrapper(
-                child: NestedScrollView(
-                  headerSliverBuilder: (context, innerBoxIsScrolled) {
-                    return [
-                      SliverToBoxAdapter(child: _buildSummaryCards(context)),
-                      SliverPersistentHeader(
-                        pinned: true,
-                        delegate: PinnedTabBarDelegate(
-                          child: _buildTabBar(context),
-                        ),
-                      ),
-                    ];
-                  },
-                  body: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      for (final key in _tabKeys) _tabBody(context, key),
-                    ],
-                  ),
+                child: TabbedSliverScaffold(
+                  controller: _tabController,
+                  headerSlivers: [
+                    SliverToBoxAdapter(child: _buildSummaryCards(context)),
+                  ],
+                  tabBar: _buildTabBar(context),
+                  tabViews: [
+                    for (final key in _tabKeys) _tabSliverView(context, key),
+                  ],
                 ),
               ),
       ),
@@ -712,9 +738,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _buildProductsTab(BuildContext context) {
+  List<Widget> _productsTabSlivers(BuildContext context) {
     if (_isFirstLoad) {
-      return const Center(child: CircularProgressIndicator());
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
     }
 
     var list = _dbProducts;
@@ -763,20 +794,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // their existing order.
     list = _sortNearExpiryFirst(list);
 
-    return Column(
-      children: [
-        if (_showSearch) _buildSearchField(context),
-        _buildSupplierFilter(context),
-        // Issue #110: press-and-hold-to-edit discoverability banner. Shown only
-        // to staff the price-edit gate lets long-press-edit (matching the
-        // gesture's own guard on `_buildProductRow`), only while there are
-        // products to hold, and only until this staff member dismisses it
-        // (which retires it permanently for them).
-        if (_showLongPressHint &&
-            list.isNotEmpty &&
-            Gates.editProductPrice.allows(ref))
-          _buildInlineHint(
-            message: 'Press and hold a '
+    return [
+      if (_showSearch) SliverToBoxAdapter(child: _buildSearchField(context)),
+      SliverToBoxAdapter(child: _buildSupplierFilter(context)),
+      // Issue #110: press-and-hold-to-edit discoverability banner. Shown only
+      // to staff the price-edit gate lets long-press-edit (matching the
+      // gesture's own guard on `_buildProductRow`), only while there are
+      // products to hold, and only until this staff member dismisses it
+      // (which retires it permanently for them).
+      if (_showLongPressHint &&
+          list.isNotEmpty &&
+          Gates.editProductPrice.allows(ref))
+        SliverToBoxAdapter(
+          child: _buildInlineHint(
+            message:
+                'Press and hold a '
                 '${ref.watch(industryLexiconProvider).itemLower}'
                 ' to edit it.',
             onDismiss: () {
@@ -784,34 +816,44 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               uiHintService.markDismissed(_longPressHintKey);
             },
           ),
-        Expanded(
-          child: list.isEmpty
-              // Genuinely empty catalogue (not a filter/search miss) hands off
-              // to the persona-aware first-run empty state — the "Add your first
-              // product" CTA / neutral message (Seam 2, #34). A filter miss over
-              // a populated catalogue keeps the "no products matching" copy.
-              ? ref.watch(firstRunSurfaceStateProvider) !=
-                        FirstRunSurfaceState.hasContent
-                    ? const FirstRunEmptyState()
-                    : Center(
-                        child: Text(
-                          'No ${ref.watch(industryLexiconProvider).itemPluralLower} matching filters',
-                          style: TextStyle(color: _subtext),
-                        ),
-                      )
-              : ListView.builder(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(16),
-                    context.getRSize(12),
-                    context.getRSize(16),
-                    context.getRSize(120) + context.bottomInset,
-                  ),
-                  itemCount: list.length,
-                  itemBuilder: (_, i) => _buildProductRow(context, list[i]),
-                ),
         ),
-      ],
-    );
+      if (list.isEmpty)
+        // Genuinely empty catalogue (not a filter/search miss) hands off to the
+        // persona-aware first-run empty state — the "Add your first product"
+        // CTA / neutral message (Seam 2, #34). A filter miss over a populated
+        // catalogue keeps the "no products matching" copy.
+        //
+        // `hasScrollBody: false` sizes the body to the LARGER of the remaining
+        // viewport and its own natural height, so the empty state still centres
+        // on a roomy phone and scrolls — rather than overflowing — once the
+        // chrome above it has eaten the screen.
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child:
+              ref.watch(firstRunSurfaceStateProvider) !=
+                  FirstRunSurfaceState.hasContent
+              ? const FirstRunEmptyState()
+              : Center(
+                  child: Text(
+                    'No ${ref.watch(industryLexiconProvider).itemPluralLower} matching filters',
+                    style: TextStyle(color: _subtext),
+                  ),
+                ),
+        )
+      else
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            context.getRSize(16),
+            context.getRSize(12),
+            context.getRSize(16),
+            context.getRSize(120) + context.bottomInset,
+          ),
+          sliver: SliverList.builder(
+            itemCount: list.length,
+            itemBuilder: (_, i) => _buildProductRow(context, list[i]),
+          ),
+        ),
+    ];
   }
 
   // Inline dismissible hint shown at the top of the Products list (first couple
@@ -866,10 +908,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _buildSuppliersTab(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
+  List<Widget> _suppliersTabSlivers(BuildContext context) {
+    final suppliers = ref.read(supplierServiceProvider).getAll();
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
           padding: EdgeInsets.all(context.getRSize(16)),
           child: AppButton(
             text: 'Add Supplier',
@@ -878,101 +921,104 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             onPressed: _showAddSupplierDialog,
           ),
         ),
-        Expanded(
-          child: ref.read(supplierServiceProvider).getAll().isEmpty
-              ? Center(
-                  child: Text(
-                    'No suppliers added yet',
-                    style: TextStyle(color: _subtext),
+      ),
+      if (suppliers.isEmpty)
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Text(
+              'No suppliers added yet',
+              style: TextStyle(color: _subtext),
+            ),
+          ),
+        )
+      else
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            context.getRSize(16),
+            0,
+            context.getRSize(16),
+            context.getRSize(120) + context.bottomInset,
+          ),
+          sliver: SliverList.builder(
+            itemCount: suppliers.length,
+            itemBuilder: (_, i) {
+              final s = suppliers[i];
+              return GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SupplierDetailScreen(supplierId: s.id),
                   ),
-                )
-              : ListView.builder(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(16),
-                    0,
-                    context.getRSize(16),
-                    context.getRSize(120) + context.bottomInset,
+                ).then((_) => setState(() {})),
+                child: Container(
+                  margin: EdgeInsets.only(bottom: context.getRSize(12)),
+                  padding: EdgeInsets.all(context.getRSize(16)),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _border),
                   ),
-                  itemCount: ref.read(supplierServiceProvider).getAll().length,
-                  itemBuilder: (_, i) {
-                    final s = ref.read(supplierServiceProvider).getAll()[i];
-                    return GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              SupplierDetailScreen(supplierId: s.id),
-                        ),
-                      ).then((_) => setState(() {})),
-                      child: Container(
-                        margin: EdgeInsets.only(bottom: context.getRSize(12)),
-                        padding: EdgeInsets.all(context.getRSize(16)),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: context.getRSize(48),
+                        height: context.getRSize(48),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: _border),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Row(
+                        child: Icon(
+                          FontAwesomeIcons.buildingColumns.data,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: context.getRSize(20),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: context.getRSize(48),
-                              height: context.getRSize(48),
-                              decoration: BoxDecoration(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                FontAwesomeIcons.buildingColumns.data,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: context.getRSize(20),
+                            Text(
+                              s.name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: context.getRFontSize(16),
+                                color: _text,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.name,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: context.getRFontSize(16),
-                                      color: _text,
-                                    ),
-                                  ),
-                                  if (s.contactDetails.isNotEmpty) ...[
-                                    SizedBox(height: context.getRSize(4)),
-                                    Text(
-                                      s.contactDetails,
-                                      style: TextStyle(
-                                        color: _subtext,
-                                        fontSize: context.getRFontSize(13),
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                            if (s.contactDetails.isNotEmpty) ...[
+                              SizedBox(height: context.getRSize(4)),
+                              Text(
+                                s.contactDetails,
+                                style: TextStyle(
+                                  color: _subtext,
+                                  fontSize: context.getRFontSize(13),
+                                ),
                               ),
-                            ),
-                            Icon(
-                              Icons.chevron_right,
-                              color: _subtext,
-                              size: context.getRSize(20),
-                            ),
+                            ],
                           ],
                         ),
                       ),
-                    );
-                  },
+                      Icon(
+                        Icons.chevron_right,
+                        color: _subtext,
+                        size: context.getRSize(20),
+                      ),
+                    ],
+                  ),
                 ),
+              );
+            },
+          ),
         ),
-      ],
-    );
+    ];
   }
 
   /// Build the per-manufacturer crate stats (keyed by manufacturer id) from the
-  /// active-store full/empty maps resolved in [_buildCratesTab].
+  /// active-store full/empty maps resolved in [_cratesTabSlivers].
   List<ManufacturerCrateStats> _computeCrateStats(
     Map<String, int> fullByMfr,
     Map<String, int> emptyByMfr,
@@ -1247,6 +1293,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         : Theme.of(context).colorScheme.primary;
 
     return GestureDetector(
+      // One complete product row is the unit the viewport tests assert on
+      // (PRD #239): a starved list renders at zero height, shows nothing, and
+      // reports no overflow, so "no red band" alone cannot catch it.
+      key: inventoryProductRowKey(product.id),
       // Long-press opens the full product editor (name/prices/details), so it
       // is gated on `products.edit_price` (hard rule #6/#7 — hide, don't
       // disable). Stock-only roles add stock via the product-detail Update
@@ -1423,7 +1473,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   }
 
   // ── CRATES TAB REDESIGNED ──────────────────────────────────────────────────
-  Widget _buildCratesTab(BuildContext context) {
+  List<Widget> _cratesTabSlivers(BuildContext context) {
     // §16.8.1 Phase 2: crate figures are PER-STORE when a store is active and
     // business-wide in "All Stores". Full bottles come from the active store's
     // inventory (fullCratesByManufacturerProvider). #159: empties are DERIVED
@@ -1451,81 +1501,85 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final totalEmpty = emptyByMfr.values.fold<int>(0, (s, v) => s + v);
     final totalFull = stats.fold<int>(0, (s, e) => s + e.fullCratesEquiv);
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(16),
-        context.getRSize(16),
-        context.getRSize(120) + context.bottomInset,
-      ),
-      children: [
-        // 1. Stats Overview
-        _buildCrateStatsRow(
-          context,
-          totalEmpty: totalEmpty,
-          totalFull: totalFull,
+    return [
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          context.getRSize(16),
+          context.getRSize(16),
+          context.getRSize(16),
+          context.getRSize(120) + context.bottomInset,
         ),
-
-        SizedBox(height: context.getRSize(24)),
-
-        // 2. Manufacturers Section
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        sliver: SliverList.list(
           children: [
-            Text(
-              'Manufacturers',
-              style: TextStyle(
-                fontSize: context.getRFontSize(18),
-                fontWeight: FontWeight.w800,
-                color: _text,
-                letterSpacing: -0.5,
-              ),
+            // 1. Stats Overview
+            _buildCrateStatsRow(
+              context,
+              totalEmpty: totalEmpty,
+              totalFull: totalFull,
             ),
-            AppButton(
-              text: 'Add New',
-              icon: FontAwesomeIcons.circlePlus.data,
-              variant: AppButtonVariant.ghost,
-              isFullWidth: false,
-              onPressed: _showAddManufacturerDialog,
+
+            SizedBox(height: context.getRSize(24)),
+
+            // 2. Manufacturers Section
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Manufacturers',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(18),
+                    fontWeight: FontWeight.w800,
+                    color: _text,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                AppButton(
+                  text: 'Add New',
+                  icon: FontAwesomeIcons.circlePlus.data,
+                  variant: AppButtonVariant.ghost,
+                  isFullWidth: false,
+                  onPressed: _showAddManufacturerDialog,
+                ),
+              ],
             ),
+
+            SizedBox(height: context.getRSize(12)),
+
+            if (_dbManufacturers.isEmpty)
+              _buildEmptyCratesState(
+                context,
+                'No manufacturers to track',
+                'Add your first manufacturer above',
+              )
+            else
+              ..._dbManufacturers.map((mfr) {
+                // stats is keyed by manufacturer ID, so match on mfr.id — matching
+                // on mfr.name never hits and forced every card's "Full" to 0.
+                final stat = stats.firstWhere(
+                  (s) => s.manufacturer == mfr.id,
+                  orElse: () => ManufacturerCrateStats(
+                    manufacturer: mfr.id,
+                    totalBottles: 0,
+                    emptyCrates: emptyForMfr(mfr),
+                    totalValueKobo: 0,
+                  ),
+                );
+                return _buildManufacturerCard(
+                  context,
+                  mfr,
+                  stat,
+                  emptyCount: emptyForMfr(mfr),
+                );
+              }),
+
+            if (_activeCrateSizeGroups.isNotEmpty) ...[
+              SizedBox(height: context.getRSize(24)),
+              _buildCrateGroupAssets(context),
+            ],
           ],
         ),
-
-        SizedBox(height: context.getRSize(12)),
-
-        if (_dbManufacturers.isEmpty)
-          _buildEmptyCratesState(
-            context,
-            'No manufacturers to track',
-            'Add your first manufacturer above',
-          )
-        else
-          ..._dbManufacturers.map((mfr) {
-            // stats is keyed by manufacturer ID, so match on mfr.id — matching
-            // on mfr.name never hits and forced every card's "Full" to 0.
-            final stat = stats.firstWhere(
-              (s) => s.manufacturer == mfr.id,
-              orElse: () => ManufacturerCrateStats(
-                manufacturer: mfr.id,
-                totalBottles: 0,
-                emptyCrates: emptyForMfr(mfr),
-                totalValueKobo: 0,
-              ),
-            );
-            return _buildManufacturerCard(
-              context,
-              mfr,
-              stat,
-              emptyCount: emptyForMfr(mfr),
-            );
-          }),
-
-        if (_activeCrateSizeGroups.isNotEmpty) ...[
-          SizedBox(height: context.getRSize(24)),
-          _buildCrateGroupAssets(context),
-        ],
-      ],
-    );
+      ),
+    ];
   }
 
   Widget _buildCrateStatsRow(
@@ -2402,7 +2456,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       ),
     );
   }
-
 
   void _showAddSupplierDialog() {
     final nameCtrl = TextEditingController();
