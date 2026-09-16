@@ -22,7 +22,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/features/staff/screens/invite_staff_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 
 void main() {
   late AppDatabase db;
@@ -130,5 +132,85 @@ void main() {
     expect(find.text('Stock keeper'), findsWidgets);
     expect(find.text('CEO'), findsNothing);
     expect(find.text('Manager'), findsNothing);
+  });
+
+  group('Van Sales switch', () {
+    const ceoUserId = 'user-ceo';
+    const vanId = 'van-1';
+
+    Future<void> pumpAsCeo(WidgetTester tester) async {
+      await db.into(db.stores).insert(
+            StoresCompanion.insert(
+              id: const Value(vanId),
+              businessId: businessId,
+              name: 'Blue Hilux',
+              kind: const Value(kStoreKindVan),
+            ),
+          );
+      await db.into(db.roles).insert(
+            RolesCompanion.insert(
+              id: const Value('role-driver'),
+              businessId: businessId,
+              name: 'Driver',
+              slug: 'driver',
+              isSystemDefault: const Value(true),
+            ),
+          );
+      await db.into(db.users).insert(
+            UsersCompanion.insert(
+              id: const Value(ceoUserId),
+              businessId: businessId,
+              name: 'Carla CEO',
+              pin: '0000',
+            ),
+          );
+      await db.into(db.userBusinesses).insert(
+            UserBusinessesCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: businessId,
+              userId: ceoUserId,
+              roleId: ceoRoleId,
+            ),
+          );
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      container.read(authProvider).value =
+          await db.storesDao.getUserById(ceoUserId);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: InviteStaffScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    List<String?> storeOptions(WidgetTester tester) => tester
+        .widget<AppDropdown<String>>(find.byType(AppDropdown<String>))
+        .items
+        .map((i) => i.value)
+        .toList();
+
+    tearDown(() => debugOverrideVanSalesEnabled(null));
+
+    testWidgets('switched off: no van store and no Driver role on offer',
+        (tester) async {
+      debugOverrideVanSalesEnabled(false);
+      await pumpAsCeo(tester);
+
+      expect(storeOptions(tester), unorderedEquals([store1Id, store2Id]));
+      expect(find.text('Driver'), findsNothing);
+    });
+
+    testWidgets('switched on: the van and the Driver role are back',
+        (tester) async {
+      debugOverrideVanSalesEnabled(true);
+      await pumpAsCeo(tester);
+
+      expect(storeOptions(tester), contains(vanId));
+      expect(find.text('Driver'), findsWidgets);
+    });
   });
 }

@@ -107,7 +107,17 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
       );
       return;
     }
-    if (_roleId == null || _storeId == null) {
+    // The store must still be one on offer — a van is not while Van Sales is
+    // switched off, however `_storeId` was set.
+    final offeredStoreIds = {
+      for (final s in assignableStores(
+        ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[],
+      ))
+        s.id,
+    };
+    if (_roleId == null ||
+        _storeId == null ||
+        !offeredStoreIds.contains(_storeId)) {
       AppNotification.showError(context, 'Pick a role and a store.');
       return;
     }
@@ -257,11 +267,17 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
     final mySlug = ref.watch(currentUserRoleProvider)?.slug;
     final allRoles = ref.watch(allRolesProvider).valueOrNull ?? const [];
     final roles = _invitableRoles(allRoles, mySlug);
-    final allStores = ref.watch(allStoresProvider).valueOrNull ?? const [];
+    // Vans are not offered while Van Sales is switched off.
+    final allStores = assignableStores(
+      ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[],
+    );
 
     final isManager = mySlug == 'manager';
     final myStoreId = ref.read(authProvider).currentUser?.storeId;
-    if (isManager && _storeId == null && myStoreId != null) {
+    if (isManager &&
+        _storeId == null &&
+        myStoreId != null &&
+        allStores.any((s) => s.id == myStoreId)) {
       _storeId = myStoreId;
     }
     final stores = isManager

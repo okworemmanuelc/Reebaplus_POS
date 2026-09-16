@@ -86,10 +86,13 @@ class _RoleCard extends ConsumerWidget {
             .length;
     // Derive the denominator from the global catalogue so it never goes stale
     // if permission keys are added. Falls back to the seed count (42 minus the
-    // hidden keys) for the one frame before the catalogue stream resolves.
+    // hidden keys, and the van keys while Van Sales is off) for the one frame
+    // before the catalogue stream resolves.
     final allPerms = ref.watch(allPermissionsProvider).valueOrNull;
     final total = allPerms == null
-        ? 42 - kHiddenPermissionKeys.length
+        ? 42 -
+              kHiddenPermissionKeys.length -
+              (isVanSalesEnabled() ? 0 : kVanSalesPermissionKeys.length)
         : allPerms.where((p) => !isPermissionKeyHidden(p.key)).length;
     // CEO is locked all-on; show the full count regardless of sync state.
     final subtitle = isCeo

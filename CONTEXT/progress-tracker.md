@@ -20,6 +20,7 @@ Branch `feat/van-sales-kill-switch`, cut from `origin/main` (`b4d251e`). No issu
   - The Driver role, via `rolesOnOffer`, in Invite Staff, Change Role, Roles & Permissions, and the Activity Logs and Sync Issues access lists. This matters because a Driver invited while the feature is off holds only `van.sell`, so they would sign in to a shell with nothing they are allowed to do.
   - The `van.manage` / `van.sell` toggles, via `isPermissionKeyHidden` (it replaces the direct `kHiddenPermissionKeys.contains` checks; the set literal itself is unchanged because `permission_enforcement_test` parses it).
   - Vans in the staff store-assignment sheet, via `assignableStores`. An existing van assignment stays in `selected`, so saving never silently removes it.
+  - Vans in the Invite Staff store dropdown, via `assignableStores`. `_generate` also rejects a store that is no longer on offer, and a Manager's own store is preselected only when it is on offer (PR #251 review).
 - **What it deliberately leaves on**, because it does nothing while no van exists and protects money once one does:
   - the van exclusion in store pickers and reports;
   - `saleContextForStore` in `createOrder`, and the costing fences;
