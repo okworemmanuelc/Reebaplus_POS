@@ -106,7 +106,15 @@ class AppFAB extends StatelessWidget {
             padding: EdgeInsets.symmetric(
               horizontal: isIconOnly ? 0 : rSize(context, 16),
             ),
-            child: Center(child: fabContent),
+            // `widthFactor: 1.0` is load-bearing: a bare `Center` is an
+            // `Align` that shrink-wraps ONLY when its incoming maxWidth is
+            // infinite. The Scaffold FAB slot hands down loose but BOUNDED
+            // constraints, so without this the labelled button expands to the
+            // full screen width and `endFloat` pushes its left edge off screen.
+            // Shrink-wrapping leaves the Container's `minWidth` to set the
+            // 165dp floor. Harmless on the icon-only path, whose explicit
+            // `width: fabHeight` already constrains this box to a square.
+            child: Center(widthFactor: 1.0, child: fabContent),
           ),
         ),
       ),
