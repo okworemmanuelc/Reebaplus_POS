@@ -10,6 +10,17 @@ The human updates it when resolving open questions or making architectural decis
 
 155 sessions logged. Codebase is live and being verified on-device.
 
+### Fix — Labelled `AppFAB` painted full-width with its left edge off screen (2026-09-16)
+Branch `fix/app-fab-full-width`, cut from `main` (7a34b7a). Reported from device screenshots of Stores and Customers; no issue filed.
+
+- **Symptom:** every labelled `AppFAB` rendered as a screen-wide bar instead of a pill, its left rounded corner clipped at the screen edge with a ~16dp gap on the right only. Measured on a 412dp viewport: width **411.4dp**, rect left **-16.0**.
+- **Root cause:** `Center(child: fabContent)` in `app_fab.dart`, added by cfd2165 (2026-08-11) for the icon-only barcode button. A `Center` is an `Align` with no `widthFactor`, which shrink-wraps only when incoming `maxWidth` is infinite; the `Scaffold` FAB slot gives loose but **bounded** constraints, so it expanded to fill. `endFloat` (the Scaffold default — no affected screen passes a `floatingActionButtonLocation`) then pushed the over-wide box to `x = -16`.
+- **Why the 165dp floor did not save it:** `BoxConstraints(minWidth: n)` leaves `maxWidth` infinite, so enforcing it against the slot's constraints yields `maxWidth: screenWidth`.
+- **Fix:** `Center(widthFactor: 1.0, ...)` — one parameter. Shrink-wraps the labelled path and leaves the Container's `minWidth` to set the 165dp floor; the icon-only path is unaffected because its explicit `width: fabHeight` already constrains that box tightly.
+- **Blast radius (8 call sites, all previously broken):** Stores "Add Store", Customers "Add Customer", Payments "Add Supplier", Expenses "Add Expense", Stock Count "Save Count", Supplier Detail "Record Activity", Staff "Invite new staff", and `AppSpeedDialFab`'s single-action collapse (which is why the Inventory "+" changed shape with permissions). The POS barcode button was never affected — it is icon-only.
+- **Tests:** `test/widgets/app_fab_sizing_test.dart` (3 tests) at the `Scaffold` FAB-slot seam, observing only the rendered rect. Min-width asserted at `phoneMiniPortrait` (375x812), the responsive baseline where `spacingScale == 1.0`, so the spec's 165 stays literal (ADR 0025). Mutation-checked both ways.
+- **Flagged, not fixed:** `context/ui-context.md` documents `AppFAB` height as 50px; the code uses `rSize(context, 48)`. Also `AppFAB.width` is exposed but passed by **zero** of its call sites, while the icon-only and labelled paths silently depend on its nullness — a candidate for a later interface-deepening pass.
+
 ### Issue #234 — The rail points at the first Product, then hands off to the Get-started card (2026-09-15)
 Branch `feat/product-rail-handoff-234`, cut from `feat/walk-to-first-store-233`. Final slice of PRD #229.
 
