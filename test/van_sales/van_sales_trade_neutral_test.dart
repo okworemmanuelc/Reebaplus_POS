@@ -37,6 +37,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 
@@ -193,6 +194,11 @@ Future<void> _pumpReconcile(
 }
 
 void main() {
+  // Van Sales ships switched off (`kVanSalesEnabled`); these tests guard the
+  // feature itself, so they run with it on.
+  setUpAll(() => debugOverrideVanSalesEnabled(true));
+  tearDownAll(() => debugOverrideVanSalesEnabled(null));
+
   // ── 1. The item noun ──────────────────────────────────────────────────────
 
   group('the item noun comes from the Lexicon, not the drinks trade', () {

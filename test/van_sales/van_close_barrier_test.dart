@@ -33,6 +33,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_close_barrier.dart';
@@ -116,6 +117,11 @@ bool _isEnabled(WidgetTester tester, Finder f) =>
     tester.widget<FilledButton>(f).onPressed != null;
 
 void main() {
+  // Van Sales ships switched off (`kVanSalesEnabled`); these tests guard the
+  // feature itself, so they run with it on.
+  setUpAll(() => debugOverrideVanSalesEnabled(true));
+  tearDownAll(() => debugOverrideVanSalesEnabled(null));
+
   group('VanCloseBarrier — the contract', () {
     late int closes;
 

@@ -1,4 +1,5 @@
 import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 /// A named entry in the [Gates] registry: one gated action, declared once
 /// (CONTEXT.md glossary → *Gate Registry*). Carries the [rule] (a pure [Gate]
@@ -641,6 +642,10 @@ abstract final class Gates {
   );
 
   // ── Van Sales cluster (#140, PRD #139 / ADR 0019) ─────────────────────────
+  //
+  // Both gates also require the Van Sales switch (`isVanSalesEnabled`, see
+  // `van_sales_switch.dart`). While the feature is off they deny for everyone —
+  // CEO included — which hides every van surface that cites them.
 
   /// Set up and run the van side of the business (`van.manage`, CEO + Manager
   /// by default) — registering a van location today, and from #141 the load,
@@ -650,7 +655,7 @@ abstract final class Gates {
   static const NamedGate vanManage = NamedGate(
     name: 'vanManage',
     action: 'Manage Van Sales',
-    rule: Gate.key('van.manage'),
+    rule: AndGate(Gate.when(isVanSalesEnabled), Gate.key('van.manage')),
   );
 
   /// Sell from a van on the road (`van.sell`, the seeded Driver role's key).
@@ -661,7 +666,7 @@ abstract final class Gates {
   static const NamedGate vanSell = NamedGate(
     name: 'vanSell',
     action: 'Sell From a Van',
-    rule: Gate.key('van.sell'),
+    rule: AndGate(Gate.when(isVanSalesEnabled), Gate.key('van.sell')),
   );
 
   /// Every declared gate. Backs the membership test (every entry cited) and

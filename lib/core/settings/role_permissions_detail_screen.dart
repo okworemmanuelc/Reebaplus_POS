@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
@@ -37,6 +38,12 @@ const kHiddenPermissionKeys = {
   'shipments.manage',
   'settings.delete_business',
 };
+
+/// True when [key] is kept off every permission editor: a [kHiddenPermissionKeys]
+/// entry, or a key whose feature is switched off (the `van.*` keys while Van
+/// Sales is off — `van_sales_switch.dart`). Filter with this, not the set.
+bool isPermissionKeyHidden(String key) =>
+    kHiddenPermissionKeys.contains(key) || isSwitchedOffPermissionKey(key);
 
 /// Permission categories in master-plan order. `allPermissionsProvider` returns
 /// them alphabetically, so the order is imposed here. Unknown categories (none
@@ -297,7 +304,7 @@ class _RolePermissionsDetailScreenState
     // Drop hidden keys (e.g. give-discount, governed by the slider) so they
     // never render as toggles.
     final perms = permsRaw
-        .where((p) => !kHiddenPermissionKeys.contains(p.key))
+        .where((p) => !isPermissionKeyHidden(p.key))
         .toList();
     final granted =
         (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??

@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -87,7 +88,8 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
           .where((r) => r.slug == 'cashier' || r.slug == 'stock_keeper')
           .toList();
     }
-    return all;
+    // The Driver role is not offered while Van Sales is switched off.
+    return rolesOnOffer(all);
   }
 
   String _randomCode() {
@@ -105,7 +107,17 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
       );
       return;
     }
-    if (_roleId == null || _storeId == null) {
+    // The store must still be one on offer — a van is not while Van Sales is
+    // switched off, however `_storeId` was set.
+    final offeredStoreIds = {
+      for (final s in assignableStores(
+        ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[],
+      ))
+        s.id,
+    };
+    if (_roleId == null ||
+        _storeId == null ||
+        !offeredStoreIds.contains(_storeId)) {
       AppNotification.showError(context, 'Pick a role and a store.');
       return;
     }
@@ -255,11 +267,17 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
     final mySlug = ref.watch(currentUserRoleProvider)?.slug;
     final allRoles = ref.watch(allRolesProvider).valueOrNull ?? const [];
     final roles = _invitableRoles(allRoles, mySlug);
-    final allStores = ref.watch(allStoresProvider).valueOrNull ?? const [];
+    // Vans are not offered while Van Sales is switched off.
+    final allStores = assignableStores(
+      ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[],
+    );
 
     final isManager = mySlug == 'manager';
     final myStoreId = ref.read(authProvider).currentUser?.storeId;
-    if (isManager && _storeId == null && myStoreId != null) {
+    if (isManager &&
+        _storeId == null &&
+        myStoreId != null &&
+        allStores.any((s) => s.id == myStoreId)) {
       _storeId = myStoreId;
     }
     final stores = isManager

@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 import '../helpers/dispatch_test_utils.dart';
 
@@ -155,8 +156,10 @@ void main() {
 
     final switches =
         tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
-    // 42 seeded keys − 3 hidden (#140 added van.manage + van.sell).
-    expect(switches.length, 39, reason: 'all 39 permissions shown');
+    // 42 seeded keys − 3 hidden (#140 added van.manage + van.sell), less those
+    // two van keys while Van Sales is switched off.
+    final shown = isVanSalesEnabled() ? 39 : 37;
+    expect(switches.length, shown, reason: 'all $shown permissions shown');
     expect(
       switches.every((s) => s.onChanged == null && s.value == true),
       isTrue,

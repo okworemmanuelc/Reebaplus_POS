@@ -8,7 +8,7 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart'
-    show kHiddenPermissionKeys;
+    show isPermissionKeyHidden;
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -227,7 +227,7 @@ class _StaffPermissionsScreenState
 
   Widget _buildBody(ThemeData t, List<PermissionData> permsRaw) {
     final perms = permsRaw
-        .where((p) => !kHiddenPermissionKeys.contains(p.key))
+        .where((p) => !isPermissionKeyHidden(p.key))
         .toList();
 
     // Role default grants for this person's role.

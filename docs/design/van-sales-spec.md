@@ -4,6 +4,12 @@ Status: **authoritative design record** for PRD #139 and slices #140–#147, as
 amended by PRD #161 (money-trail amendments, 2026-07-21 audits).
 Architecture record: **ADR 0019** (`docs/adr/0019-van-money-model.md`).
 
+> **Shipping state (2026-09-16): switched OFF.** v1 is built and its cloud
+> migrations are live, but every user-facing surface is hidden behind
+> `kVanSalesEnabled` in `lib/core/van_sales/van_sales_switch.dart` until the
+> feature is fully tested. The money-protecting background paths stay on. See
+> that file's header for exactly what is and is not hidden.
+
 Sources this file consolidates:
 
 - PRD #139 (product definition, user stories, out-of-scope) and slices #140–#147.

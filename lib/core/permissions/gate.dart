@@ -100,6 +100,12 @@ sealed class Gate {
   /// where the owner passes without holding the specific grant.
   const factory Gate.ceo() = CeoGate;
 
+  /// Grants iff [isOn] returns true — a feature switch, not a permission. Pass
+  /// a top-level function tear-off so the gate stays `const` (e.g. Van Sales'
+  /// `isVanSalesEnabled`). AND it with the feature's key gate so a switched-off
+  /// feature denies even for a role that holds the key.
+  const factory Gate.when(bool Function() isOn) = SwitchGate;
+
   /// Pure evaluation against [ctx]. Fails closed for an unresolved role.
   bool evaluate(GateContext ctx);
 
@@ -168,6 +174,15 @@ final class CeoGate extends Gate {
 
   @override
   bool evaluate(GateContext ctx) => ctx.roleRank == GateTier.ceo;
+}
+
+/// Grants iff [isOn] returns true. Ignores [GateContext] entirely.
+final class SwitchGate extends Gate {
+  const SwitchGate(this.isOn);
+  final bool Function() isOn;
+
+  @override
+  bool evaluate(GateContext ctx) => isOn();
 }
 
 /// Grants iff both [left] and [right] grant.
