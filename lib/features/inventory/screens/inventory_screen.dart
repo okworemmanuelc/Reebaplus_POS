@@ -42,6 +42,7 @@ import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
 import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
@@ -445,7 +446,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       SliverToBoxAdapter(child: _buildSummaryCards(context)),
                       SliverPersistentHeader(
                         pinned: true,
-                        delegate: _StickyTabBarDelegate(
+                        delegate: PinnedTabBarDelegate(
                           child: _buildTabBar(context),
                         ),
                       ),
@@ -2486,27 +2487,5 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         ),
       ),
     );
-  }
-}
-
-class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  _StickyTabBarDelegate({required this.child});
-  @override
-  double get minExtent => 48;
-  @override
-  double get maxExtent => 48;
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return child;
-  }
-
-  @override
-  bool shouldRebuild(_StickyTabBarDelegate oldDelegate) {
-    return child != oldDelegate.child;
   }
 }

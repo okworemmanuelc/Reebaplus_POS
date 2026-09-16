@@ -25,6 +25,7 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_ledger_entry_ti
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 
@@ -213,8 +214,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
           if (showCrates)
             SliverPersistentHeader(
               pinned: true,
-              delegate: _SliverTabBarDelegate(
+              delegate: PinnedTabBarDelegate.withChrome(
                 extent: context.getRSize(60),
+                // _buildTabBar spends this much of the header on a bottom
+                // margin, so it has to be reserved on top of the 48dp floor
+                // or the TabBar itself lands short of the tap-target minimum.
+                chromeExtent: _tabBarBottomMargin,
                 child: Container(
                   color: Colors.transparent,
                   padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
@@ -254,9 +259,13 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     );
   }
 
+  /// Height the pinned tab bar gives up to its bottom margin. Read by the
+  /// header delegate so the TabBar keeps its full interactive height.
+  double get _tabBarBottomMargin => context.getRSize(8);
+
   Widget _buildTabBar(ThemeData theme) {
     return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(8)),
+      margin: EdgeInsets.only(bottom: _tabBarBottomMargin),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(20),
@@ -2221,36 +2230,5 @@ class _GlassyCard extends StatelessWidget {
       radius: radius,
       child: child,
     );
-  }
-}
-
-class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  final double extent;
-  _SliverTabBarDelegate({required this.child, this.extent = 60});
-
-  @override
-  double get minExtent => extent;
-  @override
-  double get maxExtent => extent;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    // Pin the child to exactly [extent]. Under a NestedScrollView a pinned
-    // header reports paintExtent from the child's *actual* rendered height but
-    // layoutExtent from the declared maxExtent; if the (loosely-constrained)
-    // child renders even fractionally shorter than [extent], paintExtent drops
-    // below layoutExtent and the framework asserts "layoutExtent exceeds
-    // paintExtent". Forcing the height keeps childExtent == maxExtent.
-    return SizedBox(height: extent, child: child);
-  }
-
-  @override
-  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
-    return oldDelegate.extent != extent;
   }
 }
