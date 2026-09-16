@@ -222,14 +222,19 @@ Future<BuildContext> pumpScreen(
   int roleRank = 4,
   TextScaler? textScaler,
   ThemeData? theme,
-  Map<String, Object> sharedPreferences = const {},
+  Map<String, Object>? sharedPreferences,
   bool settle = true,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  SharedPreferences.setMockInitialValues(sharedPreferences);
+  // Only reset the mock store when the caller names the preferences this pump
+  // needs. Omitting it keeps whatever [setupScreenTestEnvironment] seeded —
+  // resetting unconditionally would silently wipe a screen's setUp defaults.
+  if (sharedPreferences != null) {
+    SharedPreferences.setMockInitialValues(sharedPreferences);
+  }
 
   final nav = NavigationService();
   nav.clearStoreLock();
