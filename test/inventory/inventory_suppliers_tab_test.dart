@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,6 +28,16 @@ void main() {
 
     setUp(() async {
       env = await setupScreenTestEnvironment(productCount: 2);
+      // pumpScreen signs in 'test-user-id'; the sheet's save logs activity
+      // against that staff id, so the users row must exist (FK).
+      await env.db.into(env.db.users).insert(
+            UsersCompanion.insert(
+              id: const Value('test-user-id'),
+              businessId: env.businessId,
+              name: 'Test Admin',
+              pin: '1234',
+            ),
+          );
     });
 
     tearDown(() async {
@@ -35,7 +45,7 @@ void main() {
     });
 
     testWidgets(
-        'Suppliers tab shows reactive supplier list and Add Supplier opens SupplierFormSheet',
+        'Suppliers tab: Add Supplier saves via SupplierFormSheet and the list updates reactively',
         (tester) async {
       await pumpScreen(
         tester,
@@ -63,26 +73,36 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify that SupplierFormSheet is displayed
-      expect(find.byType(SupplierFormSheet), findsOneWidget);
+      final sheet = find.byType(SupplierFormSheet);
+      expect(sheet, findsOneWidget);
 
-      // Close the sheet
-      Navigator.of(tester.element(find.byType(SupplierFormSheet))).pop();
+      // Fill the form through the real sheet (not a direct DAO insert)
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (w) =>
+              w is TextField &&
+              w.decoration?.hintText == 'e.g. SABMiller Nigeria',
+        ),
+        'Guinness Nigeria',
+      );
       await tester.pumpAndSettle();
-      expect(find.byType(SupplierFormSheet), findsNothing);
 
-      // Insert a supplier into Drift database
-      await env.db.catalogDao.insertSupplier(
-        SuppliersCompanion.insert(
-          businessId: env.businessId,
-          name: 'Guinness Nigeria',
-          phone: const Value('08099998888'),
+      // Tap the sheet's own "Add Supplier" (the tab has one too)
+      await tester.tap(
+        find.descendant(
+          of: sheet,
+          matching: find.widgetWithText(AppButton, 'Add Supplier'),
         ),
       );
       await tester.pumpAndSettle();
 
-      // The tab should reactively show the newly added supplier
+      // Confirm the save prompt
+      await tester.tap(find.widgetWithText(AppButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      // Sheet closes and the tab reactively shows the saved supplier
+      expect(find.byType(SupplierFormSheet), findsNothing);
       expect(find.text('Guinness Nigeria'), findsOneWidget);
-      expect(find.text('08099998888'), findsOneWidget);
 
       await disposeScreen(tester);
     });
