@@ -13,12 +13,12 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -68,6 +68,9 @@ Future<void> _bootstrap() async {
   // fallback widget (replaces Flutter's red error box) before anything else can
   // throw.
   CrashReporter.install();
+  // PRD #239 / #241: tag layout overflows with the screen they fired on.
+  // Debug builds only — install() is a no-op in release.
+  OverflowRouteReporter.install();
   ErrorWidget.builder = (details) => const ErrorFallback(compact: true);
 
   tz.initializeTimeZones();
@@ -131,13 +134,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// true  = a user has logged in on this device before → show PIN screen
   /// false = fresh device / first login → show email screen
   bool? _hasDeviceUser;
-
-  /// Cold-start routing for a known device with MORE THAN ONE active staff:
-  /// return to the Who Is Working picker instead of assuming the last device
-  /// user's PIN (master plan §7.2 — identity is chosen, never inherited).
-  /// null/false = single-staff device → personalized PIN (keeps biometric
-  /// unlock). Computed once in [_checkDeviceUser].
-  bool _deviceMultiStaff = false;
 
   /// Regenerated on auth-state changes to force MaterialApp's internal
   /// Navigator to rebuild its route stack (clears stale MainLayout).
@@ -289,7 +285,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// [AuthService.logOutCurrentUser] — the exact drawer-logout path — so the
   /// unsynced-data gate runs and local business data is wiped ONLY when they
   /// were the sole member on this device (otherwise just this user is dropped to
-  /// the Who's Working picker). Surfaces the gate's two-tier outcome exactly as
+  /// the lock screen). Surfaces the gate's two-tier outcome exactly as
   /// the drawer does: retryable rows → error toast ("connect and sync first");
   /// orphans only → the Resolve-unsynced-data flow. The admin already detached
   /// them server-side, so the plain (non-resign) terminals apply here.
@@ -383,26 +379,9 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
 
   Future<void> _checkDeviceUser() async {
     final userId = await _auth.getDeviceUserId();
-    // Decide cold-start routing: a known device with >1 active staff returns
-    // to the Who Is Working picker (master plan §7.2) rather than the last
-    // device user's PIN. Computed before setState so both flags land together.
-    bool multiStaff = false;
-    if (userId != null) {
-      final db = ref.read(databaseProvider);
-      final user = await db.storesDao.getUserById(userId);
-      if (user != null) {
-        final count = await db.userBusinessesDao.countDeviceStaffForBusiness(
-          user.businessId,
-        );
-        multiStaff = count > 1;
-      }
-    }
     if (mounted) {
       _auth.deviceUserIdNotifier.value = userId;
-      setState(() {
-        _hasDeviceUser = userId != null;
-        _deviceMultiStaff = multiStaff;
-      });
+      setState(() => _hasDeviceUser = userId != null);
     }
   }
 
@@ -435,8 +414,8 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     // this provider re-emits. Guard on `value != null` so a null (logged-out)
     // re-emission is ignored.
     //   • suspended → lockApp() (UI-only; keeps the Supabase session): drop to
-    //     the Who's Working picker, which hides suspended staff so they can't
-    //     re-select themselves.
+    //     the PIN screen, which refuses a suspended member's PIN so they can't
+    //     unlock themselves again.
     //   • removed → run the SAME offboarding the drawer logout uses (unsynced-
     //     data gate → log out; wipe only if sole member on this device).
     ref.listen(currentUserMembershipStatusProvider, (_, next) {
@@ -444,7 +423,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
       switch (membershipStatusReaction(next)) {
         case MembershipStatusReaction.none:
           break;
-        case MembershipStatusReaction.lockToPicker:
+        case MembershipStatusReaction.lock:
           _auth.lockApp();
         case MembershipStatusReaction.offboard:
           unawaited(_handleSelfRemoved());
@@ -500,9 +479,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
           navigatorKey: _navigatorKey,
           home: _HomeRouter(
             hasDeviceUser: _hasDeviceUser,
-            deviceMultiStaff: _deviceMultiStaff,
             supabaseHasSession: _supabaseHasSession,
-            showPickerOnUnlock: _auth.showPickerOnUnlock,
           ),
         ),
       ),
@@ -707,15 +684,11 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
 
 class _HomeRouter extends ConsumerWidget {
   final bool? hasDeviceUser;
-  final bool deviceMultiStaff;
   final bool supabaseHasSession;
-  final bool showPickerOnUnlock;
 
   const _HomeRouter({
     required this.hasDeviceUser,
-    required this.deviceMultiStaff,
     required this.supabaseHasSession,
-    required this.showPickerOnUnlock,
   });
 
   @override
@@ -770,15 +743,9 @@ class _HomeRouter extends ConsumerWidget {
       // can't leave a half-state to resume into. Users in that
       // transitional bucket re-enter via EmailEntry / LoginScreen.
       if (!hasDeviceUser!) return const WelcomeScreen();
-      // Known device. A lock / Switch User / auto-lock returns to the
-      // Who Is Working picker (master plan §8.5). On a cold start, a
-      // multi-staff shared till ALSO returns to the picker so the right
-      // person is chosen explicitly (§7.2) — never assume the last
-      // device user. A single-staff device goes straight to that user's
-      // personalized PIN screen (keeps biometric unlock).
-      if (showPickerOnUnlock || deviceMultiStaff) {
-        return const WhoIsWorkingScreen();
-      }
+      // Known device — cold start, the drawer lock button, and auto-lock all
+      // land on the device user's PIN screen. Another staff member on a
+      // shared till signs in through its "Not you? Switch account" link.
       return const LoginScreen();
     }
 

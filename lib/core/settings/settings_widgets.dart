@@ -124,8 +124,7 @@ class SettingsNoAccess extends StatelessWidget {
   }
 }
 
-/// Subtle fade-in wrapper for loaded content (§30.7 — no spinners). Mirrors the
-/// `_BrandedFade` pattern from who_is_working_screen.dart.
+/// Subtle fade-in wrapper for loaded content (§30.7 — no spinners).
 class SettingsFadeIn extends StatelessWidget {
   final Widget child;
   const SettingsFadeIn({super.key, required this.child});

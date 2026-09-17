@@ -15,6 +15,9 @@
 //   (d) countDeviceStaffForBusiness correctly distinguishes device-authenticated
 //       users (pinHash != null + active membership) from users who only have an
 //       OTP-level row (pinHash == null).
+//
+//   (e) getDeviceStaffForBusiness — who the device's PIN screen can pass to
+//       after a shared-till logout — drops a user once their PIN is cleared.
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
@@ -200,29 +203,26 @@ void main() {
     expect(await db.userBusinessesDao.countDeviceStaffForBusiness(biz), 2);
   });
 
-  // ── (e) watchDeviceStaffForBusiness emits in sync ───────────────────────
+  // ── (e) getDeviceStaffForBusiness reflects PIN changes ──────────────────
 
   test(
-      '(e) watchDeviceStaffForBusiness stream reflects PIN changes in '
-      'real time', () async {
+      '(e) getDeviceStaffForBusiness drops a user once their PIN is cleared',
+      () async {
     final alice = await addUser('Alice', pinHash: 'hash1');
     final bob = await addUser('Bob', pinHash: 'hash2');
     await addMembership(alice, ceoRoleId);
     await addMembership(bob, cashierRoleId);
 
-    // Initial emission: both visible.
-    var staff =
-        await db.userBusinessesDao.watchDeviceStaffForBusiness(biz).first;
-    expect(staff.length, 2);
-    expect(staff.map((e) => e.user.name).toSet(), {'Alice', 'Bob'});
+    // Both have a PIN on this device, ordered by name.
+    var staff = await db.userBusinessesDao.getDeviceStaffForBusiness(biz);
+    expect(staff.map((u) => u.name).toList(), ['Alice', 'Bob']);
 
     // Clear Alice's PIN → she drops out.
     await (db.update(db.users)..where((u) => u.id.equals(alice))).write(
       const UsersCompanion(pinHash: Value(null)),
     );
 
-    staff = await db.userBusinessesDao.watchDeviceStaffForBusiness(biz).first;
-    expect(staff.length, 1);
-    expect(staff.single.user.name, 'Bob');
+    staff = await db.userBusinessesDao.getDeviceStaffForBusiness(biz);
+    expect(staff.single.name, 'Bob');
   });
 }

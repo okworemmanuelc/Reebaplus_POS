@@ -10,6 +10,27 @@ The human updates it when resolving open questions or making architectural decis
 
 157 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #241 — overflow discovery sweep (PRD #239) (2026-09-17)
+- **Hook:** `OverflowRouteReporter` (`lib/core/diagnostics/overflow_route_reporter.dart`), installed in `main.dart` after `CrashReporter.install()`. Debug builds only; `install()` returns before touching `FlutterError.onError` in release. Every overflow report prints `[overflow] route=<Screen> (tab: <TabRoot>, offstage) widget=<Widget> :: <summary>`, resolved from the report's own `DebugCreator` element chain, so pre-warmed offstage tabs are attributed correctly. It chains to the previous handler unchanged. 5 tests in `test/diagnostics/overflow_route_reporter_test.dart`.
+- **Sweep:** `test/discovery/viewport_sweep_test.dart` pumps ~70 screens at 800x360 in empty and populated states, and records loud overflows plus silent starvation (a vertical scrollable under 48dp with taller content). It records, it does not assert; it is skipped unless `VIEWPORT_SWEEP=1` (`VIEWPORT_SWEEP_OUT` appends result lines to a file).
+- **Result:** the owner's emulator walk plus the sweep are posted on #239. The second split filed #255 empty Cart, #256 Expenses, #257 Business Reports, #258 bottom bar hides on scroll sideways, #259 POS collapsing header (POS decided and unblocked), and standalone bugs #260 Appearance card overflow and #261 welcome-heading alignment. The PRD body is amended.
+- **The sweep missed four real defects** the device walk caught (empty Cart, Supplier Detail 1.2px, Business Reports, Appearance). Emulator verification stays mandatory per slice.
+- **Review fixes (PR #262):** the populated state now fills the cart and hands Sales Detail the seeded orders; both screens had rendered their empty layouts in both states. Populated Sales Detail comes out SILENT (list viewport 41dp). A non-overflow error the binding captured now marks the line ERROR instead of OK. 13 lines flip, all missing test plugin mocks (path_provider, connectivity, secure storage) or a ListTile assertion, so those screens were never really measured. The 10 test failures on those screens predate this.
+- **Open:** confirm Orders (#244) and Driver Profile (#247) at 320x568 portrait. Both were clean at 800x360.
+
+### "Who's working?" picker removed — the drawer button is now a lock (2026-09-17)
+No issue filed; the owner asked for the picker to go. Committed on `feat/overflow-discovery-sweep-241` as its own commit, at the owner's request, in the #241 PR (both touch `lib/main.dart`).
+
+- **Deleted:** `who_is_working_screen.dart` and its widget test, the WhoIsWorkingScreen cases in `auth_landscape_screens_test` and the #241 `viewport_sweep_test`, `deviceStaffProvider`, `watchDeviceStaffForBusiness`, `countActiveStaffForBusiness` (only the picker's routing used it), `AuthService.showPickerOnUnlock`, `main.dart`'s `_deviceMultiStaff` cold-start check, and the PIN screen's top-left "Switch account" back button.
+- **Renamed:** `WhoIsWorkingEntry` → `ActiveStaffEntry` (it still backs `activeStaffProvider`, used by the Get Started checklist); `MembershipStatusReaction.lockToPicker` → `lock`; `_dropCurrentUserToPickerLocal` → `_dropCurrentUserFromSharedDevice`; `test/staff/who_is_working_dao_test.dart` → `active_staff_dao_test.dart`.
+- **Routing now:** cold start, the drawer lock button, auto-lock and a suspension all land on `LoginScreen` for the device user. Another staff member uses "Not you? Switch account" → Sign in → "Already set up on this device? Login with PIN" (the email screen's link now opens `LoginScreen` instead of the picker).
+- **Drawer button:** `FontAwesomeIcons.rightLeft` "Switch User" → `FontAwesomeIcons.lock` "Lock app"; same `lockApp()` call. The shared-till logout dialog now points at the lock button.
+- **Two jobs the picker did, moved elsewhere:**
+  1. *Suspended staff can't get back in.* The picker hid them; now `LoginScreen._enterApp` (PIN and biometrics both go through it) reads the membership and refuses `suspended` with "Your account is suspended. Ask your manager to reactivate it." `removed` is not blocked, because the offboarding in `main.dart` needs them signed in to run.
+  2. *A shared-till logout doesn't strand the lock screen.* The device pointer still named the leaving user, whose PIN had just been cleared. `_dropCurrentUserFromSharedDevice` now moves it to a staff member who still has a PIN (`getDeviceStaffForBusiness`, by name), or clears it if none is left.
+- **Tests:** new `test/auth/lock_screen_test.dart` (lock keeps the device pointer; shared-till logout moves it; PIN screen refuses a suspended member). Both behaviour tests were checked to fail with the fix removed.
+- **Spotted, not fixed (pre-existing):** when an admin removes a staff member, `logOutCurrentUser` counts device staff with `status = 'active'`, so the removed user isn't counted. If exactly one other PIN holder remains, the removal is treated as a sole-user logout and wipes the device.
+
 ### Fix — Pull-to-refresh threw "Build scheduled during frame" after the supplier form closed (2026-09-17)
 Branch `fix/refresh-wrapper-mid-frame-setstate`, cut from `origin/main` (`66d0efd`). No issue filed.
 - **Symptom (on-device, debug)**: adding a supplier from Inventory → Suppliers paused the debugger on `FlutterError (Build scheduled during frame)` the moment the form closed. It happened on two separate attempts that day.

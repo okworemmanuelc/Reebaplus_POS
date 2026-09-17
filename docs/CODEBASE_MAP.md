@@ -132,8 +132,7 @@ _resolve() checks, in this order:
   user == null?
     ├─ still reading storage        → _BrandedSplash
     ├─ no device user               → WelcomeScreen
-    ├─ locked / multi-staff device  → WhoIsWorkingScreen
-    └─ otherwise                    → LoginScreen (PIN)
+    └─ otherwise (incl. locked)     → LoginScreen (PIN)
   no Supabase session?              → _SessionExpiredScreen
   local business query not resolved?→ _BrandedSplash
   a pending post-login route?       → SuccessDashboardEntryScreen / AccessGrantedScreen
@@ -510,7 +509,7 @@ Fresh install → WelcomeScreen
                                                               ↓
                               AccessGranted / SuccessDashboardEntry → MainLayout
 
-Returning device → LoginScreen (PIN)  or  WhoIsWorkingScreen (shared till)
+Returning device → LoginScreen (PIN) — another staff member uses "Not you? Switch account"
 ```
 
 ---
@@ -586,36 +585,14 @@ Returning device → LoginScreen (PIN)  or  WhoIsWorkingScreen (shared till)
 - `_checkBiometricAvailability()` / `_triggerBiometrics()` — fingerprint/face unlock.
 - `_onDigit(digit)` / `_onBackspace()` — build the PIN buffer; auto-submits at 6 digits.
 - `_submit()` — verifies the PIN, handles failed-attempt lockout.
-- `_enterApp(user)` — sets the current user and starts login sync.
-- `_switchToEmail()` / `_switchAccount()` / `_forgotPin()` — escape hatches.
-- `_showUserPicker(users)` — bottom sheet listing device users.
+- `_enterApp(user)` — refuses a suspended member, then sets the current user and starts login sync.
+- `_switchToEmail()` / `_forgotPin()` — escape hatches.
+- `_showUserPicker(users)` — bottom sheet when two device users share the same PIN.
 - `didChangeAppLifecycleState` — re-checks whether the business was deleted when the app resumes.
 
-**Navigation:** From `_HomeRouter` (single-staff device) or `WhoIsWorkingScreen`. On success, `MainLayout`.
+**Navigation:** From `_HomeRouter` (cold start, the drawer lock button, auto-lock) or the email screen's "Login with PIN" link. On success, `MainLayout`.
 
 **Notes:** The `ValueNotifier`-for-PIN-dots choice is a deliberate, well-reasoned optimisation. At 1,095 lines with 6 private classes, though, this file would normally be split.
-
----
-
-### WhoIsWorkingScreen — shared till picker
-**Purpose:** Staff picker shown on a shared device before PIN entry.
-**File:** [lib/features/auth/screens/who_is_working_screen.dart](../lib/features/auth/screens/who_is_working_screen.dart) (612 lines)
-
-**Widget tree:** `BrandedAuthBackground` → `_BrandedFade` → `_PickerList` → grid or list of `_StaffPickerCard` (avatar, name, role tag).
-
-**State:** Resolved business id; watches `deviceStaffProvider`, `localBusinessesProvider`. View preference (grid vs list, column count) in `SharedPreferences`.
-
-**Functions:**
-- `_resolveBusiness()` — works out the tenant *before* sign-in (device user's business, falling back to the single local business).
-- `_onTapStaff(entry)` / `_replaceWithPin(user)` — opens that person's PIN screen.
-- `_shortcutTo(action)` — long-press shortcuts.
-- `_loadPreferences()` / `_updatePreferences()` — persist the layout choice.
-- `_showViewSelectorModal()` — grid/list picker sheet.
-- `_checkDeletionOnResume()` — handles the business being deleted elsewhere.
-
-**Navigation:** From `_HomeRouter` when the device is locked or has multiple staff. Leads to `LoginScreen(presetUser:)` or `WelcomeScreen`.
-
-**Notes:** Suspended staff are filtered out here — that's how a suspended user is prevented from re-selecting themselves.
 
 ---
 

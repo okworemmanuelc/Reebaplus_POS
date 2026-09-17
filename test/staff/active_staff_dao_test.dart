@@ -1,9 +1,9 @@
-// who_is_working_dao_test.dart
+// active_staff_dao_test.dart
 //
-// Covers UserBusinessesDao.watchActiveStaffForBusiness (master plan §8 — the
-// Who Is Working picker query). The method is deliberately unscoped (it runs
-// before sign-in, when there's no current business), so these assertions key
-// off the explicit businessId argument:
+// Covers UserBusinessesDao.watchActiveStaffForBusiness (the Get Started
+// checklist's staff count) and getDeviceStaffForBusiness (who holds a PIN on
+// this device). Both are deliberately unscoped (they resolve before a session
+// business binds), so these assertions key off the explicit businessId:
 //   * only ACTIVE memberships are returned (suspended excluded, §8.3);
 //   * only memberships of the requested business are returned;
 //   * the user + role rows are joined onto each entry.
@@ -107,7 +107,7 @@ void main() {
     expect(entries, isEmpty);
   });
 
-  test('watchDeviceStaffForBusiness/countDeviceStaffForBusiness returns only staff with pinHash configured', () async {
+  test('getDeviceStaffForBusiness/countDeviceStaffForBusiness returns only staff with pinHash configured', () async {
     final alice = await addUser(biz1, 'Alice', pinHash: 'hash1');
     final bob = await addUser(biz1, 'Bob'); // no pinHash
     final carol = await addUser(biz1, 'Carol', pinHash: 'hash3'); // suspended
@@ -118,8 +118,8 @@ void main() {
     await addMembership(biz1, carol, ceoRoleId, status: 'suspended');
     await addMembership(biz2, dave, biz2RoleId);
 
-    final deviceStaff = await db.userBusinessesDao.watchDeviceStaffForBusiness(biz1).first;
-    expect(deviceStaff.map((e) => e.user.name).toList(), ['Alice']);
+    final deviceStaff = await db.userBusinessesDao.getDeviceStaffForBusiness(biz1);
+    expect(deviceStaff.map((u) => u.name).toList(), ['Alice']);
 
     final count = await db.userBusinessesDao.countDeviceStaffForBusiness(biz1);
     expect(count, 1);

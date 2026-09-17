@@ -28,11 +28,10 @@ const _allowlist = <String>{
   '_allRolesUnscopedProvider',
   // Keyed by an explicit id (not the session businessId) and resolved BEFORE a
   // business binds — routing these through the factory would emit `whenAbsent`
-  // during the shared-PIN / Who's-Working picker and break role resolution.
+  // on the PIN screen's shared-PIN chooser and break role resolution.
   '_userMembershipsProvider', // watchForUser(userId) — no whereBusiness
   'myUserStoresProvider', // watchForUser(userId) — no whereBusiness
   'activeStaffProvider', // watchActiveStaffForBusiness(explicit businessId)
-  'deviceStaffProvider', // watchDeviceStaffForBusiness(explicit businessId)
   // Device-local sync-engine state — `sync_queue_orphans` carries no business_id
   // column, so it is not tenant-scoped.
   'orphanQueueItemsProvider',

@@ -29,7 +29,6 @@ import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart
 import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
 import 'package:flutter/services.dart';
 import '../helpers/viewports.dart';
 
@@ -205,19 +204,6 @@ void main() {
         await pumpScreen(tester, CreatePinScreen(user: testUser, isNewBusinessSetup: false), size);
         expect(tester.takeException(), isNull);
         expect(find.text('Create a PIN'), findsOneWidget);
-      });
-    }
-  });
-
-  group('Phase 1 - WhoIsWorkingScreen responsive layout', () {
-    for (final (name, size) in [
-      ('pixel7Landscape', pixel7Landscape),
-      ('androidCompactLandscape', androidCompactLandscape),
-      ('pixel7Portrait', pixel7Portrait),
-    ]) {
-      testWidgets('renders cleanly without overflow at $name', (tester) async {
-        await pumpScreen(tester, const WhoIsWorkingScreen(), size);
-        expect(tester.takeException(), isNull);
       });
     }
   });

@@ -59,7 +59,7 @@ class RolesDao extends DatabaseAccessor<AppDatabase>
   /// All non-deleted roles across every business on this device, NOT scoped
   /// to the current session. Role ids are globally unique, so the role-badge
   /// resolver (see `userRoleProvider`) can look up a role by id even before
-  /// login binds a business — the Who Is Working / shared-PIN picker shows
+  /// login binds a business — the PIN screen's shared-PIN chooser shows
   /// each candidate's role before `setCurrentUser` runs.
   Stream<List<RoleData>> watchAllUnscoped() {
     return (select(roles)..where((t) => t.isDeleted.not())).watch();
@@ -456,11 +456,10 @@ class RoleSettingsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-/// One active staff member for the Who Is Working picker (master plan §8):
-/// the user row plus their resolved role (null if the role row hasn't synced
-/// locally yet).
-class WhoIsWorkingEntry {
+/// One active staff member of a business: the user row plus their resolved
+/// role (null if the role row hasn't synced locally yet).
+class ActiveStaffEntry {
   final UserData user;
   final RoleData? role;
-  const WhoIsWorkingEntry({required this.user, this.role});
+  const ActiveStaffEntry({required this.user, this.role});
 }

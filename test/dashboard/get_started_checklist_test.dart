@@ -36,9 +36,9 @@ RoleData _role(String slug) => RoleData(
 
 /// A staff list of exactly [n] active members (only its length matters to the
 /// checklist — the CEO themselves is one member, so a team needs n > 1).
-List<WhoIsWorkingEntry> _staff(int n) => List.generate(
+List<ActiveStaffEntry> _staff(int n) => List.generate(
       n,
-      (i) => WhoIsWorkingEntry(
+      (i) => ActiveStaffEntry(
         user: UserData(
           id: 'user-$i',
           businessId: 'biz1',

@@ -233,7 +233,7 @@ class AuthService extends ValueNotifier<UserData?> {
   }) async {
     final query = _db.select(_db.users);
     // Scope the candidate set as tightly as the caller knows the identity.
-    // When the signer was already identified (picker card or post-OTP preset),
+    // When the signer was already identified (device user or post-OTP preset),
     // pin to their exact user id (globally unique) so a different business's
     // row that happens to share this email — or any other staff who shares
     // this PIN — can never match. Fall back to email only when no identity is
@@ -718,8 +718,6 @@ class AuthService extends ValueNotifier<UserData?> {
   /// pass UserData/businessId by widget args instead of reading from `value`.
   void setCurrentUser(UserData user, {bool freshSignIn = false}) {
     try {
-      // A successful sign-in clears the picker-on-unlock flag set by lockApp().
-      showPickerOnUnlock = false;
       // Side-effects first — navigationService fully ready before any rebuild
       _nav.applyUserStoreLock(user.storeId);
       // Open the session on the neutral landing tab (Home). The role row has
@@ -880,11 +878,11 @@ class AuthService extends ValueNotifier<UserData?> {
     return true;
   }
 
-  /// Cold-start / pre-sign-in gate (§10.3). Before the Who's-working picker or the
-  /// single-staff PIN screen renders for a KNOWN device, confirm the device's local
-  /// business hasn't been permanently deleted by its owner. If the cloud tombstone
-  /// confirms deletion, wipe + full-logout (→ WelcomeScreen) exactly like the
-  /// session-bound triggers, and return true so the caller suppresses the picker.
+  /// Cold-start / pre-sign-in gate (§10.3). Before the PIN screen renders for a
+  /// KNOWN device, confirm the device's local business hasn't been permanently
+  /// deleted by its owner. If the cloud tombstone confirms deletion, wipe +
+  /// full-logout (→ WelcomeScreen) exactly like the session-bound triggers, and
+  /// return true so the caller leaves the PIN screen.
   ///
   /// Resolves the business id from the device user (single-local-business
   /// fallback). Returns false on any ambiguity (offline, no tombstone, no
@@ -1018,13 +1016,6 @@ class AuthService extends ValueNotifier<UserData?> {
   /// so that users who explicitly pressed "Log Out" aren't immediately logged back in.
   bool bypassNextBiometric = false;
 
-  /// If true, the next "logged-out but device still has a user" render routes
-  /// to the Who Is Working picker instead of the PIN screen (master plan §8.5).
-  /// Set by [lockApp] (manual lock, Switch User, auto-lock all go through it);
-  /// reset by [setCurrentUser] on the next successful sign-in. Cold start
-  /// leaves this false, so a fresh launch still lands on the PIN screen.
-  bool showPickerOnUnlock = false;
-
   /// Clears the active user, removes the store lock, but retains the
   /// device-level session so the next launch shows the personalized PIN screen.
   ///
@@ -1067,10 +1058,6 @@ class AuthService extends ValueNotifier<UserData?> {
     // See logout() — same ordering rule.
     _nav.clearStoreLock();
     _nav.resetNavigation();
-    // Lock/Switch User/auto-lock return to the Who Is Working picker, not the
-    // PIN screen (master plan §8.5). Set before `value = null` so the flag is
-    // in place by the time main.dart rebuilds on the null user.
-    showPickerOnUnlock = true;
     value = null;
     bypassNextBiometric = true;
   }
@@ -1345,9 +1332,9 @@ class AuthService extends ValueNotifier<UserData?> {
     }
 
     // Multiple device-authenticated users (shared till): drop this user from
-    // the device set and return to the Who's Working picker — the others keep
-    // their PINs and the till's shared data + outbox are untouched.
-    await _dropCurrentUserToPickerLocal(user);
+    // the device set and return to the lock screen — the others keep their
+    // PINs and the till's shared data + outbox are untouched.
+    await _dropCurrentUserFromSharedDevice(user);
   }
 
   /// §3.1 wipe gate (E) / Invariant #12. Guards any device-wiping offboard (a
@@ -1398,14 +1385,15 @@ class AuthService extends ValueNotifier<UserData?> {
 
   /// Shared-till teardown for a single leaving user (drawer logout OR self-resign
   /// when other device staff remain): reset THIS user's PIN so the old PIN can't
-  /// unlock again, revoke their session, drop the Supabase/Google tokens, and
-  /// return to the Who's Working picker. It is NOT a device wipe — the business's
-  /// shared data, the sync queue, and OTHER staff's PINs are all kept.
-  Future<void> _dropCurrentUserToPickerLocal(UserData user) async {
+  /// unlock again, revoke their session, drop the Supabase/Google tokens, hand
+  /// the device pointer to a staff member who still has a PIN here, and return
+  /// to the lock screen. It is NOT a device wipe — the business's shared data,
+  /// the sync queue, and OTHER staff's PINs are all kept.
+  Future<void> _dropCurrentUserFromSharedDevice(UserData user) async {
     try {
       await clearUserPin(user.id);
     } catch (e) {
-      debugPrint('[AuthService] _dropCurrentUserToPickerLocal clearUserPin error: $e');
+      debugPrint('[AuthService] _dropCurrentUserFromSharedDevice clearUserPin error: $e');
     }
 
     final sid = currentSessionId;
@@ -1413,7 +1401,7 @@ class AuthService extends ValueNotifier<UserData?> {
       try {
         await _db.sessionsDao.revokeSession(sid);
       } catch (e) {
-        debugPrint('[AuthService] _dropCurrentUserToPickerLocal revokeSession error: $e');
+        debugPrint('[AuthService] _dropCurrentUserFromSharedDevice revokeSession error: $e');
       }
       currentSessionId = null;
     }
@@ -1421,17 +1409,31 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       await _supabase.auth.signOut(scope: SignOutScope.local);
     } catch (e) {
-      debugPrint('[AuthService] _dropCurrentUserToPickerLocal signOut error: $e');
+      debugPrint('[AuthService] _dropCurrentUserFromSharedDevice signOut error: $e');
     }
 
     try {
       await GoogleSignIn().signOut();
     } catch (e) {
-      debugPrint('[AuthService] _dropCurrentUserToPickerLocal Google signOut error: $e');
+      debugPrint('[AuthService] _dropCurrentUserFromSharedDevice Google signOut error: $e');
     }
 
-    // Set picker and navigation state, return to the WhoIsWorking picker.
-    showPickerOnUnlock = true;
+    // The device pointer still names the leaving user, whose PIN was just
+    // cleared — the lock screen would show someone who can no longer unlock.
+    // Point it at a staff member who still has a PIN on this device instead.
+    try {
+      final remaining = await _db.userBusinessesDao
+          .getDeviceStaffForBusiness(user.businessId);
+      final next = remaining.where((u) => u.id != user.id).firstOrNull;
+      if (next != null) {
+        await saveDeviceUserId(next.id);
+      } else {
+        await clearDeviceUserId();
+      }
+    } catch (e) {
+      debugPrint('[AuthService] _dropCurrentUserFromSharedDevice device pointer error: $e');
+    }
+
     _sync.stopRealtimeSync();
     _nav.clearStoreLock();
     _nav.resetNavigation();
@@ -1487,7 +1489,7 @@ class AuthService extends ValueNotifier<UserData?> {
   ///     [discardUnsyncedAndResign] (NOT the plain logout terminal). The RPC has
   ///     not run in either throw path, so a blocked/deferred resign is a no-op.
   ///   • Shared till (other device staff remain) → RPC → drop this user to the
-  ///     Who's Working picker (no wipe; their queued rows stay in the shared
+  ///     lock screen (no wipe; their queued rows stay in the shared
   ///     outbox and other members sync them).
   ///
   /// Online-only (like [removeStaffMember] / [deleteBusinessAndAccount]): throws
@@ -1501,7 +1503,7 @@ class AuthService extends ValueNotifier<UserData?> {
   /// [DriverOffboardingBlockedException] and changes nothing.
   // sync-exempt: #117 — the cloud `resign_own_membership` RPC is the
   // authoritative writer of both the membership status and the auth-link null;
-  // the local wipe / picker-drop mirrors a server-already-applied state, so there
+  // the local wipe / shared-device drop mirrors a server-already-applied state, so there
   // is nothing to enqueue. No raw synced-table write leaves the device here.
   Future<void> resignOwnMembership() async {
     final user = value;
@@ -1541,9 +1543,9 @@ class AuthService extends ValueNotifier<UserData?> {
       return;
     }
 
-    // Shared till: detach server-side, then drop this user to the picker.
+    // Shared till: detach server-side, then drop this user to the lock screen.
     await _resignViaRpc(businessId);
-    await _dropCurrentUserToPickerLocal(user);
+    await _dropCurrentUserFromSharedDevice(user);
   }
 
   /// §3.1 "Resolve unsynced data" terminal for a self-resign (#117). Called by

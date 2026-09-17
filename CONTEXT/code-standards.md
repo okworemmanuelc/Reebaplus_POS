@@ -348,11 +348,11 @@ lib/
 │   ├── remote/                # Supabase client wrapper and Edge Function callers
 │   └── repositories/          # One file per aggregate root
 │
-├── auth/                      # Session lifecycle, PIN, "Who's working?" picker
 ├── permissions/               # can(action) resolver, reads from Drift
 ├── sync/                      # Sync isolate entry point and all sync subsystems
 │
 └── features/
+    ├── auth/                  # Session lifecycle, PIN, lock screen
     ├── pos/                   # Point of sale grid and price tier selector
     ├── cart/                  # Cart, line items, discount application
     ├── checkout/              # Payment method selection and confirmation

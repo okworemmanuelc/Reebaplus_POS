@@ -1,7 +1,7 @@
 // pin_email_scoping_test.dart
 //
-// Guards the shared-PIN collision fix behind the Who Is Working picker
-// (master plan §8): when two staff on the same till happen to choose the
+// Guards the shared-PIN collision fix on the PIN screen
+// (master plan §7.2a): when two staff on the same till happen to choose the
 // same PIN, AuthService.getUsersByPin scoped to the identified user's email
 // must resolve to that one user only — never the other PIN-twin.
 
