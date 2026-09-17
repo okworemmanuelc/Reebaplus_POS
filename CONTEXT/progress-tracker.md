@@ -10,6 +10,23 @@ The human updates it when resolving open questions or making architectural decis
 
 158 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #259 — POS holds its product grid at every viewport (PRD #239) (2026-09-17)
+Branch `feat/pos-collapsing-header-259`, cut from `origin/main` at `973d68a`. Slice of PRD #239. The worst case in the PRD: the grid was **silently** starved, not merely clipped.
+
+- **Before (measured, not estimated)**: at 800x360 populated, the product grid laid out at **0.0dp of 463dp** and **0 complete product cards** were hit-testable, with no exception thrown. Empty catalogue overflowed by 102px. The red run is recorded in the PR.
+- **Structure (`lib/features/pos/screens/pos_home_screen.dart`)**: `_buildPos` is now one `CustomScrollView` keyed `kPosScrollSurfaceKey`, inside the existing `AppRefreshWrapper`:
+  - `_buildTopBarSliver` — sideways a `SliverFloatingHeader` (returns on reverse scroll), upright a `PinnedHeaderSliver` (unchanged behaviour). Laid out at the `AppBar`'s own `preferredSize.height`, exactly as `Scaffold` does.
+  - `_buildHeader` as a `SliverToBoxAdapter` — the price-tier / manufacturer / quick-sale row, scrolls away.
+  - `_buildFrozenBandSliver` — search + category chips in a `PinnedHeaderSliver`, frozen at the top, keyed `kPosSearchBandKey`.
+  - `_buildContentSliver` — grid / `FirstRunEmptyState` / store placeholder, every branch a sliver, the two full-screen stand-ins via `SliverFillRemaining(hasScrollBody: false)`. Fade-in preserved with `SliverOpacity`.
+- **`ProductGrid` is now a sliver** (`lib/features/pos/widgets/product_grid.dart`): `SliverPadding` + `SliverGrid.builder` / `SliverList.separated`, and `SliverFillRemaining` for the filter-miss copy. Column arithmetic extracted to `ProductGrid.columnsFor` so it can be asserted without rendering. Tiles carry `posProductTileKey(productId)` (`kPosProductTileKeyPrefix`) as the test seam.
+- **`SharedScaffold.bodyOwnsAppBar`** (new, defaults `false`): a `Scaffold.appBar` is fixed chrome and cannot scroll away, and passing `appBar: null` substitutes the default bar — so suppressing it needs an explicit flag. The drawer still works: it stays on the Scaffold, `DrawerHost` wraps the body, and the `MenuButton` in the sliver app bar reaches it.
+- **Orientation**: the only branch is the top bar's floating-vs-pinned behaviour, which is PRD #239 amendment 3's recorded *navigation* exception (as in #258). The scrolling structure is unconditional — no layout gate, no short-viewport predicate.
+- **Tests**: `test/pos/pos_home_viewport_test.dart` (15) — 4 viewports × populated/empty with both assertions, max text scale sideways (1.3, the `main.dart` clamp), every-control-present-sideways, freeze-at-top, plus search, category filtering, add-to-cart, hold-to-edit and pull-to-refresh. `test/pos/pos_home_screen_overflow_test.dart` rewritten: the 165dp chrome ceiling and the grid-rect floors are gone (rejected by the PRD's Testing Decisions and self-warning in their own comments); it keeps the column-density coverage the new suite does not duplicate. Removed the now-meaningless box-grid helpers from `pos_home_harness.dart`.
+- **Docs corrected in the same PR** (required by #259): ADR 0025 §5 no longer prescribes the rail as the required re-flow; `docs/design/responsive-layout-plan.md` §4 records Option A as decided, with the original A-vs-B comparison kept as the record and the ADR-contradiction note resolved.
+- **Verification**: `flutter analyze` clean (0 errors, 0 warnings); full suite **2165 passed / 271 skipped / 0 failures**.
+- **Outstanding**: emulator verification by the owner at 800x360 (mandatory per slice — the #241 harness sweep is not sufficient evidence). #258 is independent; the full sideways experience should be re-checked once both are merged.
+
 ### Issue #245 — Customer Detail holds its content at every viewport (PRD #239) (2026-09-17)
 Branch `feat/customer-detail-tabbed-sliver-scaffold-245`, cut from `origin/main`. Slice of PRD #239; builds on `TabbedSliverScaffold` (#243 / ADR 0027).
 
