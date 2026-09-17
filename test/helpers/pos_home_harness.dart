@@ -3,11 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
-import 'package:reebaplus_pos/features/pos/widgets/product_grid.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 
 import 'screen_harness.dart';
 
@@ -95,66 +91,3 @@ Future<PosHomeHarnessContext> pumpPosHome(
 /// Cleanly unmounts [PosHomeScreen] and flushes Drift's stream cleanup timers
 /// before the test body exits, avoiding '!timersPending' assertions.
 Future<void> disposePosHome(WidgetTester tester) => disposeScreen(tester);
-
-/// Returns the content [Rect] of the [ProductGrid] in logical dp.
-Rect gridContentRect(WidgetTester tester) {
-  final gridFinder = find.byType(ProductGrid);
-  expect(gridFinder, findsOneWidget, reason: 'ProductGrid must be mounted');
-  return tester.getRect(gridFinder);
-}
-
-/// Returns the content area of the [ProductGrid] in dp².
-double gridContentArea(WidgetTester tester) {
-  final rect = gridContentRect(tester);
-  return rect.width * rect.height;
-}
-
-/// Measures the combined vertical span (in dp) of fixed controls above
-/// [ProductGrid]: _buildHeader + _buildSearchField + CategoryFilterBar.
-///
-/// In short viewports with Phase 0 scale (0.70) and 40dp compact fields, this
-/// measures ~154dp. On origin/main with width-scale (1.50) and 53dp fields,
-/// this measures ~259dp+.
-double fixedChromeHeight(WidgetTester tester) {
-  final context = tester.element(find.byType(PosHomeScreen));
-  final headerPad = context.getRSize(16);
-  final headerDropdown = find.byType(AppDropdown<PriceTier>);
-  expect(
-    headerDropdown,
-    findsOneWidget,
-    reason: 'Header dropdown must be mounted',
-  );
-
-  final headerTop = tester.getTopLeft(headerDropdown).dy - headerPad;
-  final gridTop = tester.getTopLeft(find.byType(ProductGrid)).dy;
-
-  return gridTop - headerTop;
-}
-
-/// Counts product card tiles that are visible within the [ProductGrid]
-/// content rect (rendered in the active viewport).
-int visibleProductTileCount(WidgetTester tester) {
-  final gridRect = gridContentRect(tester);
-  final inkWells = find.descendant(
-    of: find.byType(GridView),
-    matching: find.byType(InkWell),
-  );
-
-  int count = 0;
-  for (final elem in inkWells.evaluate()) {
-    final renderBox = elem.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize) continue;
-    final rect = renderBox.localToGlobal(Offset.zero) & renderBox.size;
-    final isVisible =
-        rect.top < gridRect.bottom - 0.5 &&
-        rect.bottom > gridRect.top + 0.5 &&
-        rect.left >= gridRect.left - 0.5 &&
-        rect.right <= gridRect.right + 0.5 &&
-        rect.height > 0 &&
-        rect.width > 0;
-    if (isVisible) {
-      count++;
-    }
-  }
-  return count;
-}

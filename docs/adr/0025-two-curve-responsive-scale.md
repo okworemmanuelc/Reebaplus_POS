@@ -110,7 +110,27 @@ When rendered under `textScaler: TextScaler.linear(1.3)` at `pixel7Landscape`:
 
 This drift gives back most of the 13dp compacting savings under larger system accessibility
 type sizes. It serves as empirical evidence that **compacting field padding is only a stopgap;
-Phase 2's structural re-flow (rail layout) is required, not optional.**
+a structural re-flow is required, not optional.**
+
+> **Corrected 2026-09-17 (issue #259, PRD #239).** This paragraph originally read
+> "Phase 2's structural re-flow (**rail layout**) is required, not optional",
+> naming the rail as the form the re-flow had to take. That went further than the
+> evidence: the `textScaler` drift above shows a re-flow is needed, not which
+> re-flow. It also contradicted `docs/design/responsive-layout-plan.md` §4, which
+> left the choice open, and the two documents could not both be right.
+>
+> **POS shipped the collapsing header instead** — the top bar and price-tier row
+> scroll away, the search bar and category chips freeze at the top — decided on
+> the #241 discovery findings, where the populated product grid measured **0.0dp
+> of 463dp** at 800x360 rather than the ~90dp this ADR's arithmetic assumed.
+>
+> The drift finding is unchanged and was the strongest argument *against* the
+> choice that was made: frozen chrome grows with the system font size, where a
+> rail's grid height would not. That cost was accepted knowingly and is pinned by
+> `test/pos/pos_home_viewport_test.dart`, which requires a complete product card
+> to stay reachable sideways at the app's maximum scale — the 1.3 clamp in
+> `main.dart`, which is also the ceiling measured above. The scale model in this
+> ADR is untouched.
 
 ## Known Edges and Limitations
 

@@ -32,6 +32,37 @@ import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 
+/// POS's one vertical scroll surface (issue #259 / PRD #239).
+const Key kPosScrollSurfaceKey = ValueKey<String>('pos-scroll-surface');
+
+/// The price-tier / manufacturer / quick-sale row. Scrolls away.
+const Key kPosTierRowKey = ValueKey<String>('pos-tier-row');
+
+/// The search bar + category chips band. Freezes at the top.
+const Key kPosSearchBandKey = ValueKey<String>('pos-search-band');
+
+const Key kPosTierDropdownKey = ValueKey<String>('pos-tier-dropdown');
+const Key kPosManufacturerDropdownKey =
+    ValueKey<String>('pos-manufacturer-dropdown');
+const Key kPosQuickSaleKey = ValueKey<String>('pos-quick-sale');
+const Key kPosScannerKey = ValueKey<String>('pos-scanner');
+const Key kPosSearchFieldKey = ValueKey<String>('pos-search-field');
+const Key kPosCategoryChipsKey = ValueKey<String>('pos-category-chips');
+
+/// Every control that must still exist with the phone held sideways.
+///
+/// "Nothing is removed in landscape" (PRD #239): density drops and the layout
+/// re-flows, but no control is hidden, collapsed behind a menu, or gated on
+/// orientation. Each of these may scroll out of view; none may disappear.
+const List<Key> kPosLandscapeControlKeys = [
+  kPosTierDropdownKey,
+  kPosManufacturerDropdownKey,
+  kPosQuickSaleKey,
+  kPosScannerKey,
+  kPosSearchFieldKey,
+  kPosCategoryChipsKey,
+];
+
 class PosHomeScreen extends ConsumerStatefulWidget {
   const PosHomeScreen({super.key});
 
@@ -242,7 +273,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         return SharedScaffold(
           activeRoute: 'pos',
           backgroundColor: bgCol,
-          appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
+          // The top bar is a sliver in the body's own scroll view now, so the
+          // Scaffold must not render one as fixed chrome (issue #259).
+          bodyOwnsAppBar: true,
           // #118: the always-visible one-shot scan control lives at the
           // bottom-right (the FAB slot the removed cart FAB used, ADR 0017).
           // Hidden only while a multi-store user still has to pick a store —
@@ -250,125 +283,80 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           floatingActionButton: needsStoreSelection
               ? null
               : PosBarcodeScanButton(
+                  key: kPosScannerKey,
                   tier: _controller!.selectedGroup,
                   loadedProducts: _controller!.allProducts,
                 ),
+          // The top bar lives inside the scroll view, so this SafeArea owns the
+          // status-bar inset the Scaffold's AppBar used to absorb.
           body: SafeArea(
-            top: false,
             // Pull-to-refresh wraps the WHOLE body (above the header) so the
             // gesture + spinner work from the very top of the screen, over the
             // dropdowns and category bar — not just on the product grid.
             child: AppRefreshWrapper(
-              child: Column(
-              children: [
-                _buildHeader(
-                  context,
-                  surfaceCol,
-                  textCol,
-                  subtextCol,
-                  borderCol,
-                ),
-                // #111: the search field is always visible in its position
-                // between the price/manufacturer dropdowns and the category
-                // chips — no show/hide toggle, no app-bar search icon.
-                _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
-                _controller!.isLoading
-                    ? const SizedBox.shrink()
-                    : CategoryFilterBar(
-                        categories: [
-                          'All',
-                          ..._controller!.categories.map((c) => c.name),
-                          // #109: bucket for products with no category.
-                          'Uncategorized',
-                        ],
-                        // Defense-in-depth: the controller already resets a
-                        // dangling selectedCategoryId, but never let the chip
-                        // label `firstWhere` throw if the selected category is
-                        // momentarily absent from the list — fall back to 'All'.
-                        selectedCategory: _selectedCategoryLabel(),
-                        onCategorySelected: (name) {
-                          if (name == 'All') {
-                            _controller!.selectCategory(null);
-                          } else if (name == 'Uncategorized') {
-                            _controller!.selectCategory(
-                              kUncategorizedCategoryId,
-                            );
-                          } else {
-                            final cat = _controller!.categories.firstWhere(
-                              (c) => c.name == name,
-                            );
-                            _controller!.selectCategory(cat.id);
-                          }
-                        },
-                        textCol: textCol,
-                        borderCol: borderCol,
-                      ),
-                // ONE combined coach banner. Tap adds to the cart; tap-and-hold
-                // opens the qty/discount sheet to add several at once (it does
-                // NOT edit the product — that's done from the Products screen),
-                // which is why the copy says "quantity", not "edit". Both
-                // gestures act on a product tile, so gate on a non-empty grid.
-                //
-                // It carries ONE hint key. Main had already merged the two
-                // banners into one widget but left them on two independently
-                // retiring keys, which is what made the ✕ a half-dismiss: it
-                // called `markShown` on each, moving both counts 0 → 1, so the
-                // banner came back once more. One key + `markDismissed` is what
-                // makes a close final (see `UiHintService.hintPosGestures`).
-                if (!_controller!.isLoading &&
-                    _showPosHint &&
-                    !needsStoreSelection &&
-                    _controller!.filteredProducts.isNotEmpty)
-                  _buildInlineHint(
-                    message: 'Tap a '
-                        '${ref.watch(industryLexiconProvider).itemLower}'
-                        ' to add it to the cart, or tap and hold to choose a'
-                        ' quantity.',
-                    onDismiss: () {
-                      setState(() => _showPosHint = false);
-                      // Deliberate close retires the hint immediately so it
-                      // never reappears.
-                      uiHintService.markDismissed(UiHintService.hintPosGestures);
-                    },
+              // POS is ONE scrolling surface (issue #259 / PRD #239). The top
+              // bar and the price-tier row scroll away; the search bar and
+              // category chips freeze at the top; the grid is a sliver that
+              // depends on no supplied height. That last part is the fix: the
+              // grid used to sit in an `Expanded` under a non-scrolling Column
+              // of fixed chrome, and at 800x360 that chrome took the whole
+              // viewport and left the grid 0.0dp — rendering nothing and
+              // reporting nothing.
+              child: CustomScrollView(
+                key: kPosScrollSurfaceKey,
+                slivers: [
+                  _buildTopBarSliver(context, surfaceCol, textCol, subtextCol),
+                  SliverToBoxAdapter(
+                    child: _buildHeader(
+                      context,
+                      surfaceCol,
+                      textCol,
+                      subtextCol,
+                      borderCol,
+                    ),
                   ),
-                Expanded(
-                  // ...
-                  child: needsStoreSelection
-                      ? _buildSelectStorePlaceholder(context, subtextCol)
-                      : _controller!.isLoading
-                      ? const SizedBox.shrink()
-                      : TweenAnimationBuilder<double>(
-                          // §12.5: subtle fade-in for content, no spinner.
-                          tween: Tween(begin: 0, end: 1),
-                          duration: const Duration(milliseconds: 250),
-                          builder: (_, v, child) =>
-                              Opacity(opacity: v, child: child),
-                          // When the visible grid is empty AND the catalogue is
-                          // genuinely empty (not a category/search miss), hand
-                          // off to the persona-aware first-run empty state (the
-                          // "Add your first product" CTA / neutral message —
-                          // Seam 2, #34). A filter miss keeps ProductGrid's own
-                          // "No products found" copy.
-                          child:
-                              _controller!.filteredProducts.isEmpty &&
-                                  ref.watch(firstRunSurfaceStateProvider) !=
-                                      FirstRunSurfaceState.hasContent
-                              ? const FirstRunEmptyState()
-                              : ProductGrid(
-                                  products: _controller!.filteredProducts,
-                                  onProductTap: (item) =>
-                                      _addToCart(context, item),
-                                  cardCol: cardCol,
-                                  textCol: textCol,
-                                  subtextCol: subtextCol,
-                                  borderCol: borderCol,
-                                  controller: _controller!,
-                                  isListView: _isListView,
-                                  gridColumns: _gridColumns,
-                                ),
-                        ),
-                ),
-              ],
+                  _buildFrozenBandSliver(
+                    context,
+                    surfaceCol,
+                    cardCol,
+                    textCol,
+                    subtextCol,
+                    borderCol,
+                  ),
+                  // ONE combined coach banner. Tap adds to the cart; tap-and-hold
+                  // opens the qty/discount sheet to add several at once (it does
+                  // NOT edit the product — that's done from the Products screen),
+                  // which is why the copy says "quantity", not "edit". Both
+                  // gestures act on a product tile, so gate on a non-empty grid.
+                  //
+                  // It carries ONE hint key. Main had already merged the two
+                  // banners into one widget but left them on two independently
+                  // retiring keys, which is what made the ✕ a half-dismiss: it
+                  // called `markShown` on each, moving both counts 0 → 1, so the
+                  // banner came back once more. One key + `markDismissed` is what
+                  // makes a close final (see `UiHintService.hintPosGestures`).
+                  if (!_controller!.isLoading &&
+                      _showPosHint &&
+                      !needsStoreSelection &&
+                      _controller!.filteredProducts.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: _buildInlineHint(
+                        message: 'Tap a '
+                            '${ref.watch(industryLexiconProvider).itemLower}'
+                            ' to add it to the cart, or tap and hold to choose a'
+                            ' quantity.',
+                        onDismiss: () {
+                          setState(() => _showPosHint = false);
+                          // Deliberate close retires the hint immediately so it
+                          // never reappears.
+                          uiHintService
+                              .markDismissed(UiHintService.hintPosGestures);
+                        },
+                      ),
+                    ),
+                  _buildContentSliver(context, cardCol, textCol, subtextCol,
+                      borderCol, needsStoreSelection),
+                ],
               ),
             ),
           ),
@@ -378,6 +366,167 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   }
 
 
+
+  /// The top bar (menu, business name, store subtitle, view selector, bell) as
+  /// a sliver.
+  ///
+  /// Sideways it is a [SliverFloatingHeader]: it scrolls away while the cashier
+  /// browses and slides back the moment they scroll the other way, without
+  /// waiting for the top of the grid. Upright it is pinned, which is how the
+  /// Scaffold's fixed `AppBar` behaved before — POS looks unchanged on the
+  /// phones staff already use.
+  ///
+  /// This orientation branch is the deliberate navigation exception recorded on
+  /// PRD #239 (amendment 3), the same one the bottom bar takes in #258. It is
+  /// *not* a layout gate: the scrolling structure below is unconditional, and
+  /// no viewport depends on a hidden bar to avoid overflowing.
+  Widget _buildTopBarSliver(
+    BuildContext context,
+    Color surfaceCol,
+    Color textCol,
+    Color subtextCol,
+  ) {
+    final topBar = _buildAppBar(context, surfaceCol, textCol, subtextCol);
+    // Exactly what Scaffold does with an AppBar: lay it out at its own
+    // preferred height, which already answers for the text scale.
+    final bar = SizedBox(height: topBar.preferredSize.height, child: topBar);
+
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    return isLandscape
+        ? SliverFloatingHeader(child: bar)
+        : PinnedHeaderSliver(child: bar);
+  }
+
+  /// The search bar and category chips, frozen at the top of the scroll view.
+  ///
+  /// [PinnedHeaderSliver] pins the band at its own natural height, so there is
+  /// no declared extent to keep in step with the responsive scale — the trap
+  /// that a hand-written `SliverPersistentHeaderDelegate` sets, where a child
+  /// that renders taller than its declared `maxExtent` is clipped or overflows.
+  ///
+  /// Search and category filtering stay one tap away while browsing, which is
+  /// what makes it acceptable for the price-tier row above to scroll off.
+  Widget _buildFrozenBandSliver(
+    BuildContext context,
+    Color surfaceCol,
+    Color cardCol,
+    Color textCol,
+    Color subtextCol,
+    Color borderCol,
+  ) {
+    return PinnedHeaderSliver(
+      child: Container(
+        key: kPosSearchBandKey,
+        // Opaque: the grid scrolls underneath this band.
+        color: surfaceCol,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // #111: the search field is always visible in its position between
+            // the price/manufacturer dropdowns and the category chips — no
+            // show/hide toggle, no app-bar search icon.
+            _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
+            if (!_controller!.isLoading)
+              CategoryFilterBar(
+                key: kPosCategoryChipsKey,
+                categories: [
+                  'All',
+                  ..._controller!.categories.map((c) => c.name),
+                  // #109: bucket for products with no category.
+                  'Uncategorized',
+                ],
+                // Defense-in-depth: the controller already resets a dangling
+                // selectedCategoryId, but never let the chip label `firstWhere`
+                // throw if the selected category is momentarily absent from the
+                // list — fall back to 'All'.
+                selectedCategory: _selectedCategoryLabel(),
+                onCategorySelected: (name) {
+                  if (name == 'All') {
+                    _controller!.selectCategory(null);
+                  } else if (name == 'Uncategorized') {
+                    _controller!.selectCategory(kUncategorizedCategoryId);
+                  } else {
+                    final cat = _controller!.categories.firstWhere(
+                      (c) => c.name == name,
+                    );
+                    _controller!.selectCategory(cat.id);
+                  }
+                },
+                textCol: textCol,
+                borderCol: borderCol,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The scrolling content under the frozen band: the product grid, or the
+  /// surface that stands in for it.
+  ///
+  /// Every branch is a sliver and none depends on a supplied height. The two
+  /// full-screen stand-ins use `SliverFillRemaining(hasScrollBody: false)`,
+  /// which sizes to the LARGER of the remaining viewport and the child's own
+  /// height — so each still centres on a roomy phone and scrolls, rather than
+  /// overflowing, once the chrome above has eaten the screen.
+  Widget _buildContentSliver(
+    BuildContext context,
+    Color cardCol,
+    Color textCol,
+    Color subtextCol,
+    Color borderCol,
+    bool needsStoreSelection,
+  ) {
+    if (needsStoreSelection) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: _buildSelectStorePlaceholder(context, subtextCol),
+      );
+    }
+    if (_controller!.isLoading) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    // When the visible grid is empty AND the catalogue is genuinely empty (not
+    // a category/search miss), hand off to the persona-aware first-run empty
+    // state (the "Add your first product" CTA / neutral message — Seam 2, #34).
+    // A filter miss keeps ProductGrid's own "No products found" copy.
+    //
+    // FirstRunEmptyState itself is deliberately untouched (PRD #239, Out of
+    // Scope): seven of its nine host screens hand it the whole body and it fits
+    // with room to spare.
+    final showFirstRunEmptyState = _controller!.filteredProducts.isEmpty &&
+        ref.watch(firstRunSurfaceStateProvider) !=
+            FirstRunSurfaceState.hasContent;
+
+    final content = showFirstRunEmptyState
+        ? const SliverFillRemaining(
+            hasScrollBody: false,
+            child: FirstRunEmptyState(),
+          )
+        : ProductGrid(
+            products: _controller!.filteredProducts,
+            onProductTap: (item) => _addToCart(context, item),
+            cardCol: cardCol,
+            textCol: textCol,
+            subtextCol: subtextCol,
+            borderCol: borderCol,
+            controller: _controller!,
+            isListView: _isListView,
+            gridColumns: _gridColumns,
+          );
+
+    // §12.5: subtle fade-in for content, no spinner. SliverOpacity rather than
+    // Opacity, because the child is a sliver now.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 250),
+      builder: (_, v, child) =>
+          SliverOpacity(opacity: v, sliver: child as Widget),
+      child: content,
+    );
+  }
 
   // Shown in place of the product grid while a multi-store user is on "All
   // Stores" / hasn't picked the store they're selling from. The picker sheet is
@@ -550,6 +699,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     final slug = ref.watch(currentUserRoleProvider)?.slug;
     final canSwitchTier = slug == 'ceo' || slug == 'manager';
     return Container(
+      key: kPosTierRowKey,
       color: surfaceCol,
       padding: EdgeInsets.all(context.getRSize(16)),
       child: Row(
@@ -563,6 +713,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                     child: Opacity(
                       opacity: canSwitchTier ? 1.0 : 0.6,
                       child: AppDropdown<PriceTier>(
+                        key: kPosTierDropdownKey,
                         value: _controller!.selectedGroup,
                         items: const [
                           DropdownMenuItem(
@@ -587,6 +738,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             child: _controller!.isLoading
                 ? const SizedBox.shrink()
                 : AppDropdown<String>(
+                    key: kPosManufacturerDropdownKey,
                     value: _controller!.selectedManufacturerId,
                     items: [
                       const DropdownMenuItem(value: 'All', child: Text('All')),
@@ -611,6 +763,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
   Widget _buildQuickSaleBtn(BuildContext context) {
     return GestureDetector(
+      key: kPosQuickSaleKey,
       onTap: () => _showQuickSaleModal(context),
       child: Container(
         padding: EdgeInsets.symmetric(
@@ -648,6 +801,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         context.getRSize(12),
       ),
       child: AppInput(
+        key: kPosSearchFieldKey,
         controller: _searchController,
         // #111: the field is now always visible, so it must not steal focus
         // and pop the keyboard every time POS opens — the cashier taps it when

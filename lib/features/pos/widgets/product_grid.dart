@@ -16,6 +16,32 @@ import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 
+/// Key prefix on every product tile, so a test can find the *complete* tiles
+/// the cashier can actually reach (issue #259 / PRD #239). The two-assertion
+/// invariant needs a per-row handle: an overflow-only assertion passes a grid
+/// that has been starved to zero height, because a scroll view given no room
+/// throws nothing.
+const String kPosProductTileKeyPrefix = 'pos-product-tile-';
+
+/// The key carried by the tile for [productId].
+ValueKey<String> posProductTileKey(String productId) =>
+    ValueKey<String>('$kPosProductTileKeyPrefix$productId');
+
+/// The POS product grid, expressed as a **sliver** rather than a box.
+///
+/// ### Why this is a sliver (issue #259 / PRD #239)
+///
+/// POS used to build this inside an `Expanded` under a non-scrolling `Column`
+/// of fixed chrome — the price-tier row, the search field and the category
+/// chips. On the shortest supported landscape phone that chrome consumed the
+/// whole viewport and the grid was laid out at **0.0dp of 463dp**: it rendered
+/// nothing, reported no error, and a cashier could not start a sale. A grid
+/// handed zero height throws nothing, which is why an overflow-only test
+/// passed that screen for months.
+///
+/// As a sliver it no longer depends on a supplied height. It is content inside
+/// POS's one scroll view, so a short viewport costs the cashier a scroll rather
+/// than costing them the grid.
 class ProductGrid extends StatelessWidget {
   final List<ProductDataWithStock> products;
   final Function(ProductDataWithStock) onProductTap;
@@ -44,61 +70,10 @@ class ProductGrid extends StatelessWidget {
     this.onHintTap,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    if (products.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              FontAwesomeIcons.magnifyingGlass.data,
-              size: context.getRSize(48),
-              color: subtextCol.withValues(alpha: 0.3),
-            ),
-            SizedBox(height: context.getRSize(16)),
-            Consumer(
-              builder: (context, ref, _) => Text(
-                'No ${ref.watch(industryLexiconProvider).itemPluralLower} found',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(16),
-                  color: subtextCol,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (isListView) {
-      return ListView.separated(
-        padding: EdgeInsets.all(context.getRSize(16)),
-        itemCount: products.length,
-        separatorBuilder: (_, __) => SizedBox(height: context.getRSize(16)),
-        itemBuilder: (context, index) {
-          final item = products[index];
-          return _ProductCard(
-            item: item,
-            onTap: () => onProductTap(item),
-            cardCol: cardCol,
-            textCol: textCol,
-            subtextCol: subtextCol,
-            borderCol: borderCol,
-            controller: controller,
-            isListView: true,
-            showHint: showHint,
-            onHintTap: onHintTap,
-          );
-        },
-      );
-    }
-
-    final screenWidth = MediaQuery.of(context).size.width;
-    final availableWidth = context.isDesktop ? (screenWidth - 280.0) : screenWidth;
+  /// Column count for [availableWidth]. Extracted so the responsive-density
+  /// tests can assert it without measuring a rendered grid.
+  static int columnsFor(double availableWidth, int gridColumns) {
     int effectiveColumns = gridColumns;
-
     if (availableWidth < 380) {
       // Small phone: maximum 2 columns
       if (effectiveColumns > 2) effectiveColumns = 2;
@@ -107,6 +82,73 @@ class ProductGrid extends StatelessWidget {
       final dynamicColumns = (availableWidth / 180).floor();
       effectiveColumns = max(effectiveColumns, dynamicColumns);
     }
+    return effectiveColumns;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (products.isEmpty) {
+      // `hasScrollBody: false` sizes this to the LARGER of the remaining
+      // viewport and its own natural height, so the "no products found" copy
+      // still centres on a roomy phone and scrolls — rather than overflowing —
+      // once the chrome above it has eaten the screen.
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                FontAwesomeIcons.magnifyingGlass.data,
+                size: context.getRSize(48),
+                color: subtextCol.withValues(alpha: 0.3),
+              ),
+              SizedBox(height: context.getRSize(16)),
+              Consumer(
+                builder: (context, ref, _) => Text(
+                  'No ${ref.watch(industryLexiconProvider).itemPluralLower} found',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(16),
+                    color: subtextCol,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (isListView) {
+      return SliverPadding(
+        padding: EdgeInsets.all(context.getRSize(16)),
+        sliver: SliverList.separated(
+          itemCount: products.length,
+          separatorBuilder: (_, __) => SizedBox(height: context.getRSize(16)),
+          itemBuilder: (context, index) {
+            final item = products[index];
+            return _ProductCard(
+              key: posProductTileKey(item.product.id),
+              item: item,
+              onTap: () => onProductTap(item),
+              cardCol: cardCol,
+              textCol: textCol,
+              subtextCol: subtextCol,
+              borderCol: borderCol,
+              controller: controller,
+              isListView: true,
+              showHint: showHint,
+              onHintTap: onHintTap,
+            );
+          },
+        ),
+      );
+    }
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final availableWidth = context.isDesktop ? (screenWidth - 280.0) : screenWidth;
+    final effectiveColumns = columnsFor(availableWidth, gridColumns);
 
     // Calculate aspect ratio dynamically to guarantee a minimum height and avoid overflow
     final totalPadding = context.getRSize(16); // 8 padding on each side
@@ -115,30 +157,33 @@ class ProductGrid extends StatelessWidget {
     // We need roughly 210px (scaled) of height for the image, name, price, stock
     final aspect = cellWidth / context.getRSize(210);
 
-    return GridView.builder(
+    return SliverPadding(
       padding: EdgeInsets.all(context.getRSize(8)),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: effectiveColumns,
-        childAspectRatio: aspect,
-        crossAxisSpacing: context.getRSize(8),
-        mainAxisSpacing: context.getRSize(8),
+      sliver: SliverGrid.builder(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: effectiveColumns,
+          childAspectRatio: aspect,
+          crossAxisSpacing: context.getRSize(8),
+          mainAxisSpacing: context.getRSize(8),
+        ),
+        itemCount: products.length,
+        itemBuilder: (context, index) {
+          final item = products[index];
+          return _ProductCard(
+            key: posProductTileKey(item.product.id),
+            item: item,
+            onTap: () => onProductTap(item),
+            cardCol: cardCol,
+            textCol: textCol,
+            subtextCol: subtextCol,
+            borderCol: borderCol,
+            controller: controller,
+            isListView: false,
+            showHint: showHint,
+            onHintTap: onHintTap,
+          );
+        },
       ),
-      itemCount: products.length,
-      itemBuilder: (context, index) {
-        final item = products[index];
-        return _ProductCard(
-          item: item,
-          onTap: () => onProductTap(item),
-          cardCol: cardCol,
-          textCol: textCol,
-          subtextCol: subtextCol,
-          borderCol: borderCol,
-          controller: controller,
-          isListView: false,
-          showHint: showHint,
-          onHintTap: onHintTap,
-        );
-      },
     );
   }
 }
@@ -156,6 +201,7 @@ class _ProductCard extends ConsumerStatefulWidget {
   final VoidCallback? onHintTap;
 
   const _ProductCard({
+    super.key,
     required this.item,
     required this.onTap,
     required this.cardCol,

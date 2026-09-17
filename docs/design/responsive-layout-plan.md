@@ -260,7 +260,52 @@ for.
 
 ---
 
-## 4. Landscape phone layout — an open decision, to be measured in Phase 2
+## 4. Landscape phone layout — DECIDED 2026-09-17: Option A, collapsing header
+
+> **Decision (issue #259, PRD #239).** The open question below is settled in
+> favour of **Option A, the collapsing header**. The top bar and the
+> price-tier / store row scroll away; the search bar and the category chips
+> freeze at the top. Shipped in `pos_home_screen.dart` as a single
+> `CustomScrollView`.
+>
+> **What settled it** — and it was not the pixel table below:
+>
+> 1. **The defect is worse than this section measured.** This section's
+>    arithmetic assumed the grid gets `body − chrome` ≈ 90dp. The #241 discovery
+>    sweep measured the populated grid at **0.0dp of 463dp** at 800x360, with a
+>    21px overflow, and 102px when the catalogue is empty. The grid was not
+>    "one clipped row", it was nothing at all, silently — so the choice was not
+>    between 82,350dp² and 180,200dp², it was between zero and either.
+> 2. **The bars give their height back sideways.** #258 slides the bottom bar
+>    away while scrolling and POS's own top bar returns on reverse scroll. That
+>    is what makes A viable at the shortest supported viewport, and it did not
+>    exist when the table below was drawn.
+> 3. **Option B's decisive advantage no longer applies.** B was "every control
+>    permanently reachable". Under A as shipped, the search bar and chips are
+>    *frozen* — permanently reachable — and the tier row is one reverse scroll
+>    away, not behind a menu. B's cost, a column or two of products on a screen
+>    where width is the only thing POS has plenty of, is permanent.
+>
+> **The recorded trade-off, accepted with open eyes:** frozen chrome grows with
+> the system font size, which is precisely the `textScaler` argument ADR 0025 §5
+> made for the rail. It is real. `pos_home_viewport_test.dart` pins it — a
+> complete product card must stay reachable sideways at the app's maximum scale
+> (1.3, the clamp in `main.dart`) — so if the frozen band ever grows enough to
+> starve the grid again, a test fails rather than a cashier discovering it.
+>
+> **The implementation risk flagged below did not materialise.** A collapsing
+> header inside `AppRefreshWrapper` works; a test pins that overpulling POS
+> still descends the spinner. `PinnedHeaderSliver` (Flutter 3.24+) and
+> `SliverFloatingHeader` (Flutter 3.27+, so **3.27 is the binding floor** for
+> this screen) did the work, so no `NestedScrollView` and no hand-written
+> `SliverPersistentHeaderDelegate` with a declared extent were needed — which
+> also means there is no declared extent to keep in step with the responsive
+> scale.
+>
+> Everything from here to the end of section 4 is the original open decision,
+> kept as the record of how the call was reached.
+
+## 4 (original). Landscape phone layout — an open decision, to be measured in Phase 2
 
 Landscape gives POS 915dp of width and 252dp of body height. With Phase 0's
 scale, 40dp fields and the 48dp dropdown tap-target floor in place, the fixed
@@ -353,10 +398,14 @@ reader does not re-derive them:
    control permanently reachable, including the tier dropdown that Option A
    scrolls away. The table above is the accurate basis for the choice.
 
-**Neither option is rejected. Phase 2 prototypes both on a real device and picks
+~~**Neither option is rejected. Phase 2 prototypes both on a real device and picks
 on measurement**, per the `prototype` skill. Decide with the owner — the cashier's
 actual scroll behaviour during a sale settles this, and no amount of arithmetic
-will.
+will.~~
+
+**Superseded 2026-09-17 (#259): Option A is decided — see the decision box at the
+top of this section.** The owner settled it on the #241 emulator walk, where the
+grid turned out to be at zero height rather than one clipped row.
 
 ### Implementation risk that must be scoped before choosing A
 
@@ -369,15 +418,22 @@ invariant in `CONTEXT.md`).** Nesting a collapsing header inside a
 `SyncPullBanner`. Option B is a `Row` and carries none of this risk. Weigh that
 alongside the pixel counts.
 
-### ADR 0025 currently contradicts this section
+### ADR 0025 contradicted this section — RESOLVED 2026-09-17 (#259)
 
-`docs/adr/0025-two-curve-responsive-scale.md` §5 concludes that "Phase 2's
+`docs/adr/0025-two-curve-responsive-scale.md` §5 concluded that "Phase 2's
 structural re-flow (**rail layout**) is required, not optional", citing the
 `textScaler 1.3` drift that gives back most of the compaction savings. The plan
-text meanwhile marked the rail rejected. **Whichever option Phase 2 picks, one of
-these two documents must be corrected in the same PR.** The `textScaler` finding
-is real and argues for B, since a rail's grid height does not shrink when a user
-raises their system font size — Option A's pinned chrome does.
+text meanwhile marked the rail rejected.
+
+**Resolved: ADR 0025 §5 was corrected in #259's PR**, in the same commit as the
+fix, per the standing rule that one of the two documents had to give. §5 now
+says a structural re-flow is required — which was always its real finding — and
+no longer prescribes the rail as the form it must take.
+
+The `textScaler` finding itself stands and is not weakened: a rail's grid height
+does not shrink when a user raises their system font size, and Option A's frozen
+chrome does. That cost was accepted deliberately and is now pinned by a test
+rather than left to be rediscovered (see the decision box above).
 
 ### Applicability beyond POS
 
