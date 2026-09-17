@@ -57,8 +57,9 @@ void main() {
   /// Drags the list down past its top by more than the trigger threshold.
   Future<TestGesture> overpull(WidgetTester tester) async {
     final gesture = await tester.startGesture(tester.getCenter(find.text('Row 0')));
-    for (var step = 0; step < 8; step++) {
-      await gesture.moveBy(const Offset(0, 30));
+    // Timed moves, so letting go carries real fling velocity like a finger does.
+    for (var step = 1; step <= 8; step++) {
+      await gesture.moveBy(const Offset(0, 30), timeStamp: Duration(milliseconds: 16 * step));
       await tester.pump(const Duration(milliseconds: 16));
     }
     return gesture;
