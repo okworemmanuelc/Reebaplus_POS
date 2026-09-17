@@ -10,6 +10,13 @@ The human updates it when resolving open questions or making architectural decis
 
 157 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #241 — overflow discovery sweep (PRD #239) (2026-09-17)
+- **Hook:** `OverflowRouteReporter` (`lib/core/diagnostics/overflow_route_reporter.dart`), installed in `main.dart` after `CrashReporter.install()`. Debug builds only; `install()` returns before touching `FlutterError.onError` in release. Every overflow report prints `[overflow] route=<Screen> (tab: <TabRoot>, offstage) widget=<Widget> :: <summary>`, resolved from the report's own `DebugCreator` element chain, so pre-warmed offstage tabs are attributed correctly. It chains to the previous handler unchanged. 5 tests in `test/diagnostics/overflow_route_reporter_test.dart`.
+- **Sweep:** `test/discovery/viewport_sweep_test.dart` pumps ~70 screens at 800x360 in empty and populated states, and records loud overflows plus silent starvation (a vertical scrollable under 48dp with taller content). It records, it does not assert; it is skipped unless `VIEWPORT_SWEEP=1` (`VIEWPORT_SWEEP_OUT` appends result lines to a file).
+- **Result:** the owner's emulator walk plus the sweep are posted on #239. The second split filed #255 empty Cart, #256 Expenses, #257 Business Reports, #258 bottom bar hides on scroll sideways, #259 POS collapsing header (POS decided and unblocked), and standalone bugs #260 Appearance card overflow and #261 welcome-heading alignment. The PRD body is amended.
+- **The sweep missed four real defects** the device walk caught (empty Cart, Supplier Detail 1.2px, Business Reports, Appearance). Emulator verification stays mandatory per slice.
+- **Open:** confirm Orders (#244) and Driver Profile (#247) at 320x568 portrait. Both were clean at 800x360.
+
 ### "Who's working?" picker removed — the drawer button is now a lock (2026-09-17)
 No issue filed; the owner asked for the picker to go. Committed on `feat/overflow-discovery-sweep-241` as its own commit, at the owner's request, in the #241 PR (both touch `lib/main.dart`).
 
