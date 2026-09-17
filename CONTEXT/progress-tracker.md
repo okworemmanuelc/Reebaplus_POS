@@ -8,7 +8,30 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-157 sessions logged. Codebase is live and being verified on-device.
+158 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #245 — Customer Detail holds its content at every viewport (PRD #239) (2026-09-17)
+Branch `feat/customer-detail-tabbed-sliver-scaffold-245`, cut from `origin/main`. Slice of PRD #239; builds on `TabbedSliverScaffold` (#243 / ADR 0027).
+
+- **Scaffold Migration (`lib/features/customers/screens/customer_detail_screen.dart`)**:
+  - Replaced hand-rolled `DefaultTabController` and private `NestedScrollView` wiring with `TabbedSliverScaffold` from #243.
+  - Screen now owns its `TabController` with `TickerProviderStateMixin`, synchronized through `_syncTabController` based on dynamic crate tracking (`businessTracksCrates`).
+  - Split tab bodies into sliver lists: `_creditHistoryTabSlivers(theme)`, `_ordersTabSlivers(theme)`, and `_cratesTabSlivers(theme)` wrapped in `TabSliverView` with stable `storageKey`s (`customer-detail-credits`, `customer-detail-orders`, `customer-detail-crates`) preserving scroll offset across tab switches.
+  - Pinned header slivers: `_buildHeader(theme)` (avatar, customer name, tier, phone) and `_buildCreditCard(theme)` (balance, daily limit, deposits held, action buttons, date range selector) sit as slivers above pinned `TabBar`.
+  - Empty tab states (`_EmptyState`) rendered via `SliverFillRemaining(hasScrollBody: false)`.
+- **Button & Card Overflow Fixes**:
+  - Replaced fixed-width/unscaled `AmberButton` and `OutlinedButton` inside `_buildCreditCard` with `AppButton(size: AppButtonSize.small)` ensuring compact viewports (320x568 portrait and short landscape) do not overflow.
+  - Clamped credit history date range dropdown width to `context.getRSize(110)`.
+  - Wrapped `Credits Balance` header text with `Flexible` and balance figure with `FittedBox` scale-down.
+  - Removed unused `pinned_tab_bar_delegate.dart` import.
+- **Test Seam & Harness Integration (`test/customers/customer_detail_viewport_test.dart`)**:
+  - Tagged credit transaction rows with `kCustomerCreditRowKeyPrefix` (`customer-credit-row-`).
+  - Tested across 4 viewports: `phoneSe1Portrait` (320x568), `androidCompactLandscape` (800x360), `pixel7Landscape` (915x412), and `pixel7Portrait` (412x915) using `test/helpers/screen_harness.dart`.
+  - Tested in populated data state (asserting `expectNoOverflow` and `expectContentRowVisible`).
+  - Tested in empty data state (asserting `expectNoOverflow` and empty state visibility).
+  - Verified tab retention (`each tab remembers its scroll position across tab switches`) and sideways swiping (`swiping sideways still moves between tabs`).
+  - All 10 viewport tests passing; entire customer suite passing (12 tests).
+- **Verification**: `flutter analyze` clean with 0 errors and 0 warnings.
 
 ### Issue #241 — overflow discovery sweep (PRD #239) (2026-09-17)
 - **Hook:** `OverflowRouteReporter` (`lib/core/diagnostics/overflow_route_reporter.dart`), installed in `main.dart` after `CrashReporter.install()`. Debug builds only; `install()` returns before touching `FlutterError.onError` in release. Every overflow report prints `[overflow] route=<Screen> (tab: <TabRoot>, offstage) widget=<Widget> :: <summary>`, resolved from the report's own `DebugCreator` element chain, so pre-warmed offstage tabs are attributed correctly. It chains to the previous handler unchanged. 5 tests in `test/diagnostics/overflow_route_reporter_test.dart`.

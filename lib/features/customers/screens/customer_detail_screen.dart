@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:drift/drift.dart' show innerJoin;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,8 +35,10 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
-import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
+import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
+
+const String kCustomerCreditRowKeyPrefix = 'customer-credit-row-';
 
 class CustomerDetailScreen extends ConsumerStatefulWidget {
   final Customer? customer;
@@ -47,10 +50,14 @@ class CustomerDetailScreen extends ConsumerStatefulWidget {
       _CustomerDetailScreenState();
 }
 
-class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
+class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
+    with TickerProviderStateMixin {
   bool _contentReady = false;
   bool _isScrolled = false;
   final ScreenshotController _screenshotCtrl = ScreenshotController();
+
+  late TabController _tabController;
+  List<String> _tabKeys = const ['credits', 'orders'];
 
   CustomerData? _customerData;
   int _creditBalance = 0;
@@ -71,6 +78,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _tabKeys = _resolveTabKeys(
+      businessTracksCrates(ref.read(currentBusinessProvider)),
+    );
+    _tabController = TabController(length: _tabKeys.length, vsync: this);
     // Initial balance comes from the watchWalletBalance stream below.
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
@@ -116,11 +127,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       if (mounted) setState(() => _crateBalances = crates);
     });
 
-    _contentReady = true;
+    if (mounted) setState(() => _contentReady = true);
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _customerSub?.cancel();
     _balanceSub?.cancel();
     _depositsHeldSub?.cancel();
@@ -128,6 +140,35 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     _ordersSub?.cancel();
     _cratesSub?.cancel();
     super.dispose();
+  }
+
+  List<String> _resolveTabKeys(bool showCrates) => [
+    'credits',
+    'orders',
+    if (showCrates) 'crates',
+  ];
+
+  void _syncTabController(List<String> keys) {
+    if (_listEquals(keys, _tabKeys)) return;
+    final priorIndex = _tabController.index;
+    final newIndex = priorIndex.clamp(0, keys.length - 1);
+    _tabKeys = keys;
+    if (_tabController.length != keys.length) {
+      _tabController.dispose();
+      _tabController = TabController(
+        length: keys.length,
+        vsync: this,
+        initialIndex: newIndex,
+      );
+    }
+  }
+
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -1334,16 +1375,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     ); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final showCrates = _showCratesTab();
+    _syncTabController(_resolveTabKeys(showCrates));
 
-    return DefaultTabController(
-      length: showCrates ? 3 : 2,
-      child: Container(
-        decoration: AppDecorations.glassyBackground(context),
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            backgroundColor: _isScrolled ? theme.colorScheme.surface.withValues(alpha: 0.8) : Colors.transparent,
-            elevation: 0,
+    return Container(
+      decoration: AppDecorations.glassyBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: _isScrolled
+              ? theme.colorScheme.surface.withValues(alpha: 0.8)
+              : Colors.transparent,
+          elevation: 0,
           leading: IconButton(
             icon: Icon(
               Icons.arrow_back_ios_new,
@@ -1434,37 +1476,34 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 : const Center(child: CircularProgressIndicator()),
           ),
         ),
-        ),
       ),
     );
   }
 
   Widget _buildContent(ThemeData theme, bool showCrates) {
-    return NestedScrollView(
-      headerSliverBuilder: (context, innerBoxIsScrolled) {
-        return [
-          SliverToBoxAdapter(child: _buildHeader(theme)),
-          SliverToBoxAdapter(child: _buildCreditCard(theme)),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: PinnedTabBarDelegate(
-              extent: context.getRSize(60),
-              child: Container(
-                color: Colors.transparent,
-                padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-                child: _buildTabBar(theme, showCrates),
-              ),
-            ),
+    return TabbedSliverScaffold(
+      controller: _tabController,
+      tabBarExtent: max(kMinInteractiveDimension, context.getRSize(60)),
+      headerSlivers: [
+        SliverToBoxAdapter(child: _buildHeader(theme)),
+        SliverToBoxAdapter(child: _buildCreditCard(theme)),
+      ],
+      tabBar: _buildTabBar(theme, showCrates),
+      tabViews: [
+        TabSliverView(
+          storageKey: 'customer-detail-credits',
+          slivers: _creditHistoryTabSlivers(theme),
+        ),
+        TabSliverView(
+          storageKey: 'customer-detail-orders',
+          slivers: _ordersTabSlivers(theme),
+        ),
+        if (showCrates)
+          TabSliverView(
+            storageKey: 'customer-detail-crates',
+            slivers: _cratesTabSlivers(theme),
           ),
-        ];
-      },
-      body: TabBarView(
-        children: [
-          _buildCreditHistoryTab(theme),
-          _buildOrdersTab(theme),
-          if (showCrates) _buildCratesTab(theme),
-        ],
-      ),
+      ],
     );
   }
 
@@ -1600,24 +1639,32 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           color: theme.colorScheme.primary,
                         ),
                         SizedBox(width: context.getRSize(8)),
-                        Text(
-                          'Credits Balance',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(12),
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface.withAlpha(128),
+                        Flexible(
+                          child: Text(
+                            'Credits Balance',
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(12),
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withAlpha(128),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
                     SizedBox(height: context.getRSize(6)),
-                    Text(
-                      formatCurrency(balance),
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(28),
-                        fontWeight: FontWeight.w900,
-                        color: balance >= 0 ? theme.colorScheme.onSurface : danger,
-                        letterSpacing: -1,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        formatCurrency(balance),
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(28),
+                          fontWeight: FontWeight.w900,
+                          color: balance >= 0 ? theme.colorScheme.onSurface : danger,
+                          letterSpacing: -1,
+                        ),
                       ),
                     ),
                   ],
@@ -1636,7 +1683,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   ),
                   SizedBox(height: context.getRSize(4)),
                   SizedBox(
-                    width: 120, // To give it a nice fixed width
+                    width: context.getRSize(110),
                     child: AppDropdown<String>(
                       value: _effectivePeriod.startsWith('Custom:') ? 'Custom' : _effectivePeriod,
                       isExpanded: false,
@@ -1787,10 +1834,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     children: [
                       if (canAddFunds)
                         Expanded(
-                          child: AmberButton(
-                            label: 'Add Credit',
+                          child: AppButton(
+                            text: 'Add Credit',
                             icon: FontAwesomeIcons.plus.data,
-                            height: 42,
+                            size: AppButtonSize.small,
                             onPressed: _showAddFundsSheet,
                           ),
                         ),
@@ -1798,59 +1845,24 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         SizedBox(width: context.getRSize(10)),
                       if (canSetLimit)
                         Expanded(
-                          child: OutlinedButton.icon(
+                          child: AppButton(
+                            text: 'Set Limit',
+                            icon: FontAwesomeIcons.penToSquare.data,
+                            variant: AppButtonVariant.outline,
+                            size: AppButtonSize.small,
                             onPressed: _showSetLimitSheet,
-                            icon: Icon(
-                              FontAwesomeIcons.penToSquare.data,
-                              size: 14,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                            label: Text(
-                              'Set Limit',
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(14),
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: Size(0, context.getRSize(42)),
-                              side: BorderSide(color: theme.dividerColor),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
                           ),
                         ),
                     ],
                   ),
                   if (canRefund) ...[
                     SizedBox(height: context.getRSize(10)),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _showRefundCashSheet,
-                        icon: Icon(
-                          FontAwesomeIcons.moneyBillTransfer.data,
-                          size: 14,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                        label: Text(
-                          'Refund Cash',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: Size(0, context.getRSize(42)),
-                          side: BorderSide(color: theme.dividerColor),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
+                    AppButton(
+                      text: 'Refund Cash',
+                      icon: FontAwesomeIcons.moneyBillTransfer.data,
+                      variant: AppButtonVariant.outline,
+                      size: AppButtonSize.small,
+                      onPressed: _showRefundCashSheet,
                     ),
                   ],
                 ],
@@ -1865,31 +1877,36 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   // ── Tab Bar ─────────────────────────────────────────────────────────────────
 
   Widget _buildTabBar(ThemeData theme, bool showCrates) {
-    return TabBar(
-      labelColor: theme.colorScheme.primary,
-      unselectedLabelColor: theme.colorScheme.onSurface.withAlpha(115),
-      indicatorColor: theme.colorScheme.primary,
-      dividerColor: Colors.transparent,
-      indicatorSize: TabBarIndicatorSize.tab,
-      labelStyle: TextStyle(
-        fontSize: context.getRFontSize(13),
-        fontWeight: FontWeight.w700,
-      ),
-      tabs: [
-        Tab(
-          icon: Icon(FontAwesomeIcons.clockRotateLeft.data, size: 16),
-          text: 'Credits',
+    return Container(
+      color: Colors.transparent,
+      padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
+      child: TabBar(
+        controller: _tabController,
+        labelColor: theme.colorScheme.primary,
+        unselectedLabelColor: theme.colorScheme.onSurface.withAlpha(115),
+        indicatorColor: theme.colorScheme.primary,
+        dividerColor: Colors.transparent,
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelStyle: TextStyle(
+          fontSize: context.getRFontSize(13),
+          fontWeight: FontWeight.w700,
         ),
-        Tab(
-          icon: Icon(FontAwesomeIcons.fileLines.data, size: 16),
-          text: 'Orders',
-        ),
-        if (showCrates)
+        tabs: [
           Tab(
-            icon: Icon(FontAwesomeIcons.boxOpen.data, size: 16),
-            text: 'Crates',
+            icon: Icon(FontAwesomeIcons.clockRotateLeft.data, size: 16),
+            text: 'Credits',
           ),
-      ],
+          Tab(
+            icon: Icon(FontAwesomeIcons.fileLines.data, size: 16),
+            text: 'Orders',
+          ),
+          if (showCrates)
+            Tab(
+              icon: Icon(FontAwesomeIcons.boxOpen.data, size: 16),
+              text: 'Crates',
+            ),
+        ],
+      ),
     );
   }
 
@@ -1977,276 +1994,344 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   // ── Tab: Credit History ─────────────────────────────────────────────────────
 
-  Widget _buildCreditHistoryTab(ThemeData theme) {
+  List<Widget> _creditHistoryTabSlivers(ThemeData theme) {
     if (_creditHistory.isEmpty) {
-      return _EmptyState(
-        icon: FontAwesomeIcons.hourglass.data,
-        message: 'No ledger entries yet',
-        theme: theme,
-      );
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyState(
+            icon: FontAwesomeIcons.hourglass.data,
+            message: 'No ledger entries yet',
+            theme: theme,
+          ),
+        ),
+      ];
     }
 
     final filtered = _filteredHistory;
+    final slivers = <Widget>[];
 
-    return Column(
-      children: [
-        // §18.4: Total In / Total Out are gated by `customers.wallet.totals.view`
-        // (granted to Manager + CEO by default; the CEO can revoke it per staff
-        // member). Read the effective permission — no role-tier bypass — so a
-        // per-user override actually takes effect.
-        if (Gates.seeWalletTotals.allows(ref)) ...[
-          _buildCreditSummaryRow(theme),
-          SizedBox(height: context.getRSize(4)),
-        ],
-        Expanded(
-          child: filtered.isEmpty
-              ? _EmptyState(
-                  icon: FontAwesomeIcons.filterCircleXmark.data,
-                  message: 'No transactions in this period',
-                  theme: theme,
-                )
-              : ListView.builder(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(20),
-                    context.getRSize(12),
-                    context.getRSize(20),
-                    context.getRSize(20) + context.deviceBottomPadding,
-                  ),
-                  itemCount: filtered.length,
-                  itemBuilder: (ctx, i) {
-                    final txn = filtered[i];
-                    final isCredit = txn.type == 'credit';
-                    final amount = txn.amountKobo / 100.0;
-                    final color = isCredit ? success : danger;
-                    // #173 — a live cash/transfer top-up can be voided by anyone
-                    // who can withdraw from the wallet (the sanctioned fix for a
-                    // mistyped Add Credit). Hide-don't-block: no affordance
-                    // renders when the gate is denied or the row isn't a live
-                    // top-up.
-                    final isVoidableTopup =
-                        txn.voidedAt == null &&
-                        (txn.referenceType == 'topup_cash' ||
-                            txn.referenceType == 'topup_transfer') &&
-                        Gates.refundCustomerWallet.allows(ref);
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
-                      child: _GlassyCard(
-                        padding: EdgeInsets.all(ctx.getRSize(14)),
-                        radius: 12,
-                        child: Row(
+    // §18.4: Total In / Total Out are gated by `customers.wallet.totals.view`
+    if (Gates.seeWalletTotals.allows(ref)) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildCreditSummaryRow(theme),
+              SizedBox(height: context.getRSize(4)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (filtered.isEmpty) {
+      slivers.add(
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyState(
+            icon: FontAwesomeIcons.filterCircleXmark.data,
+            message: 'No transactions in this period',
+            theme: theme,
+          ),
+        ),
+      );
+    } else {
+      slivers.add(
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            context.getRSize(20),
+            context.getRSize(12),
+            context.getRSize(20),
+            context.getRSize(20) + context.deviceBottomPadding,
+          ),
+          sliver: SliverList.builder(
+            itemCount: filtered.length,
+            itemBuilder: (ctx, i) {
+              final txn = filtered[i];
+              final isCredit = txn.type == 'credit';
+              final amount = txn.amountKobo / 100.0;
+              final color = isCredit ? success : danger;
+              // #173 — a live cash/transfer top-up can be voided by anyone
+              // who can withdraw from the wallet (the sanctioned fix for a
+              // mistyped Add Credit). Hide-don't-block: no affordance
+              // renders when the gate is denied or the row isn't a live
+              // top-up.
+              final isVoidableTopup =
+                  txn.voidedAt == null &&
+                  (txn.referenceType == 'topup_cash' ||
+                      txn.referenceType == 'topup_transfer') &&
+                  Gates.refundCustomerWallet.allows(ref);
+              return Padding(
+                key: ValueKey('$kCustomerCreditRowKeyPrefix${txn.id}'),
+                padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
+                child: _GlassyCard(
+                  padding: EdgeInsets.all(ctx.getRSize(14)),
+                  radius: 12,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: ctx.getRSize(38),
+                        height: ctx.getRSize(38),
+                        decoration: BoxDecoration(
+                          color: color.withAlpha(30),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isCredit
+                              ? FontAwesomeIcons.arrowDown.data
+                              : FontAwesomeIcons.arrowUp.data,
+                          color: color,
+                          size: ctx.getRSize(16),
+                        ),
+                      ),
+                      SizedBox(width: ctx.getRSize(12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: ctx.getRSize(38),
-                              height: ctx.getRSize(38),
-                              decoration: BoxDecoration(
-                                color: color.withAlpha(30),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                isCredit
-                                    ? FontAwesomeIcons.arrowDown.data
-                                    : FontAwesomeIcons.arrowUp.data,
-                                color: color,
-                                size: ctx.getRSize(16),
-                              ),
-                            ),
-                            SizedBox(width: ctx.getRSize(12)),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _friendlyRefType(txn.referenceType),
-                                    style: TextStyle(
-                                      fontSize: ctx.getRFontSize(14),
-                                      fontWeight: FontWeight.w600,
-                                      color: theme.colorScheme.onSurface,
-                                    ),
-                                  ),
-                                  Text(
-                                    DateFormat(
-                                      'd MMM yyyy, h:mm a',
-                                    ).format(txn.createdAt),
-                                    style: TextStyle(
-                                      fontSize: ctx.getRFontSize(11),
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha(115),
-                                    ),
-                                  ),
-                                ],
+                            Text(
+                              _friendlyRefType(txn.referenceType),
+                              style: TextStyle(
+                                fontSize: ctx.getRFontSize(14),
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface,
                               ),
                             ),
                             Text(
-                              '${isCredit ? '+' : '-'}${formatCurrency(amount)}',
+                              DateFormat(
+                                'd MMM yyyy, h:mm a',
+                              ).format(txn.createdAt),
                               style: TextStyle(
-                                fontSize: ctx.getRFontSize(15),
-                                fontWeight: FontWeight.w800,
-                                color: color,
+                                fontSize: ctx.getRFontSize(11),
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha(115),
                               ),
                             ),
-                            if (isVoidableTopup) ...[
-                              SizedBox(width: ctx.getRSize(6)),
-                              IconButton(
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                constraints: BoxConstraints(
-                                  minWidth: ctx.getRSize(32),
-                                  minHeight: ctx.getRSize(32),
-                                ),
-                                tooltip: 'Void top-up',
-                                icon: Icon(
-                                  FontAwesomeIcons.arrowRotateLeft.data,
-                                  size: ctx.getRSize(14),
-                                  color: danger,
-                                ),
-                                onPressed: () => _confirmVoidTopup(txn),
-                              ),
-                            ],
                           ],
                         ),
                       ),
-                    );
-                  },
+                      Text(
+                        '${isCredit ? '+' : '-'}${formatCurrency(amount)}',
+                        style: TextStyle(
+                          fontSize: ctx.getRFontSize(15),
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                        ),
+                      ),
+                      if (isVoidableTopup) ...[
+                        SizedBox(width: ctx.getRSize(6)),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints(
+                            minWidth: ctx.getRSize(32),
+                            minHeight: ctx.getRSize(32),
+                          ),
+                          tooltip: 'Void top-up',
+                          icon: Icon(
+                            FontAwesomeIcons.arrowRotateLeft.data,
+                            size: ctx.getRSize(14),
+                            color: danger,
+                          ),
+                          onPressed: () => _confirmVoidTopup(txn),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
+              );
+            },
+          ),
         ),
-      ],
-    );
+      );
+    }
+
+    return slivers;
   }
 
   // ── Tab: Orders ─────────────────────────────────────────────────────────────
 
-  Widget _buildOrdersTab(ThemeData theme) {
+  List<Widget> _ordersTabSlivers(ThemeData theme) {
     if (_orders.isEmpty) {
-      return _EmptyState(
-        icon: FontAwesomeIcons.receipt.data,
-        message: 'No orders placed yet',
-        theme: theme,
-      );
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyState(
+            icon: FontAwesomeIcons.receipt.data,
+            message: 'No orders placed yet',
+            theme: theme,
+          ),
+        ),
+      ];
     }
-    return ListView.builder(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(12),
-        context.getRSize(20),
-        context.getRSize(20) + context.deviceBottomPadding,
-      ),
-      itemCount: _orders.length,
-      itemBuilder: (ctx, i) {
-        final order = _orders[i];
-        final total = order.totalAmountKobo / 100.0;
-        return Padding(
-          padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
-          child: InkWell(
-            onTap: () => _showReceipt(order),
-            borderRadius: BorderRadius.circular(12),
-            child: _GlassyCard(
-              padding: EdgeInsets.all(ctx.getRSize(14)),
-              radius: 12,
-              child: Row(
-                children: [
-                  Container(
-                    width: ctx.getRSize(38),
-                    height: ctx.getRSize(38),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withAlpha(25),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      FontAwesomeIcons.receipt.data,
-                      color: theme.colorScheme.primary,
-                      size: ctx.getRSize(16),
-                    ),
-                  ),
-                  SizedBox(width: ctx.getRSize(12)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '#${order.orderNumber}',
-                          style: TextStyle(
-                            fontSize: ctx.getRFontSize(14),
-                            fontWeight: FontWeight.w700,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          DateFormat('d MMM yyyy').format(order.createdAt),
-                          style: TextStyle(
-                            fontSize: ctx.getRFontSize(11),
-                            color: theme.colorScheme.onSurface.withAlpha(115),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+    return [
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          context.getRSize(20),
+          context.getRSize(12),
+          context.getRSize(20),
+          context.getRSize(20) + context.deviceBottomPadding,
+        ),
+        sliver: SliverList.builder(
+          itemCount: _orders.length,
+          itemBuilder: (ctx, i) {
+            final order = _orders[i];
+            final total = order.totalAmountKobo / 100.0;
+            return Padding(
+              padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
+              child: InkWell(
+                onTap: () => _showReceipt(order),
+                borderRadius: BorderRadius.circular(12),
+                child: _GlassyCard(
+                  padding: EdgeInsets.all(ctx.getRSize(14)),
+                  radius: 12,
+                  child: Row(
                     children: [
-                      Text(
-                        formatCurrency(total),
-                        style: TextStyle(
-                          fontSize: ctx.getRFontSize(14),
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onSurface,
+                      Container(
+                        width: ctx.getRSize(38),
+                        height: ctx.getRSize(38),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withAlpha(25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          FontAwesomeIcons.receipt.data,
+                          color: theme.colorScheme.primary,
+                          size: ctx.getRSize(16),
                         ),
                       ),
-                      SizedBox(height: ctx.getRSize(4)),
-                      StatusBadge(
-                        label:
-                            order.status[0].toUpperCase() +
-                            order.status.substring(1),
-                        variant: _orderStatusVariant(order.status),
-                        fontSize: 10,
+                      SizedBox(width: ctx.getRSize(12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '#${order.orderNumber}',
+                              style: TextStyle(
+                                fontSize: ctx.getRFontSize(14),
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            Text(
+                              DateFormat('d MMM yyyy').format(order.createdAt),
+                              style: TextStyle(
+                                fontSize: ctx.getRFontSize(11),
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha(115),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            formatCurrency(total),
+                            style: TextStyle(
+                              fontSize: ctx.getRFontSize(14),
+                              fontWeight: FontWeight.w800,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          SizedBox(height: ctx.getRSize(4)),
+                          StatusBadge(
+                            label:
+                                order.status[0].toUpperCase() +
+                                order.status.substring(1),
+                            variant: _orderStatusVariant(order.status),
+                            fontSize: 10,
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        );
-      },
-    );
+            );
+          },
+        ),
+      ),
+    ];
   }
 
   // ── Tab: Crates ─────────────────────────────────────────────────────────────
 
-  Widget _buildCratesTab(ThemeData theme) {
+  List<Widget> _cratesTabSlivers(ThemeData theme) {
     // §13.4 — the top "+" card is the single entry point for recording crates a
     // customer has brought back (replaces the old per-row "+"). Gated on
     // sales.make (the till-side transaction permission); hidden otherwise
     // (rule #7). It shows even when there is no crate activity yet, so a return
     // can be recorded as a credit for a brand the customer doesn't owe.
     final canRecord = Gates.recordCrateReturn.allows(ref);
-    return ListView(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(12),
-        context.getRSize(20),
-        context.getRSize(20) + context.deviceBottomPadding,
-      ),
-      children: [
-        if (canRecord) ...[
-          _buildCrateReturnCard(theme),
-          SizedBox(height: context.getRSize(16)),
-        ],
-        if (_crateBalances.isEmpty)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: context.getRSize(28)),
-            child: Text(
-              'No crate activity recorded',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                color: theme.colorScheme.onSurface.withAlpha(128),
+    final slivers = <Widget>[];
+
+    final topItems = <Widget>[];
+    if (canRecord) {
+      topItems.add(_buildCrateReturnCard(theme));
+      topItems.add(SizedBox(height: context.getRSize(16)));
+    }
+
+    if (_crateBalances.isEmpty) {
+      if (topItems.isNotEmpty) {
+        slivers.add(
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              context.getRSize(20),
+              context.getRSize(12),
+              context.getRSize(20),
+              0,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: topItems,
               ),
             ),
-          )
-        else
-          ..._crateBalances.map((entry) => _buildCrateBalanceRow(theme, entry)),
-      ],
-    );
+          ),
+        );
+      }
+      slivers.add(
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: context.getRSize(28)),
+            child: Center(
+              child: Text(
+                'No crate activity recorded',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: context.getRFontSize(13),
+                  color: theme.colorScheme.onSurface.withAlpha(128),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      slivers.add(
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            context.getRSize(20),
+            context.getRSize(12),
+            context.getRSize(20),
+            context.getRSize(20) + context.deviceBottomPadding,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              ...topItems,
+              ..._crateBalances.map((entry) => _buildCrateBalanceRow(theme, entry)),
+            ]),
+          ),
+        ),
+      );
+    }
+    return slivers;
   }
 
   // The "+" action card pinned at the top of the Crates tab.
