@@ -527,36 +527,24 @@ class AppDrawer extends ConsumerWidget {
           iconColor: t.colorScheme.error,
           labelColor: t.colorScheme.error,
           onTap: () async {
-            // Log Out (master plan §7.6): signs THIS user out and resets their
-            // PIN so the old PIN can't unlock again — they re-auth with email +
-            // a code and a new PIN. It is NOT a device wipe: the till's data and
-            // other staff's PINs are kept. All roles use this one button.
+            // Log Out (master plan §7.6): a device is used by one user at a
+            // time, so logging out wipes the device's local data — the user
+            // re-auths with email + a code and a new PIN, and the data is
+            // re-downloaded. All roles use this one button.
             // Capture the provider up front — `ref` is invalidated once this
             // widget unmounts mid-await.
             final auth = ref.read(authProvider);
-            final db = ref.read(databaseProvider);
-            final user = auth.currentUser;
-
-            int deviceStaffCount = 0;
-            if (user != null) {
-              deviceStaffCount = await db.userBusinessesDao.countDeviceStaffForBusiness(user.businessId);
-            }
-            final isSoleUser = deviceStaffCount <= 1;
-
-            if (!context.mounted) return;
 
             final confirmed = await showDialog<bool>(
               context: context,
               builder: (ctx) => AlertDialog(
-                title: Text(isSoleUser ? 'Log out and erase all data?' : 'Log out of this device?'),
-                content: Text(
-                  isSoleUser
-                      ? "Logging out of the sole user on this device will erase all local data. You will re-download it after signing in again.\n\n"
-                          "You'll need your email + a one-time code, and a new PIN, to sign back in."
-                      : "You'll need your email + a one-time code, and a new PIN, to "
-                          'sign back in. The till keeps its data and other staff stay '
-                          'signed in.\n\n'
-                          'To step away without signing out, use the lock button instead.',
+                title: const Text('Log out and erase all data?'),
+                content: const Text(
+                  'Logging out will erase all local data on this device. You '
+                  'will re-download it after signing in again.\n\n'
+                  "You'll need your email + a one-time code, and a new PIN, to "
+                  'sign back in.\n\n'
+                  'To step away without signing out, use the lock button instead.',
                 ),
                 actions: [
                   TextButton(
@@ -565,7 +553,7 @@ class AppDrawer extends ConsumerWidget {
                   ),
                   TextButton(
                     onPressed: () => Navigator.of(ctx).pop(true),
-                    child: Text(isSoleUser ? 'Log out & Erase' : 'Log out'),
+                    child: const Text('Log out & Erase'),
                   ),
                 ],
               ),

@@ -485,7 +485,7 @@ PopScope (intercepts the Android back button)
 **Functions:**
 - `_pushRoute(context, ref, screen)` — closes the drawer then pushes; on desktop it pushes into the active tab's navigator instead.
 - `_navigateTo(context, ref, route)` — switches tabs by name.
-- Logout — confirms, and warns differently if you're the sole user (data will be erased).
+- Logout — confirms, then erases the device's local data (a device is used by one user at a time).
 
 **Notes:** `ref.watch` (not `read`) on the auth provider is deliberate — the drawer can still be mounted mid-logout, and watching lets it rebuild before its business-scoped streams throw.
 

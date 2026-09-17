@@ -16,8 +16,8 @@ enum MembershipStatusReaction {
 
   /// `removed` (#117 staff offboarding) — the user was removed by an admin (the
   /// `remove_staff_member` RPC) or resigned elsewhere. Run the same offboarding
-  /// the drawer logout uses: the unsynced-data gate → log out, wiping local
-  /// business data only if they were the sole member on this device.
+  /// the drawer logout uses: the unsynced-data gate → log out, wiping the
+  /// device's local business data.
   offboard,
 }
 

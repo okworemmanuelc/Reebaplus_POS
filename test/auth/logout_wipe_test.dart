@@ -1,23 +1,19 @@
-// shared_till_logout_test.dart
+// logout_wipe_test.dart
 //
-// DAO-level coverage for the shared-till logout flow (device-scoped staff):
+// DAO-level coverage for the logout flow. A device is used by one user at a
+// time, so logout always wipes it (the service-level check lives in
+// lock_screen_test.dart):
 //
-//   (a) Multi-user logout: clearUserPin nulls the leaving user's PIN;
-//       countDeviceStaffForBusiness drops by one; the remaining user(s) keep
-//       their PIN hash intact.
+//   (a) Offline-with-pending: countPending > 0 while offline means logout
+//       should be blocked (the caller throws LogoutWipeException).
 //
-//   (b) Sole-user offline-with-pending: countPending > 0 while offline means
-//       logout should be blocked (the caller throws LogoutWipeException).
+//   (b) Clean: countPending == 0 (or online) → clearAllData wipes every user +
+//       membership row, including other staff who had a PIN here.
 //
-//   (c) Sole-user clean: countPending == 0 (or online) → clearAllData wipes
-//       every user + membership row.
-//
-//   (d) countDeviceStaffForBusiness correctly distinguishes device-authenticated
-//       users (pinHash != null + active membership) from users who only have an
-//       OTP-level row (pinHash == null).
-//
-//   (e) getDeviceStaffForBusiness — who the device's PIN screen can pass to
-//       after a shared-till logout — drops a user once their PIN is cleared.
+//   (c) countDeviceStaffForBusiness (drives the email screen's "Login with PIN"
+//       link) correctly distinguishes device-authenticated users (pinHash !=
+//       null + active membership) from users who only have an OTP-level row
+//       (pinHash == null).
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
@@ -87,54 +83,13 @@ void main() {
         ));
   }
 
-  // ── (a) Multi-user logout clears the leaving user's PIN ─────────────────
+  // ── (a) Offline with pending sync → should block ────────────────────────
 
   test(
-      '(a) multi-user logout: clearUserPin nulls the leaving user PIN and '
-      'drops the device staff count by one', () async {
-    final alice = await addUser('Alice', pinHash: 'aliceHash');
-    final bob = await addUser('Bob', pinHash: 'bobHash');
-    await addMembership(alice, ceoRoleId);
-    await addMembership(bob, cashierRoleId);
-
-    // Pre-condition: both are device-authenticated.
-    expect(await db.userBusinessesDao.countDeviceStaffForBusiness(biz), 2);
-
-    // Simulate the multi-user branch of logOutCurrentUser: clear Alice's PIN.
-    await (db.update(db.users)..where((u) => u.id.equals(alice))).write(
-      const UsersCompanion(
-        pin: Value('__INIT__'),
-        pinHash: Value(null),
-        pinSalt: Value(null),
-        pinIterations: Value(null),
-      ),
-    );
-
-    // Post-condition: only Bob is device-authenticated.
-    expect(await db.userBusinessesDao.countDeviceStaffForBusiness(biz), 1);
-
-    // Alice's user row still exists (data is kept), but her PIN is gone.
-    final aliceRow =
-        await (db.select(db.users)..where((u) => u.id.equals(alice)))
-            .getSingle();
-    expect(aliceRow.pinHash, isNull);
-
-    // Bob's PIN is untouched.
-    final bobRow =
-        await (db.select(db.users)..where((u) => u.id.equals(bob))).getSingle();
-    expect(bobRow.pinHash, 'bobHash');
-  });
-
-  // ── (b) Sole-user offline with pending sync → should block ──────────────
-
-  test(
-      '(b) sole-user with pending sync changes: countPending > 0 signals '
-      'the caller to abort (throw LogoutWipeException)', () async {
+      '(a) pending sync changes: countPending > 0 signals the caller to abort '
+      '(throw LogoutWipeException)', () async {
     final alice = await addUser('Alice', pinHash: 'aliceHash');
     await addMembership(alice, ceoRoleId);
-
-    // Sole device user.
-    expect(await db.userBusinessesDao.countDeviceStaffForBusiness(biz), 1);
 
     // Enqueue an unsynced change.
     await enqueuePending();
@@ -150,21 +105,23 @@ void main() {
     expect(ex.toString(), 'test');
   });
 
-  // ── (c) Sole-user clean → clearAllData wipes everything ─────────────────
+  // ── (b) Clean → clearAllData wipes everything ───────────────────────────
 
   test(
-      '(c) sole-user with no pending changes: clearAllData removes all users '
-      'and memberships (device-wipe path)', () async {
+      '(b) no pending changes: clearAllData removes all users and memberships, '
+      'other PIN holders included (device-wipe path)', () async {
     final alice = await addUser('Alice', pinHash: 'aliceHash');
+    final bob = await addUser('Bob', pinHash: 'bobHash');
     await addMembership(alice, ceoRoleId);
+    await addMembership(bob, cashierRoleId);
 
-    expect(await db.userBusinessesDao.countDeviceStaffForBusiness(biz), 1);
+    expect(await db.userBusinessesDao.countDeviceStaffForBusiness(biz), 2);
 
     // No pending sync queue items for this business.
     db.businessIdResolver = () => biz;
     expect(await db.syncDao.countPending(businessId: biz), 0);
 
-    // Simulate the sole-user wipe path.
+    // Simulate the logout wipe path.
     await db.clearAllData();
 
     expect(await db.select(db.users).get(), isEmpty);
@@ -172,10 +129,10 @@ void main() {
     expect(await db.select(db.businesses).get(), isEmpty);
   });
 
-  // ── (d) countDeviceStaffForBusiness excludes non-PIN users ──────────────
+  // ── (c) countDeviceStaffForBusiness excludes non-PIN users ──────────────
 
   test(
-      '(d) countDeviceStaffForBusiness counts only users with pinHash AND '
+      '(c) countDeviceStaffForBusiness counts only users with pinHash AND '
       'an active membership', () async {
     // Alice: has PIN + active → counted.
     final alice = await addUser('Alice', pinHash: 'hash1');
@@ -201,28 +158,5 @@ void main() {
       ),
     );
     expect(await db.userBusinessesDao.countDeviceStaffForBusiness(biz), 2);
-  });
-
-  // ── (e) getDeviceStaffForBusiness reflects PIN changes ──────────────────
-
-  test(
-      '(e) getDeviceStaffForBusiness drops a user once their PIN is cleared',
-      () async {
-    final alice = await addUser('Alice', pinHash: 'hash1');
-    final bob = await addUser('Bob', pinHash: 'hash2');
-    await addMembership(alice, ceoRoleId);
-    await addMembership(bob, cashierRoleId);
-
-    // Both have a PIN on this device, ordered by name.
-    var staff = await db.userBusinessesDao.getDeviceStaffForBusiness(biz);
-    expect(staff.map((u) => u.name).toList(), ['Alice', 'Bob']);
-
-    // Clear Alice's PIN → she drops out.
-    await (db.update(db.users)..where((u) => u.id.equals(alice))).write(
-      const UsersCompanion(pinHash: Value(null)),
-    );
-
-    staff = await db.userBusinessesDao.getDeviceStaffForBusiness(biz);
-    expect(staff.single.name, 'Bob');
   });
 }

@@ -69,7 +69,7 @@ class LogoutWipeException implements Exception {
 }
 
 /// §3.1 wipe gate (E), two-tier resolution. Thrown by [AuthService.logOutCurrentUser]
-/// when the sole device user tries to log out (a wipe) while the outbox still
+/// when the user tries to log out (a wipe) while the outbox still
 /// holds **un-pushable** rows — orphans the cloud is actively rejecting
 /// (42501 / P0001 / auth-uid drift) that no amount of waiting will drain. Unlike
 /// [LogoutWipeException] (transient rows → "wait and retry"), this must NOT trap
@@ -1273,72 +1273,38 @@ class AuthService extends ValueNotifier<UserData?> {
     return 'Could not remove this staff member. Please try again.';
   }
 
-  /// Resets a user's local PIN to setup-required so the OLD PIN can no longer
-  /// unlock the device. Used by [logOutCurrentUser]; the user re-establishes a
-  /// new PIN after their next email/OTP (master plan §7.4). Mirrors the §5 #4
-  /// exception of [setUserPin] — the PIN columns are local-only.
-  Future<void> clearUserPin(String userId) async {
-    // sync-exempt: §5 #4 — pin/pinHash/pinSalt/pinIterations are local-only
-    // columns by schema design; they do not exist in Supabase.
-    await (_db.update(_db.users)..where((u) => u.id.equals(userId))).write(
-      const UsersCompanion(
-        pin: Value(setupRequiredPin),
-        pinHash: Value(null),
-        pinSalt: Value(null),
-        pinIterations: Value(null),
-      ),
-    );
-  }
-
-  /// Deliberate "Log Out" from the drawer (master plan §7.6). Signs the current
-  /// user out and clears THAT user's local credentials only — it is NOT a
-  /// device wipe:
-  ///   • their PIN is reset to setup-required (the old PIN can't unlock again),
-  ///   • their session row is revoked,
-  ///   • the device pointer + Supabase/Google tokens are cleared.
-  /// The business's shared data, the sync queue, and OTHER staff's PINs are all
-  /// KEPT — so the offline-first till stays usable and needs no re-pull. Next
-  /// launch demands Email + OTP, then a NEW PIN (per §7.4).
+  /// Deliberate "Log Out" from the drawer (master plan §7.6), also run when an
+  /// admin removes the signed-in user. A device is used by one user at a time,
+  /// so logging out WIPES the device: local business data, every PIN, the
+  /// device pointer, and the Supabase/Google tokens. Next launch demands
+  /// Email + OTP, then a NEW PIN (per §7.4), and the data is re-downloaded.
   ///
   /// Separate from [fullLogout] (the involuntary remote-kick / shift-expiry /
-  /// session-expired path), which must NOT reset the user's PIN.
+  /// session-expired path), which does not wipe local data.
   Future<void> logOutCurrentUser() async {
     final user = value;
     if (user == null) return;
     final businessId = user.businessId;
 
-    // Check if they are the sole device user BEFORE clearing their PIN.
-    final count = await _db.userBusinessesDao.countDeviceStaffForBusiness(businessId);
-    final isSoleUser = count <= 1;
+    // §3.1 wipe gate (E) / Invariant #12: the wipe may never destroy a
+    // committed local row that still has an un-uploaded outbox entry. The gate
+    // throws LogoutWipeException (retryable rows remain → "connect and sync
+    // first") or LogoutBlockedByUnsyncedDataException (only un-pushable orphans
+    // remain → the Resolve-unsynced-data flow), and returns only when the
+    // outbox is confirmed clean.
+    await _assertOutboxClearBeforeWipe(businessId);
 
-    if (isSoleUser) {
-      // §3.1 wipe gate (E) / Invariant #12: a sole-user logout WIPES the device,
-      // so it may never destroy a committed local row that still has an
-      // un-uploaded outbox entry. The gate throws LogoutWipeException (retryable
-      // rows remain → "connect and sync first") or
-      // LogoutBlockedByUnsyncedDataException (only un-pushable orphans remain →
-      // the Resolve-unsynced-data flow), and returns only when the outbox is
-      // confirmed clean.
-      await _assertOutboxClearBeforeWipe(businessId);
-
-      // Outbox confirmed empty — safe to wipe.
-      try {
-        await _db.clearAllData();
-      } catch (e) {
-        debugPrint('[AuthService] logOutCurrentUser clearAllData error: $e');
-      }
-      await fullLogout();
-      return;
+    // Outbox confirmed empty — safe to wipe.
+    try {
+      await _db.clearAllData();
+    } catch (e) {
+      debugPrint('[AuthService] logOutCurrentUser clearAllData error: $e');
     }
-
-    // Multiple device-authenticated users (shared till): drop this user from
-    // the device set and return to the lock screen — the others keep their
-    // PINs and the till's shared data + outbox are untouched.
-    await _dropCurrentUserFromSharedDevice(user);
+    await fullLogout();
   }
 
   /// §3.1 wipe gate (E) / Invariant #12. Guards any device-wiping offboard (a
-  /// sole-user logout or a sole-member self-resign): a wipe may never destroy a
+  /// logout or a self-resign): a wipe may never destroy a
   /// committed local row that still has an un-uploaded outbox entry. The outbox
   /// is the union of retryable pending rows (`sync_queue`) and un-pushable
   /// orphans (`sync_queue_orphans`).
@@ -1383,63 +1349,6 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
-  /// Shared-till teardown for a single leaving user (drawer logout OR self-resign
-  /// when other device staff remain): reset THIS user's PIN so the old PIN can't
-  /// unlock again, revoke their session, drop the Supabase/Google tokens, hand
-  /// the device pointer to a staff member who still has a PIN here, and return
-  /// to the lock screen. It is NOT a device wipe — the business's shared data,
-  /// the sync queue, and OTHER staff's PINs are all kept.
-  Future<void> _dropCurrentUserFromSharedDevice(UserData user) async {
-    try {
-      await clearUserPin(user.id);
-    } catch (e) {
-      debugPrint('[AuthService] _dropCurrentUserFromSharedDevice clearUserPin error: $e');
-    }
-
-    final sid = currentSessionId;
-    if (sid != null) {
-      try {
-        await _db.sessionsDao.revokeSession(sid);
-      } catch (e) {
-        debugPrint('[AuthService] _dropCurrentUserFromSharedDevice revokeSession error: $e');
-      }
-      currentSessionId = null;
-    }
-
-    try {
-      await _supabase.auth.signOut(scope: SignOutScope.local);
-    } catch (e) {
-      debugPrint('[AuthService] _dropCurrentUserFromSharedDevice signOut error: $e');
-    }
-
-    try {
-      await GoogleSignIn().signOut();
-    } catch (e) {
-      debugPrint('[AuthService] _dropCurrentUserFromSharedDevice Google signOut error: $e');
-    }
-
-    // The device pointer still names the leaving user, whose PIN was just
-    // cleared — the lock screen would show someone who can no longer unlock.
-    // Point it at a staff member who still has a PIN on this device instead.
-    try {
-      final remaining = await _db.userBusinessesDao
-          .getDeviceStaffForBusiness(user.businessId);
-      final next = remaining.where((u) => u.id != user.id).firstOrNull;
-      if (next != null) {
-        await saveDeviceUserId(next.id);
-      } else {
-        await clearDeviceUserId();
-      }
-    } catch (e) {
-      debugPrint('[AuthService] _dropCurrentUserFromSharedDevice device pointer error: $e');
-    }
-
-    _sync.stopRealtimeSync();
-    _nav.clearStoreLock();
-    _nav.resetNavigation();
-    value = null;
-  }
-
   /// §3.1 "Resolve unsynced data" terminal step. Called by the UI ONLY after a
   /// [LogoutBlockedByUnsyncedDataException] was surfaced, the user exported the
   /// stuck records, and they typed-confirmed the discard. Records the loss as a
@@ -1478,19 +1387,16 @@ class AuthService extends ValueNotifier<UserData?> {
   /// attribution stub. The business owner cannot resign — the RPC rejects them
   /// (their exit is [deleteBusinessAndAccount]).
   ///
-  /// The device side REUSES the sole-user wipe machinery, and — crucially — the
+  /// The device side REUSES the logout wipe machinery, and — crucially — the
   /// unsynced-data gate runs BEFORE the RPC detaches us: once the RPC nulls our
   /// auth link our JWT loses access, so any un-pushed row would orphan. Pushing
   /// while we still have access is what keeps "no offline sale is lost" true.
-  ///   • Sole member on this device → gate (push + confirm clean) → RPC → wipe.
-  ///     If the gate finds retryable rows it throws [LogoutWipeException]; if it
-  ///     finds only orphans it throws [LogoutBlockedByUnsyncedDataException] and
-  ///     the UI routes to the Resolve-unsynced-data flow, whose terminal is
-  ///     [discardUnsyncedAndResign] (NOT the plain logout terminal). The RPC has
-  ///     not run in either throw path, so a blocked/deferred resign is a no-op.
-  ///   • Shared till (other device staff remain) → RPC → drop this user to the
-  ///     lock screen (no wipe; their queued rows stay in the shared
-  ///     outbox and other members sync them).
+  /// Order: gate (push + confirm clean) → RPC → wipe. If the gate finds
+  /// retryable rows it throws [LogoutWipeException]; if it finds only orphans it
+  /// throws [LogoutBlockedByUnsyncedDataException] and the UI routes to the
+  /// Resolve-unsynced-data flow, whose terminal is [discardUnsyncedAndResign]
+  /// (NOT the plain logout terminal). The RPC has not run in either throw path,
+  /// so a blocked/deferred resign is a no-op.
   ///
   /// Online-only (like [removeStaffMember] / [deleteBusinessAndAccount]): throws
   /// [StaffResignException] WITHOUT changing local state when offline.
@@ -1503,7 +1409,7 @@ class AuthService extends ValueNotifier<UserData?> {
   /// [DriverOffboardingBlockedException] and changes nothing.
   // sync-exempt: #117 — the cloud `resign_own_membership` RPC is the
   // authoritative writer of both the membership status and the auth-link null;
-  // the local wipe / shared-device drop mirrors a server-already-applied state, so there
+  // the local wipe mirrors a server-already-applied state, so there
   // is nothing to enqueue. No raw synced-table write leaves the device here.
   Future<void> resignOwnMembership() async {
     final user = value;
@@ -1525,32 +1431,21 @@ class AuthService extends ValueNotifier<UserData?> {
       );
     }
 
-    final count =
-        await _db.userBusinessesDao.countDeviceStaffForBusiness(businessId);
-    final isSoleUser = count <= 1;
-
-    if (isSoleUser) {
-      // Gate BEFORE detaching (throws on retryable/orphan rows). Only when it
-      // returns cleanly do we detach server-side and wipe.
-      await _assertOutboxClearBeforeWipe(businessId);
-      await _resignViaRpc(businessId);
-      try {
-        await _db.clearAllData();
-      } catch (e) {
-        debugPrint('[AuthService] resignOwnMembership clearAllData error: $e');
-      }
-      await fullLogout();
-      return;
-    }
-
-    // Shared till: detach server-side, then drop this user to the lock screen.
+    // Gate BEFORE detaching (throws on retryable/orphan rows). Only when it
+    // returns cleanly do we detach server-side and wipe.
+    await _assertOutboxClearBeforeWipe(businessId);
     await _resignViaRpc(businessId);
-    await _dropCurrentUserFromSharedDevice(user);
+    try {
+      await _db.clearAllData();
+    } catch (e) {
+      debugPrint('[AuthService] resignOwnMembership clearAllData error: $e');
+    }
+    await fullLogout();
   }
 
   /// §3.1 "Resolve unsynced data" terminal for a self-resign (#117). Called by
   /// the UI ONLY after [resignOwnMembership] surfaced a
-  /// [LogoutBlockedByUnsyncedDataException] (sole member, orphans only), the user
+  /// [LogoutBlockedByUnsyncedDataException] (orphans only), the user
   /// exported the stuck records, and typed-confirmed the discard. Detaches
   /// server-side FIRST (so a failed RPC discards nothing and leaves the device
   /// intact), then records the loss, discards the un-pushable outbox, wipes, and

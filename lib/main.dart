@@ -156,7 +156,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
 
   /// Business bound for push registration, tracked to detect the sign-in edge
   /// (`_onAuthChanged`) and the full-logout edge (`_onDeviceUserChanged`). A
-  /// lock / sole-user logout keeps it — a locked device still receives pushes;
+  /// lock keeps it — a locked device still receives pushes;
   /// only a full logout (device-user cleared → Welcome) nulls the token.
   String? _pushBusinessId;
 
@@ -283,9 +283,8 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// membership flips to `removed` (an admin ran `remove_staff_member` on
   /// another device; the change arrives via the next pull / broadcast). Reuses
   /// [AuthService.logOutCurrentUser] — the exact drawer-logout path — so the
-  /// unsynced-data gate runs and local business data is wiped ONLY when they
-  /// were the sole member on this device (otherwise just this user is dropped to
-  /// the lock screen). Surfaces the gate's two-tier outcome exactly as
+  /// unsynced-data gate runs before the device is wiped. Surfaces the gate's
+  /// two-tier outcome exactly as
   /// the drawer does: retryable rows → error toast ("connect and sync first");
   /// orphans only → the Resolve-unsynced-data flow. The admin already detached
   /// them server-side, so the plain (non-resign) terminals apply here.
@@ -367,7 +366,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   }
 
   /// The full-logout edge: the device user was cleared (→ Welcome). Null the
-  /// token client-side + in `devices`. A lock / sole-user logout does NOT hit
+  /// token client-side + in `devices`. A lock does NOT hit
   /// this (device user retained), so a locked device keeps receiving pushes.
   void _syncPushSignOut() {
     if (_auth.deviceUserIdNotifier.value == null && _pushBusinessId != null) {
@@ -417,7 +416,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     //     the PIN screen, which refuses a suspended member's PIN so they can't
     //     unlock themselves again.
     //   • removed → run the SAME offboarding the drawer logout uses (unsynced-
-    //     data gate → log out; wipe only if sole member on this device).
+    //     data gate → log out and wipe the device).
     ref.listen(currentUserMembershipStatusProvider, (_, next) {
       if (_auth.value == null) return;
       switch (membershipStatusReaction(next)) {

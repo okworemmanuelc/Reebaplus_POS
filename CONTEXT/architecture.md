@@ -96,7 +96,7 @@ Authentication is split deliberately into a **portable identity** and a **device
 
 - **Identity (portable):** verified by Supabase Auth via one of two providers — **email + OTP** or **Sign in with Google (OAuth)** — either of which issues the JWT that authorizes all Postgres and RPC access. The provider is an authentication detail only; the resolved **email address is the canonical identity key** in both cases, so the same person signing in by email OTP or by Google with the same address is one identity. Recovery on a new device re-establishes a user through whichever provider their email is registered with.
 - **Unlock factor (device-local):** a 6-digit PIN, stored only as a hash in `flutter_secure_storage` on that device. The PIN is never sent to the cloud and never stored in Postgres. It exists to let a staff member re-assert their identity quickly on a shared till without re-running the full provider sign-in (email OTP or Google).
-- **Shared-till session:** a cold start, the drawer lock button, and auto-lock all show the PIN screen for the last signed-in user (the device pointer). Entering that user's PIN unlocks *only* that identity; a different staff member taps "Not you? Switch account" and signs in with their email + PIN. Locking keeps the PIN. Log Out clears the leaving user's PIN; on a shared till it moves the device pointer to a staff member who still has a PIN here. The PIN screen refuses a suspended member's PIN. (The "Who's working?" staff picker was removed 2026-09-17.)
+- **Shared-till session:** a cold start, the drawer lock button, and auto-lock all show the PIN screen for the last signed-in user (the device pointer). Entering that user's PIN unlocks *only* that identity; a different staff member taps "Not you? Switch account" and signs in with their email + PIN. Locking keeps the PIN. A device is used by one user at a time, so Log Out (and self-resign, and an admin removal) wipes the device's local data behind the invariant-#12 wipe gate; the next sign-in re-downloads it. The PIN screen refuses a suspended member's PIN. (The "Who's working?" staff picker was removed 2026-09-17.)
 
 ### Active sessions across multiple devices
 
@@ -285,8 +285,8 @@ This is an **alert channel only** — it never carries or persists business data
   (`lib/shared/services/`) owns the token lifecycle — it registers the FCM token
   into `devices` (via `DeviceRegistryService`) on sign-in / permission-grant /
   token-refresh / reconnect, and clears it on **full logout** (client-side
-  `deleteToken()` **and** nulling `devices.fcm_token`). A lock / sole-user logout
-  keeps the token, so a locked device still receives broadcasts. A foreground push
+  `deleteToken()` **and** nulling `devices.fcm_token`). A lock keeps the token,
+  so a locked device still receives broadcasts. A foreground push
   is displayed via the `reebaplus_announcements` channel (Android does not
   auto-show foreground pushes); a tap in any state (foreground, background, or a
   killed-app cold start replayed after `MainLayout` mounts) opens the in-app bell

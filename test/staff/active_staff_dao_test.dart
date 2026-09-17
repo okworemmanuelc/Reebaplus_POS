@@ -1,7 +1,7 @@
 // active_staff_dao_test.dart
 //
 // Covers UserBusinessesDao.watchActiveStaffForBusiness (the Get Started
-// checklist's staff count) and getDeviceStaffForBusiness (who holds a PIN on
+// checklist's staff count) and countDeviceStaffForBusiness (who holds a PIN on
 // this device). Both are deliberately unscoped (they resolve before a session
 // business binds), so these assertions key off the explicit businessId:
 //   * only ACTIVE memberships are returned (suspended excluded, §8.3);
@@ -107,7 +107,7 @@ void main() {
     expect(entries, isEmpty);
   });
 
-  test('getDeviceStaffForBusiness/countDeviceStaffForBusiness returns only staff with pinHash configured', () async {
+  test('countDeviceStaffForBusiness counts only staff with pinHash configured', () async {
     final alice = await addUser(biz1, 'Alice', pinHash: 'hash1');
     final bob = await addUser(biz1, 'Bob'); // no pinHash
     final carol = await addUser(biz1, 'Carol', pinHash: 'hash3'); // suspended
@@ -117,9 +117,6 @@ void main() {
     await addMembership(biz1, bob, cashierRoleId);
     await addMembership(biz1, carol, ceoRoleId, status: 'suspended');
     await addMembership(biz2, dave, biz2RoleId);
-
-    final deviceStaff = await db.userBusinessesDao.getDeviceStaffForBusiness(biz1);
-    expect(deviceStaff.map((u) => u.name).toList(), ['Alice']);
 
     final count = await db.userBusinessesDao.countDeviceStaffForBusiness(biz1);
     expect(count, 1);

@@ -1449,8 +1449,7 @@ final currentUserRoleProvider = Provider<RoleData?>((ref) {
 /// Drives the live membership guard in main.dart (master plan §9.5 / §8.3 +
 /// #117): 'suspended' locks the device (the PIN screen refuses a suspended
 /// member's PIN, so they can't unlock themselves again); 'removed' (an admin ran
-/// `remove_staff_member`) runs the offboarding gate → logout, wiping local data
-/// only when they were the sole member on this device.
+/// `remove_staff_member`) runs the offboarding gate → logout, wiping local data.
 final currentUserMembershipStatusProvider = Provider<String?>((ref) {
   final user = ref.watch(authProvider).currentUser;
   if (user == null) return null;

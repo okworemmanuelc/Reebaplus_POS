@@ -18,6 +18,17 @@ The human updates it when resolving open questions or making architectural decis
 - **Review fixes (PR #262):** the populated state now fills the cart and hands Sales Detail the seeded orders; both screens had rendered their empty layouts in both states. Populated Sales Detail comes out SILENT (list viewport 41dp). A non-overflow error the binding captured now marks the line ERROR instead of OK. 13 lines flip, all missing test plugin mocks (path_provider, connectivity, secure storage) or a ListTile assertion, so those screens were never really measured. The 10 test failures on those screens predate this.
 - **Open:** confirm Orders (#244) and Driver Profile (#247) at 320x568 portrait. Both were clean at 800x360.
 
+### Logout always wipes the device (2026-09-17)
+No issue filed. The owner's rule: a device is used by one user at a time, so logging out wipes it. Branch `feat/logout-always-wipes`, stacked on `feat/overflow-discovery-sweep-241` (PR #262) because it rewrites code the picker commit there added.
+
+- **`AuthService.logOutCurrentUser`:** no longer counts device staff. It always runs the invariant-#12 wipe gate, then `clearAllData` + `fullLogout`. The drawer logout and the admin-removed offboarding in `main.dart` both go through it.
+- **`AuthService.resignOwnMembership`:** the same rule. Gate → `resign_own_membership` RPC → wipe, with no shared-till branch.
+- **Deleted:** `_dropCurrentUserFromSharedDevice` (the shared-till branch and the device-pointer handoff added hours earlier), `AuthService.clearUserPin` (only that branch used it), and `UserBusinessesDao.getDeviceStaffForBusiness`. `countDeviceStaffForBusiness` stays because the email screen's "Login with PIN" link uses it.
+- **Dialogs:** the drawer logout always asks "Log out and erase all data?" and still points at the lock button. The Profile "Leave and delete your account?" dialog always says local data will be erased.
+- **Not a bug:** the earlier "Spotted, not fixed" note (an admin removal counting as a sole-user logout) is withdrawn. Wiping is now the intended result in every case.
+- **Docs:** ADR 0016 has an amendment note (its shared-till scope no longer applies). `architecture.md`, `project-overview.md` and `CODEBASE_MAP.md` now say logout wipes. The Invariants section is untouched; its "sole-user logout" example still holds.
+- **Tests:** in `lock_screen_test`, "log out wipes the device even when another staff member has a PIN" replaces the pointer-handoff test. `shared_till_logout_test.dart` is renamed `logout_wipe_test.dart` and loses the clear-PIN and handoff cases. The `clearUserPin` case is removed from `pin_email_scoping_test`. `flutter analyze` is clean, and the auth, staff, providers and sync suites pass (+430).
+
 ### "Who's working?" picker removed — the drawer button is now a lock (2026-09-17)
 No issue filed; the owner asked for the picker to go. Committed on `feat/overflow-discovery-sweep-241` as its own commit, at the owner's request, in the #241 PR (both touch `lib/main.dart`).
 
@@ -27,9 +38,8 @@ No issue filed; the owner asked for the picker to go. Committed on `feat/overflo
 - **Drawer button:** `FontAwesomeIcons.rightLeft` "Switch User" → `FontAwesomeIcons.lock` "Lock app"; same `lockApp()` call. The shared-till logout dialog now points at the lock button.
 - **Two jobs the picker did, moved elsewhere:**
   1. *Suspended staff can't get back in.* The picker hid them; now `LoginScreen._enterApp` (PIN and biometrics both go through it) reads the membership and refuses `suspended` with "Your account is suspended. Ask your manager to reactivate it." `removed` is not blocked, because the offboarding in `main.dart` needs them signed in to run.
-  2. *A shared-till logout doesn't strand the lock screen.* The device pointer still named the leaving user, whose PIN had just been cleared. `_dropCurrentUserFromSharedDevice` now moves it to a staff member who still has a PIN (`getDeviceStaffForBusiness`, by name), or clears it if none is left.
+  2. *A shared-till logout doesn't strand the lock screen.* The device pointer still named the leaving user, whose PIN had just been cleared. `_dropCurrentUserFromSharedDevice` now moves it to a staff member who still has a PIN (`getDeviceStaffForBusiness`, by name), or clears it if none is left. **Superseded the same day:** logout now always wipes the device (entry above).
 - **Tests:** new `test/auth/lock_screen_test.dart` (lock keeps the device pointer; shared-till logout moves it; PIN screen refuses a suspended member). Both behaviour tests were checked to fail with the fix removed.
-- **Spotted, not fixed (pre-existing):** when an admin removes a staff member, `logOutCurrentUser` counts device staff with `status = 'active'`, so the removed user isn't counted. If exactly one other PIN holder remains, the removal is treated as a sole-user logout and wipes the device.
 
 ### Fix — Pull-to-refresh threw "Build scheduled during frame" after the supplier form closed (2026-09-17)
 Branch `fix/refresh-wrapper-mid-frame-setstate`, cut from `origin/main` (`66d0efd`). No issue filed.

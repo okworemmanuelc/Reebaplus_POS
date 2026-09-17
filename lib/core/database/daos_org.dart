@@ -237,25 +237,6 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// One-shot list of active staff for [businessId] who are device-authenticated
-  /// (their users.pinHash is not null), ordered by name. When one staff member
-  /// signs out of a shared till, the device's PIN screen passes to one of these.
-  /// Not session-scoped: it runs while no one is signed in.
-  Future<List<UserData>> getDeviceStaffForBusiness(String businessId) async {
-    final query =
-        select(userBusinesses).join([
-            innerJoin(users, users.id.equalsExp(userBusinesses.userId)),
-          ])
-          ..where(
-            userBusinesses.businessId.equals(businessId) &
-                userBusinesses.status.equals('active') &
-                users.pinHash.isNotNull(),
-          )
-          ..orderBy([OrderingTerm.asc(users.name)]);
-    final rows = await query.get();
-    return rows.map((row) => row.readTable(users)).toList();
-  }
-
   /// One-shot count of active staff for [businessId] who are device-authenticated
   /// (meaning their users.pinHash is not null).
   Future<int> countDeviceStaffForBusiness(String businessId) async {

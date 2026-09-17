@@ -12,7 +12,7 @@
 //     `suspended` → lock; everything else → none.
 //   * the local `removed` flip (markRemovedLocal, as applied by a pull) drives
 //     the offboard reaction — the admin-removed detection decision.
-//   * the sole-member wipe gate's three branches, at the DAO-signal level that
+//   * the logout/resign wipe gate's three branches, at the DAO-signal level that
 //     resignOwnMembership / logOutCurrentUser decide on: retryable rows → block
 //     (LogoutWipeException), orphans only → Resolve-unsynced-data
 //     (LogoutBlockedByUnsyncedDataException), clean → proceed.
@@ -143,9 +143,9 @@ void main() {
     });
   });
 
-  // ── Sole-member wipe gate — three branches (DAO signals + exceptions) ─────
+  // ── Wipe gate — three branches (DAO signals + exceptions) ────────────────
 
-  group('sole-member wipe gate branches', () {
+  group('wipe gate branches', () {
     late AppDatabase db;
     late String biz;
 

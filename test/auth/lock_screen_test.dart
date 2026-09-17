@@ -1,10 +1,9 @@
 // lock_screen_test.dart
 //
 // The "Who's working?" picker is gone: every lock lands on the device user's
-// PIN screen. These guard what the picker used to take care of:
+// PIN screen, and a device is used by one user at a time. These guard:
 //   * lockApp keeps the device pointer, so the PIN screen shows the same user.
-//   * A shared-till logout clears the leaving user's PIN, so the device pointer
-//     moves to a staff member who still has a PIN on this device.
+//   * Log out wipes the device, even when another staff member has a PIN here.
 //   * The PIN screen refuses a suspended member's PIN (the picker used to hide
 //     suspended staff).
 
@@ -147,10 +146,9 @@ void main() {
     expect(auth.deviceUserIdNotifier.value, alice.id);
   });
 
-  test(
-      'shared-till logout moves the device pointer to a staff member who '
-      'still has a PIN', () async {
-    final alice = await addStaff('Alice');
+  test('log out wipes the device even when another staff member has a PIN',
+      () async {
+    await addStaff('Alice');
     final bob = await addStaff('Bob');
     await auth.saveDeviceUserId(bob.id);
     auth.value = bob;
@@ -158,12 +156,11 @@ void main() {
     await auth.logOutCurrentUser();
 
     expect(auth.value, isNull);
-    final bobRow = await (db.select(db.users)
-          ..where((u) => u.id.equals(bob.id)))
-        .getSingle();
-    expect(bobRow.pinHash, isNull, reason: "the leaving user's PIN is cleared");
-    expect(await auth.getDeviceUserId(), alice.id);
-    expect(auth.deviceUserIdNotifier.value, alice.id);
+    expect(await db.select(db.users).get(), isEmpty);
+    expect(await db.select(db.userBusinesses).get(), isEmpty);
+    expect(await db.select(db.businesses).get(), isEmpty);
+    expect(await auth.getDeviceUserId(), isNull);
+    expect(auth.deviceUserIdNotifier.value, isNull);
   });
 
   testWidgets('the PIN screen refuses a suspended member', (tester) async {

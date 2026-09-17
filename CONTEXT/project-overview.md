@@ -37,7 +37,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 - Welcome screen, CEO sign-up (9 steps), staff sign-up via invite code (7 steps), login with email + OTP + PIN, and Forgot PIN via email OTP. All transactional email — OTP, login, Forgot PIN, and the staff invite code — is sent from the Reebaplus domain (auth email via Supabase Custom SMTP; the invite code via the `send-invite-email` Edge Function), with the invite code also copyable/shareable on-device.
 - PINs are device-local unlock factors that are never sent to the cloud; email + OTP is the portable identity and the recovery path. A new device re-establishes the PIN locally after OTP.
-- A lock button in the drawer and auto-lock both return to the PIN screen and keep the current PIN; Log Out clears the leaving user's PIN, and on a shared till hands the lock screen to a staff member who still has a PIN. A suspended member's PIN is refused. (The "Who's working?" staff picker was removed 2026-09-17.)
+- A lock button in the drawer and auto-lock both return to the PIN screen and keep the current PIN. A device is used by one user at a time, so Log Out wipes the device's local data (it is re-downloaded at the next sign-in). A suspended member's PIN is refused. (The "Who's working?" staff picker was removed 2026-09-17.)
 
 ### Roles & Permissions
 
