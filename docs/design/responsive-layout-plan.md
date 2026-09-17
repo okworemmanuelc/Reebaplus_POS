@@ -295,8 +295,9 @@ for.
 >
 > **The implementation risk flagged below did not materialise.** A collapsing
 > header inside `AppRefreshWrapper` works; a test pins that overpulling POS
-> still descends the spinner. `PinnedHeaderSliver` and `SliverFloatingHeader`
-> (Flutter 3.24+) did the work, so no `NestedScrollView` and no hand-written
+> still descends the spinner. `PinnedHeaderSliver` (Flutter 3.24+) and
+> `SliverFloatingHeader` (Flutter 3.27+, so **3.27 is the binding floor** for
+> this screen) did the work, so no `NestedScrollView` and no hand-written
 > `SliverPersistentHeaderDelegate` with a declared extent were needed — which
 > also means there is no declared extent to keep in step with the responsive
 > scale.
