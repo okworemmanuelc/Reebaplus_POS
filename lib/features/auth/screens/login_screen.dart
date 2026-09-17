@@ -180,8 +180,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       // owner. A preset staff member who is NOT the device owner must use a
       // PIN — offering biometrics would silently unlock the device owner
       // instead (master plan §7.2a).
-      // pinHash != null also gates out a post-Log-Out owner whose PIN was reset
-      // to setup-required (clearUserPin), until they re-establish a PIN.
+      // pinHash != null also gates out an owner who hasn't set up a PIN yet.
       final deviceUserId = await ref.read(authProvider).getDeviceUserId();
       final isDeviceOwner =
           _identifiedUser != null &&

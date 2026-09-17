@@ -1,6 +1,11 @@
 # Staff offboarding detaches identity, preserves attribution, reuses the wipe-gate
 
-**Status:** accepted (2026-07-11)
+**Status:** accepted (2026-07-11); amended 2026-09-17
+
+**Amendment (2026-09-17):** the "Shared-till scope" decision below no longer
+applies. A device is used by one user at a time, so logout, self-resign and an
+admin removal now always wipe the device, behind the same invariant-#12 wipe
+gate. The "Who's working?" picker it mentions was also removed.
 
 The app can *suspend* a staff member (`user_businesses.status = 'suspended'`, a
 reversible block) but has no way to **remove** one. The gap has three faces: a

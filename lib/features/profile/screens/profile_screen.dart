@@ -274,41 +274,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   /// #117 self-resign. Confirms, then hands off to
   /// [AuthService.resignOwnMembership] (server-authoritative detach + free the
-  /// email). The device side reuses the sole-user wipe gate, so the two-tier
+  /// email). The device side reuses the logout wipe gate, so the two-tier
   /// unsynced-data outcome is surfaced exactly as the drawer logout does —
   /// retryable rows → an error ("connect and sync first"); orphans only → the
   /// Resolve-unsynced-data flow (here with `isResign: true`, whose terminal also
-  /// completes the server detach). On success, main.dart routes to Welcome (sole
-  /// member) or the lock screen (shared till).
+  /// completes the server detach). On success, main.dart routes to Welcome.
   Future<void> _confirmAndResign() async {
     final auth = ref.read(authProvider);
-    final db = ref.read(databaseProvider);
-    final user = auth.currentUser;
-    if (user == null) return;
-
-    // Sole member on this device → the resign wipes local data (as a sole-user
-    // logout); otherwise only this user is removed from the shared till. Used to
-    // word the confirmation honestly.
-    final deviceStaffCount =
-        await db.userBusinessesDao.countDeviceStaffForBusiness(user.businessId);
-    final isSoleUser = deviceStaffCount <= 1;
-    if (!mounted) return;
+    if (auth.currentUser == null) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Leave and delete your account?'),
-        content: Text(
-          isSoleUser
-              ? 'You will be signed out and removed from this business. Your '
-                  'email is freed so you can start a new business with it '
-                  'later.\n\nYou are the only user on this device, so all local '
-                  'data will be erased. You can re-download it after signing in '
-                  'to another business.'
-              : 'You will be signed out and removed from this business. Your '
-                  'email is freed so you can start a new business with it '
-                  'later.\n\nOther staff on this device keep their data and '
-                  'stay signed in.',
+        content: const Text(
+          'You will be signed out and removed from this business. Your '
+          'email is freed so you can start a new business with it '
+          'later.\n\nAll local data on this device will be erased. You can '
+          're-download it after signing in to another business.',
         ),
         actions: [
           TextButton(
@@ -327,7 +310,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       await auth.resignOwnMembership();
     } on LogoutBlockedByUnsyncedDataException catch (e) {
-      // Orphans only (sole member): route to export → typed-confirm discard,
+      // Orphans only: route to export → typed-confirm discard,
       // whose terminal (isResign) also completes the server-side detach.
       if (mounted) {
         await showResolveUnsyncedDataDialog(

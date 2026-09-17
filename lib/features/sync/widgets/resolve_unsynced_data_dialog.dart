@@ -6,7 +6,7 @@ import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
-/// §3.1 "Resolve unsynced data" flow (Invariant #12). Surfaced when a sole-user
+/// §3.1 "Resolve unsynced data" flow (Invariant #12). Surfaced when a
 /// logout is blocked because the outbox holds **un-pushable** rows the cloud is
 /// actively rejecting (this device's access to the business changed). The user
 /// is never trapped: they EXPORT the stuck records (money recoverable on paper)
