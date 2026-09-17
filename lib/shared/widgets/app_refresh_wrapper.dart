@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -84,13 +85,32 @@ class _AppRefreshWrapperState extends ConsumerState<AppRefreshWrapper> {
       // are ignored so a released overpull survives to ScrollEnd.
       if (_pull != 0 && n.dragDetails != null) _setPull(0);
     } else if (n is ScrollEndNotification) {
-      if (_pull >= _triggerThreshold) {
+      // Only the finger letting go fires a refresh: that end carries its
+      // DragEndDetails. A scroll also ends with no finger involved — when a
+      // scroll view is resized (the keyboard closing after a form is saved), a
+      // NestedScrollView ends its leftover scroll activity inside
+      // performLayout. That end only settles the pull, after the frame.
+      if (n.dragDetails != null && _pull >= _triggerThreshold) {
         _onRefresh();
       } else if (_pull != 0) {
-        _settleTo(0);
+        _afterFrame(() => _settleTo(0));
       }
     }
     return false;
+  }
+
+  /// Runs [change] now, or once the frame is done if the notification arrived
+  /// while the tree is being built, laid out or painted — setState then throws
+  /// "Build scheduled during frame".
+  void _afterFrame(VoidCallback change) {
+    final scheduler = SchedulerBinding.instance;
+    if (scheduler.schedulerPhase != SchedulerPhase.persistentCallbacks) {
+      change();
+      return;
+    }
+    scheduler.addPostFrameCallback((_) {
+      if (mounted) change();
+    });
   }
 
   void _setPull(double v) {
