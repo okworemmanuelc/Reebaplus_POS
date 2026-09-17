@@ -83,6 +83,45 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
     return t.isEmpty ? null : t;
   }
 
+  Future<bool> _confirmSaveSupplier(String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          _isEdit ? 'Save Changes?' : 'Save Supplier?',
+          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          _isEdit
+              ? 'Are you sure you want to save changes to "$name"?'
+              : 'Are you sure you want to save "$name"?',
+          style: Theme.of(ctx).textTheme.bodyMedium,
+        ),
+        actions: [
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          AppButton(
+            text: 'Save',
+            variant: AppButtonVariant.primary,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _saving) return;
     // Write-boundary re-check (hard rule #6 / 3-layer enforcement).
@@ -92,6 +131,10 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
       Navigator.pop(context);
       return;
     }
+    final supplierName = _nameCtrl.text.trim();
+    final confirmed = await _confirmSaveSupplier(supplierName);
+    if (!confirmed || !mounted) return;
+
     final db = ref.read(databaseProvider);
     setState(() => _saving = true);
     try {
@@ -330,26 +373,28 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
                 ),
               ),
               SizedBox(width: context.getRSize(14)),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _isEdit ? 'Edit Supplier' : 'Add New Supplier',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(18),
-                      fontWeight: FontWeight.w800,
-                      color: _text,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isEdit ? 'Edit Supplier' : 'Add New Supplier',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(18),
+                        fontWeight: FontWeight.w800,
+                        color: _text,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Company & bank details',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
+                    Text(
+                      'Company & bank details',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(13),
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

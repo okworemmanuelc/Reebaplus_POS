@@ -14,8 +14,6 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart'; // RESPONSIVE: utility imported
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/crate_group.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/supplier.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -24,6 +22,7 @@ import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/screens/supplier_detail_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
@@ -909,7 +908,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   }
 
   List<Widget> _suppliersTabSlivers(BuildContext context) {
-    final suppliers = ref.read(supplierServiceProvider).getAll();
+    final suppliers =
+        ref.watch(allSuppliersProvider).valueOrNull ?? const <SupplierData>[];
     return [
       SliverToBoxAdapter(
         child: Padding(
@@ -918,7 +918,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             text: 'Add Supplier',
             variant: AppButtonVariant.secondary,
             icon: FontAwesomeIcons.plus.data,
-            onPressed: _showAddSupplierDialog,
+            onPressed: () => SupplierFormSheet.show(context),
           ),
         ),
       ),
@@ -944,13 +944,18 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             itemCount: suppliers.length,
             itemBuilder: (_, i) {
               final s = suppliers[i];
+              final contactDetails = [
+                s.phone,
+                s.email,
+                s.address,
+              ].where((x) => x != null && x.isNotEmpty).join(', ');
               return GestureDetector(
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => SupplierDetailScreen(supplierId: s.id),
                   ),
-                ).then((_) => setState(() {})),
+                ),
                 child: Container(
                   margin: EdgeInsets.only(bottom: context.getRSize(12)),
                   padding: EdgeInsets.all(context.getRSize(16)),
@@ -989,10 +994,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                                 color: _text,
                               ),
                             ),
-                            if (s.contactDetails.isNotEmpty) ...[
+                            if (contactDetails.isNotEmpty) ...[
                               SizedBox(height: context.getRSize(4)),
                               Text(
-                                s.contactDetails,
+                                contactDetails,
                                 style: TextStyle(
                                   color: _subtext,
                                   fontSize: context.getRFontSize(13),
@@ -2457,88 +2462,4 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  void _showAddSupplierDialog() {
-    final nameCtrl = TextEditingController();
-    final contactCtrl = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + ctx.deviceBottomPadding),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: _border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Add New Supplier',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: _text,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Only select for crate / bottle products',
-              style: TextStyle(fontSize: 11, color: _subtext),
-            ),
-            const SizedBox(height: 20),
-            _styledDialogField(
-              nameCtrl,
-              'Supplier / Company Name',
-              'e.g. SABMiller Nigeria',
-            ),
-            const SizedBox(height: 16),
-            _styledDialogField(
-              contactCtrl,
-              'Contact Details / Rep Info',
-              'e.g. John Doe, 08012345678',
-            ),
-            const SizedBox(height: 32),
-            AppButton(
-              text: 'Add Supplier',
-              variant: AppButtonVariant.primary,
-              onPressed: () async {
-                if (nameCtrl.text.trim().isEmpty) return;
-                final newSupplier = Supplier(
-                  id: 's${DateTime.now().millisecondsSinceEpoch}',
-                  name: nameCtrl.text.trim(),
-                  crateGroup: CrateGroup.nbPlc,
-                  trackInventory: true,
-                  contactDetails: contactCtrl.text.trim(),
-                  amountPaid: 0.0,
-                  supplierAccountBalance: 0.0,
-                );
-                ref.read(supplierServiceProvider).addSupplier(newSupplier);
-                await ref
-                    .read(activityLogProvider)
-                    .logAction(
-                      'new_supplier',
-                      'Supplier added: ${newSupplier.name}',
-                    );
-                if (ctx.mounted) Navigator.pop(ctx);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

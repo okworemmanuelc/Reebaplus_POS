@@ -8,7 +8,25 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-156 sessions logged. Codebase is live and being verified on-device.
+157 sessions logged. Codebase is live and being verified on-device.
+
+### Fix — Inventory Suppliers Tab Save & Confirmation Dialog (2026-09-16)
+- **Symptom / User Report**: Tapping "Add Supplier" from the inventory/stock screen ("Suppliers" tab) and saving did not add the supplier to the database or list, and there was no confirmation prompt before saving.
+- **Root Causes**:
+  1. `inventory_screen.dart` used a private `_showAddSupplierDialog` modal sheet which called `ref.read(supplierServiceProvider).addSupplier(newSupplier)`.
+  2. `SupplierService.addSupplier` was an empty stub (`// stub — no DB write`) mutating only an in-memory list without persisting to Drift SQLite or enqueuing to `sync_queue`.
+  3. `_suppliersTabSlivers` read static `ref.read(supplierServiceProvider).getAll()` rather than watching the reactive `allSuppliersProvider`.
+- **Fixes**:
+  1. **Canonical Creation Sheet**: Rewired "Add Supplier" on `inventory_screen.dart` to open `SupplierFormSheet.show(context)`. The canonical `SupplierFormSheet` creates/updates suppliers using `CatalogDao.insertSupplier`, writing directly to Drift and enqueuing to `sync_queue`.
+  2. **Reactive Suppliers Tab**: Rewired `_suppliersTabSlivers` to watch `allSuppliersProvider` directly, ensuring newly added/updated suppliers appear immediately via reactive Stream.
+  3. **Confirmation Dialog**: Added `_confirmSaveSupplier(name)` confirmation dialog (`AlertDialog` with Cancel/Save) to `SupplierFormSheet` before executing `_save()`. Aborting cancel preserves input and prevents database writes.
+  4. **Overflow Fix**: Wrapped header title/subtitle `Column` in `Expanded` inside `_buildHeader` in `supplier_form_sheet.dart`, eliminating a 16px `RenderFlex` overflow on narrow widths.
+  5. **Cleaned Unused Imports**: Removed vestigial `crate_group.dart` and `supplier.dart` imports from `inventory_screen.dart`.
+- **Tests & Verification**:
+  - `test/suppliers/supplier_form_sheet_confirmation_test.dart` (2 tests): verifies confirmation prompt before save, cancellation abort, and database persistence on confirm.
+  - `test/inventory/inventory_suppliers_tab_test.dart` (1 test): verifies reactive suppliers list rendering, empty state, and "Add Supplier" opening `SupplierFormSheet`.
+  - Full supplier test suite (`test/suppliers/`, 14 tests) and inventory viewport tests (`test/inventory/inventory_viewport_test.dart`, 12 tests) passing.
+  - `flutter analyze lib test`: 0 errors, 0 warnings.
 
 ### Van Sales switched off behind a kill switch (2026-09-16)
 Branch `feat/van-sales-kill-switch`, cut from `origin/main` (`b4d251e`). No issue filed. The owner wants Van Sales v1 (PRD #139) hidden until they have fully tested it.
