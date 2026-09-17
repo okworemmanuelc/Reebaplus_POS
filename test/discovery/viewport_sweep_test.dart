@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/appearance_settings_screen.dart';
@@ -138,6 +140,7 @@ class _Subjects {
   final StoreData vanStore;
   final VanTripData trip;
   final BusinessData business;
+  final List<OrderWithItems> orders;
 
   const _Subjects({
     required this.env,
@@ -150,13 +153,19 @@ class _Subjects {
     required this.vanStore,
     required this.trip,
     required this.business,
+    required this.orders,
   });
 }
 
 class _Screen {
   final String name;
   final Widget Function(_Subjects s) build;
-  const _Screen(this.name, this.build);
+
+  /// Fills provider-held state the screen reads instead of its constructor
+  /// (the cart). Runs after the pump, in the populated state only.
+  final void Function(ProviderContainer c, _Subjects s)? populate;
+
+  const _Screen(this.name, this.build, {this.populate});
 }
 
 final List<_Screen> _screens = [
@@ -172,6 +181,11 @@ final List<_Screen> _screens = [
   _Screen(
     'CartScreen',
     (_) => CartScreen(cart: const [], onCustomerChanged: (_) {}),
+    populate: (c, s) {
+      for (final p in s.env.products) {
+        c.read(cartProvider).addItem(p, qty: 2);
+      }
+    },
   ),
   _Screen('ActivityLogScreen', (_) => const ActivityLogScreen()),
   // Pushed screens.
@@ -221,7 +235,7 @@ final List<_Screen> _screens = [
   ),
   _Screen(
     'SalesDetailScreen',
-    (_) => const SalesDetailScreen(orders: [], mode: 'sales', period: 'Today'),
+    (s) => SalesDetailScreen(orders: s.orders, mode: 'sales', period: 'Today'),
   ),
   _Screen('StockApprovalsScreen', (_) => const StockApprovalsScreen()),
   _Screen('ProfileScreen', (_) => const ProfileScreen()),
@@ -366,6 +380,7 @@ Future<_Subjects> _seedSubjects(ScreenTestEnvironment env, {required bool popula
     vanStore: (await db.storesDao.getStore(vanStoreId))!,
     trip: await (db.select(db.vanTrips)..where((t) => t.id.equals(tripId))).getSingle(),
     business: await (db.select(db.businesses)..where((t) => t.id.equals(b))).getSingle(),
+    orders: await db.ordersDao.watchAllOrdersWithItems().first,
   );
 }
 
@@ -569,7 +584,7 @@ Future<void> _sweep(
   var allScrollables = '';
   var texts = '';
   try {
-    await pumpScreen(
+    final context = await pumpScreen(
       tester,
       env: subjects.env,
       size: androidCompactLandscape,
@@ -584,6 +599,9 @@ Future<void> _sweep(
       ],
       settle: false,
     );
+    if (populated && screen.populate != null) {
+      screen.populate!(ProviderScope.containerOf(context, listen: false), subjects);
+    }
     // Let Drift streams deliver, then let animations run out.
     // Bounded rather than pumpAndSettle: shimmer and spinner animations never
     // settle. The real-async gaps let one-shot DAO futures resolve; without
@@ -621,7 +639,11 @@ Future<void> _sweep(
   final loud = reports.isNotEmpty;
   final verdict = pumpError.isNotEmpty
       ? 'NOT-PUMPED'
-      : [if (loud) 'LOUD', if (starved.isNotEmpty) 'SILENT'].join('+');
+      : [
+          if (otherErrors.isNotEmpty) 'ERROR',
+          if (loud) 'LOUD',
+          if (starved.isNotEmpty) 'SILENT',
+        ].join('+');
   final line = [
     'SWEEP',
     state,
