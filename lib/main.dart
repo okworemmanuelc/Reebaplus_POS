@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -67,6 +68,9 @@ Future<void> _bootstrap() async {
   // fallback widget (replaces Flutter's red error box) before anything else can
   // throw.
   CrashReporter.install();
+  // PRD #239 / #241: tag layout overflows with the screen they fired on.
+  // Debug builds only — install() is a no-op in release.
+  OverflowRouteReporter.install();
   ErrorWidget.builder = (details) => const ErrorFallback(compact: true);
 
   tz.initializeTimeZones();
