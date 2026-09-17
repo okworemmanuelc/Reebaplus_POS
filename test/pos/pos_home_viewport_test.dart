@@ -310,6 +310,55 @@ void main() {
       await disposePosHome(tester);
     });
 
+    testWidgets('POS still scrolls with the price-tier dropdown open',
+        (tester) async {
+      // Reported on the emulator check for #259: "the page stops scrolling
+      // when a dropdown is open." The cause was in AppDropdown's barrier, not
+      // in POS — see test/widgets/app_dropdown_scroll_test.dart. This pins the
+      // symptom where it was actually seen, because POS is the screen that made
+      // it visible: it is the one that scrolls AND carries two dropdowns in a
+      // band that scrolls away.
+      await pumpPosHome(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        overrides: [
+          firstRunSurfaceStateProvider
+              .overrideWithValue(FirstRunSurfaceState.hasContent),
+        ],
+      );
+
+      ScrollPosition position() => tester
+          .state<ScrollableState>(
+            find
+                .descendant(
+                  of: find.byKey(kPosScrollSurfaceKey),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          )
+          .position;
+
+      await tester.tap(find.byKey(kPosTierDropdownKey));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Wholesaler'),
+        findsOneWidget,
+        reason: 'the tier menu must be open',
+      );
+
+      await tester.drag(find.byKey(kPosScrollSurfaceKey), const Offset(0, -140));
+      await tester.pumpAndSettle();
+
+      expect(
+        position().pixels,
+        greaterThan(0),
+        reason: 'An open dropdown must not freeze POS',
+      );
+
+      await disposePosHome(tester);
+    });
+
     testWidgets('hold-to-edit still opens the quantity sheet', (tester) async {
       await pumpPosHome(
         tester,

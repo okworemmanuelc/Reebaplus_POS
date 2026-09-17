@@ -46,6 +46,10 @@ class _AppDropdownState<T> extends FormFieldState<T> {
   OverlayEntry? _overlayEntry;
   bool _isOpen = false;
 
+  /// The enclosing scrollable's position while the menu is open, so a scroll
+  /// can dismiss it. Null when the field is not inside a scrollable.
+  ScrollPosition? _openScrollPosition;
+
   @override
   AppDropdown<T> get widget => super.widget as AppDropdown<T>;
 
@@ -61,6 +65,8 @@ class _AppDropdownState<T> extends FormFieldState<T> {
 
   @override
   void dispose() {
+    _openScrollPosition?.removeListener(_closeOnScroll);
+    _openScrollPosition = null;
     if (_overlayEntry != null) {
       _overlayEntry!.remove();
       _overlayEntry = null;
@@ -78,10 +84,24 @@ class _AppDropdownState<T> extends FormFieldState<T> {
 
   void _closeDropdown() {
     if (_overlayEntry != null) {
+      _openScrollPosition?.removeListener(_closeOnScroll);
+      _openScrollPosition = null;
       _overlayEntry!.remove();
       _overlayEntry = null;
       setState(() => _isOpen = false);
     }
+  }
+
+  /// Dismisses the menu as soon as the page under it scrolls.
+  ///
+  /// The menu follows its field via [CompositedTransformFollower], so it does
+  /// not drift — but a field inside a lazily-built sliver is **unmounted** once
+  /// it scrolls out of the cache extent, and `showWhenUnlinked: false` then
+  /// hides the menu while leaving `_isOpen` true and the full-screen barrier
+  /// live: an invisible surface eating every tap. Closing on scroll is both the
+  /// behaviour a user expects and what keeps that state unreachable.
+  void _closeOnScroll() {
+    if (_isOpen) _closeDropdown();
   }
 
   void _openDropdown() {
@@ -101,6 +121,11 @@ class _AppDropdownState<T> extends FormFieldState<T> {
 
     _overlayEntry = _createOverlayEntry(size, openUpwards);
     Overlay.of(context).insert(_overlayEntry!);
+    // Scroll notifications travel to a scrollable's ANCESTORS, and this field
+    // is its descendant, so a NotificationListener here would never see them.
+    // Listening to the position directly is what reaches us.
+    _openScrollPosition = Scrollable.maybeOf(context)?.position
+      ?..addListener(_closeOnScroll);
     setState(() => _isOpen = true);
   }
 
@@ -117,14 +142,21 @@ class _AppDropdownState<T> extends FormFieldState<T> {
     return OverlayEntry(
       builder: (context) => Stack(
         children: [
+          // Tap-outside-to-dismiss barrier. It must NOT swallow anything but
+          // taps, so the page underneath can still scroll (and thereby close
+          // this menu — see [_closeOnScroll]).
+          //
+          // This was a `Container(color: Colors.transparent)` and that is why
+          // POS would not scroll with a dropdown open: a `Container` with a
+          // colour builds a `ColoredBox`, which **hit-tests itself even when
+          // the colour is fully transparent**, so the barrier consumed the
+          // drag and `HitTestBehavior.translucent` never got the chance to let
+          // it through. `SizedBox.expand` paints nothing and hit-tests nothing,
+          // which is what makes the translucent behaviour actually translucent.
           GestureDetector(
             onTap: _closeDropdown,
             behavior: HitTestBehavior.translucent,
-            child: Container(
-              color: Colors.transparent,
-              width: double.infinity,
-              height: double.infinity,
-            ),
+            child: const SizedBox.expand(),
           ),
           CompositedTransformFollower(
             link: _layerLink,
