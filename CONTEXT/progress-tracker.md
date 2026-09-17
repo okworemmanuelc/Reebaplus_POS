@@ -10,6 +10,20 @@ The human updates it when resolving open questions or making architectural decis
 
 157 sessions logged. Codebase is live and being verified on-device.
 
+### Fix — Pull-to-refresh threw "Build scheduled during frame" after the supplier form closed (2026-09-17)
+Branch `fix/refresh-wrapper-mid-frame-setstate`, cut from `origin/main` (`66d0efd`). No issue filed.
+- **Symptom (on-device, debug)**: adding a supplier from Inventory → Suppliers paused the debugger on `FlutterError (Build scheduled during frame)` the moment the form closed. It happened on two separate attempts that day.
+- **Evidence**: the synced `error_logs` row carries the stack — keyboard closes → Inventory's `NestedScrollView` is resized → `RenderViewport.performLayout` → `_NestedInnerBallisticScrollActivity.applyNewDimensions` → `ScrollPosition.didEndScroll` → `ScrollEndNotification` → `AppRefreshWrapper._handleNotification` → `_onRefresh` → `setState`. The row has no `context` because `_onRefresh` is `async`: the assert became an unhandled Future error (`PlatformDispatcher.onError`), not a `FlutterError.onError` report. Nothing reached logcat either, because the IDE captures structured errors.
+- **Root cause**: the wrapper treated *any* `ScrollEndNotification` as the end of the user's pull and called `setState` synchronously. A scroll can end inside layout with no finger involved. The throw also skipped `_onRefresh`'s `try/finally`, leaving `_refreshing = true`, so pull-to-refresh stayed dead on that screen until restart. In release builds, where the assert is compiled out, it would have started an unasked-for sync instead.
+- **Fix (`lib/shared/widgets/app_refresh_wrapper.dart`)**:
+  1. A refresh fires only on a `ScrollEndNotification` carrying `DragEndDetails`, which is the finger letting go. Any other end just settles the pull.
+  2. Settling the pull back waits for a post-frame callback (`_afterFrame`) when it arrives while `SchedulerPhase.persistentCallbacks` is running. The refresh itself is not deferred: only a finger release can start one, and that never happens mid-frame.
+- **Tests**: `test/shared/widgets/app_refresh_wrapper_test.dart` has two tests.
+  - Releasing a pull past the threshold still refreshes.
+  - A `ScrollEndNotification` dispatched from `performLayout` while the pull is armed settles the pull, with no exception and no refresh.
+  - The second test reproduced `Build scheduled during frame` before the fix.
+- **Open question**: the stack proves the pull was armed (at least 100px) when the layout-time end arrived, but the device logs show no manual pull before either attempt. How the add-supplier flow armed it is unexplained. The fix covers every arming path, because a non-release end can no longer refresh or `setState` mid-frame.
+
 ### Fix — Inventory Suppliers Tab Save & Confirmation Dialog (2026-09-16)
 - **Symptom / User Report**: Tapping "Add Supplier" from the inventory/stock screen ("Suppliers" tab) and saving did not add the supplier to the database or list, and there was no confirmation prompt before saving.
 - **Root Causes**:
