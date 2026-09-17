@@ -141,10 +141,10 @@ class AppDrawer extends ConsumerWidget {
               ),
               if (user != null)
                 IconButton(
-                  // Switch User — returns to the Who Is Working picker
-                  // (master plan §8.5), not a full logout.
-                  icon: const FaIcon(FontAwesomeIcons.rightLeft, size: 18),
-                  tooltip: 'Switch User',
+                  // Lock — a quick lock back to the PIN screen, not a full
+                  // logout.
+                  icon: const FaIcon(FontAwesomeIcons.lock, size: 18),
+                  tooltip: 'Lock app',
                   color: Theme.of(
                     context,
                   ).colorScheme.onSurface.withValues(alpha: 0.85),
@@ -556,7 +556,7 @@ class AppDrawer extends ConsumerWidget {
                       : "You'll need your email + a one-time code, and a new PIN, to "
                           'sign back in. The till keeps its data and other staff stay '
                           'signed in.\n\n'
-                          'To just switch staff, use Switch User instead.',
+                          'To step away without signing out, use the lock button instead.',
                 ),
                 actions: [
                   TextButton(

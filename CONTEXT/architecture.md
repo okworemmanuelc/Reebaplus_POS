@@ -42,7 +42,7 @@ through Riverpod providers).
 | `lib/core/permissions/` | Loads role and per-staff permission rows from Drift and exposes permission checks to the UI. Source of all gating decisions. | Hard-coded role logic. Permissions are data, read from tables. |
 | `lib/core/` (`providers`, `theme`, `settings`, `utils`, `widgets`, `data`, `diagnostics`) | Cross-cutting primitives: global providers, the crash handler, theme/palette system, money/currency helpers, ID generation, static data (e.g. `nigerian_lgas.dart`), and shared low-level widgets. | Feature-specific logic. |
 | `lib/shared/` | App-shell pieces shared across features: `main_layout.dart`, `navigation_service.dart`, shared models, utils, and widgets. | Feature-specific business logic. |
-| `lib/features/auth/` | Session lifecycle: sign-in via email+OTP or Google OAuth, JWT/refresh handling, onboarding, the "Who's working?" picker, PIN set/verify, and auto-lock. `auth_service.dart` is the orchestrator. | Business/domain data access beyond the current identity. |
+| `lib/features/auth/` | Session lifecycle: sign-in via email+OTP or Google OAuth, JWT/refresh handling, onboarding, the lock screen, PIN set/verify, and auto-lock. `auth_service.dart` is the orchestrator. | Business/domain data access beyond the current identity. |
 
 **Sanctioned direct-Supabase exceptions** (outside the normal Drift→sync-queue
 path):
@@ -80,7 +80,7 @@ Four storage locations, with a strict rule for what lives where. Business data g
 | `sync_debug` (current adaptive chunk-size tier, last RTT ms) | Drift (SQLite), dedicated table | Written by the sync service each cycle for internal diagnostics screens. Never sent to the cloud. | No |
 | Active user PIN hash | flutter_secure_storage | Device-local unlock factor. Never leaves the device. | **Never** |
 | Auth refresh token / JWT | flutter_secure_storage | Session credential. | **Never** (re-issued by Supabase Auth) |
-| Active business ID, active store ID, last-active staff pointer | flutter_secure_storage | Session pointers for cold start and the "Who's working?" picker. | No |
+| Active business ID, active store ID, last-active staff pointer | flutter_secure_storage | Session pointers for cold start and the lock screen. | No |
 | Subscription status (Trial/Active/Inactive) | Drift (SQLite), read-only mirror | Surfaced in Settings and name badges. Written only by the Admin Hub via sync pull. | Pulled, never pushed |
 | In-flight cart, transient UI state | Riverpod (memory) | Ephemeral working state for the current screen. | No |
 
@@ -96,7 +96,7 @@ Authentication is split deliberately into a **portable identity** and a **device
 
 - **Identity (portable):** verified by Supabase Auth via one of two providers — **email + OTP** or **Sign in with Google (OAuth)** — either of which issues the JWT that authorizes all Postgres and RPC access. The provider is an authentication detail only; the resolved **email address is the canonical identity key** in both cases, so the same person signing in by email OTP or by Google with the same address is one identity. Recovery on a new device re-establishes a user through whichever provider their email is registered with.
 - **Unlock factor (device-local):** a 6-digit PIN, stored only as a hash in `flutter_secure_storage` on that device. The PIN is never sent to the cloud and never stored in Postgres. It exists to let a staff member re-assert their identity quickly on a shared till without re-running the full provider sign-in (email OTP or Google).
-- **Shared-till session:** a cold start shows the "Who's working?" picker. Selecting a card and entering that user's PIN unlocks *only* that identity. After inactivity the till auto-locks back to the picker; Switch User keeps the PIN, Log Out clears the leaving user's PIN and device pointer.
+- **Shared-till session:** a cold start, the drawer lock button, and auto-lock all show the PIN screen for the last signed-in user (the device pointer). Entering that user's PIN unlocks *only* that identity; a different staff member taps "Not you? Switch account" and signs in with their email + PIN. Locking keeps the PIN. Log Out clears the leaving user's PIN; on a shared till it moves the device pointer to a staff member who still has a PIN here. The PIN screen refuses a suspended member's PIN. (The "Who's working?" staff picker was removed 2026-09-17.)
 
 ### Active sessions across multiple devices
 

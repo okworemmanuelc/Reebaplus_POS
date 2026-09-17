@@ -13,7 +13,6 @@ import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
 import 'package:reebaplus_pos/features/auth/auth_post_verify_route.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
@@ -355,7 +354,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const WhoIsWorkingScreen(),
+            const LoginScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final curve = CurvedAnimation(
             parent: animation,

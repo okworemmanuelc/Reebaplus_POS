@@ -10,6 +10,19 @@ The human updates it when resolving open questions or making architectural decis
 
 157 sessions logged. Codebase is live and being verified on-device.
 
+### "Who's working?" picker removed — the drawer button is now a lock (2026-09-17)
+No issue filed; the owner asked for the picker to go. Committed on `feat/overflow-discovery-sweep-241` as its own commit, at the owner's request, in the #241 PR (both touch `lib/main.dart`).
+
+- **Deleted:** `who_is_working_screen.dart` and its widget test, the WhoIsWorkingScreen cases in `auth_landscape_screens_test` and the #241 `viewport_sweep_test`, `deviceStaffProvider`, `watchDeviceStaffForBusiness`, `countActiveStaffForBusiness` (only the picker's routing used it), `AuthService.showPickerOnUnlock`, `main.dart`'s `_deviceMultiStaff` cold-start check, and the PIN screen's top-left "Switch account" back button.
+- **Renamed:** `WhoIsWorkingEntry` → `ActiveStaffEntry` (it still backs `activeStaffProvider`, used by the Get Started checklist); `MembershipStatusReaction.lockToPicker` → `lock`; `_dropCurrentUserToPickerLocal` → `_dropCurrentUserFromSharedDevice`; `test/staff/who_is_working_dao_test.dart` → `active_staff_dao_test.dart`.
+- **Routing now:** cold start, the drawer lock button, auto-lock and a suspension all land on `LoginScreen` for the device user. Another staff member uses "Not you? Switch account" → Sign in → "Already set up on this device? Login with PIN" (the email screen's link now opens `LoginScreen` instead of the picker).
+- **Drawer button:** `FontAwesomeIcons.rightLeft` "Switch User" → `FontAwesomeIcons.lock` "Lock app"; same `lockApp()` call. The shared-till logout dialog now points at the lock button.
+- **Two jobs the picker did, moved elsewhere:**
+  1. *Suspended staff can't get back in.* The picker hid them; now `LoginScreen._enterApp` (PIN and biometrics both go through it) reads the membership and refuses `suspended` with "Your account is suspended. Ask your manager to reactivate it." `removed` is not blocked, because the offboarding in `main.dart` needs them signed in to run.
+  2. *A shared-till logout doesn't strand the lock screen.* The device pointer still named the leaving user, whose PIN had just been cleared. `_dropCurrentUserFromSharedDevice` now moves it to a staff member who still has a PIN (`getDeviceStaffForBusiness`, by name), or clears it if none is left.
+- **Tests:** new `test/auth/lock_screen_test.dart` (lock keeps the device pointer; shared-till logout moves it; PIN screen refuses a suspended member). Both behaviour tests were checked to fail with the fix removed.
+- **Spotted, not fixed (pre-existing):** when an admin removes a staff member, `logOutCurrentUser` counts device staff with `status = 'active'`, so the removed user isn't counted. If exactly one other PIN holder remains, the removal is treated as a sole-user logout and wipes the device.
+
 ### Fix — Pull-to-refresh threw "Build scheduled during frame" after the supplier form closed (2026-09-17)
 Branch `fix/refresh-wrapper-mid-frame-setstate`, cut from `origin/main` (`66d0efd`). No issue filed.
 - **Symptom (on-device, debug)**: adding a supplier from Inventory → Suppliers paused the debugger on `FlutterError (Build scheduled during frame)` the moment the form closed. It happened on two separate attempts that day.

@@ -4,7 +4,6 @@
 // (master plan §7.2a / §7.6):
 //   • getUserByEmail binds the row for the authenticated business, not the
 //     most-recently-updated cross-business row (issue #5 / #6).
-//   • countActiveStaffForBusiness drives cold-start routing — picker vs PIN.
 //   • clearAllData (fresh-onboarding wipe) empties users even with append-only
 //     ledger rows + FK references present (the BEFORE DELETE ledger triggers
 //     used to abort the whole wipe transaction).
@@ -93,31 +92,6 @@ void main() {
     // authenticated business instead of relying on this fallback.
     final resolvedNone = await db.storesDao.getUserByEmail('shared@x.com');
     expect([userA, userB], contains(resolvedNone?.id));
-  });
-
-  test(
-      'countActiveStaffForBusiness counts only active staff of that business '
-      '(drives cold-start picker vs PIN, §7.2)', () async {
-    final bizA = await insertBusiness('Biz A');
-    final bizB = await insertBusiness('Biz B');
-    final roleA = await insertRole(bizA, 'manager');
-    final roleB = await insertRole(bizB, 'cashier');
-
-    final u1 = await insertUser(bizA, 'Ada', 'ada@x.com');
-    final u2 = await insertUser(bizA, 'Ben', 'ben@x.com');
-    final u3 = await insertUser(bizA, 'Cid', 'cid@x.com');
-    final other = await insertUser(bizB, 'Zoe', 'zoe@x.com');
-
-    await insertMembership(bizA, u1, roleA);
-    await insertMembership(bizA, u2, roleA);
-    await insertMembership(bizA, u3, roleA, status: 'suspended');
-    await insertMembership(bizB, other, roleB);
-
-    // bizA has 2 active (u1, u2); u3 suspended is excluded; bizB's staff don't
-    // count → multi-staff (>1) → cold start routes to the Who Is Working picker.
-    expect(await db.userBusinessesDao.countActiveStaffForBusiness(bizA), 2);
-    // bizB has a single active staffer → cold start goes straight to PIN.
-    expect(await db.userBusinessesDao.countActiveStaffForBusiness(bizB), 1);
   });
 
   test(

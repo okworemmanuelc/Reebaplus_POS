@@ -195,7 +195,7 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Memberships for the current business, excluding terminally-`removed` staff
-  /// (#107). Drives the Staff Management list and the Who Is Working picker.
+  /// (#107). Drives the Staff Management list.
   /// Keeps `active` and `suspended` (both surface in Staff Management — suspended
   /// greyed out); `removed` staff no longer appear in any active staff list,
   /// though their users row is retained as an attribution stub for history.
@@ -207,13 +207,12 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Active staff (with their user + role rows) for [businessId], joined in
-  /// one query — drives the Who Is Working picker (master plan §8).
+  /// one query — drives the Get Started checklist's "invited a teammate" count.
   ///
   /// Deliberately NOT business-scoped via [whereBusiness]/[requireBusinessId]:
-  /// the picker renders BEFORE sign-in, so the session resolver has no current
-  /// business yet (`currentBusinessId == null`). It filters by the explicit
-  /// [businessId] argument instead. Suspended staff are excluded (§8.3).
-  Stream<List<WhoIsWorkingEntry>> watchActiveStaffForBusiness(
+  /// it filters by the explicit [businessId] argument, so it resolves before
+  /// login binds a session business. Suspended staff are excluded (§8.3).
+  Stream<List<ActiveStaffEntry>> watchActiveStaffForBusiness(
     String businessId,
   ) {
     final query =
@@ -229,7 +228,7 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     return query.watch().map(
       (rows) => rows
           .map(
-            (row) => WhoIsWorkingEntry(
+            (row) => ActiveStaffEntry(
               user: row.readTable(users),
               role: row.readTableOrNull(roles),
             ),
@@ -238,32 +237,14 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// One-shot count of active staff for [businessId]. Drives cold-start
-  /// routing (master plan §7.2): >1 → Who Is Working picker so the signer is
-  /// chosen explicitly; ≤1 → that user's personalized PIN screen. Not
-  /// session-scoped (runs before sign-in), same as [watchActiveStaffForBusiness].
-  Future<int> countActiveStaffForBusiness(String businessId) async {
-    final countExp = userBusinesses.id.count();
-    final row =
-        await (selectOnly(userBusinesses)
-              ..addColumns([countExp])
-              ..where(
-                userBusinesses.businessId.equals(businessId) &
-                    userBusinesses.status.equals('active'),
-              ))
-            .getSingle();
-    return row.read(countExp) ?? 0;
-  }
-
-  /// Streams the list of active staff for [businessId] who are also device-authenticated
-  /// (meaning their users.pinHash is not null). Drives the filtered staff picker.
-  Stream<List<WhoIsWorkingEntry>> watchDeviceStaffForBusiness(
-    String businessId,
-  ) {
+  /// One-shot list of active staff for [businessId] who are device-authenticated
+  /// (their users.pinHash is not null), ordered by name. When one staff member
+  /// signs out of a shared till, the device's PIN screen passes to one of these.
+  /// Not session-scoped: it runs while no one is signed in.
+  Future<List<UserData>> getDeviceStaffForBusiness(String businessId) async {
     final query =
         select(userBusinesses).join([
             innerJoin(users, users.id.equalsExp(userBusinesses.userId)),
-            leftOuterJoin(roles, roles.id.equalsExp(userBusinesses.roleId)),
           ])
           ..where(
             userBusinesses.businessId.equals(businessId) &
@@ -271,16 +252,8 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
                 users.pinHash.isNotNull(),
           )
           ..orderBy([OrderingTerm.asc(users.name)]);
-    return query.watch().map(
-      (rows) => rows
-          .map(
-            (row) => WhoIsWorkingEntry(
-              user: row.readTable(users),
-              role: row.readTableOrNull(roles),
-            ),
-          )
-          .toList(),
-    );
+    final rows = await query.get();
+    return rows.map((row) => row.readTable(users)).toList();
   }
 
   /// One-shot count of active staff for [businessId] who are device-authenticated
@@ -311,7 +284,7 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
 
   /// Reactive memberships for a specific user, NOT scoped to the current
   /// session. Filters by user id only so the role-badge resolver works
-  /// before login binds a business (the shared-PIN picker). Drives
+  /// before login binds a business (the PIN screen). Drives
   /// `userRoleProvider`.
   Stream<List<UserBusinessData>> watchForUser(String userId) {
     return (select(

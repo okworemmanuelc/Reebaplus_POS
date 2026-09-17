@@ -9,7 +9,7 @@
 //     flashes while the role is still resolving (null).
 //   * membershipStatusReaction — the pure mapping the main.dart live guard uses:
 //     an admin-removed membership (`removed`) → offboard (gate → logout);
-//     `suspended` → lockToPicker; everything else → none.
+//     `suspended` → lock; everything else → none.
 //   * the local `removed` flip (markRemovedLocal, as applied by a pull) drives
 //     the offboard reaction — the admin-removed detection decision.
 //   * the sole-member wipe gate's three branches, at the DAO-signal level that
@@ -68,9 +68,9 @@ void main() {
           MembershipStatusReaction.offboard);
     });
 
-    test('suspended → lockToPicker', () {
+    test('suspended → lock', () {
       expect(membershipStatusReaction('suspended'),
-          MembershipStatusReaction.lockToPicker);
+          MembershipStatusReaction.lock);
     });
 
     test('active / null / unknown → none', () {

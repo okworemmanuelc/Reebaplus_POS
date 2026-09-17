@@ -279,7 +279,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   /// retryable rows → an error ("connect and sync first"); orphans only → the
   /// Resolve-unsynced-data flow (here with `isResign: true`, whose terminal also
   /// completes the server detach). On success, main.dart routes to Welcome (sole
-  /// member) or the Who's Working picker (shared till).
+  /// member) or the lock screen (shared till).
   Future<void> _confirmAndResign() async {
     final auth = ref.read(authProvider);
     final db = ref.read(databaseProvider);

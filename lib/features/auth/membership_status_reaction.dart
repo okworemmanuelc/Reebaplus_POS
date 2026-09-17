@@ -9,10 +9,10 @@ enum MembershipStatusReaction {
   /// `active` (or an unresolved / unknown status) — do nothing.
   none,
 
-  /// `suspended` (master plan §9.5 / §8.3) — drop to the Who's Working picker,
-  /// which hides suspended staff so they can't re-select themselves. UI-only
-  /// lock: the Supabase session and local data are kept.
-  lockToPicker,
+  /// `suspended` (master plan §9.5 / §8.3) — lock the app. The PIN screen
+  /// refuses a suspended member's PIN, so they can't unlock themselves again.
+  /// UI-only lock: the Supabase session and local data are kept.
+  lock,
 
   /// `removed` (#117 staff offboarding) — the user was removed by an admin (the
   /// `remove_staff_member` RPC) or resigned elsewhere. Run the same offboarding
@@ -26,7 +26,7 @@ enum MembershipStatusReaction {
 /// default arm is required and correct for `active` / null / any future value.
 MembershipStatusReaction membershipStatusReaction(String? status) =>
     switch (status) {
-      'suspended' => MembershipStatusReaction.lockToPicker,
+      'suspended' => MembershipStatusReaction.lock,
       'removed' => MembershipStatusReaction.offboard,
       _ => MembershipStatusReaction.none,
     };

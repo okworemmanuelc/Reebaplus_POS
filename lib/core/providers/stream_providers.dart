@@ -1334,25 +1334,15 @@ final userBusinessesProvider = businessScopedStream<List<UserBusinessData>>(
   whenAbsent: const [],
 );
 
-/// Active staff (user + role) for a given business — drives the Who Is
-/// Working picker (master plan §8). Keyed by an explicit businessId because
-/// the picker renders before sign-in, when the session has no current
-/// business; the session-scoped [userBusinessesProvider] can't be used there.
+/// Active staff (user + role) for a given business — drives the Get Started
+/// checklist's "invited a teammate" count. Keyed by an explicit businessId so
+/// it resolves before login binds a session business.
 final activeStaffProvider =
-    StreamProvider.family<List<WhoIsWorkingEntry>, String>((ref, businessId) {
+    StreamProvider.family<List<ActiveStaffEntry>, String>((ref, businessId) {
       return ref
           .watch(databaseProvider)
           .userBusinessesDao
           .watchActiveStaffForBusiness(businessId);
-    });
-
-/// Device-authenticated staff (user + role) for a given business who have setup their PIN.
-final deviceStaffProvider =
-    StreamProvider.family<List<WhoIsWorkingEntry>, String>((ref, businessId) {
-      return ref
-          .watch(databaseProvider)
-          .userBusinessesDao
-          .watchDeviceStaffForBusiness(businessId);
     });
 
 /// Stores the given user is assigned to.
@@ -1391,7 +1381,7 @@ final _userMembershipsProvider =
 
 /// The [RoleData] for a user, reactive across both membership and role-table
 /// changes. Resolves by user id so it works before `setCurrentUser` binds a
-/// business (the shared-PIN picker, master plan §8.4). Returns null until the
+/// business (the PIN screen's shared-PIN chooser). Returns null until the
 /// membership + role rows are present locally — on a fresh device they arrive
 /// via the post-login background pull, so callers must render a graceful
 /// fallback while it's null.
@@ -1457,8 +1447,8 @@ final currentUserRoleProvider = Provider<RoleData?>((ref) {
 /// Reactive: a suspension or removal performed on another device arrives via the
 /// `user_businesses` realtime channel, flips the local row, and re-emits here.
 /// Drives the live membership guard in main.dart (master plan §9.5 / §8.3 +
-/// #117): 'suspended' drops the device to the Who's Working picker (which hides
-/// suspended staff, so they can't re-select themselves); 'removed' (an admin ran
+/// #117): 'suspended' locks the device (the PIN screen refuses a suspended
+/// member's PIN, so they can't unlock themselves again); 'removed' (an admin ran
 /// `remove_staff_member`) runs the offboarding gate → logout, wiping local data
 /// only when they were the sole member on this device.
 final currentUserMembershipStatusProvider = Provider<String?>((ref) {

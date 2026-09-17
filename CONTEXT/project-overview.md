@@ -11,7 +11,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 3. During registration, the business type picker shows all seven types (Restaurant, Supermarket, Bar, Beverage distributor, Pharmacy, Building Materials, and Boutique) but only Beverage distributor is selectable; the other six are visible and greyed out with a "coming soon" indicator, and the full interface for Beverage distributor — including empty-crate tracking — is built and functional. Empty-crate tracking is an onboarding opt-in for crate-eligible types (default on): the type picker shows a "Track empty crates" switch when a crate-eligible type is selected, and the choice is editable later in Settings → Business Info. When opted out, every empty-crate surface is hidden app-wide.
 4. A CEO can change what any role is allowed to do — a Manager's maximum discount, whether a Cashier sees wallet totals — by toggling a permission in Settings, with no code release and without affecting any other business on the platform.
 5. Every money movement for a registered customer and a registered supplier is recorded in their ledger, so the credit balance is the single source of truth for what each customer or supplier owes or is owed.
-6. Multiple staff share one till: each is identified explicitly via the "Who's working?" picker and a 6-digit PIN, and the device auto-locks after inactivity, never assuming the last user.
+6. Multiple staff share one till: each unlocks with their own 6-digit PIN. The lock screen shows the last signed-in staff member, and anyone else taps "Not you? Switch account". The device auto-locks after inactivity.
 7. An uncaught error never drops a cashier to a blank or red error screen mid-sale; it is caught, recorded to a synced crash log, shown as a calm message, and the till keeps working.
 
 ## Core User Flow
@@ -22,14 +22,14 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 4. The CEO opens Staff Management, taps "Invite new staff", picks a role and store, and generates an 8-character invite code. The code is emailed to the invitee automatically (branded as Reebaplus, sent server-side once the invite syncs to the cloud), and the CEO can still copy or share it via SMS / WhatsApp.
 5. A staff member installs the app, taps "Join with invite code", and enters the code, then their email (must match the invite), email OTP, their first name and last name, phone number, street address, local government / district, state / region, country, create PIN, and confirm PIN; they are signed in with the role and store carried from the invite.
 6. The CEO opens Inventory and adds products (name, per-tier prices, stock quantity, store) so the POS grid has stock to sell.
-7. On the shared till, a cold start shows the "Who's working?" picker; the staff member taps their card and enters their PIN, which unlocks only that chosen identity.
+7. On the shared till, a cold start shows the PIN screen for the last signed-in staff member. A different staff member taps "Not you? Switch account", then Sign in → "Already set up on this device? Login with PIN", and enters their email and PIN, which unlocks only that identity.
 8. They open Point of Sale, select a price tier (Retailer or Wholesaler) and category, and tap products to add them to the cart; out-of-stock products appear greyed out and are not tappable.
 9. In the Cart they review line items, adjust quantities, apply any discount allowed by their role (capped if they exceed the cap), optionally attach a registered customer, then tap "Proceed to Checkout".
 10. At Checkout they pick a payment method — Cash/Transfer (enter amount paid), Pay with Credit, or Register as Credit Sale — and tap "Confirm Payment"; a sale that would push a customer past their debt limit is blocked.
 11. The order is recorded with status Pending, the registered customer's credit balance is updated (debit the order total, credit the amount paid), and the Receipt opens with Print and Share options.
 12. The cashier taps "Done — Back to POS"; the cart clears and the till is ready for the next sale.
 13. The order moves to the Orders > Completed tab once confirmed (pickup or rider assigned), and Activity Logs, Reports, and the customer's credit history all reflect the sale.
-14. After inactivity, the till silently auto-locks back to the "Who's working?" picker for the next staff member.
+14. After inactivity, or when staff tap the lock button in the drawer, the till locks back to the PIN screen.
 
 ## Features
 
@@ -37,7 +37,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 - Welcome screen, CEO sign-up (9 steps), staff sign-up via invite code (7 steps), login with email + OTP + PIN, and Forgot PIN via email OTP. All transactional email — OTP, login, Forgot PIN, and the staff invite code — is sent from the Reebaplus domain (auth email via Supabase Custom SMTP; the invite code via the `send-invite-email` Edge Function), with the invite code also copyable/shareable on-device.
 - PINs are device-local unlock factors that are never sent to the cloud; email + OTP is the portable identity and the recovery path. A new device re-establishes the PIN locally after OTP.
-- "Who's working?" picker for shared tills with explicit identity selection; auto-lock and Switch User keep the current PIN, while Log Out clears the leaving user's PIN and device pointer.
+- A lock button in the drawer and auto-lock both return to the PIN screen and keep the current PIN; Log Out clears the leaving user's PIN, and on a shared till hands the lock screen to a staff member who still has a PIN. A suspended member's PIN is refused. (The "Who's working?" staff picker was removed 2026-09-17.)
 
 ### Roles & Permissions
 
@@ -90,7 +90,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 ### In Scope
 
-- All authentication and onboarding flows: Welcome, CEO sign-up, staff sign-up via invite code, login, Forgot PIN, and the "Who's working?" picker.
+- All authentication and onboarding flows: Welcome, CEO sign-up, staff sign-up via invite code, login, Forgot PIN, and the lock screen.
 - Data-driven roles and permissions with CEO toggles and per-staff overrides.
 - Point of Sale, Cart, Checkout, and Receipt, including cash/transfer/credit payment, role discount caps, and thermal-printer receipts.
 - One-shot barcode scanning at the POS (scan a product's barcode to add it to the cart), an optional per-product barcode, and a camera-based scanner; continuous/rapid scanning is a later upgrade (ADR 0017).
@@ -125,7 +125,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 1. A CEO can create a business from a fresh install, land on Home (the dashboard), reach Point of Sale from the nav bar, and see themselves as the first staff card in Staff Management.
 2. A CEO can generate an invite code, and a new staff member can join with it and sign in with the role and store carried from the invite.
-3. A staff member can select themselves in the "Who's working?" picker and unlock with their PIN, and five wrong PIN attempts force the Forgot-PIN (email OTP) flow.
+3. A staff member can unlock the shared till with their own PIN (switching account from the lock screen if someone else was last signed in), and five wrong PIN attempts force the Forgot-PIN (email OTP) flow.
 4. A cashier can add in-stock products to the cart, apply a discount up to their role cap (and be capped if they exceed it), and complete a Cash/Transfer sale that produces a printable and shareable receipt — fully offline.
 5. A registered-customer sale posts two ledger rows (debit the total, credit the amount paid) so the credit balance net equals paid minus total, and a credit sale that would breach the debt limit is blocked.
 6. A price edit, new sale, or stock adjustment made on one device appears on another device in the same business without a manual refresh (when realtime sync is healthy).

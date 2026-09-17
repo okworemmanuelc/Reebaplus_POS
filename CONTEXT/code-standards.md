@@ -348,7 +348,7 @@ lib/
 │   ├── remote/                # Supabase client wrapper and Edge Function callers
 │   └── repositories/          # One file per aggregate root
 │
-├── auth/                      # Session lifecycle, PIN, "Who's working?" picker
+├── auth/                      # Session lifecycle, PIN, lock screen
 ├── permissions/               # can(action) resolver, reads from Drift
 ├── sync/                      # Sync isolate entry point and all sync subsystems
 │
