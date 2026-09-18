@@ -45,6 +45,11 @@ class PinnedTabBarDelegate extends SliverPersistentHeaderDelegate {
   /// header's own height rather than the tab bar's, or the floor in
   /// [effectiveExtent] guarantees 48dp of *header* while the control inside it
   /// is still short. Reserves [chromeExtent] on top of the interactive floor.
+  ///
+  /// Count *every* non-interactive pixel, including a decorated `Container`'s
+  /// border: it insets its child by the border width top and bottom. Reserving
+  /// only an 8dp margin under a 1dp outline left Supplier Detail's tabs at
+  /// 46dp on compact phones (#246).
   PinnedTabBarDelegate.withChrome({
     required this.child,
     required double extent,

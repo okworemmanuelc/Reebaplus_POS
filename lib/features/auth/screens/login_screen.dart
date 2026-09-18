@@ -578,7 +578,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             child: _loginSuccess
-                ? _SuccessOverlay(
+                ? SuccessOverlay(
                     key: const ValueKey('success'),
                     user: _loggedInUser!,
                     checkScale: _checkScale,
@@ -608,12 +608,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
 // ── Success overlay ────────────────────────────────────────────────────────
 
-class _SuccessOverlay extends StatelessWidget {
+@visibleForTesting
+class SuccessOverlay extends StatelessWidget {
   final UserData user;
   final Animation<double> checkScale;
   final Animation<double> checkFade;
 
-  const _SuccessOverlay({
+  const SuccessOverlay({
     super.key,
     required this.user,
     required this.checkScale,
@@ -637,44 +638,49 @@ class _SuccessOverlay extends StatelessWidget {
     return Center(
       child: FadeTransition(
         opacity: checkFade,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Bouncy checkmark circle ─────────────────────────────────
-            ScaleTransition(
-              scale: checkScale,
-              child: Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: avatarColor.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: avatarColor, width: 3),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Bouncy checkmark circle ─────────────────────────────────
+              ScaleTransition(
+                scale: checkScale,
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: avatarColor.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: avatarColor, width: 3),
+                  ),
+                  child: Icon(Icons.check_rounded, size: 52, color: avatarColor),
                 ),
-                child: Icon(Icons.check_rounded, size: 52, color: avatarColor),
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // ── Welcome text ─────────────────────────────────────────────
-            Text(
-              'Welcome, ${user.name}',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: textColor,
+              // ── Welcome text ─────────────────────────────────────────────
+              Text(
+                'Welcome, ${user.name}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Opening Reebaplus POS...',
-              style: TextStyle(fontSize: 14, color: subtextColor),
-            ),
-            const SizedBox(height: 32),
+              const SizedBox(height: 6),
+              Text(
+                'Opening Reebaplus POS...',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: subtextColor),
+              ),
+              const SizedBox(height: 32),
 
-            // ── Small loading dots ────────────────────────────────────────
-            _LoadingDots(color: avatarColor),
-          ],
+              // ── Small loading dots ────────────────────────────────────────
+              _LoadingDots(color: avatarColor),
+            ],
+          ),
         ),
       ),
     );
@@ -694,6 +700,7 @@ class _LoadingDots extends StatefulWidget {
 class _LoadingDotsState extends State<_LoadingDots>
     with TickerProviderStateMixin {
   final List<AnimationController> _controllers = [];
+  final List<Timer> _timers = [];
 
   @override
   void initState() {
@@ -705,16 +712,19 @@ class _LoadingDotsState extends State<_LoadingDots>
       );
       _controllers.add(ctrl);
       // Stagger each dot by 200ms
-      Future.delayed(Duration(milliseconds: i * 200), () {
+      _timers.add(Timer(Duration(milliseconds: i * 200), () {
         if (mounted) {
           ctrl.repeat(reverse: true);
         }
-      });
+      }));
     }
   }
 
   @override
   void dispose() {
+    for (final t in _timers) {
+      t.cancel();
+    }
     for (final c in _controllers) {
       c.dispose();
     }
@@ -987,6 +997,7 @@ class _PinPad extends StatelessWidget {
               SizedBox(height: context.getRSize(12)),
               Text(
                 'Welcome back, ${identifiedUser!.name.split(' ').first}',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: context.getRFontSize(20),
                   fontWeight: FontWeight.w700,
