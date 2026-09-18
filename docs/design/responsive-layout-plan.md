@@ -1,15 +1,16 @@
-# Responsive Layout Plan — short viewports (landscape phones) and tablets
+# Responsive Layout Plan — short viewports, compact portrait phones, and tablets
 
-Status: in progress — Phase 0 landed with gaps (see §10). Phase 1 not started.
+Status: in progress — Phase 0 landed with gaps (see §10); runtime measurement audit added (see §11).
 Author: design investigation, 2026-09-05
 Audited against implementation: 2026-09-06 (branch `fix/responsive-short-viewport-seam`)
-Scope: `lib/core/utils/responsive.dart` + every screen in `lib/`
-Related: `context/ui-context.md`, `docs/adr/0025-two-curve-responsive-scale.md`
+Audited against runtime measurement (PRD #239): 2026-09-18 (issue #242)
+Scope: `lib/core/utils/responsive.dart` + every screen in `lib/`. **Not landscape-only**: small portrait phones (such as iPhone SE1 320×568) suffer the exact same content starvation and layout overflows, and sit *above* the plan's 500dp `isShortViewport` threshold (see §11.3).
+Related: `context/ui-context.md`, `docs/adr/0025-two-curve-responsive-scale.md`, `docs/adr/0027-tabbed-sliver-scaffold.md`
 
-> **Read §10 first if you are picking this up.** Phase 0 shipped the scale model
-> and it works, but two of its six deliverables are incomplete and the plan
-> below contains figures that the implementation has since superseded. §10 is
-> the reconciliation; §3 and §4 have been corrected in place.
+> **Read §10 and §11 first if you are picking this up.** Phase 0 shipped the scale model
+> and it works, but runtime measurement under PRD #239 contradicted five of the plan's
+> core assumptions and figures. §11 records the five corrections; §1, §3, and §4 have
+> been annotated or corrected in place with pointers to §11.
 
 ---
 
@@ -49,10 +50,10 @@ fixed-height children above an `Expanded` product grid:
 
 | band | composition at scale 1.50 | height |
 |---|---|---|
-| `_buildHeader` | `getRSize(16)` padding ×2 = 48 + `AppDropdown` ~48 | ~96dp |
+| `_buildHeader` | `getRSize(16)` padding ×2 = 48 + `AppDropdown` ~48 | ~96dp *(correction: ~121dp with 73dp labelled dropdown, see §11.1)* |
 | `_buildSearchField` | `getRSize(12)` bottom pad = 18 + `AppInput` ~52 | ~70dp |
 | `CategoryFilterBar` | `getRSize(38)` = 57 + margins `getRSize(8)`/`getRSize(16)` = 36 | ~93dp |
-| **total fixed chrome** | | **~259dp** |
+| **total fixed chrome** | | **~259dp** *(correction: **~284dp**, see §11.1)* |
 
 The body has ~245dp (412 − 24 status − 68 app bar − ~68 nav + gesture inset).
 The `Expanded` collapses to zero and the fixed children spill by the difference.
@@ -62,7 +63,10 @@ they come from `inputDecorationTheme.contentPadding:
 EdgeInsets.symmetric(horizontal: 16, vertical: 16)`, hardcoded in
 `lib/core/theme/app_theme.dart` and repeated across all 10 theme variants. They
 are a fixed ~100dp floor under the chrome that no scale change can touch. This
-matters in Phase 0.
+matters in Phase 0. *(Correction in §11.1: `AppDropdown` with its stacked label
+actually measures 73dp, not ~48dp or ~40dp, because the label stacked above the
+field contributes 25dp of unscaled constants. The fixed chrome budget is
+correspondingly taller.)*
 
 ### Why call-site fixes are not viable
 
@@ -248,11 +252,16 @@ POS landscape on a Pixel 7 (915×412), body ≈ 252dp:
 
 | band | at spacing 0.70 + compact inputs | height |
 |---|---|---|
-| `_buildHeader` | `getRSize(16)`×2 = 22.4 + dropdown 35 | 57.4dp |
+| `_buildHeader` | `getRSize(16)`×2 = 22.4 + dropdown 35 | 57.4dp *(correction: 95.4dp with 73dp labelled dropdown, see §11.1)* |
 | `_buildSearchField` | `getRSize(12)` = 8.4 + input 35 | 43.4dp |
 | `CategoryFilterBar` | `getRSize(38)` = 26.6 + margins 16.8 | 43.4dp |
-| **chrome** | | **144.2dp** |
-| **grid** | | **107.8dp** |
+| **chrome** | | **144.2dp** *(correction: **182.2dp**, see §11.1)* |
+| **grid** | | **107.8dp** *(correction: **~69.8dp**, see §11.1)* |
+
+> **Correction (2026-09-18, §11.1):** The table above calculated dropdown height
+> at 35dp (and earlier 48dp). In reality, `AppDropdown` with its stacked label
+> measures **73dp** (48dp tap target floor + 25dp unscaled label constants).
+> Corrected chrome at rest is **182.2dp**, leaving only **~69.8dp** for the grid.
 
 The overflow is gone, but 108dp of grid is one compact row and a peek. **Scale
 fixes the crash; it does not fix the screen.** That is what Phase 2's re-flow is
@@ -314,11 +323,17 @@ chrome measures — these figures are asserted, not estimated
 
 | band | composition at spacing 0.70, 40dp input, 48dp dropdown | height |
 |---|---|---|
-| `_buildHeader` | `getRSize(16)`×2 = 22.4 + `AppDropdown` **48** | 70.4dp |
+| `_buildHeader` | `getRSize(16)`×2 = 22.4 + `AppDropdown` **48** | 70.4dp *(correction: 95.4dp with 73dp labelled dropdown, see §11.1)* |
 | `_buildSearchField` | `getRSize(12)` = 8.4 + `AppInput` 40 | 48.4dp |
 | `CategoryFilterBar` | `getRSize(38)` = 26.6 + margins 16.8 | 43.4dp |
-| **chrome** | | **162.2dp** |
-| **grid** | 252 − 162.2 | **~90dp** |
+| **chrome** | | **162.2dp** *(correction: **187.2dp**, see §11.1)* |
+| **grid** | 252 − 162.2 | **~90dp** *(correction: **~64.8dp**, see §11.1)* |
+
+> **Correction (2026-09-18, §11.1):** `AppDropdown` **48** only accounted for
+> the bare control, omitting the 25dp unscaled label stacked above it. With its
+> label, `AppDropdown` measures **73dp**, raising `_buildHeader` to **95.4dp**,
+> chrome to **187.2dp**, and reducing grid at rest to **~64.8dp** (one clipped
+> row). On 800×360 the populated grid is starved to **0.0dp** (see §11.2).
 
 **Updated 2026-09-07:** chrome was 154.2dp with a 40dp dropdown. Restoring
 `AppDropdown`'s 48dp tap target (gap 3) added 8dp to the header band and took
@@ -913,10 +928,12 @@ assertions updated from 43dp/40dp — **they were pinning the defect.** The
 field whose height is stable under text scaling.
 
 **Cost, paid not dodged:** +8dp on POS's header band in landscape → chrome
-154.2 → **162.2dp**, grid ~98 → **~90dp**; §4's arithmetic is updated. The
-POS-home test budget moved 160 → 165dp for the same reason. On a 320dp-tall
-viewport (SE1 landscape) the grid falls to **~9.8dp** — it still does not crash,
-and it is frankly unusable, which is Phase 2's case in one number.
+154.2 → **162.2dp**, grid ~98 → **~90dp**; §4's arithmetic is updated. *(Correction
+in §11.1: 162.2dp chrome / ~90dp grid still omitted the 25dp stacked label above
+AppDropdown; with the 73dp labelled dropdown, chrome is 187.2dp and grid at rest
+is ~64.8dp).* The POS-home test budget moved 160 → 165dp for the same reason. On
+a 320dp-tall viewport (SE1 landscape) the grid falls to **~9.8dp** — it still does
+not crash, and it is frankly unusable, which is Phase 2's case in one number.
 
 ### Gap 3a — the ADR shipped on a colliding number
 
@@ -1049,3 +1066,176 @@ commits behind); measure against `origin/main`, not `main`.
 5. Squash the revert churn, then open the Phase 0 PR.
 6. Phase 1 (auth) — unblocked and independent of the §4 decision.
 7. Phase 2 — prototype both §4 options, measure, decide, reconcile the documents.
+
+---
+
+## 11. Audit against runtime measurement — PRD #239 (2026-09-18)
+
+Audited against runtime measurements from PRD #239, the #241 discovery pass,
+and implementation of the early slices (#240, #243, #245, #246, #256, #257,
+#258, #259).
+
+This section records the five places where real device and harness measurement
+contradicted the assumptions, figures, and scope of this plan, so future work
+does not re-derive the same findings or act on figures known to be invalid.
+
+### 11.1 Correction 1 — The dropdown field measures 73dp with its label, not ~40dp / 48dp
+
+The plan repeatedly recorded `AppDropdown` as ~40dp (or 48dp after Phase 0 gap 3
+enforced the tap-target floor). Earlier work compacted the internal padding of
+the field itself, but completely overlooked the label stacked above it.
+
+In `lib/shared/widgets/app_dropdown.dart`, a labelled dropdown stacks a text
+label above the control with unscaled vertical constants:
+- Label text height (`titleSmall` / 13sp with line metrics ≈ 17dp)
+- Gap between label and input (`context.getRSize(8)` ≈ 8dp)
+- Control body (floored at `kMinInteractiveDimension` = 48dp)
+
+Combined, a dropdown field measures **73dp** with its label.
+
+**Impact on fixed chrome budgets:**
+Wherever the plan calculated chrome heights using ~40dp or 48dp, the arithmetic
+was wrong by at least 25dp per dropdown:
+- **POS (`_buildHeader`):** 22.4dp padding + 73dp dropdown = **95.4dp** (not
+  70.4dp). Chrome at rest is **187.2dp** (not 162.2dp), leaving only **~64.8dp**
+  at rest on Pixel 7 landscape (915×412), and **negative space** on 800×360.
+- **Inventory (filter row):** On an 800×360 landscape phone, the filter row
+  alone measures **92.6dp** (two dropdowns side by side), which is taller than
+  the entire 75.6dp vertical space given to the tab content area. There is
+  negative space (−17.0dp). No amount of padding tightening can fix this while
+  the stacked label remains.
+
+The plan's arithmetic in §1, §3, and §4 has been annotated and corrected in place
+to reflect the real 73dp measurement.
+
+### 11.2 Correction 2 — Scroll-away headers charge the body in a tabbed scroller
+
+The mechanism by which a tabbed scroller charges its body for headers that scroll
+away was completely absent from this plan, despite being the primary structural
+root cause on five major screens (Inventory, Orders, Customer Detail, Supplier
+Detail, Driver Profile).
+
+**The mechanism:**
+Under Flutter's `NestedScrollView`, the inner tab body is rendered by
+`RenderSliverFillRemainingWithScrollable`. This render object sizes the body box
+at rest to:
+```
+bodyHeight = viewportMainAxisExtent - precedingScrollExtent
+```
+Because the scroll-away header slivers precede the tab body in the outer sliver
+tree, their *entire* height (`precedingScrollExtent`) is subtracted from the
+body viewport *at rest*. The body is not sized to the viewport minus the pinned
+tab bar; it is sized minus **all** header slivers. The body area only expands
+back once the user scrolls the header offstage.
+
+**Consequences on-screen:**
+- On **Inventory** (summary cards + store banner + tab bar taking ~264dp), the
+  body at 800×360 was left with **95.6dp**. Subtracting the 92.6dp filter band
+  left the product list with **exactly 0.0dp of height**.
+- On **Expenses** (#256), the list was squeezed to **1.8dp of 1,137dp**.
+- On **Customer Detail** (#245) and **Supplier Detail** (#246), tall profile
+  headers and credit cards caused 27px and 51px bottom overflows and squeezed
+  ledger lists to under 55dp.
+
+**The architectural resolution:**
+The plan assumed call-site padding tweaks could fit these screens. Instead,
+`TabbedSliverScaffold` (ADR 0027, #243) was built to replace hand-rolled
+`NestedScrollView`s. It pairs `SliverOverlapAbsorber` and `SliverOverlapInjector`
+and turns each tab into an independent `CustomScrollView` whose filter bands are
+slivers alongside the list items, rather than fixed box bands over an
+`Expanded`.
+
+### 11.3 Correction 3 — Scope is not landscape-only (small portrait phones and the gating trap)
+
+The plan was titled and framed exclusively around short viewports (landscape
+phones) and tablets. This scope definition was fundamentally too narrow.
+
+**Small portrait phones fail identically:**
+A budget phone in portrait — specifically the iPhone SE 1st-generation baseline
+(320×568 portrait) — suffers the exact same content starvation and layout
+overflows as a landscape phone:
+- Inventory overflowed by 19px in portrait with only 163.5dp left for content.
+- Expenses overflowed 135px and 181px horizontally on narrow cards at 320dp.
+- Supplier Detail overflowed 51px on the right of its balance card.
+
+**The gating trap:**
+At 320×568 portrait, `screenHeight` is **568.0dp**. This is comfortably *above*
+the plan's `isShortViewport` threshold (`screenHeight < 500.0`).
+Consequently:
+- Any responsive fix gated on `context.isShortViewport` evaluates to `false` on a
+  320×568 portrait phone.
+- Any fix gated on `orientation == Orientation.landscape` likewise never runs in
+  portrait.
+
+Gated fixes leave small portrait phones broken.
+
+**The correction:**
+Responsive structural fixes must be **unconditional** — screens must be
+structured as a single scrollable surface (`CustomScrollView` or
+`TabbedSliverScaffold`) across all viewports, without orientation branches or
+`isShortViewport` layout gates. The scope statement at the head of this plan has
+been amended accordingly.
+
+### 11.4 Correction 4 — Presumed screen inventory in later phases is unverified and superseded
+
+The plan's later phases (Phase 4, Phase 5, Phase 8) presumed that nearly every
+screen in the app would need individual responsive rework. That assumption was
+speculative.
+
+**The runtime discovery pass (#241):**
+Issue #241 implemented a runtime overflow detection hook (`OverflowRouteReporter`)
+and executed a discovery sweep across ~70 screens in empty and populated states at
+800×360, paired with an exhaustive device emulator walk by the product owner.
+
+**The findings:**
+Most screens in the app are completely unaffected by rotation or compact viewports.
+The defect clustered strictly on screens sharing two structural anti-patterns:
+1. Fixed box headers stacked above an `Expanded` body inside a non-scrolling
+   `Column` (POS #259, Expenses #256, Cart #255).
+2. Tabbed bodies with fixed box filter strips inside a `NestedScrollView`
+   (Inventory #243, Customer Detail #245, Supplier Detail #246).
+
+The exhaustive lists in Phase 4, Phase 5, and Phase 8 are superseded by the
+verified defect list in PRD #239. Effort is directed to measured defects rather
+than speculative screen-by-screen churn.
+
+### 11.5 Correction 5 — "Write the regression test" superseded by the two-assertion invariant
+
+The plan's outstanding item in §6 (Phase 0 item 4) and §10 (Gap 1) called for
+writing a regression test asserting "no overflow" on POS home.
+
+**Why "no overflow" is insufficient:**
+Measurement on real devices and in the test harness revealed that on populated
+screens, **content starvation is silent**:
+- When the catalogue has products, the list or grid collapses to 0.0dp, renders
+  nothing, and throws **no exception at all** (`tester.takeException()` returns
+  `null`).
+- The red `RenderFlex` overflow band appears **only when the catalogue is
+  empty** (because the empty state placeholder has a fixed intrinsic height
+  that refuses to compress to zero).
+
+An overflow-only assertion passes a screen whose content has been crushed to zero
+height.
+
+**The two-assertion invariant:**
+Responsive viewport tests that validate visible content rows or cards enforce the
+two-assertion invariant codified in `test/helpers/screen_harness.dart`:
+1. `expectNoOverflow`: no `RenderFlex` overflow at paint time.
+2. `expectContentRowVisible`: at least one complete, hit-testable content row (or
+   product card, order row, credit ledger entry) is visible in the viewport.
+
+Empty-state tests in the customer, POS, expenses, and inventory suites use targeted
+empty-state assertions rather than expecting content rows, while the report-card
+badge test uses its badge-specific assertion instead of `expectContentRowVisible`.
+
+### 11.6 Blocking contradiction: Sales screen landscape treatment (Plan §4 vs ADR 0025 §5)
+
+Plan §4 and ADR 0025 §5 gave diametrically opposite instructions for the
+landscape treatment of the sales screen (POS):
+- **ADR 0025 §5** concluded that "Phase 2's structural re-flow (**rail layout**)
+  is required, not optional", citing `textScaler 1.3` drift.
+- **Plan §4** marked the side rail rejected on the grounds that a collapsing
+  header keeps controls reachable and saves horizontal width.
+
+This contradiction remains an active, unresolved design blocker that halts work on the
+sales screen until resolved through prototyping and measurement on real devices.

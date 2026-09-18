@@ -131,22 +131,22 @@ class ReportsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gap = context.getRSize(16);
+    final gap = context.getRSize(12);
     final textScaler = MediaQuery.textScalerOf(context);
-    final cardHeight =
-        math.max(160.0, context.getRSize(160.0)) + textScaler.scale(20.0) - 20.0;
+    final cardHeight = math.max(154.0, context.getRSize(154.0)) +
+        (textScaler.scale(20.0) - 20.0) * 3.5;
     return Shimmer(
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
         padding: EdgeInsets.all(context.getRSize(16)),
         itemCount: 6,
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 240,
+          maxCrossAxisExtent: 220,
           mainAxisExtent: cardHeight,
           mainAxisSpacing: gap,
           crossAxisSpacing: gap,
         ),
-        itemBuilder: (_, __) => SkeletonBox(radius: context.getRSize(18)),
+        itemBuilder: (_, __) => SkeletonBox(radius: context.getRSize(16)),
       ),
     );
   }
