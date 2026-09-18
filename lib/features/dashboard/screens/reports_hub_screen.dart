@@ -6,17 +6,20 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
-import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
-import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_list_screen.dart';
-import 'package:reebaplus_pos/features/dashboard/screens/stock_approvals_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/crate_deposits_report_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_list_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/stock_approvals_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/supplier_accounts_report_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
+import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 const String kReportCardKeyPrefix = 'report-card-';
 Key reportCardKey(String title) => Key('$kReportCardKeyPrefix$title');
@@ -29,8 +32,18 @@ class ReportsHubScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
+  bool _isScrolled = false;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final semanticColors = theme.extension<AppSemanticColors>();
+    final warningColor = semanticColors?.warning ?? theme.colorScheme.secondary;
+    final infoColor = semanticColors?.info ?? theme.colorScheme.primary;
+    final successColor = semanticColors?.success ?? theme.colorScheme.primary;
+    final primaryColor = theme.colorScheme.primary;
+    final secondaryColor = theme.colorScheme.secondary;
+
     // §25.3 role gating — the Reports hub is CEO + Manager only (§11.3). Each
     // card is additionally guarded so it is hidden (never greyed — rule #7) for
     // any role lacking it. Each manager-up card now cites its own named registry
@@ -67,7 +80,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           title: 'Approvals',
           subtitle: 'Stock, quick sales & crate deposits',
           icon: FontAwesomeIcons.clipboardList.data,
-          color: Colors.orange,
+          color: warningColor,
           badgeCount: pendingApprovals,
           onTap: () => Navigator.push(
             context,
@@ -84,7 +97,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           title: 'Daily Reconciliation',
           subtitle: 'Day · Week · Month · Year',
           icon: FontAwesomeIcons.clipboardCheck.data,
-          color: Colors.indigo,
+          color: primaryColor,
           onTap: () => Navigator.push(
             context,
             slideDownRoute(const DailyReconciliationListScreen()),
@@ -98,7 +111,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           title: 'Crate Deposits',
           subtitle: 'Held · Refunded · Kept',
           icon: FontAwesomeIcons.beerMugEmpty.data,
-          color: Colors.teal,
+          color: secondaryColor,
           onTap: () => Navigator.push(
             context,
             slideDownRoute(const CrateDepositsReportScreen()),
@@ -115,7 +128,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           title: 'Supplier Accounts',
           subtitle: 'Balances · Paid · Received',
           icon: FontAwesomeIcons.buildingColumns.data,
-          color: Colors.brown,
+          color: infoColor,
           onTap: () => Navigator.push(
             context,
             slideDownRoute(const SupplierAccountsReportScreen()),
@@ -130,7 +143,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           title: 'Profit Report',
           subtitle: 'Margins & COGS',
           icon: FontAwesomeIcons.chartPie.data,
-          color: Colors.green,
+          color: successColor,
           onTap: () => Navigator.push(
             context,
             slideDownRoute(const ProfitReportScreen()),
@@ -140,79 +153,97 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
 
     // First load: show the reports skeleton (brief §4.4) while data streams in.
     if (ref.watch(firstLoadSkeletonActiveProvider)) {
-      return SharedScaffold(
-        activeRoute: 'dashboard',
-        appBar: AppBar(
-          title: Text(
-            'Business Reports',
-            style: context.h3.copyWith(fontWeight: FontWeight.bold),
+      return ColoredBox(
+        color: theme.scaffoldBackgroundColor,
+        child: Container(
+          decoration: AppDecorations.glassyBackground(context),
+          child: SharedScaffold(
+            activeRoute: 'dashboard',
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              title: Text(
+                'Business Reports',
+                style: context.h3.copyWith(fontWeight: FontWeight.bold),
+              ),
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              backgroundColor: Colors.transparent,
+              leading: BackButton(color: context.primaryColor),
+            ),
+            body: const SafeArea(child: ReportsSkeleton()),
           ),
-          elevation: 0,
-          backgroundColor: context.backgroundColor,
-          leading: BackButton(color: context.primaryColor),
         ),
-        body: const SafeArea(child: ReportsSkeleton()),
       );
     }
 
     final textScaler = MediaQuery.textScalerOf(context);
-    final cardHeight =
-        math.max(160.0, context.getRSize(160.0)) + textScaler.scale(20.0) - 20.0;
+    final cardHeight = math.max(154.0, context.getRSize(154.0)) +
+        (textScaler.scale(20.0) - 20.0) * 3.5;
 
-    return SharedScaffold(
-      activeRoute: 'dashboard',
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Business Reports',
-              style: context.h3.copyWith(fontWeight: FontWeight.bold),
+    return ColoredBox(
+      color: theme.scaffoldBackgroundColor,
+      child: Container(
+        decoration: AppDecorations.glassyBackground(context),
+        child: SharedScaffold(
+          activeRoute: 'dashboard',
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: _isScrolled
+                ? theme.colorScheme.surface.withValues(alpha: 0.8)
+                : Colors.transparent,
+            elevation: 0,
+            surfaceTintColor: Colors.transparent,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Business Reports',
+                  style: context.h3.copyWith(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  ref.watch(activeStoreLabelProvider),
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(11),
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-            Text(
-              ref.watch(activeStoreLabelProvider),
-              style: TextStyle(
-                fontSize: context.getRFontSize(11),
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w600,
+            leading: BackButton(color: context.primaryColor),
+          ),
+          // Each report owns its own period filter where its data lives; the hub
+          // is just the menu of cards (no duplicate hub-level period bar).
+          body: NotificationListener<ScrollUpdateNotification>(
+            onNotification: (notif) {
+              if (notif.metrics.axis == Axis.vertical) {
+                if (notif.metrics.pixels > 10 && !_isScrolled) {
+                  setState(() => _isScrolled = true);
+                } else if (notif.metrics.pixels <= 10 && _isScrolled) {
+                  setState(() => _isScrolled = false);
+                }
+              }
+              return false;
+            },
+            child: GridView(
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 220,
+                mainAxisExtent: cardHeight,
+                mainAxisSpacing: context.getRSize(12),
+                crossAxisSpacing: context.getRSize(12),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              padding: EdgeInsets.fromLTRB(
+                context.getRSize(16),
+                context.getRSize(16),
+                context.getRSize(16),
+                context.getRSize(16) + context.deviceBottomPadding,
+              ),
+              children: cards,
             ),
-          ],
-        ),
-        elevation: 0,
-        backgroundColor: context.backgroundColor,
-        leading: BackButton(color: context.primaryColor),
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              context.backgroundColor,
-              context.backgroundColor.withValues(alpha: 0.8),
-            ],
           ),
-        ),
-        // Each report owns its own period filter where its data lives; the hub
-        // is just the menu of cards (no duplicate hub-level period bar).
-        child: GridView(
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 240,
-            mainAxisExtent: cardHeight,
-            mainAxisSpacing: context.spacingM,
-            crossAxisSpacing: context.spacingM,
-          ),
-          padding: EdgeInsets.fromLTRB(
-            context.spacingM,
-            context.spacingM,
-            context.spacingM,
-            context.spacingM + context.deviceBottomPadding,
-          ),
-          children: cards,
         ),
       ),
     );
@@ -227,85 +258,123 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     required VoidCallback onTap,
     int badgeCount = 0,
   }) {
-    return Material(
-      key: reportCardKey(title),
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(context.radiusL),
-        child: Container(
-          padding: EdgeInsets.all(context.spacingM),
-          decoration: BoxDecoration(
-            color: context.surfaceColor,
-            borderRadius: BorderRadius.circular(context.radiusL),
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.1),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
-            border: Border.all(color: color.withValues(alpha: 0.2)),
-          ),
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, color: color, size: 24),
-                  ),
-                  const Spacer(),
-                  Text(
-                    title,
-                    style: context.bodyMedium.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: context.bodySmall.copyWith(
-                      color: Theme.of(context).hintColor,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-              if (badgeCount > 0)
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: Container(
-                    key: Key('report-card-badge-$title'),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '$badgeCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardRadius = context.radiusL;
+
+    return GlassyCard(
+      radius: cardRadius,
+      padding: EdgeInsets.zero,
+      border: Border.all(
+        color: isDark
+            ? color.withValues(alpha: 0.22)
+            : color.withValues(alpha: 0.16),
+        width: 1.0,
+      ),
+      child: Material(
+        key: reportCardKey(title),
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(cardRadius),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              math.max(14.0, context.getRSize(14.0)),
+              math.max(13.0, context.getRSize(13.0)),
+              math.max(14.0, context.getRSize(14.0)),
+              math.max(16.0, context.getRSize(16.0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: math.max(34.0, context.getRSize(36.0)),
+                      height: math.max(34.0, context.getRSize(36.0)),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            color.withValues(alpha: 0.18),
+                            color.withValues(alpha: 0.06),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(context.radiusM),
+                        border: Border.all(
+                          color: color.withValues(alpha: 0.25),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          icon,
+                          color: color,
+                          size: math.max(16.0, context.getRSize(17.0)),
+                        ),
                       ),
                     ),
-                  ),
+                    if (badgeCount > 0)
+                      Container(
+                        key: Key('report-card-badge-$title'),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: context.getRSize(8),
+                          vertical: context.getRSize(3),
+                        ),
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(context.radiusS),
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.35),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          '$badgeCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      )
+                    else
+                      Icon(
+                        FontAwesomeIcons.chevronRight.data,
+                        size: math.max(11.0, context.getRSize(12.0)),
+                        color: theme.colorScheme.onSurfaceVariant
+                            .withValues(alpha: 0.35),
+                      ),
+                  ],
                 ),
-            ],
+                const Spacer(),
+                Text(
+                  title,
+                  style: (theme.textTheme.titleSmall ?? context.bodyMedium)
+                      .copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: math.max(3.0, context.getRSize(3.0))),
+                Text(
+                  subtitle,
+                  style: context.bodySmall.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: math.max(4.0, context.getRSize(4.0))),
+              ],
+            ),
           ),
         ),
       ),
