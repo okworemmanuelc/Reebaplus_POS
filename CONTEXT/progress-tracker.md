@@ -8,7 +8,7 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-163 sessions logged. Codebase is live and being verified on-device.
+165 sessions logged. Codebase is live and being verified on-device.
 
 ### Fix — POS top bar threw on rotation: sideways float no longer uses `SliverFloatingHeader` (follow-up to #259, PRD #239) (2026-09-18)
 Branch `fix/pos-top-bar-rotation-assert`, cut from `main` (`7ca2b32`). Found by the owner on the emulator: rotating on Supplier Accounts stopped the debugger on `RenderBox.size accessed beyond the scope of resize, layout, or permitted parent access` and the app froze mid-rotation.
@@ -18,6 +18,46 @@ Branch `fix/pos-top-bar-rotation-assert`, cut from `main` (`7ca2b32`). Found by 
 - **Tests** — new `test/pos/pos_home_rotation_test.dart`: at 800x360 and 915x412, a sweep of gentle flings (150–1200px/s) while the viewport grows 56dp a frame at a time. **Red before**: the exact assertion at 200px/s at both sizes. **Green after.** Plus: sideways the bar scrolls away and returns on a reverse scroll; upright it stays pinned. POS suites 79/79.
 - **Test gotcha**: `tester.drag` performs the whole move and lifts before a frame runs, so layout only sees `ScrollDirection.idle` and a floating `SliverPersistentHeader` never floats back — move the finger a frame at a time (`startGesture` + `moveBy` + `pump`). And never reset a POS test by dragging past the top: it arms pull-to-refresh, whose banner never settles; `jumpTo(0)` instead.
 - **Open**: owner re-check on the emulator — rotate on any tab (upright ↔ sideways) and fling POS gently sideways so the bottom bar slides away.
+
+### Issue #246 — Supplier Detail holds its ledger at every viewport (PRD #239) (2026-09-18)
+Branch `feat/supplier-detail-tabbed-sliver-scaffold-246`, cut from `main` (`2d221d8`). Slice of PRD #239; adopts `TabbedSliverScaffold` (#243 / ADR 0027) as built — no scaffold behaviour change was needed (only its chrome doc line, below).
+
+- **Before (measured by probe, fully filled-in supplier, 12 ledger rows)**: the ledger list was handed **54.7dp** at rest on the comfortable 412x915 control and **69–110dp** on 320x568, silently. The balance card's label row overflowed **51px on the right** at 320dp wide and **19px** even at 412dp — test-font numbers, which exaggerate width, but on a device "Amount owed to supplier" still does not fit the ~135dp a 320dp phone leaves it. The owner's device walk saw a 1.2px band **once the header had scrolled partway**; the harness sweep missed it because it only looked at rest. Stepping the scroll 40dp at a time reproduces it on the old layout: **bottom overflow of 53px 120dp into a scroll at 800x360** (41px at 915x412; 37/25px in the single-ledger shape) — the band grows with the test font's wider glyphs.
+- **Two shapes, both fixed (`lib/features/inventory/screens/supplier_detail_screen.dart`)**:
+  - *Tracks crates* → `TabbedSliverScaffold` with Ledger + Empty Crates. The screen owns a fixed 2-tab `TabController` (`SingleTickerProviderStateMixin`); `DefaultTabController` and the hand-rolled `NestedScrollView` are deleted.
+  - *No crates* → **deliberately not the scaffold**: this shape never had a tab bar, and a one-tab bar would change the portrait look (story 28). With no pinned bar and no nested scroller the defect cannot occur, so one plain `CustomScrollView` carries header, balance card, "Activity Ledger" heading and ledger. Not a second scaffold variant — Driver Profile (#247) should make the same call if it has a tab-less shape. Both shapes share `kSupplierLedgerStorageKey`; `kSupplierCratesStorageKey` keys Empty Crates.
+  - `_buildHistoryTab` → `_ledgerSlivers`: the Total In / Total Out strip is a `SliverToBoxAdapter` that scrolls with the rows (it was the fixed band above an `Expanded` list); the empty message is `SliverFillRemaining(hasScrollBody: false)`. `_buildCratesTab` → `_cratesTabSlivers` (`SliverPadding` + `SliverList.list`).
+  - Balance label wrapped in `Flexible`, so it wraps instead of pushing past the card edge (next to the 120dp period selector a 320dp phone leaves it ~135dp).
+  - Ledger rows carry `kSupplierLedgerRowKeyPrefix` (`supplier-ledger-row-<id>`) as the test seam.
+- **Tap-target defect found and fixed**: the pinned tab bar reserved its bottom margin as chrome but not its 1dp border top and bottom, so on 320x568 and 800x360 each tab's `InkWell` was **46dp**. `_tabBarChromeExtent` now = margin + 2 × `_tabBarBorderWidth`. Proven by reverting it: the test reads 46.0 and fails. **Driver Profile (#247) has the same border + margin pattern and will hit the same 46dp** — carry this fix into that slice. The doc comments on `PinnedTabBarDelegate.withChrome` and `TabbedSliverScaffold.tabBarChromeExtent` now say to count the border.
+- **After**: no overflow at any viewport in either shape; the list gets 164dp at rest on 320x568 (tabbed) and the full body in the single shape; one scroll shows 2–5 complete rows everywhere. Rows at rest are 0 at every viewport with this worst-case header — the test font renders every glyph a full em wide, so the header wraps far more than on a device; the guarantee is the PRD's one scrollable surface, not a row at rest.
+- **Unconditional**: no orientation branch, no short-viewport predicate, no change to the density scale, the first-run empty state or the stacked field label.
+- **Tests** — new `test/suppliers/supplier_detail_viewport_test.dart`, 22 tests: both shapes × populated/empty × 4 viewports on the two mandatory assertions — populated ones also assert no overflow at every 40dp step of a scroll, since the device band only appeared mid-scroll — plus per-tab scroll retention, sideways swipe, Empty Crates reachable without overflow at 320x568 and 800x360, and full-height tap targets (period selector + both tabs' `InkWell`s). **Red** against the old layout with only the row key added: 14 fail / 8 pass (every populated case — mid-scroll bottom overflows, the balance-label overflow, 46dp tabs; the 8 empty-state cases pass, as the old empty layout was sound). **Green** after: 22/22.
+- **Test note**: on a short phone the filled-in header is taller than the screen, so the tab bar and ledger start *below the fold* and finders skip them. The suite drags the `NestedScrollView` (the whole screen, as a thumb does), not the Ledger tab's own view.
+- **Follow-up (not this slice)**: `settleScreen`, `teardownScreen` (close the DB inside `runAsync`) and the key-prefix row finder are now copied in three viewport suites (Expenses, Customer Detail, Supplier Detail). Lift them into `test/helpers/screen_harness.dart` before #247 makes it four.
+- **Open**: emulator verification by rotating the device, at rest **and mid-scroll** (agents do not drive the emulator). No row is visible at rest in the test font even on 412x915, so the emulator is also the proof that normal phones look unchanged.
+
+### Issue #244 — Orders migrates onto shared TabbedSliverScaffold (PRD #239) (2026-09-18)
+Branch `feat/orders-tabbed-sliver-scaffold-244`, cut from `main`. Slice of PRD #239.
+- **Problem**:
+  - `OrdersScreen` (`lib/features/orders/screens/orders_screen.dart`) previously hand-rolled `NestedScrollView` with an unpinned `TabBar` inside a `SliverToBoxAdapter` and `TabBarView` body. When scrolled, the tab bar scrolled completely out of sight.
+  - At compact viewports (320x568 portrait and short landscape 800x360), `NestedScrollView` charged its body for scroll-away headers, reducing body extent, while summary strip metric values suffered squashing on narrow widths.
+- **Implementation**:
+  - Replaced hand-rolled `NestedScrollView` and `_StickyTabBarDelegate` with shared `TabbedSliverScaffold` (ADR 0027).
+  - Pinned `TabBar` floored at 48dp using `tabBarExtent: math.max(kMinInteractiveDimension, context.getRSize(72.0))`.
+  - Converted tabs to `TabSliverView` instances with stable storage keys (`orders-pending`, `orders-completed`, `orders-cancelled`) returning per-tab `SliverToBoxAdapter`s for `_SummaryStrip` and Search/Filter controls so they scroll with content, followed by sliver lists (`SliverPadding` + `SliverList.builder`) and `SliverFillRemaining(hasScrollBody: false)` for empty, loading, and error states.
+  - Wrapped summary stat values in `FittedBox(fit: BoxFit.scaleDown)` to prevent text squashing on narrow portrait viewports.
+  - Preserved all permissions, actions, and money visibility gates (`Gates.refundOrder`, `Gates.confirmOrder`, `Gates.seeOrderMoney`).
+  - Added test seams: `kOrderRowKeyPrefix = 'order-card-'` and `orderRowKey(orderId)`.
+  - Unconditional: zero orientation branching, no `isShortViewport` predicate.
+- **Verification**:
+  - Added `test/orders/orders_viewport_test.dart` (11 tests, all passing):
+    - Populated and empty states across 4 viewports (`phoneSe1Portrait`, `androidCompactLandscape`, `pixel7Landscape`, `pixel7Portrait`) asserting `expectNoOverflow` and `expectContentRowVisible`.
+    - Tab switching via tap and index verification.
+    - Per-tab scroll position retention via `PageStorageKey`.
+    - Max text scale (1.3x) without overflow.
+  - Existing orders suite (`test/orders/`, 75 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #242 — Docs: record the five measured corrections to the responsive layout plan (PRD #239) (2026-09-18)
 Branch `docs/responsive-layout-plan-corrections-242`, cut from `main` (`2d221d8`). Slice of PRD #239. Documentation-only slice updating `docs/design/responsive-layout-plan.md` to record the five places where real device and harness measurements contradicted earlier design assumptions, preventing future re-derivation of flawed figures.

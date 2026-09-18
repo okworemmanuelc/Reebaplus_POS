@@ -93,9 +93,9 @@ class TabbedSliverScaffold extends StatelessWidget {
   /// Height for the pinned tab bar. Floored at [kMinInteractiveDimension].
   final double? tabBarExtent;
 
-  /// Non-interactive decoration inside [tabBar] — a bottom margin, say — which
-  /// must be reserved *on top of* the tap-target floor rather than taken out of
-  /// it. See [PinnedTabBarDelegate.withChrome].
+  /// Non-interactive decoration inside [tabBar] — a bottom margin plus any
+  /// border, say — which must be reserved *on top of* the tap-target floor
+  /// rather than taken out of it. See [PinnedTabBarDelegate.withChrome].
   final double? tabBarChromeExtent;
 
   /// Optional scroll behaviour for the tab bodies.

@@ -25,9 +25,20 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_ledger_entry_ti
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
+import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
+
+/// Key prefix on every ledger row, followed by the entry id. The test seam for
+/// "at least one complete ledger row is laid out and hit-testable" (PRD #239).
+const String kSupplierLedgerRowKeyPrefix = 'supplier-ledger-row-';
+
+/// Scroll-position identities: each surface keeps its place across tab
+/// switches. The Ledger key is shared by both shapes of the screen — the
+/// tabbed Ledger tab and the single scroll view a business without crate
+/// tracking gets — so one finder addresses the ledger either way.
+const String kSupplierLedgerStorageKey = 'supplier-detail-ledger';
+const String kSupplierCratesStorageKey = 'supplier-detail-crates';
 
 /// §21.3 / §21.10 — Supplier Details on real ledger data. Balance =
 /// SUM(payments) − SUM(invoices); negative (red) = we owe the supplier.
@@ -41,10 +52,27 @@ class SupplierDetailScreen extends ConsumerStatefulWidget {
       _SupplierDetailScreenState();
 }
 
-class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
+class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
+    with SingleTickerProviderStateMixin {
   String _timeFilter = 'This Month'; // §30.6/§30.11 default
   DateTimeRange? _customRange;
   bool _isScrolled = false;
+
+  /// Ledger + Empty Crates. Only read when the business tracks crates; the
+  /// other shape has no tabs at all.
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   List<String> get _periodOptions =>
       datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
@@ -99,15 +127,6 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
             );
     } else {
       content = _buildBody(context, theme, supplier, showCrates);
-    }
-
-    // DefaultTabController if showCrates is true
-    Widget bodyContent = content;
-    if (showCrates && canManage && supplier != null) {
-      bodyContent = DefaultTabController(
-        length: 2,
-        child: content,
-      );
     }
 
     return ColoredBox(
@@ -170,7 +189,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
               }
               return false;
             },
-            child: bodyContent,
+            child: content,
           ),
           floatingActionButton: (canManage && supplier != null)
               ? AppFAB(
@@ -206,62 +225,84 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         .where((e) => isDateInPeriod(e.activityDate, _timeFilter))
         .toList();
 
-    return NestedScrollView(
-      headerSliverBuilder: (context, innerBoxIsScrolled) {
-        return [
-          SliverToBoxAdapter(child: _buildHeader(context, theme, supplier)),
-          SliverToBoxAdapter(child: _buildBalanceCard(context, theme, balanceKobo, scopeLabel)),
-          if (showCrates)
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: PinnedTabBarDelegate.withChrome(
-                extent: context.getRSize(60),
-                // _buildTabBar spends this much of the header on a bottom
-                // margin, so it has to be reserved on top of the 48dp floor
-                // or the TabBar itself lands short of the tap-target minimum.
-                chromeExtent: _tabBarBottomMargin,
-                child: Container(
-                  color: Colors.transparent,
-                  padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-                  child: _buildTabBar(theme),
-                ),
+    final headerSlivers = [
+      SliverToBoxAdapter(child: _buildHeader(context, theme, supplier)),
+      SliverToBoxAdapter(child: _buildBalanceCard(context, theme, balanceKobo, scopeLabel)),
+    ];
+    final ledgerSlivers = _ledgerSlivers(
+      context,
+      theme,
+      filtered,
+      supplier,
+      isAllStores ? storeNameById : null,
+    );
+
+    // No tabs to pin, so one scroll view carries the whole screen. Same
+    // storage key as the tabbed shape's Ledger tab.
+    if (!showCrates) {
+      return CustomScrollView(
+        key: const PageStorageKey<String>(kSupplierLedgerStorageKey),
+        slivers: [
+          ...headerSlivers,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.getRSize(20),
+                context.getRSize(16),
+                context.getRSize(20),
+                context.getRSize(8),
               ),
-            )
-          else
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  context.getRSize(20),
-                  context.getRSize(16),
-                  context.getRSize(20),
-                  context.getRSize(8),
-                ),
-                child: Text(
-                  'Activity Ledger',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(16),
-                    fontWeight: FontWeight.w800,
-                    color: _text,
-                  ),
+              child: Text(
+                'Activity Ledger',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(16),
+                  fontWeight: FontWeight.w800,
+                  color: _text,
                 ),
               ),
             ),
-        ];
-      },
-      body: showCrates
-          ? TabBarView(
-              children: [
-                _buildHistoryTab(context, theme, filtered, supplier, isAllStores ? storeNameById : null),
-                _buildCratesTab(context, theme),
-              ],
-            )
-          : _buildHistoryTab(context, theme, filtered, supplier, isAllStores ? storeNameById : null),
+          ),
+          ...ledgerSlivers,
+        ],
+      );
+    }
+
+    return TabbedSliverScaffold(
+      controller: _tabController,
+      tabBarExtent: context.getRSize(60),
+      // _buildTabBar spends this much of the header on decoration, so it has
+      // to be reserved on top of the 48dp floor or the TabBar itself lands
+      // short of the tap-target minimum.
+      tabBarChromeExtent: _tabBarChromeExtent,
+      headerSlivers: headerSlivers,
+      tabBar: Container(
+        color: Colors.transparent,
+        padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
+        child: _buildTabBar(theme),
+      ),
+      tabViews: [
+        TabSliverView(storageKey: kSupplierLedgerStorageKey, slivers: ledgerSlivers),
+        TabSliverView(
+          storageKey: kSupplierCratesStorageKey,
+          slivers: _cratesTabSlivers(context, theme),
+        ),
+      ],
     );
   }
 
-  /// Height the pinned tab bar gives up to its bottom margin. Read by the
-  /// header delegate so the TabBar keeps its full interactive height.
+  /// Height the pinned tab bar gives up to its bottom margin.
   double get _tabBarBottomMargin => context.getRSize(8);
+
+  /// Width of the tab bar's outline. A decorated `Container` insets its child
+  /// by the border, so it costs height top and bottom.
+  static const double _tabBarBorderWidth = 1;
+
+  /// Everything in the pinned header that is not the TabBar: the bottom margin
+  /// plus the border on both edges. Read by the header delegate so the TabBar
+  /// keeps its full interactive height — reserving the margin alone left each
+  /// tab 46dp tall on a compact phone.
+  double get _tabBarChromeExtent =>
+      _tabBarBottomMargin + 2 * _tabBarBorderWidth;
 
   Widget _buildTabBar(ThemeData theme) {
     return Container(
@@ -269,7 +310,10 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.1)),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+          width: _tabBarBorderWidth,
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -277,6 +321,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
           filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           fallbackBuilder: (context, child) => child,
           child: TabBar(
+            controller: _tabController,
             indicatorSize: TabBarIndicatorSize.tab,
             indicatorPadding: EdgeInsets.all(context.getRSize(4)),
             indicator: BoxDecoration(
@@ -434,12 +479,17 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                           color: theme.colorScheme.primary,
                         ),
                         SizedBox(width: context.getRSize(8)),
-                        Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(12),
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface.withAlpha(128),
+                        // Wraps rather than pushing past the card edge: next to
+                        // the period selector a 320dp phone leaves this label
+                        // ~135dp, short of "Amount owed to supplier".
+                        Flexible(
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(12),
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withAlpha(128),
+                            ),
                           ),
                         ),
                       ],
@@ -604,82 +654,85 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     );
   }
 
-  Widget _buildHistoryTab(
+  /// The ledger as slivers: the Total In / Total Out strip scrolls with the
+  /// rows rather than sitting as a fixed band above them (PRD #239).
+  List<Widget> _ledgerSlivers(
     BuildContext context,
     ThemeData theme,
     List<SupplierLedgerEntryData> entries,
     SupplierData supplier,
     Map<String, String>? storeNameById,
   ) {
-    final summaryRow = Column(
-      children: [
-        _buildLedgerSummaryRow(theme, entries),
-        SizedBox(height: context.getRSize(4)),
-      ],
+    final summaryRow = SliverToBoxAdapter(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildLedgerSummaryRow(theme, entries),
+          SizedBox(height: context.getRSize(4)),
+        ],
+      ),
     );
 
     if (entries.isEmpty) {
-      return Column(
-        children: [
-          summaryRow,
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(context.getRSize(40)),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      FontAwesomeIcons.fileInvoiceDollar.data,
-                      size: context.getRSize(48),
-                      color: theme.colorScheme.onSurface.withAlpha(40),
+      return [
+        summaryRow,
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(40)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    FontAwesomeIcons.fileInvoiceDollar.data,
+                    size: context.getRSize(48),
+                    color: theme.colorScheme.onSurface.withAlpha(40),
+                  ),
+                  SizedBox(height: context.getRSize(16)),
+                  Text(
+                    'No activity in this period',
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withAlpha(128),
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w500,
                     ),
-                    SizedBox(height: context.getRSize(16)),
-                    Text(
-                      'No activity in this period',
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurface.withAlpha(128),
-                        fontSize: context.getRFontSize(14),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
-      );
-    }
-    
-    final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
-    return Column(
-      children: [
-        summaryRow,
-        Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.fromLTRB(
-              context.getRSize(20),
-              context.getRSize(8),
-              context.getRSize(20),
-              context.getRSize(96) + context.deviceBottomPadding,
-            ),
-            itemCount: entries.length,
-            itemBuilder: (ctx, i) {
-              final e = entries[i];
-              return SupplierLedgerEntryTile(
-                entry: e,
-                onTap: isCeo ? () => _showEntryActions(supplier, e) : null,
-                storeName: storeNameById == null
-                    ? null
-                    : (storeNameById[e.storeId] ??
-                          (e.storeId == null ? 'Unassigned' : null)),
-              );
-            },
-          ),
         ),
-      ],
-    );
+      ];
+    }
+
+    final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
+    return [
+      summaryRow,
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          context.getRSize(20),
+          context.getRSize(8),
+          context.getRSize(20),
+          context.getRSize(96) + context.deviceBottomPadding,
+        ),
+        sliver: SliverList.builder(
+          itemCount: entries.length,
+          itemBuilder: (ctx, i) {
+            final e = entries[i];
+            return SupplierLedgerEntryTile(
+              key: ValueKey('$kSupplierLedgerRowKeyPrefix${e.id}'),
+              entry: e,
+              onTap: isCeo ? () => _showEntryActions(supplier, e) : null,
+              storeName: storeNameById == null
+                  ? null
+                  : (storeNameById[e.storeId] ??
+                        (e.storeId == null ? 'Unassigned' : null)),
+            );
+          },
+        ),
+      ),
+    ];
   }
 
   /// §3.13 — real per-supplier empty-crate tracking. Mirrors the customer
@@ -687,7 +740,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   /// many empties (for the full crates they delivered); negative = a crate
   /// credit. The deposit we paid for crates we keep is surfaced as the
   /// refundable "deposit held by supplier" figure.
-  Widget _buildCratesTab(BuildContext context, ThemeData theme) {
+  List<Widget> _cratesTabSlivers(BuildContext context, ThemeData theme) {
     final supplierAsync = ref.watch(supplierByIdProvider(widget.supplierId));
     final supplier = supplierAsync.valueOrNull;
     final canManage =
@@ -709,60 +762,64 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         ref.watch(supplierCrateMovementTotalsProvider(widget.supplierId)).valueOrNull ??
         (received: 0, returned: 0);
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(16),
-        context.getRSize(20),
-        context.getRSize(96) + context.deviceBottomPadding,
-      ),
-      children: [
-        if (canManage && supplier != null) ...[
-          _buildCrateActionCard(theme, supplier),
-          SizedBox(height: context.getRSize(16)),
-          // #214 — the standing-float door. Only a brand on `standing_float`
-          // has money that moves on nothing but a real top-up or payout, so
-          // this card simply is not there for a business without one, which is
-          // every business until an owner switches a brand over.
-          if (_floatBrands().isNotEmpty) ...[
-            _buildFloatActionCard(theme, supplier),
-            SizedBox(height: context.getRSize(16)),
-          ],
-        ],
-        _buildCrateSummaryCard(theme, totalOwed, depositValueKobo),
-        SizedBox(height: context.getRSize(12)),
-        _buildCrateMovementStats(theme, totals.received, totals.returned),
-        SizedBox(height: context.getRSize(16)),
-        // #212 (PRD #203, ADR 0023 rules 1 + 2) — what this supplier is
-        // actually holding of the owner's money, per brand. Renders nothing at
-        // all for a business whose brands are all on the default `none`
-        // arrangement, which is every business until an owner switches one on.
-        ..._buildPlacedDepositSection(context, theme),
-        Text(
-          'By manufacturer',
-          style: TextStyle(
-            fontSize: context.getRFontSize(14),
-            fontWeight: FontWeight.w800,
-            color: _text,
-          ),
+    return [
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          context.getRSize(20),
+          context.getRSize(16),
+          context.getRSize(20),
+          context.getRSize(96) + context.deviceBottomPadding,
         ),
-        SizedBox(height: context.getRSize(12)),
-        if (active.isEmpty)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: context.getRSize(20)),
-            child: Text(
-              'No crate activity recorded with this supplier',
-              textAlign: TextAlign.center,
+        sliver: SliverList.list(
+          children: [
+            if (canManage && supplier != null) ...[
+              _buildCrateActionCard(theme, supplier),
+              SizedBox(height: context.getRSize(16)),
+              // #214 — the standing-float door. Only a brand on `standing_float`
+              // has money that moves on nothing but a real top-up or payout, so
+              // this card simply is not there for a business without one, which is
+              // every business until an owner switches a brand over.
+              if (_floatBrands().isNotEmpty) ...[
+                _buildFloatActionCard(theme, supplier),
+                SizedBox(height: context.getRSize(16)),
+              ],
+            ],
+            _buildCrateSummaryCard(theme, totalOwed, depositValueKobo),
+            SizedBox(height: context.getRSize(12)),
+            _buildCrateMovementStats(theme, totals.received, totals.returned),
+            SizedBox(height: context.getRSize(16)),
+            // #212 (PRD #203, ADR 0023 rules 1 + 2) — what this supplier is
+            // actually holding of the owner's money, per brand. Renders nothing at
+            // all for a business whose brands are all on the default `none`
+            // arrangement, which is every business until an owner switches one on.
+            ..._buildPlacedDepositSection(context, theme),
+            Text(
+              'By manufacturer',
               style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                color: _subtext,
+                fontSize: context.getRFontSize(14),
+                fontWeight: FontWeight.w800,
+                color: _text,
               ),
             ),
-          )
-        else
-          ...active.map((b) => _buildSupplierCrateRow(theme, b)),
-      ],
-    );
+            SizedBox(height: context.getRSize(12)),
+            if (active.isEmpty)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: context.getRSize(20)),
+                child: Text(
+                  'No crate activity recorded with this supplier',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    color: _subtext,
+                  ),
+                ),
+              )
+            else
+              ...active.map((b) => _buildSupplierCrateRow(theme, b)),
+          ],
+        ),
+      ),
+    ];
   }
 
   /// **Money this supplier is holding for us** (#212, ADR 0023 rule 1) — the
