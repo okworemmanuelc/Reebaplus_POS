@@ -103,16 +103,27 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
 
   void _syncTabController(List<String> tabKeys) {
     if (_tabController != null && _listEquals(_tabKeys, tabKeys)) return;
-    final previousIndex = _tabController?.index ?? 0;
+    final int newIndex;
+    if (_tabController == null) {
+      newIndex = tabKeys.contains(widget.initialTab)
+          ? tabKeys.indexOf(widget.initialTab)
+          : 0;
+    } else {
+      final previousIndex = _tabController!.index;
+      final previousKey =
+          previousIndex < _tabKeys.length ? _tabKeys[previousIndex] : null;
+      if (previousKey != null && tabKeys.contains(previousKey)) {
+        newIndex = tabKeys.indexOf(previousKey);
+      } else {
+        newIndex = previousIndex.clamp(0, math.max(0, tabKeys.length - 1));
+      }
+    }
     _tabController?.dispose();
     _tabKeys = tabKeys;
-    final initialIndex = tabKeys.contains(widget.initialTab)
-        ? tabKeys.indexOf(widget.initialTab)
-        : math.min(previousIndex, math.max(0, tabKeys.length - 1));
     _tabController = TabController(
       length: tabKeys.length,
       vsync: this,
-      initialIndex: initialIndex,
+      initialIndex: newIndex,
     );
   }
 

@@ -127,10 +127,11 @@ void main() {
           );
 
       final now = DateTime.now();
+      final monthAnchor = DateTime(now.year, now.month, 1, 8);
       for (var i = 1; i <= 8; i++) {
         final tripId = UuidV7.generate();
-        final openedAt = now.subtract(Duration(days: i));
-        final closedAt = now.subtract(Duration(days: i, hours: -6));
+        final openedAt = monthAnchor.add(Duration(days: i - 1));
+        final closedAt = openedAt.add(const Duration(hours: 6));
 
         await db.into(db.vanTrips).insert(
               VanTripsCompanion.insert(
@@ -380,9 +381,10 @@ void main() {
           );
 
       final now = DateTime.now();
+      final monthAnchor = DateTime(now.year, now.month, 1, 8);
       for (var i = 1; i <= 15; i++) {
         final tripId = UuidV7.generate();
-        final openedAt = now.subtract(Duration(days: i));
+        final openedAt = monthAnchor.add(Duration(days: i - 1));
 
         await db.into(db.vanTrips).insert(
               VanTripsCompanion.insert(
@@ -551,6 +553,53 @@ void main() {
 
         await disposeScreen(tester);
       }
+    });
+
+    testWidgets('initialTab only applies on creation; tab set change preserves selection', (tester) async {
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        screen: DriverProfileScreen(driverUserId: driverId, initialTab: 'sales'),
+        grantedKeys: driverGrants,
+        settle: false,
+      );
+
+      for (var i = 0; i < 8; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+
+      final tabController = tester.widget<TabBar>(find.byType(TabBar)).controller!;
+      expect(tabController.index, 1, reason: 'Initial creation should respect initialTab (sales)');
+
+      // User selects Ledger tab (index 2)
+      await tester.tap(find.text('Ledger'));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(tabController.index, 2);
+
+      // Disable crates in DB, triggering a rebuild and tab set change from 4 tabs to 3 tabs
+      await (env.db.update(env.db.businesses)..where((t) => t.id.equals(env.businessId))).write(
+        const BusinessesCompanion(
+          tracksEmptyCrates: Value(false),
+        ),
+      );
+      for (var i = 0; i < 8; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+
+      final updatedController = tester.widget<TabBar>(find.byType(TabBar)).controller!;
+      expect(updatedController.length, 3);
+      expect(
+        updatedController.index,
+        2,
+        reason: 'Tab set change should preserve current selected tab (Ledger), not reset to initialTab (Sales)',
+      );
+
+      await disposeScreen(tester);
     });
   });
 }
