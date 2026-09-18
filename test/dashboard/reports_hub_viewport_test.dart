@@ -244,6 +244,60 @@ void main() {
       await teardownScreen(tester);
     });
 
+    // The badge is part of a "complete" Approvals card, so check it sits inside
+    // the card on every viewport, at max text scale, with a three-digit count.
+    for (final entry in {
+      'phoneSe1Portrait (320x568)': phoneSe1Portrait,
+      'androidCompactLandscape (800x360)': androidCompactLandscape,
+      'pixel7Landscape (915x412)': pixel7Landscape,
+      'pixel7Portrait (412x915)': pixel7Portrait,
+    }.entries) {
+      testWidgets('${entry.key} keeps a 3-digit badge inside the complete '
+          'Approvals card at max text scale (1.3)', (tester) async {
+        final dummyReq = StockAdjustmentRequestData(
+          id: 'req-1',
+          businessId: env.businessId,
+          productId: 'prod-1',
+          storeId: env.storeId,
+          quantityDiff: 2,
+          reason: 'restock',
+          summary: 'Add 2',
+          requestedBy: 'user-1',
+          status: 'pending',
+          approvedBy: null,
+          approvedAt: null,
+          createdAt: DateTime.now(),
+          lastUpdatedAt: DateTime.now(),
+        );
+
+        await pumpScreen(
+          tester,
+          env: env,
+          size: entry.value,
+          grantedKeys: grantedAll,
+          roleRank: 0,
+          textScaler: const TextScaler.linear(1.3),
+          overrides: [
+            viewerScopedPendingStockRequestsProvider
+                .overrideWith((ref) => List.filled(128, dummyReq)),
+          ],
+          screen: const ReportsHubScreen(),
+        );
+
+        expectNoOverflow(tester);
+        final card = find.byKey(reportCardKey('Approvals'));
+        await expectContentRowVisible(tester, card, minimum: 1);
+        final badge = find.byKey(const Key('report-card-badge-Approvals'));
+        expect(find.descendant(of: badge, matching: find.text('128')),
+            findsOneWidget);
+        final cardRect = tester.getRect(card);
+        final badgeRect = tester.getRect(badge);
+        expect(cardRect.contains(badgeRect.topLeft), isTrue);
+        expect(cardRect.contains(badgeRect.bottomRight), isTrue);
+        await teardownScreen(tester);
+      });
+    }
+
     testWidgets('tapping report cards navigates to corresponding screens',
         (tester) async {
       await pumpScreen(
