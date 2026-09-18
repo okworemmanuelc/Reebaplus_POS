@@ -85,6 +85,27 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Asserts [target] sits wholly inside [surface] — scrolled into view and
+  /// readable, not merely built. A finder count alone passes a message that
+  /// is clipped to a sliver at the fold.
+  void expectFullyInside(
+    WidgetTester tester,
+    Finder target,
+    Finder surface, {
+    required String reason,
+  }) {
+    final inner = tester.getRect(target);
+    final outer = tester.getRect(surface);
+    expect(
+      inner.top >= outer.top - 0.5 &&
+          inner.bottom <= outer.bottom + 0.5 &&
+          inner.left >= outer.left - 0.5 &&
+          inner.right <= outer.right + 0.5,
+      isTrue,
+      reason: '$reason (target $inner, surface $outer)',
+    );
+  }
+
   Finder ledgerRows() => find.byWidgetPredicate(
         (w) =>
             w.key is ValueKey<String> &&
@@ -233,10 +254,18 @@ void main() {
           await tester.drag(screenSurface(), const Offset(0, -400));
           await tester.pump(const Duration(milliseconds: 250));
 
+          final emptyMessage = find.text('No activity in this period');
           expect(
-            find.text('No activity in this period'),
+            emptyMessage,
             findsOneWidget,
             reason: 'An empty ledger must still show its message at $name',
+          );
+          expectFullyInside(
+            tester,
+            emptyMessage,
+            ledgerSurface(),
+            reason: 'One scroll must bring the whole empty-ledger message '
+                'into view at $name',
           );
           expectNoOverflow(tester, reason: 'Scrolling overflowed at $name');
 
@@ -341,10 +370,18 @@ void main() {
         await tester.drag(cratesSurface, const Offset(0, -600));
         await tester.pumpAndSettle();
 
+        final byManufacturer = find.text('By manufacturer');
         expect(
-          find.text('By manufacturer'),
+          byManufacturer,
           findsOneWidget,
           reason: 'One scroll must reach the per-manufacturer list',
+        );
+        expectFullyInside(
+          tester,
+          byManufacturer,
+          cratesSurface,
+          reason: 'One scroll must bring the whole per-manufacturer heading '
+              'into view at ${entry.key}',
         );
         expectNoOverflow(
           tester,
