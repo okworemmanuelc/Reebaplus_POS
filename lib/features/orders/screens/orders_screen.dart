@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,13 +28,13 @@ import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart'
     as model;
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
-import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
@@ -43,6 +44,12 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
+
+/// Test seam for finding order rows laid out on [OrdersScreen].
+const String kOrderRowKeyPrefix = 'order-card-';
+
+/// Stable key for one order card on [OrdersScreen].
+Key orderRowKey(String orderId) => ValueKey('$kOrderRowKeyPrefix$orderId');
 
 class OrdersScreen extends ConsumerStatefulWidget {
   final int initialIndex;
@@ -198,18 +205,27 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
               ref.invalidate(ordersStatsProvider(cancelledKey));
               ref.invalidate(pendingOrdersProvider(activeStoreId));
             },
-            child: NestedScrollView(
-              headerSliverBuilder: (context, innerBoxIsScrolled) => [
-                SliverToBoxAdapter(child: _buildTabBar(context)),
-              ],
-              body: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildPendingTab(context, activeStoreId),
-                  _buildCompletedTab(context, activeStoreId),
-                  _buildCancelledTab(context, activeStoreId),
-                ],
+            child: TabbedSliverScaffold(
+              controller: _tabController,
+              tabBarExtent: math.max(
+                kMinInteractiveDimension,
+                context.getRSize(72.0),
               ),
+              tabBar: _buildTabBar(context),
+              tabViews: [
+                TabSliverView(
+                  storageKey: 'orders-pending',
+                  slivers: _pendingTabSlivers(context, activeStoreId),
+                ),
+                TabSliverView(
+                  storageKey: 'orders-completed',
+                  slivers: _completedTabSlivers(context, activeStoreId),
+                ),
+                TabSliverView(
+                  storageKey: 'orders-cancelled',
+                  slivers: _cancelledTabSlivers(context, activeStoreId),
+                ),
+              ],
             ),
           );
         },
@@ -407,12 +423,22 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
   // ─────────────────────────── TABS ───────────────────────────────────────
 
-  Widget _buildPendingTab(BuildContext context, String? activeStoreId) {
+  List<Widget> _pendingTabSlivers(BuildContext context, String? activeStoreId) {
     final pendingAsync = ref.watch(pendingOrdersProvider(activeStoreId));
 
     return pendingAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      loading: () => const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ],
+      error: (e, _) => [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: Text('Error: $e')),
+        ),
+      ],
       data: (allPending) {
         final list = _applySearch(allPending);
         final canSeeMoney = Gates.seeOrderMoney.allows(ref);
@@ -441,25 +467,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           _StatItem(label: 'Pick-up', value: '$unassigned', color: subtextCol),
         ];
 
-        final searchBarHeight = context.getRSize(64.0);
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: PinnedTabBarDelegate(
-                extent: searchBarHeight,
-                child: _buildSearchBar(context),
-              ),
-            ),
-            ..._buildOrderSlivers(context, list, status: 'pending'),
-          ],
-        );
+        return [
+          SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
+          SliverToBoxAdapter(child: _buildSearchBar(context)),
+          ..._buildOrderSlivers(context, list, status: 'pending'),
+        ];
       },
     );
   }
 
-  Widget _buildCompletedTab(BuildContext context, String? activeStoreId) {
+  List<Widget> _completedTabSlivers(BuildContext context, String? activeStoreId) {
     final canSeeMoney = Gates.seeOrderMoney.allows(ref);
     final canSeeExtendedRanges = Gates.seeExtendedDateRanges.allows(ref);
     final key = (
@@ -473,8 +490,18 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final stateAsync = ref.watch(paginatedOrdersProvider(key));
 
     return statsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      loading: () => const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ],
+      error: (e, _) => [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: Text('Error: $e')),
+        ),
+      ],
       data: (stats) {
         final statItems = [
           _StatItem(label: 'Completed', value: '${stats.count}', color: success),
@@ -498,40 +525,38 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         ];
 
         if (stateAsync.isLoading) {
-          return const Center(child: CircularProgressIndicator());
+          return const [
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ];
         }
 
-        final searchBarHeight = context.getRSize(64.0);
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: PinnedTabBarDelegate(
-                extent: searchBarHeight,
-                child: _buildSearchBar(
-                  context,
-                  selectedFilter: _completedFilter,
-                  onSelectFilter: (f) => _changeFilter('completed', f),
-                  filterOptions: _periodOptions(canSeeExtendedRanges),
-                ),
-              ),
-            ),
-            ..._buildPaginatedOrderSlivers(
+        return [
+          SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
+          SliverToBoxAdapter(
+            child: _buildSearchBar(
               context,
-              stateAsync.orders,
-              status: 'completed',
-              isLoadingMore: stateAsync.isLoadingMore,
-              hasMore: stateAsync.hasMore,
-              key: key,
+              selectedFilter: _completedFilter,
+              onSelectFilter: (f) => _changeFilter('completed', f),
+              filterOptions: _periodOptions(canSeeExtendedRanges),
             ),
-          ],
-        );
+          ),
+          ..._buildPaginatedOrderSlivers(
+            context,
+            stateAsync.orders,
+            status: 'completed',
+            isLoadingMore: stateAsync.isLoadingMore,
+            hasMore: stateAsync.hasMore,
+            key: key,
+          ),
+        ];
       },
     );
   }
 
-  Widget _buildCancelledTab(BuildContext context, String? activeStoreId) {
+  List<Widget> _cancelledTabSlivers(BuildContext context, String? activeStoreId) {
     final canSeeMoney = Gates.seeOrderMoney.allows(ref);
     final canSeeExtendedRanges = Gates.seeExtendedDateRanges.allows(ref);
     final key = (
@@ -545,8 +570,18 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final stateAsync = ref.watch(paginatedOrdersProvider(key));
 
     return statsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      loading: () => const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ],
+      error: (e, _) => [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: Text('Error: $e')),
+        ),
+      ],
       data: (stats) {
         final statItems = [
           _StatItem(label: 'Cancelled', value: '${stats.count}', color: danger),
@@ -571,35 +606,33 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         ];
 
         if (stateAsync.isLoading) {
-          return const Center(child: CircularProgressIndicator());
+          return const [
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ];
         }
 
-        final searchBarHeight = context.getRSize(64.0);
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: PinnedTabBarDelegate(
-                extent: searchBarHeight,
-                child: _buildSearchBar(
-                  context,
-                  selectedFilter: _cancelledFilter,
-                  onSelectFilter: (f) => _changeFilter('cancelled', f),
-                  filterOptions: _periodOptions(canSeeExtendedRanges),
-                ),
-              ),
-            ),
-            ..._buildPaginatedOrderSlivers(
+        return [
+          SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
+          SliverToBoxAdapter(
+            child: _buildSearchBar(
               context,
-              stateAsync.orders,
-              status: 'cancelled',
-              isLoadingMore: stateAsync.isLoadingMore,
-              hasMore: stateAsync.hasMore,
-              key: key,
+              selectedFilter: _cancelledFilter,
+              onSelectFilter: (f) => _changeFilter('cancelled', f),
+              filterOptions: _periodOptions(canSeeExtendedRanges),
             ),
-          ],
-        );
+          ),
+          ..._buildPaginatedOrderSlivers(
+            context,
+            stateAsync.orders,
+            status: 'cancelled',
+            isLoadingMore: stateAsync.isLoadingMore,
+            hasMore: stateAsync.hasMore,
+            key: key,
+          ),
+        ];
       },
     );
   }
@@ -1438,17 +1471,20 @@ class _SummaryStrip extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    stat.value,
-                    style: TextStyle(
-                      color:
-                          stat.color ?? Theme.of(context).colorScheme.onSurface,
-                      fontWeight: FontWeight.bold,
-                      fontSize: context.getRFontSize(13),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      stat.value,
+                      style: TextStyle(
+                        color:
+                            stat.color ?? Theme.of(context).colorScheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                        fontSize: context.getRFontSize(13),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
                   ),
                   SizedBox(height: context.getRSize(2)),
                   Text(
@@ -1616,6 +1652,7 @@ class _OrderCard extends ConsumerWidget {
     final extraCount = items.length - displayItems.length;
 
     return GlassyCard(
+      key: orderRowKey(order.id),
       margin: EdgeInsets.only(bottom: context.getRSize(16)),
       padding: EdgeInsets.zero,
       radius: 16.0,
