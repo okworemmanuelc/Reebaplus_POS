@@ -217,25 +217,25 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       return false;
     }
 
-    // 3. If content fits without scrolling (maxScrollExtent <= 0), never hide.
-    if (notification.metrics.maxScrollExtent <= 0) {
-      return false;
-    }
-
-    // 4. If content returns to the top (or in overscroll), always show the bar.
-    if (notification.metrics.pixels <= 0) {
-      _showBottomBar();
-      return false;
-    }
-
-    // 5. If this notification originates from a pushed modal / route (not the root screen),
-    // do not let it toggle the root bottom bar.
+    // 3. If this notification originates from a pushed modal / route (not the root screen),
+    // do not let it toggle or restore the root bottom bar.
     final notificationContext = notification.context;
     if (notificationContext != null) {
       final route = ModalRoute.of(notificationContext);
       if (route != null && !route.isFirst) {
         return false;
       }
+    }
+
+    // 4. If content fits without scrolling (maxScrollExtent <= 0), never hide.
+    if (notification.metrics.maxScrollExtent <= 0) {
+      return false;
+    }
+
+    // 5. If content returns to the top (or in overscroll), always show the bar.
+    if (notification.metrics.pixels <= 0) {
+      _showBottomBar();
+      return false;
     }
 
     // 6. Scroll direction handling:
@@ -254,6 +254,33 @@ class _MainLayoutState extends ConsumerState<MainLayout>
           _showBottomBar();
         }
       }
+    }
+
+    return false;
+  }
+
+  bool _handleScrollMetricsNotification(
+    BuildContext context,
+    ScrollMetricsNotification notification,
+  ) {
+    final isMobileLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape &&
+            !context.isDesktop;
+    if (!isMobileLandscape) {
+      return false;
+    }
+
+    if (notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    final route = ModalRoute.of(notification.context);
+    if (route != null && !route.isFirst) {
+      return false;
+    }
+
+    if (notification.metrics.maxScrollExtent <= 0) {
+      _showBottomBar();
     }
 
     return false;
@@ -453,10 +480,15 @@ class _MainLayoutState extends ConsumerState<MainLayout>
             );
           }
 
-          final scrollListeningBody = NotificationListener<ScrollNotification>(
+          final scrollListeningBody =
+              NotificationListener<ScrollMetricsNotification>(
             onNotification: (notification) =>
-                _handleScrollNotification(context, notification),
-            child: bodyWidget,
+                _handleScrollMetricsNotification(context, notification),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) =>
+                  _handleScrollNotification(context, notification),
+              child: bodyWidget,
+            ),
           );
 
           return Stack(

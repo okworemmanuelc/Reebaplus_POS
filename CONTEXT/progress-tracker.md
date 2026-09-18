@@ -22,7 +22,9 @@ Branch `feat/bottom-bar-slides-away-258`, cut from `feat/pos-collapsing-header-2
 - **Layout Extent & Animation**:
   - `_bottomBarController` (200ms `AnimationController` with `TickerProviderStateMixin`) and `_bottomBarAnimation` (`CurvedAnimation` with `Curves.easeOut` / `reverseCurve: Curves.easeIn`).
   - Wrapped `BottomNavigationBar` in `AnimatedBuilder` -> `ClipRect(key: Key('main-bottom-nav-clip'))` -> `Align(key: Key('main-bottom-nav-align'), alignment: Alignment.topCenter, heightFactor: _bottomBarAnimation.value)`.
-  - Body wrapped in `NotificationListener<ScrollNotification>` filtering for `Axis.vertical`, `maxScrollExtent > 0`, and root route depth.
+  - Body wrapped in `NotificationListener<ScrollMetricsNotification>` and `NotificationListener<ScrollNotification>`:
+    - Root-route depth check (`ModalRoute.of(context)?.isFirst != false`) is evaluated first so pushed-route notifications (modals/dialogs) are ignored before any bar restoration or pixels checks.
+    - Content shrinking to fit (`maxScrollExtent <= 0`) via `ScrollMetricsNotification` restores the bar immediately.
 - **Grid Compact Card Fix (`lib/features/pos/widgets/product_grid.dart`)**:
   - Wrapped stock status text in `Flexible` with `maxLines: 1` and `TextOverflow.ellipsis` to prevent RenderFlex overflow on dense multi-column grids in landscape.
 - **Verification**: `flutter analyze` clean with 0 errors and 0 warnings. Acceptance suite drafted in `test/shared/main_layout_bottom_bar_viewport_test.dart`.
