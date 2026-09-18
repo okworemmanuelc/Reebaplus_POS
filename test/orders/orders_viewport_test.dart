@@ -46,11 +46,7 @@ void main() {
       );
 
   Finder tabSurface([String storageKey = 'orders-pending']) {
-    final pageKey = find.byKey(PageStorageKey<String>(storageKey));
-    if (pageKey.evaluate().isNotEmpty) {
-      return pageKey;
-    }
-    return find.byType(CustomScrollView).first;
+    return find.byKey(PageStorageKey<String>(storageKey));
   }
 
   Future<void> settleScreen(WidgetTester tester) async {
@@ -214,11 +210,6 @@ void main() {
         of: find.byType(TabBar),
         matching: find.text('Completed'),
       );
-      final cancelledTab = find.descendant(
-        of: find.byType(TabBar),
-        matching: find.text('Cancelled'),
-      );
-
       expect(pendingTab, findsOneWidget);
       expect(completedTab, findsOneWidget);
 
@@ -227,13 +218,35 @@ void main() {
           tester.widget<TabBar>(find.byType(TabBar)).controller!;
       expect(tabController.index, 0);
 
-      // Tap on Completed tab
-      await tester.tap(completedTab);
+      final pager = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(TabBarView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      final onePage = pager.position.viewportDimension;
+
+      // Drag leftward past snap threshold to move to Completed tab
+      final swipe1 =
+          await tester.startGesture(tester.getCenter(find.byType(TabBarView)));
+      for (var step = 0; step < 8; step++) {
+        await swipe1.moveBy(Offset(-onePage * 0.08, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await swipe1.up();
       await settleScreen(tester);
       expect(tabController.index, 1);
 
-      // Tap on Cancelled tab
-      await tester.tap(cancelledTab);
+      // Drag leftward past snap threshold to move to Cancelled tab
+      final swipe2 =
+          await tester.startGesture(tester.getCenter(find.byType(TabBarView)));
+      for (var step = 0; step < 8; step++) {
+        await swipe2.moveBy(Offset(-onePage * 0.08, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await swipe2.up();
       await settleScreen(tester);
       expect(tabController.index, 2);
 

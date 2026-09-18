@@ -17,9 +17,8 @@ Branch `feat/orders-tabbed-sliver-scaffold-244`, cut from `main`. Slice of PRD #
   - At compact viewports (320x568 portrait and short landscape 800x360), `NestedScrollView` charged its body for scroll-away headers, reducing body extent, while summary strip metric values suffered squashing on narrow widths.
 - **Implementation**:
   - Replaced hand-rolled `NestedScrollView` and `_StickyTabBarDelegate` with shared `TabbedSliverScaffold` (ADR 0027).
-  - Search, Filter, and Summary Strip placed into `headerSlivers` as a `SliverToBoxAdapter` that scrolls away.
   - Pinned `TabBar` floored at 48dp using `tabBarExtent: math.max(kMinInteractiveDimension, context.getRSize(72.0))`.
-  - Converted tabs to `TabSliverView` instances with stable storage keys (`orders-pending`, `orders-completed`, `orders-cancelled`) returning sliver lists (`SliverPadding` + `SliverList.builder`) and `SliverFillRemaining(hasScrollBody: false)` for empty, loading, and error states.
+  - Converted tabs to `TabSliverView` instances with stable storage keys (`orders-pending`, `orders-completed`, `orders-cancelled`) returning per-tab `SliverToBoxAdapter`s for `_SummaryStrip` and Search/Filter controls so they scroll with content, followed by sliver lists (`SliverPadding` + `SliverList.builder`) and `SliverFillRemaining(hasScrollBody: false)` for empty, loading, and error states.
   - Wrapped summary stat values in `FittedBox(fit: BoxFit.scaleDown)` to prevent text squashing on narrow portrait viewports.
   - Preserved all permissions, actions, and money visibility gates (`Gates.refundOrder`, `Gates.confirmOrder`, `Gates.seeOrderMoney`).
   - Added test seams: `kOrderRowKeyPrefix = 'order-card-'` and `orderRowKey(orderId)`.

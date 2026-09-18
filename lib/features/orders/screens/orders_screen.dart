@@ -35,7 +35,6 @@ import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
-import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
@@ -468,19 +467,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           _StatItem(label: 'Pick-up', value: '$unassigned', color: subtextCol),
         ];
 
-        final searchBarHeight = math.max(
-          kMinInteractiveDimension + context.getRSize(16),
-          context.getRSize(64.0),
-        );
         return [
           SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: PinnedTabBarDelegate(
-              extent: searchBarHeight,
-              child: _buildSearchBar(context),
-            ),
-          ),
+          SliverToBoxAdapter(child: _buildSearchBar(context)),
           ..._buildOrderSlivers(context, list, status: 'pending'),
         ];
       },
@@ -544,22 +533,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           ];
         }
 
-        final searchBarHeight = math.max(
-          kMinInteractiveDimension + context.getRSize(16),
-          context.getRSize(64.0),
-        );
         return [
           SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: PinnedTabBarDelegate(
-              extent: searchBarHeight,
-              child: _buildSearchBar(
-                context,
-                selectedFilter: _completedFilter,
-                onSelectFilter: (f) => _changeFilter('completed', f),
-                filterOptions: _periodOptions(canSeeExtendedRanges),
-              ),
+          SliverToBoxAdapter(
+            child: _buildSearchBar(
+              context,
+              selectedFilter: _completedFilter,
+              onSelectFilter: (f) => _changeFilter('completed', f),
+              filterOptions: _periodOptions(canSeeExtendedRanges),
             ),
           ),
           ..._buildPaginatedOrderSlivers(
@@ -633,22 +614,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           ];
         }
 
-        final searchBarHeight = math.max(
-          kMinInteractiveDimension + context.getRSize(16),
-          context.getRSize(64.0),
-        );
         return [
           SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: PinnedTabBarDelegate(
-              extent: searchBarHeight,
-              child: _buildSearchBar(
-                context,
-                selectedFilter: _cancelledFilter,
-                onSelectFilter: (f) => _changeFilter('cancelled', f),
-                filterOptions: _periodOptions(canSeeExtendedRanges),
-              ),
+          SliverToBoxAdapter(
+            child: _buildSearchBar(
+              context,
+              selectedFilter: _cancelledFilter,
+              onSelectFilter: (f) => _changeFilter('cancelled', f),
+              filterOptions: _periodOptions(canSeeExtendedRanges),
             ),
           ),
           ..._buildPaginatedOrderSlivers(
