@@ -73,6 +73,7 @@ class _SuccessDashboardEntryScreenState
             // Success Text
             Text(
               'Your business is ready!',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w700,

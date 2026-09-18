@@ -310,6 +310,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
                 ),
               Text(
                 _confirming ? 'Confirm your PIN' : 'Create a PIN',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: context.getRFontSize(20),
                   fontWeight: FontWeight.w800,
@@ -407,11 +408,13 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
 
         Text(
           _confirming ? 'Confirm your PIN' : 'Create a PIN',
+          textAlign: TextAlign.center,
           style: authTitleStyle(context),
         ),
         SizedBox(height: context.getRSize(6)),
         Text(
           'Welcome, ${widget.user?.name ?? ref.read(onboardingDraftProvider)?.ownerName ?? "there"}!',
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: context.getRFontSize(15),
             color: textColor.withValues(alpha: 0.8),
