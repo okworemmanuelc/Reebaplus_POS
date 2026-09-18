@@ -8,7 +8,56 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-159 sessions logged. Codebase is live and being verified on-device.
+160 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #256 — Expenses holds its content at every viewport (PRD #239) (2026-09-18)
+Branch `feat/expenses-tabbed-sliver-scaffold-256`, cut from `main`. Slice of PRD #239,
+picked as the highest-severity remaining screen: the only one still hitting **both**
+failure modes — a loud 26px band when empty (64px in the harness sweep) and, populated,
+the expense list starved to **1.8dp of its 1,137dp** of content, which renders nothing
+and reports nothing.
+
+- **Adopted the shared scaffold (`lib/features/expenses/screens/expenses_screen.dart`)**:
+  - Replaced the starving `Column` (fixed `_buildHeaderArea` above `Expanded(TabBarView)`)
+    with `TabbedSliverScaffold` from #243. Expenses was not one of the PRD's original five
+    because its defect lived in a plain `Column`, not a `NestedScrollView` body.
+  - The Total Expenses figure with its period selector and the Monthly Budget card become a
+    `SliverToBoxAdapter` that scrolls away; the tab bar pins beneath them.
+  - The `TabBar` moved **out of `AppBar.bottom`** into `_buildTabBar`, the pinned header.
+  - `_buildExpensesTab` / `_buildStatsTab` became `_expensesTabSlivers` / `_statsTabSlivers`
+    (`SliverPadding` + `SliverList.list`); empty states became
+    `SliverFillRemaining(hasScrollBody: false)`.
+  - `AppRefreshWrapper` moved **up** to wrap the whole scaffold once, instead of being cloned
+    inside each tab's `ListView` (matches Inventory).
+  - `tabBarExtent: max(kMinInteractiveDimension, getRSize(72))` — these tabs stack an icon
+    above the label, so the 48dp default clips them.
+- **Two horizontal overflows the sweep could not have seen** (it never ran at 320dp wide):
+  the budget-bar caption row (**135px**) and the expense card's status/date row (**181px**).
+  Both fixed by letting the text flex and ellipsize. No tap target was shrunk.
+- **Unconditional**: no orientation branch, no short-viewport predicate, no change to the
+  responsive density scale, the shared first-run empty state, or the stacked field label.
+- **Tests** — new `test/expenses/expenses_viewport_test.dart`, 11 tests, all passing:
+  4 viewports × populated/empty on the two mandatory assertions (no overflow **and** a
+  complete hit-testable row), plus per-tab scroll retention, sideways swipe, and the period
+  selector surviving 800x360. Measured after the fix: 320x568 → **2 complete rows, 0
+  overflow**; 800x360 → 0 rows at rest **by design** (the harness documents that no structure
+  can seat a row there without hiding a control or shrinking a tap target; the guarantee is
+  one scrollable surface where one scroll reaches a full-height row).
+- **Two test traps worth not rediscovering** (both cost a lot of wall-clock this session):
+  1. `AppDatabase.close()` waits on open Drift stream subscriptions, and a `tearDown` body
+     runs **outside** the tester's fake-async zone — so for a stream-backed screen the close
+     blocks until the 10-minute per-test timeout. Close inside `runAsync` instead. Customer
+     Detail escapes this only because it loads via one-shot futures, so this is latent for
+     every future stream-backed screen test.
+  2. `setupScreenTestEnvironment()` must be called from `setUp()`, never inside a
+     `testWidgets` body, or Drift's real SQLite I/O never completes. The harness docstring
+     says so; ignoring it looks identical to a hang in the screen.
+  Tell for both: measurements print, *then* the test times out, with `flutter_tester` idle at
+  0% CPU. The control experiment (running the merged Customer Detail suite — 10/10 in 4s) is
+  what proved the environment innocent.
+- **Open**: emulator verification by rotating the device, at rest and scrolled, is still
+  required by the issue's acceptance criteria and has not been done (agents do not drive the
+  emulator).
 
 ### Issue #258 — Bottom bar slides away sideways (PRD #239) (2026-09-18)
 Branch `feat/bottom-bar-slides-away-258`, cut from `feat/pos-collapsing-header-259`. Slice of PRD #239 (the unfinished half of #259 / PR #265).
