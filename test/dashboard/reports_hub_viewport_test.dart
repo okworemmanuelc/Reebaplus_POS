@@ -163,6 +163,50 @@ void main() {
       await teardownScreen(tester);
     });
 
+    testWidgets('pixel7Landscape (915x412) survives max text scale (1.3)',
+        (tester) async {
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Landscape,
+        grantedKeys: grantedAll,
+        roleRank: 0,
+        textScaler: const TextScaler.linear(1.3),
+        screen: const ReportsHubScreen(),
+      );
+
+      expectNoOverflow(tester);
+      final atRest = await expectContentRowVisible(
+        tester,
+        find.byKey(reportCardKey('Approvals')),
+        minimum: 1,
+      );
+      expect(atRest, greaterThanOrEqualTo(1));
+      await teardownScreen(tester);
+    });
+
+    testWidgets('pixel7Portrait (412x915) survives max text scale (1.3)',
+        (tester) async {
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        grantedKeys: grantedAll,
+        roleRank: 0,
+        textScaler: const TextScaler.linear(1.3),
+        screen: const ReportsHubScreen(),
+      );
+
+      expectNoOverflow(tester);
+      final atRest = await expectContentRowVisible(
+        tester,
+        find.byKey(reportCardKey('Approvals')),
+        minimum: 1,
+      );
+      expect(atRest, greaterThanOrEqualTo(1));
+      await teardownScreen(tester);
+    });
+
     testWidgets('Approvals card shows pending-count badge when count > 0',
         (tester) async {
       final dummyReq = StockAdjustmentRequestData(
