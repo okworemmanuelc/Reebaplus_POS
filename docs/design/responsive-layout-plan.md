@@ -1239,3 +1239,33 @@ landscape treatment of the sales screen (POS):
 
 This contradiction remains an active, unresolved design blocker that halts work on the
 sales screen until resolved through prototyping and measurement on real devices.
+
+### 11.7 Harness gaps found by #255 — the bottom bar is 24dp short, and a clipped row still counts
+
+Found while reproducing the empty-Cart band (#255), which the #241 sweep had
+called unaffected. The harness still gets the verdict wrong in two ways:
+
+1. **The bottom bar stand-in omits the bottom inset.** `pumpScreen` renders the
+   bar as a bare `SizedBox(height: 56)`, but the Scaffold still strips the 24dp
+   bottom inset (`kRealisticPhoneInsets`) from the body. MainLayout's real bar
+   is Material's `BottomNavigationBar`, which is `56 + viewPadding.bottom` tall.
+   So every harness screen is handed 24dp the phone does not have. Measured on
+   the empty Cart at 800x360: 14.6dp spare with the 56dp bar, a 9.4px overflow
+   with the real 80dp one. Test fonts draw lines shorter than a device font,
+   which covers the rest of the 15px seen on the emulator.
+   Correcting the default turns four existing tests red: Inventory's empty
+   first-run state at 800x360, POS grid density at 568x320, and Supplier
+   Detail's tab scroll-retention and swipe tests. Each belongs to its own slice,
+   so #255 left the default alone and passes the real height
+   (`kBottomNavBodyHeight + kRealisticPhoneInsets.bottom`) from its own suite.
+2. **`visibleRowCount` measures a row against the whole screen, not the scroll
+   view that clips it.** A row whose centre is inside the scroll view but whose
+   lower part is clipped behind the bottom bar still counts as "complete". At
+   800x360 it counted a partly clipped Recall button and a partly clipped cart
+   line at rest. Suites that care assert the target's rect sits wholly inside
+   its scroll surface after scrolling to it, as Supplier Detail (#246) and Cart
+   (#255) do.
+
+Until both are fixed in `test/helpers/screen_harness.dart`, a green harness run
+is weaker evidence than it looks. Do not treat a sweep's "unaffected" as a
+device verdict.
