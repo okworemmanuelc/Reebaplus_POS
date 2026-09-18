@@ -8,7 +8,15 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-167 sessions logged. Codebase is live and being verified on-device.
+168 sessions logged. Codebase is live and being verified on-device.
+
+### PRD #239 Closed — Fixed chrome starves scrollable content on short and small viewports (2026-09-18)
+All 15 child issues and slices under PRD #239 have been completed, verified, and merged into `main`:
+- Prefactor & Foundation: #240 (shared pinned tab-bar delegate), #241 (discovery sweep), #242 (docs: responsive layout plan corrections).
+- Tabbed Screens (`TabbedSliverScaffold`): #243 (Inventory), #244 (Orders), #245 (Customer Detail), #246 (Supplier Detail), #247 (Driver Profile), #256 (Expenses).
+- Responsive & Slices: #255 (Empty Cart), #257 (Business Reports cards), #258 (bottom bar auto-hide sideways), #259 (POS product grid & collapsing header).
+- Sibling fixes: #260 (Appearance color cards), #261 (centred welcome headings).
+PRD #239 closed on GitHub.
 
 ### Issue #255 — Empty Cart holds its message and Recall button at every viewport (PRD #239) (2026-09-18)
 Branch `fix/empty-cart-viewport-overflow-255`, cut from `main` (`891a748`). Slice of PRD #239, found by the #241 emulator walk: at 800x360 with nothing in the cart, a red "BOTTOM OVERFLOWED BY 15 PIXELS" band cut the Recall button off.
