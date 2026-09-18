@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
@@ -23,6 +25,16 @@ import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
+import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
+
+/// Unscaled height of the pinned tab bar. The tabs stack an icon above their
+/// label, which is Flutter's taller `_kTextAndIconTabHeight` form.
+const double _kTabBarHeight = 72;
+
+/// Key prefix on every expense row in the Expenses tab, so a viewport test can
+/// assert a *complete* row is laid out and hit-testable (PRD #239's second
+/// assertion — a list starved to zero height reports no overflow at all).
+const String kExpenseRowKeyPrefix = 'expense-row-';
 
 /// Friendly label for an expense payment-method code (§20). Codes are
 /// 'cash'/'transfer'/'pos'/'card'/'other'.
@@ -216,38 +228,59 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               .where((e) => e.expense.status == 'pending')
               .fold<int>(0, (sum, e) => sum + e.expense.amountKobo);
 
-          return Column(
-            children: [
-              _buildHeaderArea(
-                context,
-                approvedTotalKobo: approvedTotal,
-                budgetSpentKobo: budgetSpentKobo,
-                budgetPendingKobo: budgetPendingKobo,
-                scopeLabel: showScope ? scopeLabel : null,
+          // One scrollable surface (PRD #239 / #256): the Total Expenses figure
+          // with its period selector and the Monthly Budget card scroll away,
+          // the tab bar pins beneath them, and each tab is its own scroll view.
+          // Previously this was a Column whose fixed header sat above an
+          // Expanded TabBarView, so the header took its height off the top and
+          // left the list whatever remained — 1.8dp of 1,137dp at 800x360, a
+          // list that renders nothing and reports nothing.
+          return AppRefreshWrapper(
+            child: TabbedSliverScaffold(
+              controller: _tabController,
+              // The tabs carry an icon above their label, so the bar needs the
+              // full icon+text height; PinnedTabBarDelegate floors it at the
+              // 48dp tap target if the responsive scale resolves shorter.
+              tabBarExtent: max(
+                kMinInteractiveDimension,
+                context.getRSize(_kTabBarHeight),
               ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildExpensesTab(
-                      context,
-                      allExpenses: allExpenses,
-                      categoryNames: categoryNames,
-                      users: users,
-                      storeNameById: storeNameById,
-                      showRowStore: showRowStore,
-                    ),
-                    _buildStatsTab(
-                      context,
-                      periodApproved: periodApproved,
-                      categoryNames: categoryNames,
-                      users: users,
-                      approvedTotalKobo: approvedTotal,
-                    ),
-                  ],
+              headerSlivers: [
+                SliverToBoxAdapter(
+                  child: _buildHeaderArea(
+                    context,
+                    approvedTotalKobo: approvedTotal,
+                    budgetSpentKobo: budgetSpentKobo,
+                    budgetPendingKobo: budgetPendingKobo,
+                    scopeLabel: showScope ? scopeLabel : null,
+                  ),
                 ),
-              ),
-            ],
+              ],
+              tabBar: _buildTabBar(context),
+              tabViews: [
+                TabSliverView(
+                  storageKey: 'expenses-list',
+                  slivers: _expensesTabSlivers(
+                    context,
+                    allExpenses: allExpenses,
+                    categoryNames: categoryNames,
+                    users: users,
+                    storeNameById: storeNameById,
+                    showRowStore: showRowStore,
+                  ),
+                ),
+                TabSliverView(
+                  storageKey: 'expenses-stats',
+                  slivers: _statsTabSlivers(
+                    context,
+                    periodApproved: periodApproved,
+                    categoryNames: categoryNames,
+                    users: users,
+                    approvedTotalKobo: approvedTotal,
+                  ),
+                ),
+              ],
+            ),
           );
         },
       )),
@@ -372,7 +405,20 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           ),
         ],
       ),
-      bottom: TabBar(
+    );
+  }
+
+  /// The tab bar. It used to hang off the app bar's `bottom`, where it was
+  /// fixed chrome above a body that had already been starved; under the shared
+  /// scaffold it is the pinned header below the scroll-away summary, so it
+  /// stays visible while the content beneath it scrolls (PRD #239 / #256).
+  Widget _buildTabBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        border: Border(bottom: BorderSide(color: _border)),
+      ),
+      child: TabBar(
         controller: _tabController,
         labelColor: Theme.of(context).colorScheme.error,
         unselectedLabelColor: _subtext,
@@ -558,23 +604,31 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Icon(
-              FontAwesomeIcons.bullseye.data,
-              size: context.getRSize(12),
-              color: _subtext,
-            ),
-            SizedBox(width: context.getRSize(8)),
-            Text(
-              'No monthly budget set',
-              style: TextStyle(
+        // The caption yields width to the button rather than pushing it off the
+        // edge: at 320dp this row wanted 135dp more than it had (#256).
+        Expanded(
+          child: Row(
+            children: [
+              Icon(
+                FontAwesomeIcons.bullseye.data,
+                size: context.getRSize(12),
                 color: _subtext,
-                fontSize: context.getRFontSize(12),
-                fontWeight: FontWeight.bold,
               ),
-            ),
-          ],
+              SizedBox(width: context.getRSize(8)),
+              Flexible(
+                child: Text(
+                  'No monthly budget set',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _subtext,
+                    fontSize: context.getRFontSize(12),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         if (isCeo)
           AppButton(
@@ -794,7 +848,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
   // ─────────────────────────── EXPENSES TAB ───────────────────────────────────
 
-  Widget _buildExpensesTab(
+  /// The Expenses tab, as slivers. Nothing here may depend on a supplied
+  /// height — that dependency is the defect this screen was fixed for.
+  List<Widget> _expensesTabSlivers(
     BuildContext context, {
     required List<ExpenseWithCategory> allExpenses,
     required Map<String, String> categoryNames,
@@ -813,7 +869,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
         .toList();
 
     if (pending.isEmpty && periodList.isEmpty) {
-      return _emptyState(context, 'No expenses found');
+      return [_emptySliver(context, 'No expenses found')];
     }
 
     // Group the period list by resolved category name.
@@ -824,81 +880,97 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     }
     final sortedCategories = grouped.keys.toList()..sort();
 
-    return AppRefreshWrapper(
-      child: ListView(
+    return [
+      SliverPadding(
+        // Clears the Add Expense FAB and the device's gesture inset so the last
+        // row is never permanently covered.
         padding: EdgeInsets.only(
           bottom: context.getRSize(100) + context.deviceBottomPadding,
         ),
-        children: [
-          if (pending.isNotEmpty)
-            _buildPendingApprovals(
-              context,
-              pending,
-              categoryNames,
-              users,
-              storeNameById,
-              showRowStore,
-            ),
-          ...sortedCategories.expand((cat) {
-            final catList = grouped[cat]!
-              ..sort(
-                (a, b) =>
-                    b.expense.expenseDate.compareTo(a.expense.expenseDate),
+        sliver: SliverList.list(
+          children: [
+            if (pending.isNotEmpty)
+              _buildPendingApprovals(
+                context,
+                pending,
+                categoryNames,
+                users,
+                storeNameById,
+                showRowStore,
+              ),
+            ...sortedCategories.expand((cat) {
+              final catList = grouped[cat]!
+                ..sort(
+                  (a, b) =>
+                      b.expense.expenseDate.compareTo(a.expense.expenseDate),
+                );
+              final catSum = catList.fold<int>(
+                0,
+                (s, e) => s + e.expense.amountKobo,
               );
-            final catSum = catList.fold<int>(
-              0,
-              (s, e) => s + e.expense.amountKobo,
-            );
-            return [
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  context.getRSize(20),
-                  context.getRSize(20),
-                  context.getRSize(20),
-                  context.getRSize(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        cat.toUpperCase(),
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: _subtext,
-                          fontSize: context.getRFontSize(12),
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
+              return [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    context.getRSize(20),
+                    context.getRSize(20),
+                    context.getRSize(20),
+                    context.getRSize(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          cat.toUpperCase(),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: _subtext,
+                            fontSize: context.getRFontSize(12),
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
-                    ),
-                    Text(
-                      formatCurrency(catSum / 100.0),
-                      style: TextStyle(
-                        color: _subtext,
-                        fontSize: context.getRFontSize(13),
-                        fontWeight: FontWeight.bold,
+                      Text(
+                        formatCurrency(catSum / 100.0),
+                        style: TextStyle(
+                          color: _subtext,
+                          fontSize: context.getRFontSize(13),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              ...catList.map(
-                (e) => _buildExpenseCard(
-                  context,
-                  e,
-                  categoryNames,
-                  users,
-                  withMenu: true,
-                  storeName: showRowStore
-                      ? _storeLabel(e, storeNameById)
-                      : null,
+                ...catList.map(
+                  (e) => _buildExpenseCard(
+                    context,
+                    e,
+                    categoryNames,
+                    users,
+                    withMenu: true,
+                    storeName: showRowStore
+                        ? _storeLabel(e, storeNameById)
+                        : null,
+                  ),
                 ),
-              ),
-            ];
-          }),
-        ],
+              ];
+            }),
+          ],
+        ),
       ),
+    ];
+  }
+
+  /// An empty-state message as a sliver. [SliverFillRemaining] with
+  /// `hasScrollBody: false` gives it the rest of the viewport when there is
+  /// room and its own intrinsic height when there is not, so the message
+  /// scrolls into reach instead of overflowing — which is what produced the
+  /// red 26px band on a sideways phone.
+  Widget _emptySliver(BuildContext context, String message) {
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: _emptyState(context, message),
     );
   }
 
@@ -1331,6 +1403,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   }) {
     final exp = e.expense;
     return _ExpenseCard(
+      key: ValueKey('$kExpenseRowKeyPrefix${exp.id}'),
       exp: exp,
       categoryName: _categoryName(e, categoryNames),
       recordedByName: _recordedByName(exp.recordedBy, users),
@@ -1341,7 +1414,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
   // ─────────────────────────── STATS TAB ──────────────────────────────────────
 
-  Widget _buildStatsTab(
+  /// The Stats tab, as slivers. See [_expensesTabSlivers].
+  List<Widget> _statsTabSlivers(
     BuildContext context, {
     required List<ExpenseWithCategory> periodApproved,
     required Map<String, String> categoryNames,
@@ -1349,7 +1423,12 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     required int approvedTotalKobo,
   }) {
     if (periodApproved.isEmpty) {
-      return const Center(child: Text('No data for statistics.'));
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: Text('No data for statistics.')),
+        ),
+      ];
     }
 
     // Category totals (approved only).
@@ -1371,119 +1450,121 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       const Color(0xFFEC4899), // pink
     ];
 
-    return AppRefreshWrapper(
-      child: ListView(
+    return [
+      SliverPadding(
         padding: EdgeInsets.all(
           context.getRSize(16),
         ).copyWith(bottom: context.getRSize(100) + context.deviceBottomPadding),
-        children: [
-          _buildAnnualProjectionCard(context),
-          SizedBox(height: context.getRSize(16)),
-          _buildBudgetComparisonCard(context),
-          _buildTopStaffCard(context, periodApproved, users),
-          SizedBox(height: context.getRSize(8)),
-
-          // Category Breakdown Header
-          Text(
-            'Category Breakdown',
-            style: TextStyle(
-              color: _text,
-              fontSize: context.getRFontSize(16),
-              fontWeight: FontWeight.bold,
+        sliver: SliverList.list(
+          children: [
+            _buildAnnualProjectionCard(context),
+            SizedBox(height: context.getRSize(16)),
+            _buildBudgetComparisonCard(context),
+            _buildTopStaffCard(context, periodApproved, users),
+            SizedBox(height: context.getRSize(8)),
+  
+            // Category Breakdown Header
+            Text(
+              'Category Breakdown',
+              style: TextStyle(
+                color: _text,
+                fontSize: context.getRFontSize(16),
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          SizedBox(height: context.getRSize(16)),
-
-          Container(
-            padding: EdgeInsets.all(context.getRSize(16)),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _border),
-            ),
-            child: Column(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Row(
-                    children: List.generate(sortedCats.length, (index) {
-                      final cat = sortedCats[index];
-                      final amt = catTotals[cat]!;
-                      final flex = total == 0
-                          ? 0
-                          : (amt / total * 1000).toInt();
-                      if (flex == 0) return const SizedBox();
-                      return Expanded(
-                        flex: flex,
-                        child: Container(
-                          height: context.getRSize(16),
-                          color: colors[index % colors.length],
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-                SizedBox(height: context.getRSize(20)),
-                ...List.generate(sortedCats.length, (index) {
-                  final cat = sortedCats[index];
-                  final amt = catTotals[cat]!;
-                  final pct = total == 0
-                      ? '0.0'
-                      : (amt / total * 100).toStringAsFixed(1);
-                  return Padding(
-                    padding: EdgeInsets.only(bottom: context.getRSize(12)),
+            SizedBox(height: context.getRSize(16)),
+  
+            Container(
+              padding: EdgeInsets.all(context.getRSize(16)),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _border),
+              ),
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
                     child: Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
+                      children: List.generate(sortedCats.length, (index) {
+                        final cat = sortedCats[index];
+                        final amt = catTotals[cat]!;
+                        final flex = total == 0
+                            ? 0
+                            : (amt / total * 1000).toInt();
+                        if (flex == 0) return const SizedBox();
+                        return Expanded(
+                          flex: flex,
+                          child: Container(
+                            height: context.getRSize(16),
                             color: colors[index % colors.length],
-                            shape: BoxShape.circle,
                           ),
-                        ),
-                        SizedBox(width: context.getRSize(12)),
-                        Expanded(
-                          child: Text(
-                            cat,
+                        );
+                      }),
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(20)),
+                  ...List.generate(sortedCats.length, (index) {
+                    final cat = sortedCats[index];
+                    final amt = catTotals[cat]!;
+                    final pct = total == 0
+                        ? '0.0'
+                        : (amt / total * 100).toStringAsFixed(1);
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: context.getRSize(12)),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: colors[index % colors.length],
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          SizedBox(width: context.getRSize(12)),
+                          Expanded(
+                            child: Text(
+                              cat,
+                              style: TextStyle(
+                                color: _text,
+                                fontSize: context.getRFontSize(14),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            formatCurrency(amt / 100.0),
                             style: TextStyle(
                               color: _text,
                               fontSize: context.getRFontSize(14),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          formatCurrency(amt / 100.0),
-                          style: TextStyle(
-                            color: _text,
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(width: context.getRSize(12)),
-                        SizedBox(
-                          width: context.getRSize(45),
-                          child: Text(
-                            '$pct%',
-                            textAlign: TextAlign.right,
-                            style: TextStyle(
-                              color: _subtext,
-                              fontSize: context.getRFontSize(12),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ],
+                          SizedBox(width: context.getRSize(12)),
+                          SizedBox(
+                            width: context.getRSize(45),
+                            child: Text(
+                              '$pct%',
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                color: _subtext,
+                                fontSize: context.getRFontSize(12),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    );
+    ];
   }
 
   /// "This month vs budget" card (§20.8) — shown only when a monthly goal is
@@ -1739,6 +1820,7 @@ class _ExpenseCard extends StatelessWidget {
   final Widget? trailing;
 
   const _ExpenseCard({
+    super.key,
     required this.exp,
     required this.categoryName,
     required this.recordedByName,
@@ -1851,7 +1933,7 @@ class _ExpenseCard extends StatelessWidget {
                       SizedBox(height: context.getRSize(6)),
                       Row(
                         children: [
-                          _StatusBadge(status: exp.status),
+                          Flexible(child: _StatusBadge(status: exp.status)),
                           SizedBox(width: context.getRSize(8)),
                           Expanded(
                             child: Text(
@@ -1865,11 +1947,18 @@ class _ExpenseCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Text(
-                            dateStr,
-                            style: TextStyle(
-                              color: subtextCol,
-                              fontSize: context.getRFontSize(12),
+                          // The full "Sep 18, 2026 • 10:30 AM" stamp is wider
+                          // than a 320dp card can spare beside the status
+                          // badge; it shortens rather than overflowing (#256).
+                          Flexible(
+                            child: Text(
+                              dateStr,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: subtextCol,
+                                fontSize: context.getRFontSize(12),
+                              ),
                             ),
                           ),
                         ],
@@ -2000,6 +2089,10 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
+        // "Pending CEO approval" is the long one; on a 320dp card it shortens
+        // rather than pushing the date off the edge (#256).
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.bold,
