@@ -8,7 +8,28 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-160 sessions logged. Codebase is live and being verified on-device.
+161 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #257 — Business Reports shows a complete report card at every viewport (PRD #239) (2026-09-18)
+Branch `feat/business-reports-viewport-257`, cut from `feat/expenses-tabbed-sliver-scaffold-256`. Slice of PRD #239.
+- **Before (measured in harness)**:
+  - On `androidCompactLandscape` (800x360): laid out cards in a 2-column square grid (`GridView.count(crossAxisCount: 2)` with default `childAspectRatio: 1.0`), ballooning each card to ~383dp tall, which exceeded the entire 360dp physical screen height. Measured: `0` complete visible rows (silent starvation).
+  - On `phoneSe1Portrait` (320x568): small square cards caused `RenderFlex overflowed by 55 pixels on the bottom` (and 61px on 3-line cards).
+- **Core Fix (`lib/features/dashboard/screens/reports_hub_screen.dart` & `lib/shared/widgets/skeletons/first_load_skeletons.dart`)**:
+  - Replaced rigid 2-column square grid with an unconditional `GridView` using:
+    `gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 240, mainAxisExtent: cardHeight, mainAxisSpacing: context.spacingM, crossAxisSpacing: context.spacingM)`
+  - Dynamic `cardHeight = math.max(160.0, context.getRSize(160.0)) + textScaler.scale(20.0) - 20.0;`:
+    - Provides 160.0dp on 800x360 landscape (well under the 212dp body viewport, all 4 cards visible at rest).
+    - Eliminates vertical overflow on narrow portrait devices (`phoneSe1Portrait`) and comfortable control (`pixel7Portrait`).
+    - Naturally accommodates dynamic system text scaling (`textScaler`).
+  - Added `maxLines: 2` and `overflow: TextOverflow.ellipsis` to report card title and subtitle.
+  - Skeletons in `ReportsSkeleton` updated to match `SliverGridDelegateWithMaxCrossAxisExtent` and matching `cardHeight`.
+  - Exposed test seams: `kReportCardKeyPrefix = 'report-card-'`, `reportCardKey(title)`, and badge key `report-card-badge-$title`.
+  - Unconditional: no branch on orientation and no `isShortViewport` predicate.
+- **Tests (`test/dashboard/reports_hub_viewport_test.dart`)**:
+  - 8 tests covering 4 viewports (`androidCompactLandscape`, `phoneSe1Portrait`, `pixel7Landscape`, `pixel7Portrait`), max text scale (1.3x) on both compact orientations, pending-count badges, and navigation to sub-screens with back navigation.
+  - Clean `teardownScreen(tester)` pattern (`disposeScreen(tester)` + `tester.runAsync(() => env.dispose())`) preventing Drift stream lockups.
+- **Verification**: `flutter analyze` clean (0 errors, 0 warnings); full dashboard suite passed (254 tests passed).
 
 ### Issue #256 — Expenses holds its content at every viewport (PRD #239) (2026-09-18)
 Branch `feat/expenses-tabbed-sliver-scaffold-256`, cut from `main`. Slice of PRD #239,
