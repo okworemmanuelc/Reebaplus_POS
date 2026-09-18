@@ -1218,11 +1218,15 @@ An overflow-only assertion passes a screen whose content has been crushed to zer
 height.
 
 **The two-assertion invariant:**
-Every responsive viewport test now enforces the two-assertion invariant codified
-in `test/helpers/screen_harness.dart`:
+Responsive viewport tests that validate visible content rows or cards enforce the
+two-assertion invariant codified in `test/helpers/screen_harness.dart`:
 1. `expectNoOverflow`: no `RenderFlex` overflow at paint time.
 2. `expectContentRowVisible`: at least one complete, hit-testable content row (or
    product card, order row, credit ledger entry) is visible in the viewport.
+
+Empty-state tests in the customer, POS, expenses, and inventory suites use targeted
+empty-state assertions rather than expecting content rows, while the report-card
+badge test uses its badge-specific assertion instead of `expectContentRowVisible`.
 
 ### 11.6 Blocking contradiction: Sales screen landscape treatment (Plan §4 vs ADR 0025 §5)
 
@@ -1233,11 +1237,5 @@ landscape treatment of the sales screen (POS):
 - **Plan §4** marked the side rail rejected on the grounds that a collapsing
   header keeps controls reachable and saves horizontal width.
 
-This contradiction was an active design blocker that halted work on the sales
-screen until resolved through prototyping and measurement on real devices.
-
-*(Resolution record: On 2026-09-17, Issue #259 and PR #265 resolved this
-contradiction in favour of Option A, the collapsing header, implemented as a
-single `CustomScrollView` with `PinnedHeaderSliver` and `SliverFloatingHeader`.
-ADR 0025 §5 was amended in the same PR to state that a structural re-flow is
-required without prescribing the rail as the only form).*
+This contradiction remains an active, unresolved design blocker that halts work on the
+sales screen until resolved through prototyping and measurement on real devices.
