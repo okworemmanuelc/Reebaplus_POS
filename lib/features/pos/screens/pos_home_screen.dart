@@ -370,11 +370,23 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   /// The top bar (menu, business name, store subtitle, view selector, bell) as
   /// a sliver.
   ///
-  /// Sideways it is a [SliverFloatingHeader]: it scrolls away while the cashier
-  /// browses and slides back the moment they scroll the other way, without
-  /// waiting for the top of the grid. Upright it is pinned, which is how the
-  /// Scaffold's fixed `AppBar` behaved before — POS looks unchanged on the
-  /// phones staff already use.
+  /// Sideways it floats: it scrolls away while the cashier browses and slides
+  /// back the moment they scroll the other way, without waiting for the top of
+  /// the grid. Upright it is pinned, which is how the Scaffold's fixed `AppBar`
+  /// behaved before — POS looks unchanged on the phones staff already use.
+  ///
+  /// The float is a [SliverPersistentHeader] with no snap, deliberately *not*
+  /// Flutter's [SliverFloatingHeader]. That widget snaps by listening to the
+  /// scroll position's `isScrollingNotifier` and reads its child's size when
+  /// scrolling stops. If the viewport changes size as a fling runs out — a
+  /// rotation, or #258's bottom bar handing its 56dp back over 200ms — the
+  /// fling ends *inside* `RenderViewport.performLayout`, the listener fires
+  /// there, and the read trips `RenderBox.size accessed beyond the scope of
+  /// resize, layout, or permitted parent access`. POS stays mounted in the tab
+  /// stack, so that fired on rotation from any tab. The unsnapped header's own
+  /// scrolling listener returns before touching any size when there is no snap
+  /// configuration. The bar still follows the finger back in; it just no longer
+  /// finishes the motion on its own when the finger lifts.
   ///
   /// This orientation branch is the deliberate navigation exception recorded on
   /// PRD #239 (amendment 3), the same one the bottom bar takes in #258. It is
@@ -394,7 +406,13 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     final isLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape;
     return isLandscape
-        ? SliverFloatingHeader(child: bar)
+        ? SliverPersistentHeader(
+            floating: true,
+            delegate: _FloatingTopBarDelegate(
+              extent: topBar.preferredSize.height,
+              child: bar,
+            ),
+          )
         : PinnedHeaderSliver(child: bar);
   }
 
@@ -864,4 +882,38 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       ),
     );
   }
+}
+
+/// The sideways top bar's float, without snapping. See
+/// `_PosHomeScreenState._buildTopBarSliver` for why this is not
+/// [SliverFloatingHeader].
+///
+/// `minExtent == maxExtent` so the bar slides off whole rather than shrinking,
+/// and [child] is already sized to [extent], so its rendered height always
+/// matches the declared one.
+class _FloatingTopBarDelegate extends SliverPersistentHeaderDelegate {
+  const _FloatingTopBarDelegate({required this.extent, required this.child});
+
+  final double extent;
+  final Widget child;
+
+  @override
+  double get minExtent => extent;
+
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) =>
+      child;
+
+  /// The child is built fresh from screen state on every host build, so it
+  /// has to be part of the comparison (see `PinnedTabBarDelegate`).
+  @override
+  bool shouldRebuild(_FloatingTopBarDelegate oldDelegate) =>
+      oldDelegate.extent != extent || oldDelegate.child != child;
 }

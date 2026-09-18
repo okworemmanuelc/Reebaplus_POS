@@ -8,7 +8,16 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-164 sessions logged. Codebase is live and being verified on-device.
+165 sessions logged. Codebase is live and being verified on-device.
+
+### Fix — POS top bar threw on rotation: sideways float no longer uses `SliverFloatingHeader` (follow-up to #259, PRD #239) (2026-09-18)
+Branch `fix/pos-top-bar-rotation-assert`, cut from `main` (`7ca2b32`). Found by the owner on the emulator: rotating on Supplier Accounts stopped the debugger on `RenderBox.size accessed beyond the scope of resize, layout, or permitted parent access` and the app froze mid-rotation.
+
+- **Cause (read from the paused isolate's stack via the Dart tooling daemon, not guessed)**: `RenderBox.size` ← `_RenderSliverFloatingHeader.childExtent` ← `isScrollingUpdate` ← `_SnapTriggerState.isScrollingListener` ← `ScrollPosition.beginActivity` / `goIdle` ← `BallisticScrollActivity.applyNewDimensions` ← `RenderViewport.performLayout`. #259's sideways top bar was Flutter's `SliverFloatingHeader`, which snaps by listening to `isScrollingNotifier` and reads its child's size when scrolling stops. When the viewport changes size as a fling runs out, the fling ends *inside* the viewport's layout and the read is illegal there. POS stays mounted in the tab stack, so it fired on rotation from **any** tab. Rotation is one trigger; #258's bottom bar handing back its 56dp over 200ms during a slow fling is another. Upright was never affected (pinned, not floating). Debug-only assertion, but in debug it aborts that layout pass.
+- **Fix (`lib/features/pos/screens/pos_home_screen.dart`)**: sideways, the top bar is `SliverPersistentHeader(floating: true)` with a private `_FloatingTopBarDelegate` (`minExtent == maxExtent`, child pre-sized) and **no snap configuration** — the framework's floating header returns from its scrolling listener before touching any size when there is no snap. Still scrolls away and follows the finger back in on reverse scroll (PRD #239 amendment 3); the one behaviour change is that it no longer finishes the motion on its own when the finger lifts. Upright unchanged (`PinnedHeaderSliver`).
+- **Tests** — new `test/pos/pos_home_rotation_test.dart`: at 800x360 and 915x412, a sweep of gentle flings (150–1200px/s) while the viewport grows 56dp a frame at a time. **Red before**: the exact assertion at 200px/s at both sizes. **Green after.** Plus: sideways the bar scrolls away and returns on a reverse scroll; upright it stays pinned. POS suites 79/79.
+- **Test gotcha**: `tester.drag` performs the whole move and lifts before a frame runs, so layout only sees `ScrollDirection.idle` and a floating `SliverPersistentHeader` never floats back — move the finger a frame at a time (`startGesture` + `moveBy` + `pump`). And never reset a POS test by dragging past the top: it arms pull-to-refresh, whose banner never settles; `jumpTo(0)` instead.
+- **Open**: owner re-check on the emulator — rotate on any tab (upright ↔ sideways) and fling POS gently sideways so the bottom bar slides away.
 
 ### Issue #246 — Supplier Detail holds its ledger at every viewport (PRD #239) (2026-09-18)
 Branch `feat/supplier-detail-tabbed-sliver-scaffold-246`, cut from `main` (`2d221d8`). Slice of PRD #239; adopts `TabbedSliverScaffold` (#243 / ADR 0027) as built — no scaffold behaviour change was needed (only its chrome doc line, below).
