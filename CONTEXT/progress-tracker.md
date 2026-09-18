@@ -10,6 +10,37 @@ The human updates it when resolving open questions or making architectural decis
 
 166 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #261 — Long names break the centred welcome headings (welcome overlay + 3 siblings) (2026-09-18)
+Branch `fix/centred-welcome-headings-261`, cut from `origin/main` (`891a748`). Standalone bug found during the discovery walk for #239 (#241).
+- **Problem**:
+  - When staff names wrap (40+ characters or on narrow viewports like iPhone SE1 320x568), four welcome headings aligned left instead of staying centred, and the post-login welcome overlay lacked horizontal inset padding (hugging screen edges).
+  - The 4 Headings:
+    1. Welcome overlay right after login (`SuccessOverlay` in `lib/features/auth/screens/login_screen.dart`).
+    2. "Your business is ready!" in `lib/features/auth/screens/success_dashboard_entry_screen.dart`.
+    3. "Create a PIN" and "Welcome, name!" on Create PIN in `lib/features/auth/screens/create_pin_screen.dart`.
+    4. "Welcome back, first name" in `lib/features/auth/screens/login_screen.dart` (`_PinPad` portrait layout).
+- **Implementation**:
+  - `lib/features/auth/screens/login_screen.dart`:
+    - Exposed `SuccessOverlay` with `@visibleForTesting class SuccessOverlay`.
+    - Wrapped `SuccessOverlay` Column in `Padding(padding: const EdgeInsets.symmetric(horizontal: 24))`.
+    - Added `textAlign: TextAlign.center` to `Text('Welcome, ${user.name}')` and `Text('Opening Reebaplus POS...')`.
+    - Fixed unmanaged timer leak in `_LoadingDotsState`: stored `Timer`s in `_timers` and cancelled them in `dispose()`.
+    - In `_PinPad` portrait layout: added `textAlign: TextAlign.center` to `Text('Welcome back, ${identifiedUser!.name.split(' ').first}')`.
+  - `lib/features/auth/screens/success_dashboard_entry_screen.dart`:
+    - Added `textAlign: TextAlign.center` to `Text('Your business is ready!')`.
+  - `lib/features/auth/screens/create_pin_screen.dart`:
+    - In portrait: added `textAlign: TextAlign.center` to title (`Text(_confirming ? 'Confirm your PIN' : 'Create a PIN')`) and welcome text (`Text('Welcome, ...!')`).
+    - In landscape: added `textAlign: TextAlign.center` to title (`Text(_confirming ? 'Confirm your PIN' : 'Create a PIN')`).
+- **Verification**:
+  - Added `test/auth/welcome_overlay_viewport_test.dart` (16 tests, all passing):
+    - Tested `SuccessOverlay` across 3 viewports (`phoneSe1Portrait`, `pixel7Portrait`, `androidCompactLandscape`) with long full name (40+ chars): verified `textAlign == TextAlign.center`, horizontal insets >= 16dp, and horizontal centering within 1.0dp of screen center.
+    - Tested `SuccessDashboardEntryScreen` across 3 viewports with centering, insets >= 16dp, and zero overflow.
+    - Tested `CreatePinScreen` across 3 viewports with centering, insets >= 16dp, and zero overflow.
+    - Tested `LoginScreen` (`_PinPad`) with `textAlign: TextAlign.center` across 3 viewports (`phoneSe1Portrait`, `pixel7Portrait`, `androidCompactLandscape`).
+    - Tested max text scale (1.3x) without overflow across viewports (`SuccessOverlay`, `SuccessDashboardEntryScreen`, `CreatePinScreen`, `LoginScreen`).
+  - Full auth test suite `test/auth/` (105 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
+
 ### Issue #260 — Appearance: the selected colour card overflows on narrow phones (2026-09-18)
 Branch `fix/appearance-card-overflow-260`, cut from `main` (`4b17abe`). Standalone bug found during the discovery walk for #239 (#241).
 - **Problem**:
@@ -34,6 +65,7 @@ Branch `fix/appearance-card-overflow-260`, cut from `main` (`4b17abe`). Standalo
     - Verified card tapping selects its colour and updates `themeController.designSystem`.
     - Verified zero overflow under 1.3x maximum text scaling on compact viewports.
   - Existing suite `test/settings/appearance_settings_screen_test.dart` passes.
+>>>>>>> origin/main
   - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #257 close-out — Business Reports test covers max text scale at all four viewports (PRD #239) (2026-09-18)
