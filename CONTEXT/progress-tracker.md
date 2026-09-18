@@ -32,13 +32,40 @@ Branch `fix/centred-welcome-headings-261`, cut from `origin/main` (`891a748`). S
     - In portrait: added `textAlign: TextAlign.center` to title (`Text(_confirming ? 'Confirm your PIN' : 'Create a PIN')`) and welcome text (`Text('Welcome, ...!')`).
     - In landscape: added `textAlign: TextAlign.center` to title (`Text(_confirming ? 'Confirm your PIN' : 'Create a PIN')`).
 - **Verification**:
-  - Added `test/auth/welcome_overlay_viewport_test.dart` (13 tests, all passing):
+  - Added `test/auth/welcome_overlay_viewport_test.dart` (16 tests, all passing):
     - Tested `SuccessOverlay` across 3 viewports (`phoneSe1Portrait`, `pixel7Portrait`, `androidCompactLandscape`) with long full name (40+ chars): verified `textAlign == TextAlign.center`, horizontal insets >= 16dp, and horizontal centering within 1.0dp of screen center.
     - Tested `SuccessDashboardEntryScreen` across 3 viewports with centering, insets >= 16dp, and zero overflow.
     - Tested `CreatePinScreen` across 3 viewports with centering, insets >= 16dp, and zero overflow.
-    - Tested `LoginScreen` (`_PinPad`) with `textAlign: TextAlign.center`.
-    - Tested max text scale (1.3x) without overflow across viewports.
-  - Full auth test suite `test/auth/` (102 tests) all pass.
+    - Tested `LoginScreen` (`_PinPad`) with `textAlign: TextAlign.center` across 3 viewports (`phoneSe1Portrait`, `pixel7Portrait`, `androidCompactLandscape`).
+    - Tested max text scale (1.3x) without overflow across viewports (`SuccessOverlay`, `SuccessDashboardEntryScreen`, `CreatePinScreen`, `LoginScreen`).
+  - Full auth test suite `test/auth/` (105 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
+
+### Issue #260 — Appearance: the selected colour card overflows on narrow phones (2026-09-18)
+Branch `fix/appearance-card-overflow-260`, cut from `main` (`4b17abe`). Standalone bug found during the discovery walk for #239 (#241).
+- **Problem**:
+  - On a 360dp-wide phone upright, selecting a colour card in Settings → Appearance showed a red "RIGHT OVERFLOWED BY 6.0 PIXELS" band. On 320dp-wide phones (iPhone SE1), the shortfall was 26.0px.
+  - Cause: Card top row laid out three fixed-size swatch circles (28dp), gaps (6dp), and an active check badge (24dp), requiring 120dp. On a 360dp phone, each card has width (360 - 48 - 12)/2 = 150dp; minus 4dp active border and 32dp card padding leaves 114dp interior width, producing the exact 6.0px overflow. On a 320dp phone, interior width is 94dp, producing 26.0px overflow.
+  - Additionally, for Black & White, the check badge used `Colors.black` on a `Color(0xFF111111)` background, making the check icon virtually invisible.
+- **Implementation (`lib/core/settings/appearance_settings_screen.dart`)**:
+  - `_AccentCard` wrapped in `LayoutBuilder` with three adaptive width tiers:
+    - `< 100dp` (compact phones like 320dp with narrow margins): 18dp swatches, 3dp gaps, 18dp badge (78dp total).
+    - `< 120dp` (compact phones like 320dp/360dp): 20dp swatches, 4dp gaps, 20dp badge (88dp total, leaving at least 6dp - 26dp breathing room for the `Spacer()`).
+    - `>= 120dp` (comfortable widths): 24dp swatches, 6dp gaps, 24dp badge (108dp total).
+  - `badgeSize` strictly matches `swatchSize` in all tiers, guaranteeing the card top row height is identical whether active or inactive.
+  - Check badge icon color computes dynamically via `ThemeData.estimateBrightnessForColor(activeColor) == Brightness.light ? Colors.black : Colors.white`, ensuring sharp contrast (white check icon on dark accents like Black & White and Blue).
+  - Swatches and check badge are separated by a `Spacer()` with guaranteed width > 0, ensuring the badge is positioned to the right of swatch 3 and never overlaps any swatch.
+  - Label text wraps cleanly with `maxLines: 2` and `overflow: TextOverflow.ellipsis`.
+  - Added test seams: `kAppearanceCardKeyPrefix`, `kAppearanceCheckBadgeKeyPrefix`, `kAppearanceSwatchKeyPrefix` and helper key generators `appearanceCardKey(ds)`, `appearanceCheckBadgeKey(ds)`, `appearanceSwatchKey(ds, index)`.
+- **Verification**:
+  - Added `test/settings/appearance_viewport_test.dart` (22 tests, all passing):
+    - Tested all 5 colours selected across 4 viewports (`phoneSe1Portrait`, `androidCompactPortrait`, `pixel7Portrait`, `androidCompactLandscape`).
+    - Asserted `expectNoOverflow` (reproduced failing 26.0px overflow on 320x568 and 6.0px on 360x800 before fix, passing with zero overflow after fix).
+    - Asserted check badge visibility (`find.byKey(...)`) and confirmed it does not overlap any swatch (`badgeRect.overlaps(swatchRect) == false` and `badgeRect.left >= swatchRect.right`).
+    - Verified card tapping selects its colour and updates `themeController.designSystem`.
+    - Verified zero overflow under 1.3x maximum text scaling on compact viewports.
+  - Existing suite `test/settings/appearance_settings_screen_test.dart` passes.
+>>>>>>> origin/main
   - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Fix — POS top bar threw on rotation: sideways float no longer uses `SliverFloatingHeader` (follow-up to #259, PRD #239) (2026-09-18)
