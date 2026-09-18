@@ -8,7 +8,34 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-161 sessions logged. Codebase is live and being verified on-device.
+162 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #242 — Docs: record the five measured corrections to the responsive layout plan (PRD #239) (2026-09-18)
+Branch `docs/responsive-layout-plan-corrections-242`, cut from `main` (`2d221d8`). Slice of PRD #239. Documentation-only slice updating `docs/design/responsive-layout-plan.md` to record the five places where real device and harness measurements contradicted earlier design assumptions, preventing future re-derivation of flawed figures.
+
+- **Changes in `docs/design/responsive-layout-plan.md`**:
+  1. **New Section 11 added**: "Audit against runtime measurement — PRD #239 (2026-09-18)" recording the five measured corrections in full detail:
+     - **§11.1 Correction 1 (Dropdown height)**: `AppDropdown` with its stacked label measures **73dp** (48dp interactive minimum floor + 25dp unscaled label constants from `titleSmall` font metrics and `getRSize(8)` gap), not ~40dp or 48dp. Fixed chrome budgets in §1, §3, and §4 were under-budgeted wherever they used the smaller figure (e.g. POS `_buildHeader` is 95.4dp, not 70.4dp; Inventory filter row is 92.6dp, exceeding the entire 75.6dp content area at 800×360 and producing negative space).
+     - **§11.2 Correction 2 (`NestedScrollView` body charging mechanism)**: Under `NestedScrollView`, `RenderSliverFillRemainingWithScrollable` sizes the body at rest to `viewportMainAxisExtent - precedingScrollExtent`, charging the body for the *entire* scroll-away header extent (not merely the pinned tab bar). Tall headers at rest squeezed the body down to 0.0dp (Inventory), 1.8dp (Expenses), or under 55dp (Customer & Supplier Detail) until resolved by `TabbedSliverScaffold` (ADR 0027, #243).
+     - **§11.3 Correction 3 (Scope is not landscape-only)**: Small portrait phones (iPhone SE1, 320×568) suffer identical content starvation and horizontal/vertical overflows. Because 568dp is *above* the 500dp `isShortViewport` threshold, any layout fix gated on `isShortViewport` or landscape orientation misses them. Structural fixes must be unconditional.
+     - **§11.4 Correction 4 (Presumed screen inventory superseded)**: The exhaustive screen lists in Phase 4, Phase 5, and Phase 8 were speculative. The #241 discovery pass (overflow hook + 800×360 sweep + emulator walk) proved content starvation clustered strictly in screens with fixed headers over `Expanded` or nested tabbed scrollers; unaffected screens require no churn.
+     - **§11.5 Correction 5 (Regression test invariant)**: An overflow-only test silently passes a populated screen whose list or grid has been crushed to 0.0dp with zero thrown exceptions; tests must assert both `expectNoOverflow` and `expectContentRowVisible` (`test/helpers/screen_harness.dart`).
+     - **§11.6 Blocking contradiction flagged**: Plan §4 (rail rejected) vs ADR 0025 §5 (rail required) gave opposite instructions for POS landscape treatment, forming a blocking contradiction that halted POS work until resolved in #259 (Option A collapsing header).
+  2. **In-place corrections with pointers to §11**:
+     - Corrected dropdown height and chrome budgets in §1 (`_buildHeader` ~121dp at scale 1.50, chrome ~284dp), §3 (header 95.4dp, chrome 182.2dp, grid ~69.8dp at rest), §4 (header 95.4dp, chrome 187.2dp, grid ~64.8dp at rest), and §10 Gap 3.
+  3. **Scope statement broadened**:
+     - Title and scope updated to explicitly include compact portrait phones and reject landscape-only framing.
+- **BUILD_LOG.md**: Dated entry added under September 2026 summarizing the durable facts and gotchas.
+- **Verification**: `flutter analyze` clean (0 errors, 0 warnings); documentation-only slice with zero Dart/production code changes.
+
+### Fix — Business Reports landscape bottom spacing & design refinement (2026-09-18)
+- **Problem**: In landscape mode, the bottom padding of report cards collapsed to ~7dp (`getRSize(10)` at 0.70 spacing scale), causing subtitles to hug the bottom curved border (16dp radius) while an asymmetric `Spacer()` created an awkward vertical void above the text.
+- **Fix (`lib/features/dashboard/screens/reports_hub_screen.dart` & `lib/shared/widgets/skeletons/first_load_skeletons.dart`)**:
+  - Enforced generous padding floors on report cards: `EdgeInsets.fromLTRB(math.max(14.0, context.getRSize(14.0)), math.max(13.0, context.getRSize(13.0)), math.max(14.0, context.getRSize(14.0)), math.max(16.0, context.getRSize(16.0)))`.
+  - Added dedicated bottom breathing room after the subtitle: `SizedBox(height: math.max(4.0, context.getRSize(4.0)))`, ensuring a total of 20dp spacing from text to card bottom border.
+  - Sized icon badges consistently with `math.max(34.0, context.getRSize(36.0))` and 16dp icon floor so icons remain bold and crisp in landscape.
+  - Adjusted `cardHeight = math.max(154.0, context.getRSize(154.0)) + (textScaler.scale(20.0) - 20.0) * 3.5` in both `ReportsHubScreen` and `ReportsSkeleton`, guaranteeing zero overflow at 1.3x text scale across compact viewports.
+- **Verification**: `flutter test test/dashboard/reports_hub_viewport_test.dart` (8/8 passing), full dashboard suite (254/254 passing), `flutter analyze` clean (0 errors, 0 warnings).
 
 ### Issue #257 — Business Reports shows a complete report card at every viewport (PRD #239) (2026-09-18)
 Branch `feat/business-reports-viewport-257`, cut from `feat/expenses-tabbed-sliver-scaffold-256`. Slice of PRD #239.
