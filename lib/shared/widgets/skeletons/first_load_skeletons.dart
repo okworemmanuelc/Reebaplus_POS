@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/skeletons/skeleton.dart';
@@ -130,16 +132,19 @@ class ReportsSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gap = context.getRSize(16);
+    final textScaler = MediaQuery.textScalerOf(context);
+    final cardHeight =
+        math.max(160.0, context.getRSize(160.0)) + textScaler.scale(20.0) - 20.0;
     return Shimmer(
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
         padding: EdgeInsets.all(context.getRSize(16)),
         itemCount: 6,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 240,
+          mainAxisExtent: cardHeight,
           mainAxisSpacing: gap,
           crossAxisSpacing: gap,
-          childAspectRatio: 1.3,
         ),
         itemBuilder: (_, __) => SkeletonBox(radius: context.getRSize(18)),
       ),

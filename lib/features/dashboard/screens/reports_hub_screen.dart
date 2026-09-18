@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -15,6 +17,9 @@ import 'package:reebaplus_pos/features/dashboard/screens/supplier_accounts_repor
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
 import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
+
+const String kReportCardKeyPrefix = 'report-card-';
+Key reportCardKey(String title) => Key('$kReportCardKeyPrefix$title');
 
 class ReportsHubScreen extends ConsumerStatefulWidget {
   const ReportsHubScreen({super.key});
@@ -150,6 +155,10 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
       );
     }
 
+    final textScaler = MediaQuery.textScalerOf(context);
+    final cardHeight =
+        math.max(160.0, context.getRSize(160.0)) + textScaler.scale(20.0) - 20.0;
+
     return SharedScaffold(
       activeRoute: 'dashboard',
       appBar: AppBar(
@@ -190,16 +199,19 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
         ),
         // Each report owns its own period filter where its data lives; the hub
         // is just the menu of cards (no duplicate hub-level period bar).
-        child: GridView.count(
-          crossAxisCount: 2,
+        child: GridView(
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 240,
+            mainAxisExtent: cardHeight,
+            mainAxisSpacing: context.spacingM,
+            crossAxisSpacing: context.spacingM,
+          ),
           padding: EdgeInsets.fromLTRB(
             context.spacingM,
             context.spacingM,
             context.spacingM,
             context.spacingM + context.deviceBottomPadding,
           ),
-          mainAxisSpacing: context.spacingM,
-          crossAxisSpacing: context.spacingM,
           children: cards,
         ),
       ),
@@ -216,6 +228,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     int badgeCount = 0,
   }) {
     return Material(
+      key: reportCardKey(title),
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -253,8 +266,9 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                     title,
                     style: context.bodyMedium.copyWith(
                       fontWeight: FontWeight.bold,
-                      fontSize: 15,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -262,6 +276,8 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                     style: context.bodySmall.copyWith(
                       color: Theme.of(context).hintColor,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -270,6 +286,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                   top: 0,
                   right: 0,
                   child: Container(
+                    key: Key('report-card-badge-$title'),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 7,
                       vertical: 3,
