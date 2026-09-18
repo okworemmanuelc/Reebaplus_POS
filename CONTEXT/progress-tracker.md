@@ -8,7 +8,29 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-162 sessions logged. Codebase is live and being verified on-device.
+163 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #244 — Orders migrates onto shared TabbedSliverScaffold (PRD #239) (2026-09-18)
+Branch `feat/orders-tabbed-sliver-scaffold-244`, cut from `main`. Slice of PRD #239.
+- **Problem**:
+  - `OrdersScreen` (`lib/features/orders/screens/orders_screen.dart`) previously hand-rolled `NestedScrollView` with an unpinned `TabBar` inside a `SliverToBoxAdapter` and `TabBarView` body. When scrolled, the tab bar scrolled completely out of sight.
+  - At compact viewports (320x568 portrait and short landscape 800x360), `NestedScrollView` charged its body for scroll-away headers, reducing body extent, while summary strip metric values suffered squashing on narrow widths.
+- **Implementation**:
+  - Replaced hand-rolled `NestedScrollView` and `_StickyTabBarDelegate` with shared `TabbedSliverScaffold` (ADR 0027).
+  - Pinned `TabBar` floored at 48dp using `tabBarExtent: math.max(kMinInteractiveDimension, context.getRSize(72.0))`.
+  - Converted tabs to `TabSliverView` instances with stable storage keys (`orders-pending`, `orders-completed`, `orders-cancelled`) returning per-tab `SliverToBoxAdapter`s for `_SummaryStrip` and Search/Filter controls so they scroll with content, followed by sliver lists (`SliverPadding` + `SliverList.builder`) and `SliverFillRemaining(hasScrollBody: false)` for empty, loading, and error states.
+  - Wrapped summary stat values in `FittedBox(fit: BoxFit.scaleDown)` to prevent text squashing on narrow portrait viewports.
+  - Preserved all permissions, actions, and money visibility gates (`Gates.refundOrder`, `Gates.confirmOrder`, `Gates.seeOrderMoney`).
+  - Added test seams: `kOrderRowKeyPrefix = 'order-card-'` and `orderRowKey(orderId)`.
+  - Unconditional: zero orientation branching, no `isShortViewport` predicate.
+- **Verification**:
+  - Added `test/orders/orders_viewport_test.dart` (11 tests, all passing):
+    - Populated and empty states across 4 viewports (`phoneSe1Portrait`, `androidCompactLandscape`, `pixel7Landscape`, `pixel7Portrait`) asserting `expectNoOverflow` and `expectContentRowVisible`.
+    - Tab switching via tap and index verification.
+    - Per-tab scroll position retention via `PageStorageKey`.
+    - Max text scale (1.3x) without overflow.
+  - Existing orders suite (`test/orders/`, 75 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #242 — Docs: record the five measured corrections to the responsive layout plan (PRD #239) (2026-09-18)
 Branch `docs/responsive-layout-plan-corrections-242`, cut from `main` (`2d221d8`). Slice of PRD #239. Documentation-only slice updating `docs/design/responsive-layout-plan.md` to record the five places where real device and harness measurements contradicted earlier design assumptions, preventing future re-derivation of flawed figures.
