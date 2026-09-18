@@ -8,7 +8,33 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-165 sessions logged. Codebase is live and being verified on-device.
+166 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #260 — Appearance: the selected colour card overflows on narrow phones (2026-09-18)
+Branch `fix/appearance-card-overflow-260`, cut from `main` (`4b17abe`). Standalone bug found during the discovery walk for #239 (#241).
+- **Problem**:
+  - On a 360dp-wide phone upright, selecting a colour card in Settings → Appearance showed a red "RIGHT OVERFLOWED BY 6.0 PIXELS" band. On 320dp-wide phones (iPhone SE1), the shortfall was 26.0px.
+  - Cause: Card top row laid out three fixed-size swatch circles (28dp), gaps (6dp), and an active check badge (24dp), requiring 120dp. On a 360dp phone, each card has width (360 - 48 - 12)/2 = 150dp; minus 4dp active border and 32dp card padding leaves 114dp interior width, producing the exact 6.0px overflow. On a 320dp phone, interior width is 94dp, producing 26.0px overflow.
+  - Additionally, for Black & White, the check badge used `Colors.black` on a `Color(0xFF111111)` background, making the check icon virtually invisible.
+- **Implementation (`lib/core/settings/appearance_settings_screen.dart`)**:
+  - `_AccentCard` wrapped in `LayoutBuilder` with three adaptive width tiers:
+    - `< 100dp` (compact phones like 320dp with narrow margins): 18dp swatches, 3dp gaps, 18dp badge (78dp total).
+    - `< 120dp` (compact phones like 320dp/360dp): 20dp swatches, 4dp gaps, 20dp badge (88dp total, leaving at least 6dp - 26dp breathing room for the `Spacer()`).
+    - `>= 120dp` (comfortable widths): 24dp swatches, 6dp gaps, 24dp badge (108dp total).
+  - `badgeSize` strictly matches `swatchSize` in all tiers, guaranteeing the card top row height is identical whether active or inactive.
+  - Check badge icon color computes dynamically via `ThemeData.estimateBrightnessForColor(activeColor) == Brightness.light ? Colors.black : Colors.white`, ensuring sharp contrast (white check icon on dark accents like Black & White and Blue).
+  - Swatches and check badge are separated by a `Spacer()` with guaranteed width > 0, ensuring the badge is positioned to the right of swatch 3 and never overlaps any swatch.
+  - Label text wraps cleanly with `maxLines: 2` and `overflow: TextOverflow.ellipsis`.
+  - Added test seams: `kAppearanceCardKeyPrefix`, `kAppearanceCheckBadgeKeyPrefix`, `kAppearanceSwatchKeyPrefix` and helper key generators `appearanceCardKey(ds)`, `appearanceCheckBadgeKey(ds)`, `appearanceSwatchKey(ds, index)`.
+- **Verification**:
+  - Added `test/settings/appearance_viewport_test.dart` (22 tests, all passing):
+    - Tested all 5 colours selected across 4 viewports (`phoneSe1Portrait`, `androidCompactPortrait`, `pixel7Portrait`, `androidCompactLandscape`).
+    - Asserted `expectNoOverflow` (reproduced failing 26.0px overflow on 320x568 and 6.0px on 360x800 before fix, passing with zero overflow after fix).
+    - Asserted check badge visibility (`find.byKey(...)`) and confirmed it does not overlap any swatch (`badgeRect.overlaps(swatchRect) == false` and `badgeRect.left >= swatchRect.right`).
+    - Verified card tapping selects its colour and updates `themeController.designSystem`.
+    - Verified zero overflow under 1.3x maximum text scaling on compact viewports.
+  - Existing suite `test/settings/appearance_settings_screen_test.dart` passes.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #257 close-out — Business Reports test covers max text scale at all four viewports (PRD #239) (2026-09-18)
 Branch `test/reports-hub-text-scale-coverage-257`, cut from `main` (`891a748`). Test-only; no production code changed.
