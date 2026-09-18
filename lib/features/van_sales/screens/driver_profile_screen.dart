@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -23,9 +24,23 @@ import 'package:reebaplus_pos/features/van_sales/widgets/driver_ledger_entry_til
 import 'package:reebaplus_pos/features/van_sales/widgets/van_sale_receipt_sheet.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/pinned_tab_bar_delegate.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
+import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
+
+const kDriverTripRowKeyPrefix = 'driver-trip-row-';
+const kDriverSaleRowKeyPrefix = 'driver-sale-row-';
+const kDriverLedgerRowKeyPrefix = 'driver-ledger-row-';
+const kDriverCrateRowKeyPrefix = 'driver-crate-row-';
+
+Key driverTripRowKey(String tripId) =>
+    ValueKey('$kDriverTripRowKeyPrefix$tripId');
+Key driverSaleRowKey(String orderId) =>
+    ValueKey('$kDriverSaleRowKeyPrefix$orderId');
+Key driverLedgerRowKey(String entryId) =>
+    ValueKey('$kDriverLedgerRowKeyPrefix$entryId');
+Key driverCrateRowKey(String tripId) =>
+    ValueKey('$kDriverCrateRowKeyPrefix$tripId');
 
 /// One driver's whole money story (#146, PRD #139 / ADR 0019, van-sales spec
 /// §9.5 / §11).
@@ -52,17 +67,63 @@ import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 /// sitting next to a balance that is a position rather than a flow.
 class DriverProfileScreen extends ConsumerStatefulWidget {
   final String driverUserId;
+  final String initialTab;
 
-  const DriverProfileScreen({super.key, required this.driverUserId});
+  const DriverProfileScreen({
+    super.key,
+    required this.driverUserId,
+    this.initialTab = 'trips',
+  });
 
   @override
   ConsumerState<DriverProfileScreen> createState() =>
       _DriverProfileScreenState();
 }
 
-class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
+class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
+    with TickerProviderStateMixin<DriverProfileScreen> {
   String _timeFilter = 'This Month';
   DateTimeRange? _customRange;
+
+  TabController? _tabController;
+  List<String> _tabKeys = const [];
+
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
+  }
+
+  List<String> _resolveTabKeys({required bool tracksCrates}) => [
+        'trips',
+        'sales',
+        'ledger',
+        if (tracksCrates) 'crates',
+      ];
+
+  void _syncTabController(List<String> tabKeys) {
+    if (_tabController != null && _listEquals(_tabKeys, tabKeys)) return;
+    final previousIndex = _tabController?.index ?? 0;
+    _tabController?.dispose();
+    _tabKeys = tabKeys;
+    final initialIndex = tabKeys.contains(widget.initialTab)
+        ? tabKeys.indexOf(widget.initialTab)
+        : math.min(previousIndex, math.max(0, tabKeys.length - 1));
+    _tabController = TabController(
+      length: tabKeys.length,
+      vsync: this,
+      initialIndex: initialIndex,
+    );
+  }
+
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
 
   List<String> get _periodOptions =>
       datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
@@ -186,58 +247,67 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     // DefaultTabController and TabBarView disagree.
     final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
 
-    return DefaultTabController(
-      length: tracksCrates ? 4 : 3,
-      child: _shell(
-        context,
-        NestedScrollView(
-          headerSliverBuilder: (context, _) => [
-            SliverToBoxAdapter(
-              child: _Header(
-                user: user,
-                standing: standing,
-                trips: trips,
-                vanNameById: vanNameById,
-                assignedVanStoreIds: assignedVanStoreIds,
-                joinedAt: _driverSince(trips),
-              ),
+    final tabKeys = _resolveTabKeys(tracksCrates: tracksCrates);
+    _syncTabController(tabKeys);
+
+    return _shell(
+      context,
+      TabbedSliverScaffold(
+        controller: _tabController!,
+        tabBarExtent: context.getRSize(60),
+        tabBarChromeExtent: _tabBarBottomMargin,
+        tabBar: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: context.getRSize(16),
+          ),
+          child: _tabBar(context, showCrates: tracksCrates),
+        ),
+        headerSlivers: [
+          SliverToBoxAdapter(
+            child: _Header(
+              user: user,
+              standing: standing,
+              trips: trips,
+              vanNameById: vanNameById,
+              assignedVanStoreIds: assignedVanStoreIds,
+              joinedAt: _driverSince(trips),
             ),
-            SliverToBoxAdapter(child: _balanceCard(context, balanceKobo)),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: PinnedTabBarDelegate.withChrome(
-                extent: context.getRSize(60),
-                // _tabBar spends this much of the header on a bottom margin,
-                // so it has to be reserved on top of the 48dp floor or the
-                // TabBar itself lands short of the tap-target minimum.
-                chromeExtent: _tabBarBottomMargin,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: context.getRSize(16),
-                  ),
-                  child: _tabBar(context, showCrates: tracksCrates),
-                ),
-              ),
+          ),
+          SliverToBoxAdapter(child: _balanceCard(context, balanceKobo)),
+        ],
+        tabViews: [
+          TabSliverView(
+            storageKey: 'driver-profile-trips',
+            slivers: _tripsTabSlivers(
+              trips: periodTrips,
+              vanNameById: vanNameById,
+              driverName: user.name,
             ),
-          ],
-          body: TabBarView(
-            children: [
-              _TripsTab(
+          ),
+          TabSliverView(
+            storageKey: 'driver-profile-sales',
+            slivers: _salesTabSlivers(sales: periodSales),
+          ),
+          TabSliverView(
+            storageKey: 'driver-profile-ledger',
+            slivers: _ledgerTabSlivers(
+              entries: periodLedger,
+              vanNameByTripId: {
+                for (final t in trips) t.id: vanNameById[t.vanStoreId] ?? '',
+              },
+            ),
+          ),
+          if (tracksCrates)
+            TabSliverView(
+              storageKey: 'driver-profile-crates',
+              slivers: _cratesTabSlivers(
                 trips: periodTrips,
                 vanNameById: vanNameById,
-                driverName: user.name,
               ),
-              _SalesTab(sales: periodSales),
-              _LedgerTab(entries: periodLedger, vanNameByTripId: {
-                for (final t in trips) t.id: vanNameById[t.vanStoreId] ?? '',
-              }),
-              if (tracksCrates)
-                _CratesTab(trips: periodTrips, vanNameById: vanNameById),
-            ],
-          ),
-        ),
-        subtitle: user.name,
+            ),
+        ],
       ),
+      subtitle: user.name,
     );
   }
 
@@ -301,13 +371,17 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
                   ],
                 ),
                 SizedBox(height: context.getRSize(6)),
-                Text(
-                  formatCurrency(balanceKobo.abs() / 100),
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(28),
-                    fontWeight: FontWeight.w900,
-                    color: color,
-                    letterSpacing: -1,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    formatCurrency(balanceKobo.abs() / 100),
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(28),
+                      fontWeight: FontWeight.w900,
+                      color: color,
+                      letterSpacing: -1,
+                    ),
                   ),
                 ),
                 SizedBox(height: context.getRSize(4)),
@@ -404,6 +478,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
           filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           fallbackBuilder: (context, child) => child,
           child: TabBar(
+            controller: _tabController,
             isScrollable: true,
             tabAlignment: TabAlignment.center,
             indicatorSize: TabBarIndicatorSize.tab,
@@ -438,6 +513,292 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
         ),
       ),
     );
+  }
+
+  List<Widget> _tripsTabSlivers({
+    required List<VanTripData> trips,
+    required Map<String, String> vanNameById,
+    required String driverName,
+  }) {
+    if (trips.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyTab(
+            icon: FontAwesomeIcons.truck.data,
+            message: 'No trips in this period',
+          ),
+        ),
+      ];
+    }
+    return [
+      SliverPadding(
+        padding: _tabPadding(context),
+        sliver: SliverList.builder(
+          itemCount: trips.length,
+          itemBuilder: (_, i) => _TripRow(
+            key: driverTripRowKey(trips[i].id),
+            trip: trips[i],
+            vanName: vanNameById[trips[i].vanStoreId] ?? 'Van',
+            driverName: driverName,
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _salesTabSlivers({required List<OrderWithItems> sales}) {
+    if (sales.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyTab(
+            icon: FontAwesomeIcons.receipt.data,
+            message: 'No road sales in this period',
+          ),
+        ),
+      ];
+    }
+    final t = Theme.of(context);
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final recognised = sales
+        .where((s) => orderCountsAsSale(s.order.status))
+        .fold<int>(0, (sum, s) => sum + s.order.netAmountKobo);
+
+    return [
+      SliverPadding(
+        padding: _tabPadding(context),
+        sliver: SliverList.builder(
+          itemCount: sales.length + 1,
+          itemBuilder: (_, i) {
+            if (i == 0) {
+              return Padding(
+                padding: EdgeInsets.only(bottom: context.getRSize(12)),
+                child: Text(
+                  'Taken on the road in this period: '
+                  '${formatCurrency(recognised / 100)}',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    color: subtext,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              );
+            }
+            final sale = sales[i - 1];
+            return _SaleRow(
+              key: driverSaleRowKey(sale.order.id),
+              sale: sale,
+            );
+          },
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _ledgerTabSlivers({
+    required List<DriverLedgerEntryData> entries,
+    required Map<String, String> vanNameByTripId,
+  }) {
+    if (entries.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyTab(
+            icon: FontAwesomeIcons.fileInvoiceDollar.data,
+            message: 'No account activity in this period',
+          ),
+        ),
+      ];
+    }
+    final t = Theme.of(context);
+    final semantic = t.extension<AppSemanticColors>()!;
+
+    var inKobo = 0;
+    var outKobo = 0;
+    for (final e in entries) {
+      if (e.signedAmountKobo >= 0) {
+        inKobo += e.signedAmountKobo;
+      } else {
+        outKobo += -e.signedAmountKobo;
+      }
+    }
+
+    return [
+      SliverPadding(
+        padding: _tabPadding(context),
+        sliver: SliverList.builder(
+          itemCount: entries.length + 1,
+          itemBuilder: (_, i) {
+            if (i == 0) {
+              return Padding(
+                padding: EdgeInsets.only(bottom: context.getRSize(12)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _SummaryTile(
+                        label: 'Credited this period',
+                        value: inKobo,
+                        color: semantic.success,
+                      ),
+                    ),
+                    SizedBox(width: context.getRSize(10)),
+                    Expanded(
+                      child: _SummaryTile(
+                        label: 'Signed for this period',
+                        value: outKobo,
+                        color: t.colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            final entry = entries[i - 1];
+            return DriverLedgerEntryTile(
+              key: driverLedgerRowKey(entry.id),
+              entry: entry,
+              vanName:
+                  entry.tripId == null ? null : vanNameByTripId[entry.tripId!],
+            );
+          },
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _cratesTabSlivers({
+    required List<VanTripData> trips,
+    required Map<String, String> vanNameById,
+  }) {
+    final t = Theme.of(context);
+    final semantic = t.extension<AppSemanticColors>()!;
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+
+    final withShells = [
+      for (final trip in trips)
+        if (trip.shellsOut != 0 || trip.shellsBack != 0) trip,
+    ];
+    final totalOut = withShells.fold<int>(0, (s, t) => s + t.shellsOut);
+    final totalBack = withShells.fold<int>(0, (s, t) => s + t.shellsBack);
+
+    return [
+      SliverPadding(
+        padding: _tabPadding(context),
+        sliver: SliverList(
+          delegate: SliverChildListDelegate([
+            GlassyCard(
+              padding: EdgeInsets.all(context.getRSize(16)),
+              radius: 16,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Empty crates on the road',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w800,
+                      color: t.colorScheme.onSurface,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(4)),
+                  Text(
+                    'Swap only — no crate deposits are taken or refunded on the '
+                    'road. These are counts, not money.',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: subtext,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(14)),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _CrateStat(label: 'Went out', value: totalOut),
+                      ),
+                      Expanded(
+                        child: _CrateStat(label: 'Came back', value: totalBack),
+                      ),
+                      Expanded(
+                        child: _CrateStat(
+                          label: 'Unaccounted',
+                          value: totalOut - totalBack,
+                          color: totalOut - totalBack > 0
+                              ? semantic.warning
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: context.getRSize(16)),
+            if (withShells.isEmpty)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: context.getRSize(20)),
+                child: Text(
+                  'No crates counted on any trip in this period',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    color: subtext,
+                  ),
+                ),
+              )
+            else
+              ...withShells.map(
+                (trip) => GlassyCard(
+                  key: driverCrateRowKey(trip.id),
+                  margin: EdgeInsets.only(bottom: context.getRSize(12)),
+                  padding: EdgeInsets.all(context.getRSize(16)),
+                  radius: 16,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              vanNameById[trip.vanStoreId] ?? 'Van',
+                              style: TextStyle(
+                                fontSize: context.getRFontSize(14),
+                                fontWeight: FontWeight.w700,
+                                color: t.colorScheme.onSurface,
+                              ),
+                            ),
+                            SizedBox(height: context.getRSize(4)),
+                            Text(
+                              '${DateFormat('d MMM y').format(trip.openedAt)}'
+                              '${trip.status == kVanTripStatusOpen ? ' • on the road' : ''}',
+                              style: TextStyle(
+                                fontSize: context.getRFontSize(12),
+                                color: subtext,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _CrateStat(label: 'Out', value: trip.shellsOut),
+                      SizedBox(width: context.getRSize(14)),
+                      _CrateStat(label: 'Back', value: trip.shellsBack),
+                      SizedBox(width: context.getRSize(14)),
+                      _CrateStat(
+                        label: 'Short',
+                        value: trip.shellsOut - trip.shellsBack,
+                        color: trip.shellsOut - trip.shellsBack > 0
+                            ? semantic.warning
+                            : null,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    ];
   }
 }
 
@@ -576,37 +937,6 @@ class _Header extends StatelessWidget {
 
 // ── Trips ───────────────────────────────────────────────────────────────────
 
-class _TripsTab extends StatelessWidget {
-  final List<VanTripData> trips;
-  final Map<String, String> vanNameById;
-  final String driverName;
-
-  const _TripsTab({
-    required this.trips,
-    required this.vanNameById,
-    required this.driverName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (trips.isEmpty) {
-      return _EmptyTab(
-        icon: FontAwesomeIcons.truck.data,
-        message: 'No trips in this period',
-      );
-    }
-    return ListView.builder(
-      padding: _tabPadding(context),
-      itemCount: trips.length,
-      itemBuilder: (_, i) => _TripRow(
-        trip: trips[i],
-        vanName: vanNameById[trips[i].vanStoreId] ?? 'Van',
-        driverName: driverName,
-      ),
-    );
-  }
-}
-
 /// One trip row: which van, when it went out, how it ended, and the net.
 ///
 /// The status is deliberately three facts and not one: **closed with a balance**
@@ -620,6 +950,7 @@ class _TripRow extends ConsumerWidget {
   final String driverName;
 
   const _TripRow({
+    super.key,
     required this.trip,
     required this.vanName,
     required this.driverName,
@@ -763,56 +1094,10 @@ class _TripRow extends ConsumerWidget {
 
 // ── Sales ───────────────────────────────────────────────────────────────────
 
-class _SalesTab extends StatelessWidget {
-  final List<OrderWithItems> sales;
-
-  const _SalesTab({required this.sales});
-
-  @override
-  Widget build(BuildContext context) {
-    if (sales.isEmpty) {
-      return _EmptyTab(
-        icon: FontAwesomeIcons.receipt.data,
-        message: 'No road sales in this period',
-      );
-    }
-    final t = Theme.of(context);
-    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    final recognised = sales
-        .where((s) => orderCountsAsSale(s.order.status))
-        .fold<int>(0, (sum, s) => sum + s.order.netAmountKobo);
-
-    return ListView.builder(
-      padding: _tabPadding(context),
-      itemCount: sales.length + 1,
-      itemBuilder: (_, i) {
-        if (i == 0) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: context.getRSize(12)),
-            child: Text(
-              // Road takings, NOT cash the business holds — a road sale writes
-              // no payment row (ADR 0019 decision 2). Named so on purpose.
-              'Taken on the road in this period: '
-              '${formatCurrency(recognised / 100)}',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                color: subtext,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          );
-        }
-        final sale = sales[i - 1];
-        return _SaleRow(sale: sale);
-      },
-    );
-  }
-}
-
 class _SaleRow extends StatelessWidget {
   final OrderWithItems sale;
 
-  const _SaleRow({required this.sale});
+  const _SaleRow({super.key, required this.sale});
 
   @override
   Widget build(BuildContext context) {
@@ -900,74 +1185,6 @@ class _SaleRow extends StatelessWidget {
 
 // ── Ledger ──────────────────────────────────────────────────────────────────
 
-class _LedgerTab extends StatelessWidget {
-  final List<DriverLedgerEntryData> entries;
-  final Map<String, String> vanNameByTripId;
-
-  const _LedgerTab({required this.entries, required this.vanNameByTripId});
-
-  @override
-  Widget build(BuildContext context) {
-    if (entries.isEmpty) {
-      return _EmptyTab(
-        icon: FontAwesomeIcons.fileInvoiceDollar.data,
-        message: 'No account activity in this period',
-      );
-    }
-    final t = Theme.of(context);
-    final semantic = t.extension<AppSemanticColors>()!;
-
-    // The period-scoped money figure. A void's compensating row is a real
-    // signed entry and belongs in these totals; the row it reversed is left in
-    // too, and the pair nets to zero, exactly as it does in the balance.
-    var inKobo = 0;
-    var outKobo = 0;
-    for (final e in entries) {
-      if (e.signedAmountKobo >= 0) {
-        inKobo += e.signedAmountKobo;
-      } else {
-        outKobo += -e.signedAmountKobo;
-      }
-    }
-
-    return ListView.builder(
-      padding: _tabPadding(context),
-      itemCount: entries.length + 1,
-      itemBuilder: (_, i) {
-        if (i == 0) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: context.getRSize(12)),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _SummaryTile(
-                    label: 'Credited this period',
-                    value: inKobo,
-                    color: semantic.success,
-                  ),
-                ),
-                SizedBox(width: context.getRSize(10)),
-                Expanded(
-                  child: _SummaryTile(
-                    label: 'Signed for this period',
-                    value: outKobo,
-                    color: t.colorScheme.error,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-        final entry = entries[i - 1];
-        return DriverLedgerEntryTile(
-          entry: entry,
-          vanName: entry.tripId == null ? null : vanNameByTripId[entry.tripId!],
-        );
-      },
-    );
-  }
-}
-
 class _SummaryTile extends StatelessWidget {
   final String label;
   final int value;
@@ -1029,140 +1246,6 @@ class _SummaryTile extends StatelessWidget {
 /// reconstruct it. These are the same two columns `VanTripPosition.shellsOut` /
 /// `shellsBack` report on the reconcile screen, read straight off the trip, so
 /// the two surfaces cannot disagree.
-class _CratesTab extends StatelessWidget {
-  final List<VanTripData> trips;
-  final Map<String, String> vanNameById;
-
-  const _CratesTab({required this.trips, required this.vanNameById});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final semantic = t.extension<AppSemanticColors>()!;
-    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-
-    final withShells = [
-      for (final trip in trips)
-        if (trip.shellsOut != 0 || trip.shellsBack != 0) trip,
-    ];
-    final totalOut = withShells.fold<int>(0, (s, t) => s + t.shellsOut);
-    final totalBack = withShells.fold<int>(0, (s, t) => s + t.shellsBack);
-
-    return ListView(
-      padding: _tabPadding(context),
-      children: [
-        GlassyCard(
-          padding: EdgeInsets.all(context.getRSize(16)),
-          radius: 16,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Empty crates on the road',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w800,
-                  color: t.colorScheme.onSurface,
-                ),
-              ),
-              SizedBox(height: context.getRSize(4)),
-              Text(
-                'Swap only — no crate deposits are taken or refunded on the '
-                'road. These are counts, not money.',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  color: subtext,
-                ),
-              ),
-              SizedBox(height: context.getRSize(14)),
-              Row(
-                children: [
-                  Expanded(
-                    child: _CrateStat(label: 'Went out', value: totalOut),
-                  ),
-                  Expanded(
-                    child: _CrateStat(label: 'Came back', value: totalBack),
-                  ),
-                  Expanded(
-                    child: _CrateStat(
-                      label: 'Unaccounted',
-                      value: totalOut - totalBack,
-                      color: totalOut - totalBack > 0
-                          ? semantic.warning
-                          : null,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: context.getRSize(16)),
-        if (withShells.isEmpty)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: context.getRSize(20)),
-            child: Text(
-              'No crates counted on any trip in this period',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                color: subtext,
-              ),
-            ),
-          )
-        else
-          ...withShells.map(
-            (trip) => GlassyCard(
-              margin: EdgeInsets.only(bottom: context.getRSize(12)),
-              padding: EdgeInsets.all(context.getRSize(16)),
-              radius: 16,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          vanNameById[trip.vanStoreId] ?? 'Van',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.w700,
-                            color: t.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: context.getRSize(4)),
-                        Text(
-                          '${DateFormat('d MMM y').format(trip.openedAt)}'
-                          '${trip.status == kVanTripStatusOpen ? ' • on the road' : ''}',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(12),
-                            color: subtext,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _CrateStat(label: 'Out', value: trip.shellsOut),
-                  SizedBox(width: context.getRSize(14)),
-                  _CrateStat(label: 'Back', value: trip.shellsBack),
-                  SizedBox(width: context.getRSize(14)),
-                  _CrateStat(
-                    label: 'Short',
-                    value: trip.shellsOut - trip.shellsBack,
-                    color: trip.shellsOut - trip.shellsBack > 0
-                        ? semantic.warning
-                        : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 class _CrateStat extends StatelessWidget {
   final String label;
   final int value;
