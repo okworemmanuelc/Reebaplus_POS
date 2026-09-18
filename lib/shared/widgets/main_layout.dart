@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/home_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
@@ -34,7 +35,7 @@ class MainLayout extends ConsumerStatefulWidget {
 }
 
 class _MainLayoutState extends ConsumerState<MainLayout>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static void _voidOnCustomerChanged(dynamic _) {}
 
   // 10 tabs = 10 Navigators (Funds Register removed §23; Deliveries removed).
@@ -81,6 +82,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
   late final Animation<double> _tabFadeAnimation;
   int? _previousTabIndex;
 
+  late final AnimationController _bottomBarController;
+  late final Animation<double> _bottomBarAnimation;
+
   @override
   void initState() {
     super.initState();
@@ -118,7 +122,19 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       curve: Curves.easeOut,
     );
 
+    _bottomBarController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+      value: 1.0,
+    );
+    _bottomBarAnimation = CurvedAnimation(
+      parent: _bottomBarController,
+      curve: Curves.easeOut,
+      reverseCurve: Curves.easeIn,
+    );
+
     _nav.currentIndex.addListener(_onTabIndexChanged);
+    _nav.currentTabCanPop.addListener(_onCurrentTabCanPopChanged);
 
     _pendingOrdersSub = ref
         .read(databaseProvider)
@@ -132,7 +148,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
   @override
   void dispose() {
     _nav.currentIndex.removeListener(_onTabIndexChanged);
+    _nav.currentTabCanPop.removeListener(_onCurrentTabCanPopChanged);
     _tabSwitchController.dispose();
+    _bottomBarController.dispose();
     _pendingOrdersSub?.cancel();
     super.dispose();
   }
@@ -153,6 +171,132 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     if (newIndex == _previousTabIndex) return;
     _previousTabIndex = newIndex;
     _tabSwitchController.forward(from: 0);
+    _showBottomBar(immediate: true);
+  }
+
+  void _onCurrentTabCanPopChanged() {
+    if (!_nav.currentTabCanPop.value) {
+      _showBottomBar(immediate: true);
+    }
+  }
+
+  void _hideBottomBar() {
+    if (_bottomBarController.status != AnimationStatus.reverse &&
+        _bottomBarController.value > 0.0) {
+      _bottomBarController.reverse();
+    }
+  }
+
+  void _showBottomBar({bool immediate = false}) {
+    if (immediate) {
+      if (_bottomBarController.value != 1.0) {
+        _bottomBarController.value = 1.0;
+      }
+    } else if (_bottomBarController.status != AnimationStatus.forward &&
+        _bottomBarController.value < 1.0) {
+      _bottomBarController.forward();
+    }
+  }
+
+  bool _handleScrollNotification(
+    BuildContext context,
+    ScrollNotification notification,
+  ) {
+    // 1. Only sideways (mobile landscape) viewports slide the bottom bar away.
+    // Upright (portrait) and desktop never hide.
+    final isMobileLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape &&
+            !context.isDesktop;
+    if (!isMobileLandscape) {
+      return false;
+    }
+
+    // 2. Only vertical scrolling in the active screen drives it.
+    // Sideways swipes (tabs, chip rows) never toggle it.
+    if (notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    // 3. Resolve the notification's source navigator and ensure it belongs to the
+    // currently active tab. Offstage tabs or unrelated navigators never drive the bar.
+    final notificationContext = notification.context;
+    if (notificationContext == null) {
+      return false;
+    }
+    final sourceNavigator = Navigator.maybeOf(notificationContext);
+    if (!_nav.isActiveTabNavigator(sourceNavigator)) {
+      return false;
+    }
+
+    // 4. If this notification originates from a pushed modal / route (not the root screen),
+    // do not let it toggle or restore the root bottom bar.
+    final route = ModalRoute.of(notificationContext);
+    if (route != null && !route.isFirst) {
+      return false;
+    }
+
+    // 5. If content fits without scrolling (maxScrollExtent <= 0), never hide.
+    if (notification.metrics.maxScrollExtent <= 0) {
+      return false;
+    }
+
+    // 6. If content returns to the top (or in overscroll), always show the bar.
+    if (notification.metrics.pixels <= 0) {
+      _showBottomBar();
+      return false;
+    }
+
+    // 7. Scroll direction handling:
+    if (notification is UserScrollNotification) {
+      if (notification.direction == ScrollDirection.reverse) {
+        _hideBottomBar();
+      } else if (notification.direction == ScrollDirection.forward) {
+        _showBottomBar();
+      }
+    } else if (notification is ScrollUpdateNotification) {
+      final delta = notification.scrollDelta;
+      if (delta != null) {
+        if (delta > 2.0 && notification.metrics.pixels > 10.0) {
+          _hideBottomBar();
+        } else if (delta < -2.0) {
+          _showBottomBar();
+        }
+      }
+    }
+
+    return false;
+  }
+
+  bool _handleScrollMetricsNotification(
+    BuildContext context,
+    ScrollMetricsNotification notification,
+  ) {
+    final isMobileLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape &&
+            !context.isDesktop;
+    if (!isMobileLandscape) {
+      return false;
+    }
+
+    if (notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    final sourceNavigator = Navigator.maybeOf(notification.context);
+    if (!_nav.isActiveTabNavigator(sourceNavigator)) {
+      return false;
+    }
+
+    final route = ModalRoute.of(notification.context);
+    if (route != null && !route.isFirst) {
+      return false;
+    }
+
+    if (notification.metrics.maxScrollExtent <= 0) {
+      _showBottomBar();
+    }
+
+    return false;
   }
 
   // Progressively mount the not-yet-visited tabs offstage, one per frame, after
@@ -286,6 +430,13 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       }
     }
 
+    final isMobileLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape &&
+            !context.isDesktop;
+    if (!isMobileLandscape && _bottomBarController.value < 1.0) {
+      _bottomBarController.value = 1.0;
+    }
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -342,12 +493,23 @@ class _MainLayoutState extends ConsumerState<MainLayout>
             );
           }
 
+          final scrollListeningBody =
+              NotificationListener<ScrollMetricsNotification>(
+            onNotification: (notification) =>
+                _handleScrollMetricsNotification(context, notification),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) =>
+                  _handleScrollNotification(context, notification),
+              child: bodyWidget,
+            ),
+          );
+
           return Stack(
             children: [
               Scaffold(
                 key: nav.mainScaffoldKey,
                 onDrawerChanged: (opened) => nav.drawerOpenNotifier.value = opened,
-                body: bodyWidget,
+                body: scrollListeningBody,
             bottomNavigationBar: context.isDesktop
                 ? null
                 : Builder(
@@ -380,8 +542,22 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                 valueListenable: nav.currentTabCanPop,
                 builder: (context, canPop, _) {
                   if (!isNavTab || canPop) return const SizedBox.shrink();
-                  return BottomNavigationBar(
-                    currentIndex: navIndex,
+                  return AnimatedBuilder(
+                    animation: _bottomBarAnimation,
+                    builder: (context, child) {
+                      return ClipRect(
+                        key: const Key('main-bottom-nav-clip'),
+                        child: Align(
+                          key: const Key('main-bottom-nav-align'),
+                          alignment: Alignment.topCenter,
+                          heightFactor: _bottomBarAnimation.value,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: BottomNavigationBar(
+                      key: const Key('main-bottom-nav'),
+                      currentIndex: navIndex,
                     selectedItemColor: isNavTab
                         ? t.colorScheme.primary
                         : iconColor,
@@ -483,7 +659,8 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                           label: 'Cart',
                         ),
                     ],
-                  );
+                  ),
+                );
                 },
               );
             },
