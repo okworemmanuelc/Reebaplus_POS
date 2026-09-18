@@ -217,28 +217,36 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       return false;
     }
 
-    // 3. If this notification originates from a pushed modal / route (not the root screen),
-    // do not let it toggle or restore the root bottom bar.
+    // 3. Resolve the notification's source navigator and ensure it belongs to the
+    // currently active tab. Offstage tabs or unrelated navigators never drive the bar.
     final notificationContext = notification.context;
-    if (notificationContext != null) {
-      final route = ModalRoute.of(notificationContext);
-      if (route != null && !route.isFirst) {
-        return false;
-      }
+    if (notificationContext == null) {
+      return false;
+    }
+    final sourceNavigator = Navigator.maybeOf(notificationContext);
+    if (!_nav.isActiveTabNavigator(sourceNavigator)) {
+      return false;
     }
 
-    // 4. If content fits without scrolling (maxScrollExtent <= 0), never hide.
+    // 4. If this notification originates from a pushed modal / route (not the root screen),
+    // do not let it toggle or restore the root bottom bar.
+    final route = ModalRoute.of(notificationContext);
+    if (route != null && !route.isFirst) {
+      return false;
+    }
+
+    // 5. If content fits without scrolling (maxScrollExtent <= 0), never hide.
     if (notification.metrics.maxScrollExtent <= 0) {
       return false;
     }
 
-    // 5. If content returns to the top (or in overscroll), always show the bar.
+    // 6. If content returns to the top (or in overscroll), always show the bar.
     if (notification.metrics.pixels <= 0) {
       _showBottomBar();
       return false;
     }
 
-    // 6. Scroll direction handling:
+    // 7. Scroll direction handling:
     if (notification is UserScrollNotification) {
       if (notification.direction == ScrollDirection.reverse) {
         _hideBottomBar();
@@ -271,6 +279,11 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     }
 
     if (notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    final sourceNavigator = Navigator.maybeOf(notification.context);
+    if (!_nav.isActiveTabNavigator(sourceNavigator)) {
       return false;
     }
 

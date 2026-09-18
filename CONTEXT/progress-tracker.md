@@ -23,6 +23,7 @@ Branch `feat/bottom-bar-slides-away-258`, cut from `feat/pos-collapsing-header-2
   - `_bottomBarController` (200ms `AnimationController` with `TickerProviderStateMixin`) and `_bottomBarAnimation` (`CurvedAnimation` with `Curves.easeOut` / `reverseCurve: Curves.easeIn`).
   - Wrapped `BottomNavigationBar` in `AnimatedBuilder` -> `ClipRect(key: Key('main-bottom-nav-clip'))` -> `Align(key: Key('main-bottom-nav-align'), alignment: Alignment.topCenter, heightFactor: _bottomBarAnimation.value)`.
   - Body wrapped in `NotificationListener<ScrollMetricsNotification>` and `NotificationListener<ScrollNotification>`:
+    - Active tab navigator filter (`_nav.isActiveTabNavigator(Navigator.maybeOf(context))`) is evaluated before any bottom-bar state changes or restoration, ensuring offstage kept-alive tabs or nested/unrelated navigators never drive the active bottom bar.
     - Root-route depth check (`ModalRoute.of(context)?.isFirst != false`) is evaluated first so pushed-route notifications (modals/dialogs) are ignored before any bar restoration or pixels checks.
     - Content shrinking to fit (`maxScrollExtent <= 0`) via `ScrollMetricsNotification` restores the bar immediately.
 - **Grid Compact Card Fix (`lib/features/pos/widgets/product_grid.dart`)**:
