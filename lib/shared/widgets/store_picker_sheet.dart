@@ -80,69 +80,79 @@ Future<void> showStorePickerSheet(
               ),
             ),
             SizedBox(height: context.getRSize(8)),
-            ...options.map((o) {
-              final selected = o.id == activeId;
-              return InkWell(
-                onTap: () {
-                  ref.read(navigationProvider).setLockedStore(o.id);
-                  Navigator.of(sheetCtx).pop();
-                  onSelected?.call();
-                },
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: context.getRSize(20),
-                    vertical: context.getRSize(14),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        o.id == null
-                            ? FontAwesomeIcons.layerGroup.data
-                            : FontAwesomeIcons.store.data,
-                        size: context.getRSize(15),
-                        color: selected ? primary : subtextColor,
+            // The option list scrolls inside whatever height the sheet is
+            // given (#239 vertical budget): the default modal cap is 9/16 of
+            // the screen, which in landscape is ~2 rows. Handle + title stay
+            // fixed; only the rows scroll.
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                children: options.map((o) {
+                  final selected = o.id == activeId;
+                  return InkWell(
+                    onTap: () {
+                      ref.read(navigationProvider).setLockedStore(o.id);
+                      Navigator.of(sheetCtx).pop();
+                      onSelected?.call();
+                    },
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: context.getRSize(20),
+                        vertical: context.getRSize(14),
                       ),
-                      SizedBox(width: context.getRSize(14)),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              o.name,
-                              style: TextStyle(
-                                fontWeight: selected
-                                    ? FontWeight.bold
-                                    : FontWeight.w600,
-                                fontSize: context.getRFontSize(14.5),
-                                color: selected ? primary : textColor,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (o.id != null && inventoryCounts[o.id] != null) ...[
-                              SizedBox(height: context.getRSize(2)),
-                              Text(
-                                '${inventoryCounts[o.id]!.skuCount} SKUs (${inventoryCounts[o.id]!.totalQuantity} items)',
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(12),
-                                  color: subtextColor,
+                      child: Row(
+                        children: [
+                          Icon(
+                            o.id == null
+                                ? FontAwesomeIcons.layerGroup.data
+                                : FontAwesomeIcons.store.data,
+                            size: context.getRSize(15),
+                            color: selected ? primary : subtextColor,
+                          ),
+                          SizedBox(width: context.getRSize(14)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  o.name,
+                                  style: TextStyle(
+                                    fontWeight: selected
+                                        ? FontWeight.bold
+                                        : FontWeight.w600,
+                                    fontSize: context.getRFontSize(14.5),
+                                    color: selected ? primary : textColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                            ],
-                          ],
-                        ),
+                                if (o.id != null && inventoryCounts[o.id] != null) ...[
+                                  SizedBox(height: context.getRSize(2)),
+                                  Text(
+                                    '${inventoryCounts[o.id]!.skuCount} SKUs (${inventoryCounts[o.id]!.totalQuantity} items)',
+                                    style: TextStyle(
+                                      fontSize: context.getRFontSize(12),
+                                      color: subtextColor,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          if (selected)
+                            Icon(
+                              FontAwesomeIcons.check.data,
+                              size: context.getRSize(14),
+                              color: primary,
+                            ),
+                        ],
                       ),
-                      if (selected)
-                        Icon(
-                          FontAwesomeIcons.check.data,
-                          size: context.getRSize(14),
-                          color: primary,
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            }),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           ],
         ),
       );

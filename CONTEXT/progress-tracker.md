@@ -326,6 +326,11 @@ Branch `feat/customer-detail-tabbed-sliver-scaffold-245`, cut from `origin/main`
   - All 10 viewport tests passing; entire customer suite passing (12 tests).
 - **Verification**: `flutter analyze` clean with 0 errors and 0 warnings.
 
+### Store picker sheet overflow in landscape (PRD #239 family) (2026-09-18)
+- **Bug:** the Select Store sheet (`lib/shared/widgets/store_picker_sheet.dart`, opened from the drawer and the POS store gate) laid every store row out in a non-scrolling `Column`. The default modal cap is 9/16 of the screen, about 2 rows in landscape, so on a Pixel 7 Pro landscape the rows overflowed by 32px.
+- **Fix:** the handle and title stay fixed. The options now sit in `Flexible` + shrink-wrapped `ListView`, so the sheet stays compact when there is room and scrolls when there is not.
+- **Test:** `test/shared/widgets/store_picker_sheet_test.dart` covers 891x411 landscape (red before the fix, overflowed by 11px) and 411x891 portrait (all rows visible).
+
 ### Issue #241 — overflow discovery sweep (PRD #239) (2026-09-17)
 - **Hook:** `OverflowRouteReporter` (`lib/core/diagnostics/overflow_route_reporter.dart`), installed in `main.dart` after `CrashReporter.install()`. Debug builds only; `install()` returns before touching `FlutterError.onError` in release. Every overflow report prints `[overflow] route=<Screen> (tab: <TabRoot>, offstage) widget=<Widget> :: <summary>`, resolved from the report's own `DebugCreator` element chain, so pre-warmed offstage tabs are attributed correctly. It chains to the previous handler unchanged. 5 tests in `test/diagnostics/overflow_route_reporter_test.dart`.
 - **Sweep:** `test/discovery/viewport_sweep_test.dart` pumps ~70 screens at 800x360 in empty and populated states, and records loud overflows plus silent starvation (a vertical scrollable under 48dp with taller content). It records, it does not assert; it is skipped unless `VIEWPORT_SWEEP=1` (`VIEWPORT_SWEEP_OUT` appends result lines to a file).
