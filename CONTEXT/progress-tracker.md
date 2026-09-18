@@ -14,11 +14,15 @@ The human updates it when resolving open questions or making architectural decis
 Branch `test/reports-hub-text-scale-coverage-257`, cut from `main` (`891a748`). Test-only; no production code changed.
 
 - **Why #257 was still open**: the fix (PR #269) merged into `feat/expenses-tabbed-sliver-scaffold-256`, not `main`. It reached `main` through #256's PR #268, and #272 refined the card spacing on top. GitHub only acts on `Closes #N` when the PR targets the default branch, so the issue never closed.
-- **Audit of `main` against the acceptance criteria**: no orientation or short-viewport branch in `reports_hub_screen.dart` or `ReportsSkeleton`, and the 1.3 test scale matches `main.dart`'s clamp. The badge and tap-each-card tests exist. The one gap: max text scale was tested only at 320x568 and 800x360.
-- **Added**: `pixel7Landscape` (915x412) and `pixel7Portrait` (412x915) at 1.3x in `test/dashboard/reports_hub_viewport_test.dart`, on the same two assertions. **10/10 green.**
-- **Red before, re-run against the pre-fix screen** (`c2b6b24^`, with only the test keys added): all 10 fail. Both landscape sizes fail with **0 complete cards and no overflow**, so an overflow-only test would pass. Portrait sizes overflow 55–150px.
+- **Audit of `main` against the acceptance criteria**: no orientation or short-viewport branch in `reports_hub_screen.dart` or `ReportsSkeleton`, and the 1.3 test scale matches `main.dart`'s clamp. The tap-each-card test exists. Two gaps: max text scale was tested only at 320x568 and 800x360, and the badge only at 412x915 at 1.0x, never inside a complete card.
+- **Added to `test/dashboard/reports_hub_viewport_test.dart`**:
+  - 915x412 and 412x915 at 1.3x, on the same two assertions.
+  - At all four viewports at 1.3x: a 3-digit badge ("128") that must sit inside the complete Approvals card.
+  - **14/14 green.**
+- **Red before, re-run against the pre-fix screen** (`c2b6b24^`, with only the test keys added): all 14 fail. The landscape tests are the ones that prove the silent defect: they fail with **0 complete cards and no overflow**, so an overflow-only test would pass. The portrait, badge-count and tap tests fail on overflow (55–150px), which proves nothing about the tall-card defect.
 - **Wider probe (throwaway, not committed)**: 6 phone sizes × 1.0/1.3 × dark/light, with a 3-digit Approvals badge and every card scrolled into view: no overflow anywhere, and 4–5 complete cards at rest. Cards are 152–196dp tall, 2 per row in portrait and 4 per row sideways.
 - **Open**: owner emulator check by rotating the device.
+
 ### Fix — POS top bar threw on rotation: sideways float no longer uses `SliverFloatingHeader` (follow-up to #259, PRD #239) (2026-09-18)
 Branch `fix/pos-top-bar-rotation-assert`, cut from `main` (`7ca2b32`). Found by the owner on the emulator: rotating on Supplier Accounts stopped the debugger on `RenderBox.size accessed beyond the scope of resize, layout, or permitted parent access` and the app froze mid-rotation.
 
