@@ -68,6 +68,26 @@ Branch `fix/appearance-card-overflow-260`, cut from `main` (`4b17abe`). Standalo
 >>>>>>> origin/main
   - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
+### Issue #257 close-out — Business Reports test covers max text scale at all four viewports (PRD #239) (2026-09-18)
+Branch `test/reports-hub-text-scale-coverage-257`, cut from `main` (`891a748`). Test-only; no production code changed.
+
+- **Why #257 was still open**: the fix (PR #269) merged into `feat/expenses-tabbed-sliver-scaffold-256`, not `main`. It reached `main` through #256's PR #268, and #272 refined the card spacing on top. GitHub only acts on `Closes #N` when the PR targets the default branch, so the issue never closed.
+- **Audit of `main` against the acceptance criteria**: no orientation or short-viewport branch in `reports_hub_screen.dart` or `ReportsSkeleton`, and the 1.3 test scale matches `main.dart`'s clamp. The tap-each-card test exists. Two gaps: max text scale was tested only at 320x568 and 800x360, and the badge only at 412x915 at 1.0x, never inside a complete card.
+- **Added to `test/dashboard/reports_hub_viewport_test.dart`**:
+  - 915x412 and 412x915 at 1.3x, on the same two assertions.
+  - At all four viewports at 1.3x: a 3-digit badge ("128") that must sit inside the complete Approvals card, with the card's icon, title and subtitle inside it too.
+  - At all four viewports at 1.3x: tapping the Approvals card opens Approvals. This one runs with nothing pending; see the finding below.
+  - **18/18 green.**
+- **Finding, not fixed (outside #257)**: with pending requests, `StockApprovalsScreen` trips Flutter's debug-only "ListTile background color or ink splashes may be invisible" assertion. A `ListTile` sits inside a `DecoratedBox` that has a background colour. In release builds the ripple just doesn't show.
+- **Red before, re-run against the pre-fix screen** (`c2b6b24^`, with only the test keys added): all 14 fail. The landscape tests are the ones that prove the silent defect: they fail with **0 complete cards and no overflow**, so an overflow-only test would pass. The portrait, badge-count and tap tests fail on overflow (55–150px), which proves nothing about the tall-card defect.
+- **Wider probe (throwaway, not committed)**: 6 phone sizes × 1.0/1.3 × dark/light, with a 3-digit Approvals badge and every card scrolled into view: no overflow anywhere, and 4–5 complete cards at rest. Cards are 152–196dp tall, 2 per row in portrait and 4 per row sideways.
+- **Verified (2026-09-18)**: the owner watched an emulator pass (720x1600, rotated with the emulator's own control):
+  - Upright: 2 cards per row, all 5 complete.
+  - Sideways: 4 per row, the first row complete; Profit Report scrolls into view below.
+  - No overflow in either orientation.
+  - Approvals opened and Back returned to the hub.
+  - Not done on the emulator: the owner ended the walk before the other cards were tapped (the automated tap test covers them), and the maximum font size was not tried there.
+
 ### Fix — POS top bar threw on rotation: sideways float no longer uses `SliverFloatingHeader` (follow-up to #259, PRD #239) (2026-09-18)
 Branch `fix/pos-top-bar-rotation-assert`, cut from `main` (`7ca2b32`). Found by the owner on the emulator: rotating on Supplier Accounts stopped the debugger on `RenderBox.size accessed beyond the scope of resize, layout, or permitted parent access` and the app froze mid-rotation.
 
