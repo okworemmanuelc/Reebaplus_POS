@@ -461,53 +461,67 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total Expenses',
-                      style: TextStyle(
-                        color: _subtext,
-                        fontSize: context.getRFontSize(13),
-                        fontWeight: FontWeight.w600,
+                // Bounded so a large total or a long store name shrinks or
+                // truncates instead of pushing the period selector off a
+                // 320dp-wide phone.
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total Expenses',
+                        style: TextStyle(
+                          color: _subtext,
+                          fontSize: context.getRFontSize(13),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: context.getRSize(4)),
-                    Text(
-                      formatCurrency(approvedTotalKobo / 100.0),
-                      style: TextStyle(
-                        color: _text,
-                        fontSize: context.getRFontSize(24),
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    // §20.8 — active-store scope caption (only when the picker
-                    // is in play, i.e. more than one selectable store).
-                    if (scopeLabel != null) ...[
                       SizedBox(height: context.getRSize(4)),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            FontAwesomeIcons.store.data,
-                            size: context.getRSize(10),
-                            color: _subtext,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          formatCurrency(approvedTotalKobo / 100.0),
+                          style: TextStyle(
+                            color: _text,
+                            fontSize: context.getRFontSize(24),
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
                           ),
-                          SizedBox(width: context.getRSize(5)),
-                          Text(
-                            scopeLabel,
-                            style: TextStyle(
-                              color: _subtext,
-                              fontSize: context.getRFontSize(11),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
+                      // §20.8 — active-store scope caption (only when the picker
+                      // is in play, i.e. more than one selectable store).
+                      if (scopeLabel != null) ...[
+                        SizedBox(height: context.getRSize(4)),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              FontAwesomeIcons.store.data,
+                              size: context.getRSize(10),
+                              color: _subtext,
+                            ),
+                            SizedBox(width: context.getRSize(5)),
+                            Flexible(
+                              child: Text(
+                                scopeLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: _subtext,
+                                  fontSize: context.getRFontSize(11),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
+                SizedBox(width: context.getRSize(12)),
                 AppDropdown<String>(
                   value: _effectivePeriod.startsWith('Custom:') ? 'Custom' : _effectivePeriod,
                   width: context.getRSize(130),

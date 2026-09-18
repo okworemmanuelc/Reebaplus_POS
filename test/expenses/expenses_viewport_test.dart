@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
 import '../helpers/screen_harness.dart';
@@ -318,9 +319,23 @@ void main() {
 
       // The header scrolls away, so the selector may start off screen; it must
       // still exist at its full height rather than have been shrunk to fit.
-      final selector = find.text('This Month');
+      final selector = find.text('This Month', skipOffstage: false);
       expect(selector, findsWidgets,
           reason: 'The period selector must survive sideways');
+
+      // Measured by layout, not hit-testing, so it holds while the header has
+      // scrolled out of view.
+      final dropdown = find
+          .ancestor(
+            of: selector.first,
+            matching: find.byType(AppDropdown<String>, skipOffstage: false),
+          )
+          .first;
+      expect(
+        tester.getSize(dropdown).height,
+        greaterThanOrEqualTo(kMinInteractiveDimension),
+        reason: 'The period selector must not shrink below a full tap target',
+      );
 
       await teardownScreen(tester);
     });
