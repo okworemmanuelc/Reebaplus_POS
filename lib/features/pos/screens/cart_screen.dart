@@ -38,6 +38,16 @@ import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:flutter/services.dart';
 
+/// Key prefix on every cart line, so a viewport test can assert a *complete*
+/// line is laid out and hit-testable (PRD #239's second assertion — a list
+/// starved to zero height reports no overflow at all).
+const String kCartLineKeyPrefix = 'cart-line-';
+
+/// The key on one cart line. A line is identified by product id AND name, as
+/// `CartService.addItem` merges them: Quick Sale lines carry no product id.
+ValueKey<String> cartLineKey({required String? productId, required String name}) =>
+    ValueKey<String>('$kCartLineKeyPrefix${productId ?? ''}-$name');
+
 class CartScreen extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> cart;
   final Customer? activeCustomer;
@@ -1241,37 +1251,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
             // ── Scrollable content: cart items + totals ──
             Expanded(
               child: cartItems.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            FontAwesomeIcons.cartArrowDown.data,
-                            size: context.getRSize(48),
-                            color: _border,
-                          ),
-                          SizedBox(height: context.getRSize(16)),
-                          Text(
-                            'Cart is empty',
-                            style: TextStyle(
-                              color: _subtext,
-                              fontWeight: FontWeight.bold,
-                              fontSize: context.getRFontSize(16),
-                            ),
-                          ),
-                          SizedBox(height: context.getRSize(20)),
-                          // Recall stays reachable with an empty cart so a
-                          // saved cart can be restored before adding items.
-                          AppButton(
-                            text: 'Recall',
-                            variant: AppButtonVariant.outline,
-                            icon: FontAwesomeIcons.clockRotateLeft.data,
-                            isFullWidth: false,
-                            onPressed: _viewSavedCarts,
-                          ),
-                        ],
-                      ),
-                    )
+                  ? _EmptyCartMessage(onRecall: _viewSavedCarts)
                   : CustomScrollView(
                       slivers: [
                         if (_showCartHint)
@@ -1359,6 +1339,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                   : Theme.of(context).colorScheme.primary;
                               // Build card once, reused in both paths
                               final card = InkWell(
+                                key: cartLineKey(
+                                  productId: item['id'] as String?,
+                                  name: item['name'] as String,
+                                ),
                                 borderRadius: BorderRadius.circular(14),
                                 onTap: _isClearing
                                     ? null
@@ -1835,6 +1819,65 @@ class _CartScreenState extends ConsumerState<CartScreen>
           ],
         ),
       ),
+    );
+  }
+}
+
+/// What the Cart shows with nothing in it: an icon, "Cart is empty", and a
+/// Recall button so a saved cart can be restored before adding items.
+///
+/// Scrolls rather than clips (#255). Centred while there is room; on a short
+/// phone — sideways, under the fixed customer card — the message grows past
+/// the viewport and one scroll reaches Recall. `SliverFillRemaining` sizes to
+/// the larger of the space left and the message itself. The padding keeps
+/// Recall off the bottom bar at the end of a scroll; it never decides whether
+/// a scroll is needed at a supported size.
+class _EmptyCartMessage extends StatelessWidget {
+  final VoidCallback onRecall;
+
+  const _EmptyCartMessage({required this.onRecall});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return CustomScrollView(
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    FontAwesomeIcons.cartArrowDown.data,
+                    size: context.getRSize(48),
+                    color: t.dividerColor,
+                  ),
+                  SizedBox(height: context.getRSize(16)),
+                  Text(
+                    'Cart is empty',
+                    style: TextStyle(
+                      color: t.textTheme.bodySmall?.color ?? t.iconTheme.color!,
+                      fontWeight: FontWeight.bold,
+                      fontSize: context.getRFontSize(16),
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(20)),
+                  AppButton(
+                    text: 'Recall',
+                    variant: AppButtonVariant.outline,
+                    icon: FontAwesomeIcons.clockRotateLeft.data,
+                    isFullWidth: false,
+                    onPressed: onRecall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
