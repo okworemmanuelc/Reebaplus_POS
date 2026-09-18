@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -294,6 +295,33 @@ void main() {
         final badgeRect = tester.getRect(badge);
         expect(cardRect.contains(badgeRect.topLeft), isTrue);
         expect(cardRect.contains(badgeRect.bottomRight), isTrue);
+        for (final part in [
+          find.byIcon(FontAwesomeIcons.clipboardList.data),
+          find.text('Approvals'),
+          find.text('Stock, quick sales & crate deposits'),
+        ]) {
+          expect(find.descendant(of: card, matching: part), findsOneWidget);
+        }
+        await teardownScreen(tester);
+      });
+
+      testWidgets('${entry.key} opens Approvals from its card at max text '
+          'scale (1.3)', (tester) async {
+        await pumpScreen(
+          tester,
+          env: env,
+          size: entry.value,
+          grantedKeys: grantedAll,
+          roleRank: 0,
+          textScaler: const TextScaler.linear(1.3),
+          screen: const ReportsHubScreen(),
+        );
+
+        await tester.tap(find.byKey(reportCardKey('Approvals')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        expectNoOverflow(tester);
+        expect(find.byType(StockApprovalsScreen), findsOneWidget);
         await teardownScreen(tester);
       });
     }
