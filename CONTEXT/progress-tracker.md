@@ -115,6 +115,29 @@ Branch `feat/supplier-detail-tabbed-sliver-scaffold-246`, cut from `main` (`2d22
 - **Follow-up (not this slice)**: `settleScreen`, `teardownScreen` (close the DB inside `runAsync`) and the key-prefix row finder are now copied in three viewport suites (Expenses, Customer Detail, Supplier Detail). Lift them into `test/helpers/screen_harness.dart` before #247 makes it four.
 - **Verified (2026-09-18)**: owner checked on the emulator, rotating the device at rest and mid-scroll — no overflow, no errors; normal phones look unchanged.
 
+### Issue #247 — Driver Profile holds its content at every viewport (adopts shared TabbedSliverScaffold) (PRD #239) (2026-09-18)
+Branch `feat/driver-profile-tabbed-sliver-scaffold-247`, cut from `main`. Slice of PRD #239.
+- **Problem**:
+  - `DriverProfileScreen` (`lib/features/van_sales/screens/driver_profile_screen.dart`) previously hand-rolled `DefaultTabController` and a private `NestedScrollView` with box-based tabs (`_TripsTab`, `_SalesTab`, `_LedgerTab`, `_CratesTab`), each returning `ListView`s.
+  - At compact viewports (320x568 portrait, 800x360 / 915x412 landscape), tall headers (`_header`, `_balanceCard`, date picker) and private scroller wiring caused content starvation in tab bodies and risk of overflow.
+- **Implementation**:
+  - Migrated `DriverProfileScreen` to shared `TabbedSliverScaffold` (ADR 0027).
+  - Converted screen to `TickerProviderStateMixin` with dynamic tab list synchronisation (`_syncTabController`, `_resolveTabKeys`).
+  - Replaced private tab classes with sliver methods: `_tripsTabSlivers`, `_salesTabSlivers`, `_ledgerTabSlivers`, and `_cratesTabSlivers` returning per-tab slivers (`SliverToBoxAdapter` for summary stats/filters and `SliverPadding` + `SliverList.builder` / `SliverFillRemaining(hasScrollBody: false)` for empty states).
+  - Deleted obsolete private classes `_TripsTab`, `_SalesTab`, `_LedgerTab`, and `_CratesTab`.
+  - Floored pinned `TabBar` at 48dp via `tabBarExtent: math.max(kMinInteractiveDimension, context.getRSize(72.0))`.
+  - Wrapped currency balance text in `_balanceCard` with `FittedBox` to prevent squashing/overflow on narrow viewports.
+  - Added test seams and key helpers: `kDriverTripRowKeyPrefix`, `driverTripRowKey`, `driverSaleRowKey`, `driverLedgerRowKey`, `driverCrateRowKey`.
+  - Unconditional fix: zero orientation branching or short-viewport predicates.
+- **Verification**:
+  - Added `test/van_sales/driver_profile_viewport_test.dart` (11 tests, all passing):
+    - Populated and empty states across 4 viewports (`phoneSe1Portrait`, `androidCompactLandscape`, `pixel7Landscape`, `pixel7Portrait`) asserting `expectNoOverflow` and `expectContentRowVisible`.
+    - Per-tab scroll offset retention across tab switches (`PageStorageKey`).
+    - Sideways tab swiping moves between tabs.
+    - Max text scale (1.3x) without overflow at tight viewports.
+  - Full van sales suite (`test/van_sales/`, 211 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
+
 ### Issue #244 — Orders migrates onto shared TabbedSliverScaffold (PRD #239) (2026-09-18)
 Branch `feat/orders-tabbed-sliver-scaffold-244`, cut from `main`. Slice of PRD #239.
 - **Problem**:
