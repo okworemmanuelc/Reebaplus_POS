@@ -601,18 +601,22 @@ class _ProductCardState extends ConsumerState<_ProductCard>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    isOutOfStock
-                        ? 'No stock'
-                        : 'Stock: ${widget.item.totalStock}',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(11),
-                      color: isOutOfStock
-                          ? danger
-                          : (isLowStock ? danger : widget.subtextCol),
-                      fontWeight: (isOutOfStock || isLowStock)
-                          ? FontWeight.bold
-                          : FontWeight.w500,
+                  Flexible(
+                    child: Text(
+                      isOutOfStock
+                          ? 'No stock'
+                          : 'Stock: ${widget.item.totalStock}',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(11),
+                        color: isOutOfStock
+                            ? danger
+                            : (isLowStock ? danger : widget.subtextCol),
+                        fontWeight: (isOutOfStock || isLowStock)
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (isLowStock)

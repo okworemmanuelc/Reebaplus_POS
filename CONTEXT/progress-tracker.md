@@ -8,7 +8,24 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-158 sessions logged. Codebase is live and being verified on-device.
+159 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #258 — Bottom bar slides away sideways (PRD #239) (2026-09-18)
+Branch `feat/bottom-bar-slides-away-258`, cut from `feat/pos-collapsing-header-259`. Slice of PRD #239 (the unfinished half of #259 / PR #265).
+- **Core Feature (`lib/shared/widgets/main_layout.dart`)**:
+  - In landscape phone viewports (`orientation == Orientation.landscape && !context.isDesktop`), scrolling downward into content smoothly animates the bottom navigation bar away, transferring its 56dp height to the screen body without leaving a blank gap.
+  - Reverse scroll (finger drag down), returning to the top (`pixels <= 0`), switching tabs, or rotating the device upright immediately/smoothly restores the bar.
+  - Upright (portrait) and desktop layouts never hide the bar.
+  - Screens whose content fits without scrolling (`maxScrollExtent <= 0`) never hide the bar.
+  - Horizontal gestures (category chips, horizontal tabs) never toggle the bottom bar.
+  - Cart badge and active indicators remain reactive and intact whenever the bar is visible.
+- **Layout Extent & Animation**:
+  - `_bottomBarController` (200ms `AnimationController` with `TickerProviderStateMixin`) and `_bottomBarAnimation` (`CurvedAnimation` with `Curves.easeOut` / `reverseCurve: Curves.easeIn`).
+  - Wrapped `BottomNavigationBar` in `AnimatedBuilder` -> `ClipRect(key: Key('main-bottom-nav-clip'))` -> `Align(key: Key('main-bottom-nav-align'), alignment: Alignment.topCenter, heightFactor: _bottomBarAnimation.value)`.
+  - Body wrapped in `NotificationListener<ScrollNotification>` filtering for `Axis.vertical`, `maxScrollExtent > 0`, and root route depth.
+- **Grid Compact Card Fix (`lib/features/pos/widgets/product_grid.dart`)**:
+  - Wrapped stock status text in `Flexible` with `maxLines: 1` and `TextOverflow.ellipsis` to prevent RenderFlex overflow on dense multi-column grids in landscape.
+- **Verification**: `flutter analyze` clean with 0 errors and 0 warnings. Acceptance suite drafted in `test/shared/main_layout_bottom_bar_viewport_test.dart`.
 
 ### Issue #259 — POS holds its product grid at every viewport (PRD #239) (2026-09-17)
 Branch `feat/pos-collapsing-header-259`, cut from `origin/main` at `973d68a`. Slice of PRD #239. The worst case in the PRD: the grid was **silently** starved, not merely clipped.
