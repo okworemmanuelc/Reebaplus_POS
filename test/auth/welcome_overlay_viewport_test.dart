@@ -403,8 +403,59 @@ void main() {
   });
 
   group('LoginScreen PinPad welcome back test (Issue #261)', () {
-    testWidgets('welcome back text has textAlign center', (tester) async {
-      const size = pixel7Portrait;
+    for (final (label, size) in [
+      ('phoneSe1Portrait', phoneSe1Portrait),
+      ('pixel7Portrait', pixel7Portrait),
+      ('androidCompactLandscape', androidCompactLandscape),
+    ]) {
+      testWidgets('welcome back text has textAlign center on $label', (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final client = Supabase.instance.client;
+        final fake = _FakeAuth(
+          db,
+          NavigationService(),
+          SecureStorageService(),
+          SupabaseSyncService(db, SupabaseCloudTransport(client)),
+          client,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            authProvider.overrideWith((ref) => fake),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          wrapWithTheme(
+            size: size,
+            container: container,
+            child: LoginScreen(presetUser: longNameUser),
+          ),
+        );
+        for (var i = 0; i < 4; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        final welcomeFinder = find.text('Welcome back, Dr.');
+        expect(welcomeFinder, findsOneWidget);
+
+        final welcomeText = tester.widget<Text>(welcomeFinder);
+        expect(welcomeText.textAlign, TextAlign.center);
+
+        expectNoOverflow(tester);
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      });
+    }
+
+    testWidgets('zero overflow at shortest landscape phone at 1.3x text scale', (tester) async {
+      const size = androidCompactLandscape;
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -430,6 +481,7 @@ void main() {
         wrapWithTheme(
           size: size,
           container: container,
+          textScaler: const TextScaler.linear(1.3),
           child: LoginScreen(presetUser: longNameUser),
         ),
       );
