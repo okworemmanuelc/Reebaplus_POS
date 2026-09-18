@@ -21,7 +21,12 @@ Branch `test/reports-hub-text-scale-coverage-257`, cut from `main` (`891a748`). 
   - **14/14 green.**
 - **Red before, re-run against the pre-fix screen** (`c2b6b24^`, with only the test keys added): all 14 fail. The landscape tests are the ones that prove the silent defect: they fail with **0 complete cards and no overflow**, so an overflow-only test would pass. The portrait, badge-count and tap tests fail on overflow (55–150px), which proves nothing about the tall-card defect.
 - **Wider probe (throwaway, not committed)**: 6 phone sizes × 1.0/1.3 × dark/light, with a 3-digit Approvals badge and every card scrolled into view: no overflow anywhere, and 4–5 complete cards at rest. Cards are 152–196dp tall, 2 per row in portrait and 4 per row sideways.
-- **Open**: owner emulator check by rotating the device.
+- **Verified (2026-09-18)**: the owner watched an emulator pass (720x1600, rotated with the emulator's own control):
+  - Upright: 2 cards per row, all 5 complete.
+  - Sideways: 4 per row, the first row complete; Profit Report scrolls into view below.
+  - No overflow in either orientation.
+  - Approvals opened and Back returned to the hub.
+  - Not done on the emulator: the owner ended the walk before the other cards were tapped (the automated tap test covers them), and the maximum font size was not tried there.
 
 ### Fix — POS top bar threw on rotation: sideways float no longer uses `SliverFloatingHeader` (follow-up to #259, PRD #239) (2026-09-18)
 Branch `fix/pos-top-bar-rotation-assert`, cut from `main` (`7ca2b32`). Found by the owner on the emulator: rotating on Supplier Accounts stopped the debugger on `RenderBox.size accessed beyond the scope of resize, layout, or permitted parent access` and the app froze mid-rotation.
