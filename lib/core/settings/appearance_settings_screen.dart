@@ -15,6 +15,15 @@ import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 /// colour — synced via the `business_design_system` setting and applied to
 /// every device (see the bridge in main.dart). Light/dark/system mode is NOT
 /// here — that's a per-device choice under "Display" in the drawer.
+
+const kAppearanceCardKeyPrefix = 'appearance-card-';
+const kAppearanceCheckBadgeKeyPrefix = 'appearance-check-badge-';
+const kAppearanceSwatchKeyPrefix = 'appearance-swatch-';
+
+Key appearanceCardKey(DesignSystem ds) => Key('$kAppearanceCardKeyPrefix${ds.name}');
+Key appearanceCheckBadgeKey(DesignSystem ds) => Key('$kAppearanceCheckBadgeKeyPrefix${ds.name}');
+Key appearanceSwatchKey(DesignSystem ds, int index) => Key('$kAppearanceSwatchKeyPrefix${ds.name}-$index');
+
 class AppearanceSettingsScreen extends ConsumerWidget {
   const AppearanceSettingsScreen({super.key});
 
@@ -63,25 +72,24 @@ class AppearanceSettingsScreen extends ConsumerWidget {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                  24,
-                  24,
-                  24,
-                  24 + context.deviceBottomPadding,
+                  context.getRSize(20),
+                  context.getRSize(24),
+                  context.getRSize(20),
+                  context.getRSize(24) + context.deviceBottomPadding,
                 ),
                 children: [
                   Text(
                     'Pick the colour for the whole business. It applies to every '
                     'device. Light and dark mode stays a personal choice under '
                     'Display.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.4,
+                    style: t.textTheme.bodyMedium?.copyWith(
                       color: t.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: context.getRSize(20)),
                   for (var i = 0; i < _options.length; i += 2) ...[
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: _AccentCard(
@@ -90,7 +98,7 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                             onTap: () => _select(context, ref, _options[i].ds),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        SizedBox(width: context.getRSize(12)),
                         if (i + 1 < _options.length)
                           Expanded(
                             child: _AccentCard(
@@ -104,7 +112,7 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                           const Expanded(child: SizedBox()),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: context.getRSize(12)),
                   ],
                 ],
               ),
@@ -157,12 +165,19 @@ class _AccentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final activeColor = option.swatch.first;
+    final checkIconColor =
+        ThemeData.estimateBrightnessForColor(activeColor) == Brightness.light
+            ? Colors.black
+            : Colors.white;
+
     return GestureDetector(
+      key: appearanceCardKey(option.ds),
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.getRSize(14)),
         decoration: BoxDecoration(
           color: t.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
@@ -171,50 +186,82 @@ class _AccentCard extends StatelessWidget {
             width: isActive ? 2 : 1,
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final double swatchSize;
+            final double swatchGap;
+            final double badgeSize;
+            final double iconSize;
+
+            if (constraints.maxWidth < 100) {
+              swatchSize = 18.0;
+              swatchGap = 3.0;
+              badgeSize = 18.0;
+              iconSize = 11.0;
+            } else if (constraints.maxWidth < 120) {
+              swatchSize = 20.0;
+              swatchGap = 4.0;
+              badgeSize = 20.0;
+              iconSize = 12.0;
+            } else {
+              swatchSize = 24.0;
+              swatchGap = 6.0;
+              badgeSize = 24.0;
+              iconSize = 14.0;
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                for (var i = 0; i < option.swatch.length; i++) ...[
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: option.swatch[i],
-                      shape: BoxShape.circle,
-                      border: Border.all(color: t.dividerColor),
-                    ),
+                Row(
+                  children: [
+                    for (var i = 0; i < option.swatch.length; i++) ...[
+                      Container(
+                        key: appearanceSwatchKey(option.ds, i),
+                        width: swatchSize,
+                        height: swatchSize,
+                        decoration: BoxDecoration(
+                          color: option.swatch[i],
+                          shape: BoxShape.circle,
+                          border: Border.all(color: t.dividerColor),
+                        ),
+                      ),
+                      if (i < option.swatch.length - 1)
+                        SizedBox(width: swatchGap),
+                    ],
+                    const Spacer(),
+                    if (isActive)
+                      Container(
+                        key: appearanceCheckBadgeKey(option.ds),
+                        width: badgeSize,
+                        height: badgeSize,
+                        decoration: BoxDecoration(
+                          color: activeColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.check,
+                          size: iconSize,
+                          color: checkIconColor,
+                        ),
+                      ),
+                  ],
+                ),
+                SizedBox(height: context.getRSize(12)),
+                Text(
+                  option.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(14),
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    color: isActive ? activeColor : t.colorScheme.onSurface,
                   ),
-                  if (i < option.swatch.length - 1) const SizedBox(width: 6),
-                ],
-                const Spacer(),
-                if (isActive)
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: activeColor,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check,
-                      size: 14,
-                      color: Colors.black,
-                    ),
-                  ),
+                ),
               ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              option.label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive ? activeColor : t.colorScheme.onSurface,
-              ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );

@@ -8,7 +8,7 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-166 sessions logged. Codebase is live and being verified on-device.
+167 sessions logged. Codebase is live and being verified on-device.
 
 ### Issue #255 — Empty Cart holds its message and Recall button at every viewport (PRD #239) (2026-09-18)
 Branch `fix/empty-cart-viewport-overflow-255`, cut from `main` (`891a748`). Slice of PRD #239, found by the #241 emulator walk: at 800x360 with nothing in the cart, a red "BOTTOM OVERFLOWED BY 15 PIXELS" band cut the Recall button off.
@@ -17,6 +17,83 @@ Branch `fix/empty-cart-viewport-overflow-255`, cut from `main` (`891a748`). Slic
 - **Why the harness sweep called Cart unaffected (measured, not guessed)**: `pumpScreen` stands the bottom bar in with a bare 56dp box while the Scaffold still strips the 24dp bottom inset from the body; MainLayout's real `BottomNavigationBar` is `56 + viewPadding.bottom`. At 800x360 the 56dp bar left the empty block **14.6dp spare**; the real 80dp bar overflows it by **9.4px**; test fonts' shorter lines account for the rest of the device's 15px. Correcting the harness default turns four existing tests in other suites red (Inventory empty 800x360, POS grid density 568x320, Supplier Detail scroll-retention + swipe) — each its own slice, so the default is left alone and this suite passes the real height. Recorded as `docs/design/responsive-layout-plan.md` §11.7, along with a second gap: `visibleRowCount` measures a row against the screen, not the scroll view that clips it, so at 800x360 it counted a partly clipped Recall and cart line as complete.
 - **Tests** — new `test/pos/cart_viewport_test.dart`, 11 tests: empty × 4 viewports (320x568, 800x360, 915x412, 412x915), empty at 1.3x text on both compact sizes, Recall opens the saved-carts sheet sideways, and with-items × 4 viewports. Each asserts no overflow, the shared content-row assertion (Recall / a cart line), that the target scrolls **wholly** inside the cart's scroll view, and that Change is laid out and hit-testable. The with-items cart is filled before `CartScreen` first builds, as on a phone — filling after the first frame blamed the empty state's overflow on the with-items case. **Red** — the final suite against the unfixed empty branch (line key only): **3 fail / 8 pass** — empty 800x360 (9.4px overflow), empty 800x360 at 1.3x (25px), Recall-opens-sheet (9.4px); every with-items case passes, matching the issue. **Green** after: **11/11**. The wholly-inside check measures against the screen when nothing scrolls, so it judges the defect, not this fix's shape (a first draft required the fix's `CustomScrollView` and failed 4 roomy cases pre-fix for that reason alone). With the scroll-into-view removed, it fails 3 cases at 800x360 that the shared assertion passes. Full suite: all green apart from `test/shared/main_layout_bottom_bar_viewport_test.dart` (#258), which hangs in its first case — reproduced identically on a pristine `origin/main` worktree at `891a748`, so pre-existing. After the fix, at rest Recall needs a scroll only at 800x360 (31.8dp at 1.0x, 47.8dp at 1.3x); everywhere else it fits.
 - **Outstanding**: the owner's emulator check — rotate with an empty cart. **Follow-up to file**: fix both harness gaps in `test/helpers/screen_harness.dart` (bar height = 56 + bottom inset; complete-row check against the clipping scroll view) and fix the four suites that go red with it; lift the wholly-inside rect check, `settleScreen` and `teardownScreen` (now copied across five viewport suites) into the harness at the same time.
+
+### Issue #261 — Long names break the centred welcome headings (welcome overlay + 3 siblings) (2026-09-18)
+Branch `fix/centred-welcome-headings-261`, cut from `origin/main` (`891a748`). Standalone bug found during the discovery walk for #239 (#241).
+- **Problem**:
+  - When staff names wrap (40+ characters or on narrow viewports like iPhone SE1 320x568), four welcome headings aligned left instead of staying centred, and the post-login welcome overlay lacked horizontal inset padding (hugging screen edges).
+  - The 4 Headings:
+    1. Welcome overlay right after login (`SuccessOverlay` in `lib/features/auth/screens/login_screen.dart`).
+    2. "Your business is ready!" in `lib/features/auth/screens/success_dashboard_entry_screen.dart`.
+    3. "Create a PIN" and "Welcome, name!" on Create PIN in `lib/features/auth/screens/create_pin_screen.dart`.
+    4. "Welcome back, first name" in `lib/features/auth/screens/login_screen.dart` (`_PinPad` portrait layout).
+- **Implementation**:
+  - `lib/features/auth/screens/login_screen.dart`:
+    - Exposed `SuccessOverlay` with `@visibleForTesting class SuccessOverlay`.
+    - Wrapped `SuccessOverlay` Column in `Padding(padding: const EdgeInsets.symmetric(horizontal: 24))`.
+    - Added `textAlign: TextAlign.center` to `Text('Welcome, ${user.name}')` and `Text('Opening Reebaplus POS...')`.
+    - Fixed unmanaged timer leak in `_LoadingDotsState`: stored `Timer`s in `_timers` and cancelled them in `dispose()`.
+    - In `_PinPad` portrait layout: added `textAlign: TextAlign.center` to `Text('Welcome back, ${identifiedUser!.name.split(' ').first}')`.
+  - `lib/features/auth/screens/success_dashboard_entry_screen.dart`:
+    - Added `textAlign: TextAlign.center` to `Text('Your business is ready!')`.
+  - `lib/features/auth/screens/create_pin_screen.dart`:
+    - In portrait: added `textAlign: TextAlign.center` to title (`Text(_confirming ? 'Confirm your PIN' : 'Create a PIN')`) and welcome text (`Text('Welcome, ...!')`).
+    - In landscape: added `textAlign: TextAlign.center` to title (`Text(_confirming ? 'Confirm your PIN' : 'Create a PIN')`).
+- **Verification**:
+  - Added `test/auth/welcome_overlay_viewport_test.dart` (16 tests, all passing):
+    - Tested `SuccessOverlay` across 3 viewports (`phoneSe1Portrait`, `pixel7Portrait`, `androidCompactLandscape`) with long full name (40+ chars): verified `textAlign == TextAlign.center`, horizontal insets >= 16dp, and horizontal centering within 1.0dp of screen center.
+    - Tested `SuccessDashboardEntryScreen` across 3 viewports with centering, insets >= 16dp, and zero overflow.
+    - Tested `CreatePinScreen` across 3 viewports with centering, insets >= 16dp, and zero overflow.
+    - Tested `LoginScreen` (`_PinPad`) with `textAlign: TextAlign.center` across 3 viewports (`phoneSe1Portrait`, `pixel7Portrait`, `androidCompactLandscape`).
+    - Tested max text scale (1.3x) without overflow across viewports (`SuccessOverlay`, `SuccessDashboardEntryScreen`, `CreatePinScreen`, `LoginScreen`).
+  - Full auth test suite `test/auth/` (105 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
+
+### Issue #260 — Appearance: the selected colour card overflows on narrow phones (2026-09-18)
+Branch `fix/appearance-card-overflow-260`, cut from `main` (`4b17abe`). Standalone bug found during the discovery walk for #239 (#241).
+- **Problem**:
+  - On a 360dp-wide phone upright, selecting a colour card in Settings → Appearance showed a red "RIGHT OVERFLOWED BY 6.0 PIXELS" band. On 320dp-wide phones (iPhone SE1), the shortfall was 26.0px.
+  - Cause: Card top row laid out three fixed-size swatch circles (28dp), gaps (6dp), and an active check badge (24dp), requiring 120dp. On a 360dp phone, each card has width (360 - 48 - 12)/2 = 150dp; minus 4dp active border and 32dp card padding leaves 114dp interior width, producing the exact 6.0px overflow. On a 320dp phone, interior width is 94dp, producing 26.0px overflow.
+  - Additionally, for Black & White, the check badge used `Colors.black` on a `Color(0xFF111111)` background, making the check icon virtually invisible.
+- **Implementation (`lib/core/settings/appearance_settings_screen.dart`)**:
+  - `_AccentCard` wrapped in `LayoutBuilder` with three adaptive width tiers:
+    - `< 100dp` (compact phones like 320dp with narrow margins): 18dp swatches, 3dp gaps, 18dp badge (78dp total).
+    - `< 120dp` (compact phones like 320dp/360dp): 20dp swatches, 4dp gaps, 20dp badge (88dp total, leaving at least 6dp - 26dp breathing room for the `Spacer()`).
+    - `>= 120dp` (comfortable widths): 24dp swatches, 6dp gaps, 24dp badge (108dp total).
+  - `badgeSize` strictly matches `swatchSize` in all tiers, guaranteeing the card top row height is identical whether active or inactive.
+  - Check badge icon color computes dynamically via `ThemeData.estimateBrightnessForColor(activeColor) == Brightness.light ? Colors.black : Colors.white`, ensuring sharp contrast (white check icon on dark accents like Black & White and Blue).
+  - Swatches and check badge are separated by a `Spacer()` with guaranteed width > 0, ensuring the badge is positioned to the right of swatch 3 and never overlaps any swatch.
+  - Label text wraps cleanly with `maxLines: 2` and `overflow: TextOverflow.ellipsis`.
+  - Added test seams: `kAppearanceCardKeyPrefix`, `kAppearanceCheckBadgeKeyPrefix`, `kAppearanceSwatchKeyPrefix` and helper key generators `appearanceCardKey(ds)`, `appearanceCheckBadgeKey(ds)`, `appearanceSwatchKey(ds, index)`.
+- **Verification**:
+  - Added `test/settings/appearance_viewport_test.dart` (22 tests, all passing):
+    - Tested all 5 colours selected across 4 viewports (`phoneSe1Portrait`, `androidCompactPortrait`, `pixel7Portrait`, `androidCompactLandscape`).
+    - Asserted `expectNoOverflow` (reproduced failing 26.0px overflow on 320x568 and 6.0px on 360x800 before fix, passing with zero overflow after fix).
+    - Asserted check badge visibility (`find.byKey(...)`) and confirmed it does not overlap any swatch (`badgeRect.overlaps(swatchRect) == false` and `badgeRect.left >= swatchRect.right`).
+    - Verified card tapping selects its colour and updates `themeController.designSystem`.
+    - Verified zero overflow under 1.3x maximum text scaling on compact viewports.
+  - Existing suite `test/settings/appearance_settings_screen_test.dart` passes.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
+
+### Issue #257 close-out — Business Reports test covers max text scale at all four viewports (PRD #239) (2026-09-18)
+Branch `test/reports-hub-text-scale-coverage-257`, cut from `main` (`891a748`). Test-only; no production code changed.
+
+- **Why #257 was still open**: the fix (PR #269) merged into `feat/expenses-tabbed-sliver-scaffold-256`, not `main`. It reached `main` through #256's PR #268, and #272 refined the card spacing on top. GitHub only acts on `Closes #N` when the PR targets the default branch, so the issue never closed.
+- **Audit of `main` against the acceptance criteria**: no orientation or short-viewport branch in `reports_hub_screen.dart` or `ReportsSkeleton`, and the 1.3 test scale matches `main.dart`'s clamp. The tap-each-card test exists. Two gaps: max text scale was tested only at 320x568 and 800x360, and the badge only at 412x915 at 1.0x, never inside a complete card.
+- **Added to `test/dashboard/reports_hub_viewport_test.dart`**:
+  - 915x412 and 412x915 at 1.3x, on the same two assertions.
+  - At all four viewports at 1.3x: a 3-digit badge ("128") that must sit inside the complete Approvals card, with the card's icon, title and subtitle inside it too.
+  - At all four viewports at 1.3x: tapping the Approvals card opens Approvals. This one runs with nothing pending; see the finding below.
+  - **18/18 green.**
+- **Finding, not fixed (outside #257)**: with pending requests, `StockApprovalsScreen` trips Flutter's debug-only "ListTile background color or ink splashes may be invisible" assertion. A `ListTile` sits inside a `DecoratedBox` that has a background colour. In release builds the ripple just doesn't show.
+- **Red before, re-run against the pre-fix screen** (`c2b6b24^`, with only the test keys added): all 14 fail. The landscape tests are the ones that prove the silent defect: they fail with **0 complete cards and no overflow**, so an overflow-only test would pass. The portrait, badge-count and tap tests fail on overflow (55–150px), which proves nothing about the tall-card defect.
+- **Wider probe (throwaway, not committed)**: 6 phone sizes × 1.0/1.3 × dark/light, with a 3-digit Approvals badge and every card scrolled into view: no overflow anywhere, and 4–5 complete cards at rest. Cards are 152–196dp tall, 2 per row in portrait and 4 per row sideways.
+- **Verified (2026-09-18)**: the owner watched an emulator pass (720x1600, rotated with the emulator's own control):
+  - Upright: 2 cards per row, all 5 complete.
+  - Sideways: 4 per row, the first row complete; Profit Report scrolls into view below.
+  - No overflow in either orientation.
+  - Approvals opened and Back returned to the hub.
+  - Not done on the emulator: the owner ended the walk before the other cards were tapped (the automated tap test covers them), and the maximum font size was not tried there.
 
 ### Fix — POS top bar threw on rotation: sideways float no longer uses `SliverFloatingHeader` (follow-up to #259, PRD #239) (2026-09-18)
 Branch `fix/pos-top-bar-rotation-assert`, cut from `main` (`7ca2b32`). Found by the owner on the emulator: rotating on Supplier Accounts stopped the debugger on `RenderBox.size accessed beyond the scope of resize, layout, or permitted parent access` and the app froze mid-rotation.
@@ -44,6 +121,29 @@ Branch `feat/supplier-detail-tabbed-sliver-scaffold-246`, cut from `main` (`2d22
 - **Test note**: on a short phone the filled-in header is taller than the screen, so the tab bar and ledger start *below the fold* and finders skip them. The suite drags the `NestedScrollView` (the whole screen, as a thumb does), not the Ledger tab's own view.
 - **Follow-up (not this slice)**: `settleScreen`, `teardownScreen` (close the DB inside `runAsync`) and the key-prefix row finder are now copied in three viewport suites (Expenses, Customer Detail, Supplier Detail). Lift them into `test/helpers/screen_harness.dart` before #247 makes it four.
 - **Verified (2026-09-18)**: owner checked on the emulator, rotating the device at rest and mid-scroll — no overflow, no errors; normal phones look unchanged.
+
+### Issue #247 — Driver Profile holds its content at every viewport (adopts shared TabbedSliverScaffold) (PRD #239) (2026-09-18)
+Branch `feat/driver-profile-tabbed-sliver-scaffold-247`, cut from `main`. Slice of PRD #239.
+- **Problem**:
+  - `DriverProfileScreen` (`lib/features/van_sales/screens/driver_profile_screen.dart`) previously hand-rolled `DefaultTabController` and a private `NestedScrollView` with box-based tabs (`_TripsTab`, `_SalesTab`, `_LedgerTab`, `_CratesTab`), each returning `ListView`s.
+  - At compact viewports (320x568 portrait, 800x360 / 915x412 landscape), tall headers (`_header`, `_balanceCard`, date picker) and private scroller wiring caused content starvation in tab bodies and risk of overflow.
+- **Implementation**:
+  - Migrated `DriverProfileScreen` to shared `TabbedSliverScaffold` (ADR 0027).
+  - Converted screen to `TickerProviderStateMixin` with dynamic tab list synchronisation (`_syncTabController`, `_resolveTabKeys`).
+  - Replaced private tab classes with sliver methods: `_tripsTabSlivers`, `_salesTabSlivers`, `_ledgerTabSlivers`, and `_cratesTabSlivers` returning per-tab slivers (`SliverToBoxAdapter` for summary stats/filters and `SliverPadding` + `SliverList.builder` / `SliverFillRemaining(hasScrollBody: false)` for empty states).
+  - Deleted obsolete private classes `_TripsTab`, `_SalesTab`, `_LedgerTab`, and `_CratesTab`.
+  - Floored pinned `TabBar` at 48dp via `tabBarExtent: math.max(kMinInteractiveDimension, context.getRSize(72.0))`.
+  - Wrapped currency balance text in `_balanceCard` with `FittedBox` to prevent squashing/overflow on narrow viewports.
+  - Added test seams and key helpers: `kDriverTripRowKeyPrefix`, `driverTripRowKey`, `driverSaleRowKey`, `driverLedgerRowKey`, `driverCrateRowKey`.
+  - Unconditional fix: zero orientation branching or short-viewport predicates.
+- **Verification**:
+  - Added `test/van_sales/driver_profile_viewport_test.dart` (11 tests, all passing):
+    - Populated and empty states across 4 viewports (`phoneSe1Portrait`, `androidCompactLandscape`, `pixel7Landscape`, `pixel7Portrait`) asserting `expectNoOverflow` and `expectContentRowVisible`.
+    - Per-tab scroll offset retention across tab switches (`PageStorageKey`).
+    - Sideways tab swiping moves between tabs.
+    - Max text scale (1.3x) without overflow at tight viewports.
+  - Full van sales suite (`test/van_sales/`, 211 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #244 — Orders migrates onto shared TabbedSliverScaffold (PRD #239) (2026-09-18)
 Branch `feat/orders-tabbed-sliver-scaffold-244`, cut from `main`. Slice of PRD #239.
