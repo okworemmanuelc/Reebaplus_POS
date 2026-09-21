@@ -8,13 +8,38 @@ String camelToSnake(String input) {
   return input.replaceAllMapped(exp, (m) => '_${m.group(1)!}').toLowerCase();
 }
 
-/// Drift's default `DataClass.toJson()` serializes `DateTime` as integer
-/// milliseconds since epoch, which Postgres rejects as a `timestamptz`
-/// literal (22008 / "date/time field value out of range"). Force ISO-8601
-/// strings so the cloud accepts the value directly.
-const _cloudSerializer = ValueSerializer.defaults(
-  serializeDateTimeValuesAsString: true,
-);
+/// A Drift [ValueSerializer] that serializes [DateTime] values to UTC ISO-8601
+/// strings with an explicit `Z` zone designator (e.g. `2026-09-13T22:22:03.000Z`).
+///
+/// Drift's default `ValueSerializer.defaults(serializeDateTimeValuesAsString: true)`
+/// calls `value.toIso8601String()` without `.toUtc()`. Because Drift reads
+/// unix-seconds columns back from SQLite as local `DateTime`s, the default
+/// serializer emits zone-less strings (e.g. `2026-09-13T23:22:03.000`). Postgres
+/// interprets zone-less `timestamptz` literals as UTC, which shifts records from
+/// devices in non-UTC time zones (such as Nigeria / WAT, UTC+1) forward by their
+/// offset (#286).
+class CloudValueSerializer extends ValueSerializer {
+  const CloudValueSerializer();
+
+  static const _defaultSerializer = ValueSerializer.defaults(
+    serializeDateTimeValuesAsString: true,
+  );
+
+  @override
+  dynamic toJson<T>(T value) {
+    if (value is DateTime) {
+      return value.toUtc().toIso8601String();
+    }
+    return _defaultSerializer.toJson<T>(value);
+  }
+
+  @override
+  T fromJson<T>(dynamic json) {
+    return _defaultSerializer.fromJson<T>(json);
+  }
+}
+
+const _cloudSerializer = CloudValueSerializer();
 
 /// Robust serialization helper to extract cloud-ready key-value maps
 /// from any Drift `Insertable` (supporting both `DataClass` and `Companion`).
@@ -43,7 +68,7 @@ Map<String, dynamic> serializeInsertable(Insertable row) {
     final snakeKey = camelToSnake(k);
     var val = v;
     if (val is DateTime) {
-      val = val.toUtc().toIso8601String();
+      val = _cloudSerializer.toJson(val);
     }
     return MapEntry(snakeKey, val);
   });
