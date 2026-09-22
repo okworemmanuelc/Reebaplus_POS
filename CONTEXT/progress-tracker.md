@@ -26,8 +26,8 @@ Branch `fix/dataclass-serializer-utc-286`, cut from `main` (`83fbf7d`).
     - Red test verified first: `UserData` and `CostBatchData` serialization failed prior to fix (produced zone-less strings without `Z`), green after fix.
     - Guard test: representative `DataClass` instances across synced tables (`BusinessData`, `StoreData`, `CategoryData`, `SupplierData`, `ProductData`, `InventoryData`, `CustomerData`, `OrderData`, `ExpenseData`, `SettingData`, `SessionData`) verify all `DateTime` fields serialize with `Z` suffix.
     - Companion path output verified unchanged and produces `Z` suffix.
-    - Instant parity: `created_at` and `received_at` match the UUIDv7 creation instant within seconds (not shifted by 3600 seconds).
-    - DAO integration tests: `enqueueUpsert` with `UserData` and `CostBatchData` re-read from Drift enqueues payloads carrying UTC `Z` timestamps.
+    - Instant parity: `created_at` (UserData) matches UUIDv7 creation instant within seconds; `received_at` (CostBatchData) uses a deterministic UUIDv7 and asserts exact equality with the UUIDv7 embedded instant.
+    - DAO integration tests: `enqueueUpsert` with `UserData` and `CostBatchData` re-read from Drift enqueues payloads carrying UTC `Z` timestamps matching their respective UUIDv7 instants.
   - Full sync suite (`test/sync/`, 244 tests) all pass.
   - Full costing suite (`test/costing/`, 64 tests) all pass.
   - `flutter analyze lib test` clean (0 errors, 0 warnings).

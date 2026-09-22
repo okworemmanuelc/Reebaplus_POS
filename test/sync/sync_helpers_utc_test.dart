@@ -435,14 +435,23 @@ void main() {
     );
 
     test(
-      'enqueueUpsert with CostBatchData re-read from Drift enqueues payload with UTC Z timestamps',
+      'enqueueUpsert with CostBatchData re-read from Drift enqueues payload with UTC Z timestamps matching UUIDv7 instant',
       () async {
         final boot = await bootstrapTestDb();
         try {
           final storeId = UuidV7.generate();
           final productId = UuidV7.generate();
-          final batchId = UuidV7.generate();
           final localReceived = DateTime(2026, 9, 13, 23, 22, 3);
+
+          // Deterministic UUIDv7 whose embedded 48-bit timestamp matches localReceived instant
+          final epochMs = localReceived.toUtc().millisecondsSinceEpoch;
+          final msHex = epochMs.toRadixString(16).padLeft(12, '0');
+          final batchId =
+              '${msHex.substring(0, 8)}-${msHex.substring(8, 12)}-7000-8000-000000000001';
+          final uuidInstantUtc = DateTime.fromMillisecondsSinceEpoch(
+            int.parse(batchId.replaceAll('-', '').substring(0, 12), radix: 16),
+            isUtc: true,
+          );
 
           await boot.db.into(boot.db.stores).insert(
                 StoresCompanion.insert(
@@ -493,6 +502,10 @@ void main() {
 
           final parsedUtc = DateTime.parse(receivedAtStr).toUtc();
           expect(parsedUtc.isAtSameMomentAs(localReceived.toUtc()), isTrue);
+          expect(parsedUtc, equals(uuidInstantUtc),
+              reason: 'serialized received_at ($parsedUtc) must equal UUIDv7 embedded instant ($uuidInstantUtc)');
+          expect(receivedAtStr, equals(uuidInstantUtc.toIso8601String()),
+              reason: 'serialized received_at string must equal ISO-8601 representation of UUIDv7 instant');
         } finally {
           await boot.db.close();
         }
