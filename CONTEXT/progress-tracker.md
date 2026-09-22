@@ -8,7 +8,16 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-169 sessions logged. Codebase is live and being verified on-device.
+170 sessions logged. Codebase is live and being verified on-device.
+
+### Fix — The bottom-bar widget test hung the whole test suite (follow-up to #258) (2026-09-22)
+Branch `fix/bottom-bar-test-hang`, cut from `main` (`19e0b72`), worked in `../drinkPosApp-wt-bottom-bar-hang` because another session held the shared checkout. `test/shared/main_layout_bottom_bar_viewport_test.dart` ran 9+ minutes on its first test and ignored `--timeout`, so no full `flutter test` run could finish.
+
+- **Cause**: every test body passed. The hang was `db.close()` in `tearDown`: the harness disposes the Riverpod container after the widget test's fake clock stops, provider-held Drift streams then schedule `Timer.run` cleanups on that dead clock, and `close()` waits for them forever. `MainLayout` warms every tab offstage, so it was the only harness screen holding long-lived provider streams.
+- **Fix (harness, `test/helpers/screen_harness.dart`)**: the test database now opens with `closeStreamsSynchronously: true`; `ScreenTestEnvironment.dispose()` bounds `close()` to 10 real seconds and throws a message pointing at the first failure (a failed widget test leaves its tree mounted, which would otherwise hang again); the harness `MediaQuery` reads its size from the view, so tests can rotate the device.
+- **Fix (the test file)**: once the hang was gone, the file ran to completion for the first time and five latent test defects surfaced. (1) The "fits without scrolling" test built its database inside the fake clock and hung on its own; it now uses `tester.runAsync`. (2) Every post-drag check used a single `pump(250ms)`, which only *starts* the slide animation. The hide checks failed, and the three "never hides" checks passed without ever being able to see the bar move. Each drag is now followed by `pump(); pump(250ms)`. (3) "Fits without scrolling" used POS, which always scrolls sideways (its collapsing header gives 92dp of scroll room at 800x360 even with no products); it now uses the empty Cart on a sideways 7" tablet (960x600, under the 1024dp side-rail cutoff) and asserts `maxScrollExtent <= 0` as a precondition. (4) "Back to the top" overpulled into pull-to-refresh, which started a real sync and left a timer pending; it now drags back exactly to the top. (5) The rotation test couldn't rotate, because the harness pinned `MediaQuery` (fixed by the harness change above).
+- **Verified**: the file passes 8/8 in ~3s (was a 9+ minute hang). Mutation checks: removing `MainLayout`'s "fits → never hide" and "at top → show" guards turns the fits test red, removing the "upright → restore" reset turns the rotation test red, and in both cases the failing run ends in seconds instead of hanging. All 15 files that use the harness pass (175 passed, 140 skipped by their own `skip:` markers). No `lib/` change.
+- **Full suite**: `flutter test` completes — 2332 passed, 271 skipped, 0 failed in 2m07s. Before this fix it never finished.
 
 ### Issue #285 — Sign-in fails (UNIQUE users.auth_user_id) when the phone still holds an old business's data (2026-09-22)
 Branch `fix/stale-business-signin-285`, cut from `main` (`83fbf7d`). Reported from a physical phone: signing in with the email code or with Google failed every time, with `SqliteException(2067) … UNIQUE constraint failed: users.auth_user_id`.
