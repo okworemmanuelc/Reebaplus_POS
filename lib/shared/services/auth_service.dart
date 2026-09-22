@@ -959,33 +959,36 @@ class AuthService extends ValueNotifier<UserData?> {
   /// Read from `businesses` UNION the tenants referenced by `users`: the #285
   /// phone can hold a stale `users` row whose `businesses` row never arrived
   /// (or was already removed), and that row is exactly the one that collides.
+  /// This read deliberately spans every business on the device: naming them is
+  /// the whole job, and no tenant DATA is read (invariant #5 is about rows, and
+  /// the sibling [_soleLocalBusinessId] / [wipeIfActiveBusinessDeleted] already
+  /// read `businesses` the same pre-session way).
   Future<List<({String id, String name})>> _localBusinessesOtherThan(
     String? keepBusinessId,
   ) async {
-    final rows = await _db.customSelect(
-      'SELECT id AS bid, name AS bname FROM businesses '
-      'UNION '
-      'SELECT DISTINCT u.business_id AS bid, NULL AS bname FROM users u '
-      'WHERE u.business_id NOT IN (SELECT id FROM businesses)',
-    ).get();
+    final businesses = await _db.select(_db.businesses).get();
+    final namesById = {for (final b in businesses) b.id: b.name};
+
+    // A stale `users` row can outlive its `businesses` row — and that row is
+    // exactly the one whose `auth_user_id` collides — so the tenants the
+    // `users` table references count even when no `businesses` row names them.
+    final users = await _db.select(_db.users).get();
+    final ids = <String>{...namesById.keys, for (final u in users) u.businessId};
+
     return [
-      for (final r in rows)
-        if (r.read<String>('bid') != keepBusinessId)
-          (
-            id: r.read<String>('bid'),
-            name: r.read<String?>('bname') ?? 'your previous business',
-          ),
+      for (final id in ids)
+        if (id != keepBusinessId)
+          (id: id, name: namesById[id] ?? 'your previous business'),
     ];
   }
 
   /// The local `users` ids belonging to [businessId], read BEFORE the clear so
   /// the caller can tell whether the device-user pointer is about to dangle.
   Future<Set<String>> _localUserIdsForBusiness(String businessId) async {
-    final rows = await _db.customSelect(
-      'SELECT id FROM users WHERE business_id = ?1',
-      variables: [Variable.withString(businessId)],
-    ).get();
-    return {for (final r in rows) r.read<String>('id')};
+    final rows = await (_db.select(
+      _db.users,
+    )..where((u) => u.businessId.equals(businessId))).get();
+    return {for (final r in rows) r.id};
   }
 
   /// Abandons a sign-in that the user cancelled at the clear-other-business
