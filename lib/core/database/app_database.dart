@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
+import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/sync_cursor_reset_service.dart';
 export 'daos.dart';
@@ -6381,16 +6382,19 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
-  Future<void> clearAllData() async {
-    // Append-only ledger tables carry BEFORE DELETE triggers that RAISE(ABORT)
-    // (e.g. `crate_ledger_no_delete`, `<ledger>_no_delete`). PRAGMA
-    // foreign_keys = OFF does NOT disable triggers, so on a real till — which
-    // always has ledger rows (sales, stock movements) — the first ledger
-    // delete aborts the whole transaction and NOTHING is wiped, leaving the
-    // PIN-bearing `users` row behind. A full device wipe must legitimately drop
-    // those guards: capture each delete-event trigger's DDL, drop it, wipe,
-    // then recreate it verbatim (even if the wipe throws). The bump_* (UPDATE)
-    // and _immutable (UPDATE) triggers don't fire on DELETE, so they're left.
+  /// Runs [body] with every delete-event trigger and foreign-key enforcement
+  /// temporarily off, then restores both — even if [body] throws.
+  ///
+  /// Append-only ledger tables carry BEFORE DELETE triggers that RAISE(ABORT)
+  /// (e.g. `crate_ledger_no_delete`, `<ledger>_no_delete`). PRAGMA
+  /// foreign_keys = OFF does NOT disable triggers, so on a real till — which
+  /// always has ledger rows (sales, stock movements) — the first ledger
+  /// delete aborts the whole transaction and NOTHING is wiped, leaving the
+  /// PIN-bearing `users` row behind. A deliberate wipe must legitimately drop
+  /// those guards: capture each delete-event trigger's DDL, drop it, wipe,
+  /// then recreate it verbatim. The bump_* (UPDATE) and _immutable (UPDATE)
+  /// triggers don't fire on DELETE, so they're left alone.
+  Future<void> _withDeleteGuardsSuspended(Future<void> Function() body) async {
     final triggers = await customSelect(
       "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'",
     ).get();
@@ -6412,11 +6416,7 @@ class AppDatabase extends _$AppDatabase {
           'DROP TRIGGER IF EXISTS ${r.read<String>('name')}',
         );
       }
-      await transaction(() async {
-        for (final table in allTables) {
-          await delete(table).go();
-        }
-      });
+      await body();
     } finally {
       // Recreate the guards from their own captured DDL — restores the
       // append-only protection even if the wipe above threw.
@@ -6428,6 +6428,91 @@ class AppDatabase extends _$AppDatabase {
       }
       await customStatement('PRAGMA foreign_keys = ON');
     }
+  }
+
+  /// The business-scoped tables, discovered from the Drift schema rather than a
+  /// hand-written list: every table that carries a `business_id` column, sorted
+  /// CHILDREN FIRST.
+  ///
+  /// `kSyncPullOrder` is FK-safe parents-first, so its reverse is children-
+  /// first; tables outside the registry are device-local leaves and go first.
+  /// Deriving the list from the schema is what makes [clearBusinessData] cover
+  /// a new table the day it is added instead of the day someone remembers.
+  List<String> get businessScopedTableNames {
+    final rank = <String, int>{
+      for (var i = 0; i < kSyncPullOrder.length; i++) kSyncPullOrder[i]: i,
+    };
+    final names = allTables
+        .where((t) => t.$columns.any((c) => c.name == 'business_id'))
+        .map((t) => t.actualTableName)
+        .toList();
+    names.sort(
+      (a, b) => (rank[b] ?? kSyncPullOrder.length).compareTo(
+        rank[a] ?? kSyncPullOrder.length,
+      ),
+    );
+    return names;
+  }
+
+  /// Removes every trace of ONE business from this device, leaving every other
+  /// business — and all device-level data (the permissions catalogue, app
+  /// settings) — untouched.
+  ///
+  /// #285: a login outlives the businesses it belonged to, so a phone can hold
+  /// an older business's rows while signing in to a new one. Wiping the whole
+  /// device ([clearAllData]) would take the current business's unsent sales
+  /// with it and force a full re-download; this clears only the tenant named by
+  /// [businessId].
+  ///
+  /// Covers the business-scoped tables, the `businesses` row itself, both
+  /// outbox tables, and the per-business SharedPreferences keys that live
+  /// outside Drift and would otherwise survive (the same wipe-trap pattern
+  /// [clearAllData] documents).
+  Future<void> clearBusinessData(String businessId) async {
+    final scoped = businessScopedTableNames;
+    await _withDeleteGuardsSuspended(() async {
+      await transaction(() async {
+        for (final table in scoped) {
+          await customStatement(
+            'DELETE FROM $table WHERE business_id = ?1',
+            [businessId],
+          );
+        }
+        // `sync_queue_orphans` has no `business_id` column — its tenant is the
+        // one embedded in the payload, exactly how `SyncDao.countOrphans`
+        // scopes it.
+        await customStatement(
+          'DELETE FROM sync_queue_orphans WHERE COALESCE('
+          "json_extract(payload, '\$.business_id'), "
+          "json_extract(payload, '\$.p_business_id')) = ?1",
+          [businessId],
+        );
+        await customStatement(
+          'DELETE FROM businesses WHERE id = ?1',
+          [businessId],
+        );
+      });
+    });
+
+    // Prefs keys survive the Drift deletes above, so clear this business's own
+    // — and ONLY this business's — first-load marker and pull cursors.
+    // Best-effort: a prefs hiccup must not fail the clear.
+    try {
+      await FirstLoadMarkerService.clearMarkerForBusiness(businessId);
+    } catch (_) {}
+    try {
+      await SyncCursorResetService.clearForBusiness(businessId);
+    } catch (_) {}
+  }
+
+  Future<void> clearAllData() async {
+    await _withDeleteGuardsSuspended(() async {
+      await transaction(() async {
+        for (final table in allTables) {
+          await delete(table).go();
+        }
+      });
+    });
 
     // The wipe above emptied the global `permissions` catalogue along with
     // everything else. It is static config that is never re-pulled by sync, so
@@ -6485,7 +6570,7 @@ void markDbReadyWithError([Object? error]) {
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'reebaplus_pos.sqlite'));
+    final file = File(p.join(dbFolder.path, kLocalDatabaseFileName));
 
     return NativeDatabase(
       file,

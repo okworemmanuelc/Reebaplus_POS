@@ -192,18 +192,23 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     // exists. Users has UNIQUE(business_id, email), so a single email can hold
     // one local row PER business (multi-business account / staff re-invite).
     // Tolerate >1 row instead of crashing (getSingleOrNull throws on multi-row,
-    // which would kill the sign-in / upsertLocalUserFromProfile rebuild): prefer
-    // the row for the active/cloud business, else the most-recently-updated.
+    // which would kill the sign-in / upsertLocalUserFromProfile rebuild).
     final rows = await (select(
       users,
     )..where((t) => t.email.equals(email))).get();
     if (rows.isEmpty) return null;
-    if (rows.length == 1) return rows.first;
+    // [preferredBusinessId] is the business the CLOUD named for this sign-in,
+    // so it is a filter, not a tiebreaker: a row from any other business
+    // belongs to a tenant this login has left behind, and binding it logs the
+    // user into the wrong business (#285 — the row count is irrelevant, the
+    // single-row shortcut used to skip this check and return the stale row).
     if (preferredBusinessId != null) {
       for (final r in rows) {
         if (r.businessId == preferredBusinessId) return r;
       }
+      return null;
     }
+    if (rows.length == 1) return rows.first;
     rows.sort((a, b) => b.lastUpdatedAt.compareTo(a.lastUpdatedAt));
     return rows.first;
   }

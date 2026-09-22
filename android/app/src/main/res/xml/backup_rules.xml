@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and below (fullBackupContent). Belt to `allowBackup="false"`'s
+  braces: exclude every storage domain so no vendor or OEM backup agent can
+  lift the Drift database off the device (#285).
+
+  Why this matters: the database is a till's local source of truth, and it is
+  restored WITHOUT the secure-storage session that scopes it. A restored copy
+  lands on a phone whose signed-in identity may belong to an entirely different
+  business, which is exactly the stale-business collision #285 fixes.
+-->
+<full-backup-content>
+    <exclude domain="root" />
+    <exclude domain="file" />
+    <exclude domain="database" />
+    <exclude domain="sharedpref" />
+    <exclude domain="external" />
+</full-backup-content>

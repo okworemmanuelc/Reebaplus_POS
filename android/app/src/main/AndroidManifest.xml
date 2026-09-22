@@ -30,9 +30,18 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
 
+    <!-- #285: keep the local database out of phone backups. The Drift DB is
+         restored without the secure-storage session that scopes it, so a
+         restored or transferred copy can arrive on a phone signed in to a
+         different business. allowBackup=false covers cloud backup; the
+         dataExtractionRules file also covers device-to-device transfer on
+         API 31+, which allowBackup alone does not stop. -->
     <application
         android:label="Reebaplus POS"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
