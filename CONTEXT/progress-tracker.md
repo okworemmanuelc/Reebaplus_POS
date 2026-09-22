@@ -8,7 +8,27 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-170 sessions logged. Codebase is live and being verified on-device.
+171 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #282 — Approvals: request cards show no tap ripple, and debug builds report a framework error (2026-09-22)
+Branch `fix/approvals-card-tap-ripple-282`, cut from `main`.
+- **Problem**:
+  - In `lib/features/dashboard/screens/stock_approvals_screen.dart`, approval request cards (`_ApprovalCardState`, `_QuickSaleApprovalCardState`, `_CrateDepositApprovalCardState`) wrapped `ExpansionTile` in a `Container(decoration: BoxDecoration(color: context.surfaceColor, ...))` with `clipBehavior: Clip.antiAlias`.
+  - In debug builds, Flutter threw the assertion: `"ListTile background color or ink splashes may be invisible. The ListTile is wrapped in a DecoratedBox that has a background color."`
+  - In release/profile, the opaque Container background painted over the underlying `Material` widget, preventing tap highlights and ripples from being visible when tapping any card to expand/collapse.
+- **Fix (`lib/features/dashboard/screens/stock_approvals_screen.dart`)**:
+  - Replaced `Container(decoration: BoxDecoration(...))` with `Material(color: context.surfaceColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(context.radiusL), side: BorderSide(color: _accent.withValues(alpha: 0.25))), clipBehavior: Clip.antiAlias)` across all three card widgets (`_ApprovalCard`, `_QuickSaleApprovalCard`, `_CrateDepositApprovalCard`).
+  - Added test key constants and helper functions: `kStockApprovalCardKeyPrefix`, `kQuickSaleApprovalCardKeyPrefix`, `kCrateDepositApprovalCardKeyPrefix`, `stockApprovalCardKey(id)`, `quickSaleApprovalCardKey(id)`, `crateDepositApprovalCardKey(id)`.
+  - Wrapped subtitle timestamp in `Flexible` with `TextOverflow.ellipsis` in all three cards to prevent text overflow under wide/scaled fonts.
+- **Verification**:
+  - Created `test/dashboard/stock_approvals_screen_test.dart` (9 tests, all passing):
+    - Confirmed no framework error when opening Approvals with pending stock adjustment, quick sale, and crate deposit requests.
+    - Verified card appearance matches design specs: surface color, rounded corners (`radiusL`), accent border (alpha 0.25), and zero divider lines.
+    - Verified tapping any card expands content and displays press highlight/ink ripple (`paints..rect(...)`).
+    - Verified database-backed Approve & Reject actions for stock adjustments, quick sales, and crate deposits work correctly (updating inventory, flipping status, and recording reasons).
+  - Updated `test/dashboard/reports_hub_viewport_test.dart` to fold the Approvals card tap test into the 3-digit badge test with 128 pending requests across all four viewports at 1.3x text scale (14/14 tests pass).
+  - Full dashboard test suite (`test/dashboard/`, 269 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Fix — The bottom-bar widget test hung the whole test suite (follow-up to #258) (2026-09-22)
 Branch `fix/bottom-bar-test-hang`, cut from `main` (`19e0b72`), worked in `../drinkPosApp-wt-bottom-bar-hang` because another session held the shared checkout. `test/shared/main_layout_bottom_bar_viewport_test.dart` ran 9+ minutes on its first test and ignored `--timeout`, so no full `flutter test` run could finish.

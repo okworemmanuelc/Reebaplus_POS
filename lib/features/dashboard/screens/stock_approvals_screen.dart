@@ -13,6 +13,16 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
+const kStockApprovalCardKeyPrefix = 'approval-card-';
+const kQuickSaleApprovalCardKeyPrefix = 'quick-sale-approval-card-';
+const kCrateDepositApprovalCardKeyPrefix = 'crate-deposit-approval-card-';
+
+Key stockApprovalCardKey(String id) => Key('$kStockApprovalCardKeyPrefix$id');
+Key quickSaleApprovalCardKey(String id) =>
+    Key('$kQuickSaleApprovalCardKeyPrefix$id');
+Key crateDepositApprovalCardKey(String id) =>
+    Key('$kCrateDepositApprovalCardKeyPrefix$id');
+
 /// Pending Approvals (master plan §25.2). Lists, for the current viewer, both
 /// cashier Quick Sale requests (§12.3.1) and stock-keeper adjustment requests
 /// (§16.6.1) — a CEO sees every store, a Manager only their assigned store(s)
@@ -250,11 +260,12 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
     final qtyLabel = '${isRemove ? '−' : '+'}${r.quantityDiff.abs()}';
     final totalCostLabel = _totalCostLabel;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
+    return Material(
+      key: stockApprovalCardKey(r.id),
+      color: context.surfaceColor,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: _accent.withValues(alpha: 0.25)),
+        side: BorderSide(color: _accent.withValues(alpha: 0.25)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Theme(
@@ -294,10 +305,13 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
               children: [
                 _pendingChip(context),
                 const SizedBox(width: 8),
-                Text(
-                  _timeAgo(r.createdAt),
-                  style: context.bodySmall.copyWith(
-                    color: Theme.of(context).hintColor,
+                Flexible(
+                  child: Text(
+                    _timeAgo(r.createdAt),
+                    overflow: TextOverflow.ellipsis,
+                    style: context.bodySmall.copyWith(
+                      color: Theme.of(context).hintColor,
+                    ),
                   ),
                 ),
               ],
@@ -505,11 +519,12 @@ class _QuickSaleApprovalCardState
         : qty.toString();
     final totalNaira = qty * r.unitPriceKobo / 100.0;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
+    return Material(
+      key: quickSaleApprovalCardKey(r.id),
+      color: context.surfaceColor,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: _accent.withValues(alpha: 0.25)),
+        side: BorderSide(color: _accent.withValues(alpha: 0.25)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Theme(
@@ -544,10 +559,13 @@ class _QuickSaleApprovalCardState
               children: [
                 _pendingChip(context),
                 const SizedBox(width: 8),
-                Text(
-                  'Quick Sale · ${_timeAgo(r.createdAt)}',
-                  style: context.bodySmall.copyWith(
-                    color: Theme.of(context).hintColor,
+                Flexible(
+                  child: Text(
+                    'Quick Sale · ${_timeAgo(r.createdAt)}',
+                    overflow: TextOverflow.ellipsis,
+                    style: context.bodySmall.copyWith(
+                      color: Theme.of(context).hintColor,
+                    ),
                   ),
                 ),
               ],
@@ -804,11 +822,12 @@ class _CrateDepositApprovalCardState
   @override
   Widget build(BuildContext context) {
     final r = widget.request;
-    return Container(
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
+    return Material(
+      key: crateDepositApprovalCardKey(r.id),
+      color: context.surfaceColor,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: _accent.withValues(alpha: 0.25)),
+        side: BorderSide(color: _accent.withValues(alpha: 0.25)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Theme(
@@ -847,10 +866,13 @@ class _CrateDepositApprovalCardState
               children: [
                 _pendingChip(context),
                 const SizedBox(width: 8),
-                Text(
-                  _timeAgo(r.createdAt),
-                  style: context.bodySmall.copyWith(
-                    color: Theme.of(context).hintColor,
+                Flexible(
+                  child: Text(
+                    _timeAgo(r.createdAt),
+                    overflow: TextOverflow.ellipsis,
+                    style: context.bodySmall.copyWith(
+                      color: Theme.of(context).hintColor,
+                    ),
                   ),
                 ),
               ],
