@@ -89,8 +89,19 @@ class ScreenTestEnvironment {
     required this.manufacturers,
   });
 
+  /// Bounded on the real clock. When a widget test fails, flutter_test leaves
+  /// the widget tree mounted, so its Drift subscriptions stay on the test's
+  /// stopped fake clock and close() never finishes. Without the bound, that
+  /// failure turns into a hang with no error message.
   Future<void> dispose() async {
-    await db.close();
+    await db.close().timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => throw StateError(
+        'Test database did not close within 10s. A widget test probably '
+        'failed earlier and left the screen mounted. Look for the first '
+        'failure above.',
+      ),
+    );
   }
 }
 
@@ -114,7 +125,16 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
   SharedPreferences.setMockInitialValues(sharedPreferences);
   await initTestSupabase();
 
-  final db = AppDatabase.forTesting(NativeDatabase.memory());
+  // closeStreamsSynchronously: a Drift stream that loses its last listener
+  // normally schedules a Timer.run cleanup, and close() waits for it. Riverpod
+  // providers cancel their Drift subscriptions when the harness disposes the
+  // container, which happens after the widget test's fake clock has stopped.
+  // The timer lands on that dead clock, and close() in tearDown waits
+  // forever. A widget test ignores its own timeout in this case, so the whole
+  // `flutter test` run hangs.
+  final db = AppDatabase.forTesting(
+    DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true),
+  );
   final businessId = UuidV7.generate();
   db.businessIdResolver = () => businessId;
 
@@ -305,17 +325,22 @@ Future<BuildContext> pumpScreen(
       container: container,
       child: MaterialApp(
         theme: theme ?? AppTheme.dark(),
-        home: MediaQuery(
-          data: MediaQueryData(
-            size: size,
-            padding: padding ?? EdgeInsets.zero,
-            textScaler: textScaler ?? TextScaler.noScaling,
-          ),
-          child: Builder(
-            builder: (context) {
-              capturedContext = context;
-              return content;
-            },
+        // Size is read from the view rather than pinned to [size] (they start
+        // equal), so a test that rotates via tester.view.physicalSize reaches
+        // the screen.
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQueryData(
+              size: MediaQuery.sizeOf(context),
+              padding: padding ?? EdgeInsets.zero,
+              textScaler: textScaler ?? TextScaler.noScaling,
+            ),
+            child: Builder(
+              builder: (context) {
+                capturedContext = context;
+                return content;
+              },
+            ),
           ),
         ),
       ),
