@@ -363,6 +363,24 @@ Future<void> disposeScreen(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 50));
 }
 
+/// Noon today, local time — the instant to hang seeded history off.
+///
+/// Issue #266. Period filters are calendar-anchored ("Today" means since local
+/// midnight, see `date_period.dart`), and several screens start on "Today" —
+/// the orders tabs for every role, the others whenever the role is below
+/// Manager. Rows seeded as `DateTime.now().subtract(...)` therefore drop out of
+/// the list when the suite runs just after midnight, and a layout test fails
+/// for a reason that has nothing to do with layout.
+///
+/// Subtract offsets from this instead. Anything up to 12 hours back stays in
+/// the current calendar day whatever time the suite runs. Rows may land later
+/// than "now" when the suite runs before noon; the preset periods have no upper
+/// bound, so they still show.
+DateTime seedAnchorToday() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day, 12);
+}
+
 // ---------------------------------------------------------------------------
 // The two assertions (PRD #239)
 // ---------------------------------------------------------------------------

@@ -393,7 +393,7 @@ Future<void> _seedHistory(
 }) async {
   final db = env.db;
   final b = env.businessId;
-  final now = DateTime.now();
+  final now = seedAnchorToday();
 
   for (var i = 1; i <= 8; i++) {
     final c = UuidV7.generate();
