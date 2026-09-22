@@ -299,6 +299,42 @@ void main() {
   );
 
   test(
+    'three tenants: declining the SECOND warning leaves the first business '
+    'on the phone too (every warning is answered before anything is cleared)',
+    () async {
+      final bizA = await seedBusiness('Old Biz A', userEmail: email);
+      await seedPendingOutboxRow(bizA);
+      final bizOther = await seedBusiness('Old Biz B');
+      await seedPendingOutboxRow(bizOther);
+      final bizB = await seedBusiness('New Biz');
+      auth.lookup = found(bizB, 'New Biz');
+
+      final asked = <String>[];
+      final route = await resolvePostVerifyRoute(
+        auth,
+        email,
+        confirmClearOtherBusiness: (w) async {
+          asked.add(w.businessId);
+          // Accept the first, decline the second.
+          return asked.length == 1;
+        },
+      );
+
+      expect(asked, hasLength(2), reason: 'both warnings must be shown');
+      expect(route, isA<SignInCancelledRoute>());
+      expect(
+        (await db.select(db.businesses).get()).map((b) => b.id),
+        unorderedEquals([bizA, bizOther, bizB]),
+        reason: 'cancelling must leave the phone exactly as it was found — a '
+            'confirm-then-clear-then-confirm loop would already have wiped '
+            'whichever business was asked about first',
+      );
+      expect(await db.syncDao.countPending(businessId: bizA), 1);
+      expect(await db.syncDao.countPending(businessId: bizOther), 1);
+    },
+  );
+
+  test(
     'phone holding A and B with pending B rows → A cleared, B\'s rows and '
     'outbox untouched',
     () async {

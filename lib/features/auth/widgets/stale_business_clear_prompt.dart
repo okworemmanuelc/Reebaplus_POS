@@ -21,9 +21,13 @@ StaleBusinessConfirm staleBusinessClearPrompt(BuildContext context) {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear the old business from this phone?'),
+        // "changes", not "sales": the count is every un-uploaded outbox row
+        // for that business — a price edit, a stock count or an expense counts
+        // the same as a sale, and naming them all sales would misstate what is
+        // about to go.
         content: Text(
           '${warning.unsentCount} unsaved '
-          '${warning.unsentCount == 1 ? 'sale' : 'sales'} from '
+          '${warning.unsentCount == 1 ? 'change' : 'changes'} from '
           '${warning.businessName} will be deleted from this phone.',
         ),
         actions: [

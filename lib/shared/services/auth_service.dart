@@ -906,7 +906,11 @@ class AuthService extends ValueNotifier<UserData?> {
     final others = await _localBusinessesOtherThan(keepBusinessId);
     if (others.isEmpty) return StaleBusinessClearOutcome.nothingToClear;
 
-    final deviceUserId = await getDeviceUserId();
+    // Phase 1 — ask about EVERY business before touching any of them. A phone
+    // holding three tenants would otherwise clear the first and then offer the
+    // warning for the second, so declining it could not honour the promise
+    // that cancelling leaves the phone exactly as it was found.
+    final plan = <({String id, bool wasDeleted})>[];
     for (final business in others) {
       final wasDeleted = await _sync.confirmBusinessDeleted(business.id);
       if (!wasDeleted) {
@@ -928,24 +932,37 @@ class AuthService extends ValueNotifier<UserData?> {
           if (!proceed) return StaleBusinessClearOutcome.cancelled;
         }
       }
+      plan.add((id: business.id, wasDeleted: wasDeleted));
+    }
 
+    // Phase 2 — every warning is answered; now clear.
+    final deviceUserId = await getDeviceUserId();
+    for (final entry in plan) {
       // Invariant #12: the loss is permitted here but must never be silent.
-      // No-ops when this business had nothing un-uploaded.
+      // No-ops when this business had nothing un-uploaded. Runs before the
+      // clear, while there is still something to count.
       await _recordWipeLoss(
-        business.id,
-        wasDeleted
+        entry.id,
+        entry.wasDeleted
             ? 'business_deleted:stale_local'
             : 'sign_in:other_business_cleared',
       );
 
-      final userIds = await _localUserIdsForBusiness(business.id);
+      final userIds = await _localUserIdsForBusiness(entry.id);
       try {
-        await _db.clearBusinessData(business.id);
+        await _db.clearBusinessData(entry.id);
       } catch (e) {
-        debugPrint('[AuthService] clearBusinessData(${business.id}) error: $e');
+        // Never carry on as though the tenant is gone: its `users` row still
+        // holds the login, so the pull that follows would hit the very 2067
+        // this routine exists to prevent — and the caller would have shown no
+        // error at all. Surface it instead; the entry screens record it and
+        // show the "couldn't finish setting up this phone" message.
+        debugPrint('[AuthService] clearBusinessData(${entry.id}) failed: $e');
+        rethrow;
       }
       // The device-user pointer outlives the Drift wipe (secure storage), so a
-      // pointer at one of the rows we just deleted would dangle.
+      // pointer at one of the rows we just deleted would dangle. Only reached
+      // once the clear above actually succeeded.
       if (deviceUserId != null && userIds.contains(deviceUserId)) {
         await _secure.clearDeviceUserId();
         deviceUserIdNotifier.value = null;
