@@ -8,7 +8,15 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-173 sessions logged. Codebase is live and being verified on-device.
+174 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #266 — Customer Detail viewport tests fail in the hour after midnight (2026-09-22)
+Branch `fix/customer-detail-viewport-midnight-266`, cut from `main` (`19e0b72`); rebased onto `main` 2026-09-29. Test-only change; no app code touched.
+- **Cause**: the suite seeded wallet transactions 1–10 hours (and 10–250 minutes) before `DateTime.now()`. Customer Detail's period defaults to `'To Date'`, but `_effectivePeriod` clamps it into `datePeriodLabelsForRole`, and `pumpScreen`'s default `roleRank: 4` is the **Driver** tier (despite `roleSlug: 'ceo'`), so the period became `'Today'`. After midnight the seeded rows were yesterday's and the list was empty — 5 of 10 tests failed even at 412x915.
+- **Fix (`test/customers/customer_detail_viewport_test.dart`)**: every pump passes `roleRank: GateTier.ceo`, so the default `'To Date'` survives the clamp; and the seed hangs off the new `seedAnchorToday()` (noon today) instead of the clock. Each guard is enough on its own — both were checked separately past midnight. The content-row assertion is unchanged.
+- **Same trap, smaller windows**: `supplier_detail_viewport_test.dart` (30 s back), `expenses_viewport_test.dart` (30 min), `orders_viewport_test.dart` (60 min — its Completed/Cancelled tabs start on `'Today'` for every role, so only the seed fix can help) and the opt-in `discovery/viewport_sweep_test.dart` (credit history 12 h back) now seed off `seedAnchorToday()` too.
+- **Helper**: `seedAnchorToday()` in `test/helpers/screen_harness.dart`. The harness's contradictory default rank is left as-is — changing it would open every tier gate in every screen suite; worth its own issue.
+- **Verified**: reproduced red at 00:28 local (`TZ=Asia/Tehran`), green after the fix at 00:32/00:35 (`TZ=Africa/Johannesburg`), 12:36 (`Pacific/Kiritimati`) and 23:36 (`Europe/London`) — the four changed suites, 54 tests. `flutter analyze` on the changed files clean.
 
 ### Issue #291 — Manufacturer screen opens from the brand card and shows its crates by status (read-only) (2026-09-23)
 Branch `feat/manufacturer-screen-291`, cut from `main`.
