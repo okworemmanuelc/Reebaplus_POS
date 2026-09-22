@@ -4,7 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-const _legacyDbFilename = 'reebaplus_pos.sqlite';
+import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart'
+    show kLocalDatabaseFileName;
+
+const _legacyDbFilename = kLocalDatabaseFileName;
 const _cutoverMarkerFilename = '.uuid_cutover_complete_v2';
 
 /// One-time wipe of the legacy SQLite database.

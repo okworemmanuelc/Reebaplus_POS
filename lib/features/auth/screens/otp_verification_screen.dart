@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/auth/auth_post_verify_route.dart';
+import 'package:reebaplus_pos/features/auth/sign_in_failure_message.dart';
+import 'package:reebaplus_pos/features/auth/widgets/stale_business_clear_prompt.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
@@ -206,6 +209,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     // on a weak link. Show the centered spinner so the screen never looks frozen.
     setState(() => _resolving = true);
 
+    // Bind the #285 clear-other-business prompt to a context we have just
+    // confirmed is mounted; the closure re-checks `context.mounted` itself
+    // before it ever shows the dialog.
+    final confirmClearOtherBusiness = staleBusinessClearPrompt(context);
+
     try {
       // Mark this session as email-authenticated (triggers second OTP after PIN).
       await auth.saveAuthMethod('email');
@@ -220,25 +228,48 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
         auth,
         widget.email,
         isPinReset: widget.isPinReset,
+        confirmClearOtherBusiness: confirmClearOtherBusiness,
       );
       if (!mounted) return;
 
-      Navigator.of(context).pushReplacement(
-        SmoothRoute(
-          page: switch (route) {
-            ExistingAccountRoute(:final account) => ExistingAccountScreen(
-              email: widget.email,
-              account: account,
-            ),
-            NoAccountFoundRoute() => widget.createBusinessIntent
-                ? CeoSignUpScreen(verifiedEmail: widget.email)
-                : NoAccountFoundScreen(email: widget.email),
-            LoginRoute(:final user) => LoginScreen(presetUser: user),
-            CreatePinRoute(:final user) => CreatePinScreen(user: user),
-          },
+      final Widget? page = switch (route) {
+        ExistingAccountRoute(:final account) => ExistingAccountScreen(
+          email: widget.email,
+          account: account,
         ),
+        NoAccountFoundRoute() => widget.createBusinessIntent
+            ? CeoSignUpScreen(verifiedEmail: widget.email)
+            : NoAccountFoundScreen(email: widget.email),
+        LoginRoute(:final user) => LoginScreen(presetUser: user),
+        CreatePinRoute(:final user) => CreatePinScreen(user: user),
+        // #285: both leave the phone exactly as it was found. Drop back to the
+        // code entry state rather than routing anywhere.
+        AccountLookupUnavailableRoute() => null,
+        SignInCancelledRoute() => null,
+      };
+
+      if (page == null) {
+        setState(() {
+          _resolving = false;
+          _loading = false;
+          _verified = false;
+          _otpController.clear();
+        });
+        if (route is AccountLookupUnavailableRoute) {
+          AppNotification.showError(context, kSignInNetworkMessage);
+        }
+        return;
+      }
+
+      Navigator.of(context).pushReplacement(SmoothRoute(page: page));
+    } catch (e, stack) {
+      // The OTP path used to swallow this entirely; the phone-only 2067 that
+      // #285 fixes was invisible in the crash log because of it.
+      CrashReporter.record(
+        e,
+        stack,
+        context: 'otp_verification.post_verify email=${widget.email}',
       );
-    } catch (e) {
       if (!mounted) return;
       setState(() {
         _resolving = false;
@@ -246,10 +277,9 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
         _verified = false;
         _otpController.clear();
       });
-      AppNotification.showError(
-        context,
-        'Verified, but we could not load your account. Check your connection and try again.',
-      );
+      // #285 decision 8: same plain wording as the Google path, no raw
+      // exception text.
+      AppNotification.showError(context, signInFailureMessage(e));
     }
   }
 

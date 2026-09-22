@@ -1480,6 +1480,26 @@ Future<void> _restoreUsers(
     final lastUpdatedAt = parseTs(r['lastUpdatedAt']);
     final createdAt = parseTs(r['createdAt'], fallback: lastUpdatedAt);
 
+    // #285 safety net. `users.auth_user_id` is UNIQUE on this device, and a
+    // Supabase login outlives the businesses it belonged to — so a stale row
+    // from an OLDER business can still hold the login this incoming row
+    // carries. Without this, the write below fails with SQLITE_CONSTRAINT
+    // (2067) and takes the whole minimum-login pull down with it, which is
+    // what the user sees as "we could not load your account".
+    //
+    // Unhook the login from the other row rather than deleting it: local
+    // history (orders, ledgers, activity logs) still points at that row. Local
+    // only — `auth_user_id` is absent from the `users` push columns above, so
+    // nulling it here never reaches the cloud.
+    final incomingAuthUserId = r['authUserId'] as String?;
+    if (incomingAuthUserId != null) {
+      await (db.update(db.users)..where(
+            (u) =>
+                u.authUserId.equals(incomingAuthUserId) & u.id.equals(id).not(),
+          ))
+          .write(const UsersCompanion(authUserId: Value<String?>(null)));
+    }
+
     if (existing != null) {
       await (db.update(db.users)..where((u) => u.id.equals(id))).write(
         UsersCompanion(

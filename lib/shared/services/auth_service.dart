@@ -340,11 +340,17 @@ class AuthService extends ValueNotifier<UserData?> {
   static const String setupRequiredPin = kSetupRequiredPin;
 
   /// Reads the current auth user's cloud profile and the linked business
-  /// metadata. Returns null when no profile / business exists, when no user
-  /// is signed in, or on network error.
-  Future<SupabaseAccountInfo?> fetchSupabaseAccount() async {
+  /// metadata.
+  ///
+  /// The three-armed [SupabaseAccountLookup] exists so a caller can tell a
+  /// POSITIVE "this login is linked to no business" apart from "we could not
+  /// reach the server" (#285). Both used to be `null`, and the sign-in flow
+  /// read the network failure as a real answer. Only a positive answer may
+  /// clear another business's data off this phone.
+  Future<SupabaseAccountLookup> fetchSupabaseAccount() async {
     final authUser = _supabase.auth.currentUser;
-    if (authUser == null) return null;
+    // No session at all: we learned nothing about this identity.
+    if (authUser == null) return const SupabaseAccountUnavailable();
     try {
       final profile = await _supabase
           .from('profiles')
@@ -371,7 +377,10 @@ class AuthService extends ValueNotifier<UserData?> {
           .eq('id', businessId)
           .maybeSingle();
       final businessName = business?['name'] as String?;
-      if (businessName == null) return null;
+      // `profiles` named a business but its row is unreadable here — that is
+      // not evidence the login has no business, so ask the authoritative RPC
+      // rather than reporting a positive "none" off a partial read.
+      if (businessName == null) return _fetchAccountViaLinkedBusinessRpc();
 
       // Resolve the user's role from the cloud so the existing-account screen
       // can show it before any local pull. Best-effort: failures leave the
@@ -412,11 +421,13 @@ class AuthService extends ValueNotifier<UserData?> {
         debugPrint('[AuthService] fetchSupabaseAccount role lookup error: $e');
       }
 
-      return SupabaseAccountInfo(
-        businessId: businessId,
-        businessName: businessName,
-        roleName: roleName,
-        roleSlug: roleSlug,
+      return SupabaseAccountFound(
+        SupabaseAccountInfo(
+          businessId: businessId,
+          businessName: businessName,
+          roleName: roleName,
+          roleSlug: roleSlug,
+        ),
       );
     } catch (e) {
       debugPrint('[AuthService] fetchSupabaseAccount error: $e');
@@ -433,25 +444,33 @@ class AuthService extends ValueNotifier<UserData?> {
   /// backed by the `current_user_linked_business` SECURITY DEFINER RPC (migration
   /// 0128). Mirrors complete_onboarding's §9 guard exactly (keyed on
   /// public.users.auth_user_id) so post-verify detection and onboarding
-  /// enforcement can never disagree. Returns null when the identity is not
-  /// linked, unauthenticated, or on error.
-  Future<SupabaseAccountInfo?> _fetchAccountViaLinkedBusinessRpc() async {
+  /// enforcement can never disagree. An empty result is a real answer
+  /// ([SupabaseAccountNone]); a thrown call is not ([SupabaseAccountUnavailable]).
+  Future<SupabaseAccountLookup> _fetchAccountViaLinkedBusinessRpc() async {
     try {
       final result = await _supabase.rpc('current_user_linked_business');
-      if (result is! List || result.isEmpty) return null;
+      // The RPC answered: an empty result IS the answer "not linked".
+      if (result is! List || result.isEmpty) {
+        return const SupabaseAccountNone();
+      }
       final row = result.first as Map<String, dynamic>;
       final businessId = row['business_id'] as String?;
       final businessName = row['business_name'] as String?;
-      if (businessId == null || businessName == null) return null;
-      return SupabaseAccountInfo(
-        businessId: businessId,
-        businessName: businessName,
-        roleName: row['role_name'] as String?,
-        roleSlug: row['role_slug'] as String?,
+      if (businessId == null || businessName == null) {
+        return const SupabaseAccountNone();
+      }
+      return SupabaseAccountFound(
+        SupabaseAccountInfo(
+          businessId: businessId,
+          businessName: businessName,
+          roleName: row['role_name'] as String?,
+          roleSlug: row['role_slug'] as String?,
+        ),
       );
     } catch (e) {
       debugPrint('[AuthService] current_user_linked_business RPC error: $e');
-      return null;
+      // The call itself failed — we learned nothing. Never treated as "none".
+      return const SupabaseAccountUnavailable();
     }
   }
 
@@ -854,28 +873,136 @@ class AuthService extends ValueNotifier<UserData?> {
   /// to show a snackbar, then reset.
   bool businessDeletedRemotely = false;
 
-  /// Checks the `deleted_businesses` tombstone for [businessId]. If confirmed,
-  /// the stale local `users` row [resolvePostVerifyRoute] just found belongs to
-  /// a business THIS device already had — and which its owner permanently
-  /// deleted (§10.3) — most commonly because the same email re-registered
-  /// afterwards and the device's earlier wipe never ran/completed. Wipes all
-  /// local data so the re-registration proceeds on a clean device, and returns
-  /// true so the caller treats this as "no local user".
+  /// Removes every business on this phone OTHER than [keepBusinessId] — the
+  /// one the cloud just named for the login that is signing in (#285).
   ///
-  /// Any ambiguity (offline, no tombstone) returns false — never a
-  /// false-positive wipe, same guarantee as [_handleActiveBusinessDeleted].
-  Future<bool> wipeOrphanedLocalBusiness(String businessId) async {
-    if (!await _sync.confirmBusinessDeleted(businessId)) return false;
-    // §3.1 business-deleted carve-out: record any un-synced loss before wiping.
-    await _recordWipeLoss(businessId, 'business_deleted:orphaned_local');
-    try {
-      await _db.clearAllData();
-    } catch (e) {
-      debugPrint(
-        '[AuthService] wipeOrphanedLocalBusiness clearAllData error: $e',
+  /// A Supabase login outlives the businesses it belonged to, so the same
+  /// identity can be reused by a new business while the phone still holds the
+  /// old one's rows — including a `users` row holding this login's
+  /// `auth_user_id`, which collides with the incoming row on the very first
+  /// pull (SQLite 2067) and takes the whole sign-in down.
+  ///
+  /// Per business, in order:
+  ///   • a confirmed `deleted_businesses` tombstone → clear with no prompt
+  ///     (the existing §3.1 business-deleted carve-out: the tenant is gone
+  ///     cloud-side, so the data is unsalvageable);
+  ///   • still exists with an empty outbox → clear with no prompt (nothing is
+  ///     lost; the rows are all in the cloud);
+  ///   • still exists with un-uploaded rows → [confirm] once, naming the count
+  ///     and the business. Declining abandons the sign-in and leaves the phone
+  ///     untouched; accepting is the SECOND carve-out to invariant #12 — a
+  ///     deliberate, confirmed user action, recorded via [_recordWipeLoss] so
+  ///     the loss is never silent.
+  ///
+  /// Pass null for [keepBusinessId] when the cloud positively said the login
+  /// has no business: every local business is then an old one.
+  ///
+  /// Only ever called on a POSITIVE cloud answer. Never call it after a network
+  /// failure — a wipe on a guess is exactly what decision 2 forbids.
+  Future<StaleBusinessClearOutcome> clearOtherLocalBusinesses({
+    required String? keepBusinessId,
+    required StaleBusinessConfirm confirm,
+  }) async {
+    final others = await _localBusinessesOtherThan(keepBusinessId);
+    if (others.isEmpty) return StaleBusinessClearOutcome.nothingToClear;
+
+    final deviceUserId = await getDeviceUserId();
+    for (final business in others) {
+      final wasDeleted = await _sync.confirmBusinessDeleted(business.id);
+      if (!wasDeleted) {
+        final pending = await _db.syncDao.countPending(
+          businessId: business.id,
+        );
+        final orphans = await _db.syncDao.countOrphans(
+          businessId: business.id,
+        );
+        final unsent = pending + orphans;
+        if (unsent > 0) {
+          final proceed = await confirm(
+            StaleBusinessWarning(
+              businessId: business.id,
+              businessName: business.name,
+              unsentCount: unsent,
+            ),
+          );
+          if (!proceed) return StaleBusinessClearOutcome.cancelled;
+        }
+      }
+
+      // Invariant #12: the loss is permitted here but must never be silent.
+      // No-ops when this business had nothing un-uploaded.
+      await _recordWipeLoss(
+        business.id,
+        wasDeleted
+            ? 'business_deleted:stale_local'
+            : 'sign_in:other_business_cleared',
       );
+
+      final userIds = await _localUserIdsForBusiness(business.id);
+      try {
+        await _db.clearBusinessData(business.id);
+      } catch (e) {
+        debugPrint('[AuthService] clearBusinessData(${business.id}) error: $e');
+      }
+      // The device-user pointer outlives the Drift wipe (secure storage), so a
+      // pointer at one of the rows we just deleted would dangle.
+      if (deviceUserId != null && userIds.contains(deviceUserId)) {
+        await _secure.clearDeviceUserId();
+        deviceUserIdNotifier.value = null;
+      }
     }
-    return true;
+    return StaleBusinessClearOutcome.cleared;
+  }
+
+  /// Every business this device holds except [keepBusinessId].
+  ///
+  /// Read from `businesses` UNION the tenants referenced by `users`: the #285
+  /// phone can hold a stale `users` row whose `businesses` row never arrived
+  /// (or was already removed), and that row is exactly the one that collides.
+  Future<List<({String id, String name})>> _localBusinessesOtherThan(
+    String? keepBusinessId,
+  ) async {
+    final rows = await _db.customSelect(
+      'SELECT id AS bid, name AS bname FROM businesses '
+      'UNION '
+      'SELECT DISTINCT u.business_id AS bid, NULL AS bname FROM users u '
+      'WHERE u.business_id NOT IN (SELECT id FROM businesses)',
+    ).get();
+    return [
+      for (final r in rows)
+        if (r.read<String>('bid') != keepBusinessId)
+          (
+            id: r.read<String>('bid'),
+            name: r.read<String?>('bname') ?? 'your previous business',
+          ),
+    ];
+  }
+
+  /// The local `users` ids belonging to [businessId], read BEFORE the clear so
+  /// the caller can tell whether the device-user pointer is about to dangle.
+  Future<Set<String>> _localUserIdsForBusiness(String businessId) async {
+    final rows = await _db.customSelect(
+      'SELECT id FROM users WHERE business_id = ?1',
+      variables: [Variable.withString(businessId)],
+    ).get();
+    return {for (final r in rows) r.read<String>('id')};
+  }
+
+  /// Abandons a sign-in that the user cancelled at the clear-other-business
+  /// warning (#285 decision 3). Signs this device out of Supabase and Google so
+  /// the half-authenticated session does not linger, and touches NOTHING local
+  /// — unlike [fullLogout], which clears secure storage.
+  Future<void> abandonSignIn() async {
+    _supabase.auth
+        .signOut(scope: SignOutScope.local)
+        .catchError(
+          (e) => debugPrint('[AuthService] abandonSignIn signOut error: $e'),
+        );
+    try {
+      await GoogleSignIn().signOut();
+    } catch (e) {
+      debugPrint('[AuthService] abandonSignIn Google signOut error: $e');
+    }
   }
 
   /// Cold-start / pre-sign-in gate (§10.3). Before the PIN screen renders for a
@@ -1929,6 +2056,70 @@ class AuthService extends ValueNotifier<UserData?> {
   // Invite lifecycle moved to lib/features/invite/services/invite_api_service.dart
   // (cloud-first, server-validated). Callers go through inviteApiServiceProvider
   // directly; this service no longer exposes invite CRUD.
+}
+
+/// What the cloud said when asked which business the current auth identity
+/// belongs to.
+///
+/// Three arms, not a nullable [SupabaseAccountInfo], because the sign-in flow
+/// must never act on an answer it did not get: clearing an older business off
+/// this phone is allowed on [SupabaseAccountFound] and [SupabaseAccountNone]
+/// and forbidden on [SupabaseAccountUnavailable] (#285 decision 2).
+sealed class SupabaseAccountLookup {
+  const SupabaseAccountLookup();
+}
+
+/// The cloud named a business for this identity.
+final class SupabaseAccountFound extends SupabaseAccountLookup {
+  final SupabaseAccountInfo account;
+  const SupabaseAccountFound(this.account);
+}
+
+/// The cloud answered, and this identity is linked to no business at all.
+final class SupabaseAccountNone extends SupabaseAccountLookup {
+  const SupabaseAccountNone();
+}
+
+/// The cloud could not be reached, or answered with an error. Nothing was
+/// learned, so nothing may be cleared.
+final class SupabaseAccountUnavailable extends SupabaseAccountLookup {
+  const SupabaseAccountUnavailable();
+}
+
+/// An older business still on this phone that holds work the cloud has not
+/// accepted yet. Handed to the sign-in screen so its one-tap warning can name
+/// the count and the business (#285 decision 3).
+class StaleBusinessWarning {
+  final String businessId;
+  final String businessName;
+
+  /// Un-uploaded `sync_queue` + `sync_queue_orphans` rows for this business —
+  /// what invariant #12 protects, and what clearing destroys.
+  final int unsentCount;
+
+  const StaleBusinessWarning({
+    required this.businessId,
+    required this.businessName,
+    required this.unsentCount,
+  });
+}
+
+/// Asks the user whether to clear [warning]'s business off this phone. Returns
+/// true to clear and continue signing in, false to abandon the sign-in and
+/// leave the phone untouched.
+typedef StaleBusinessConfirm =
+    Future<bool> Function(StaleBusinessWarning warning);
+
+/// The result of [AuthService.clearOtherLocalBusinesses].
+enum StaleBusinessClearOutcome {
+  /// This phone held no other business — nothing was touched.
+  nothingToClear,
+
+  /// Every other business was removed from this phone.
+  cleared,
+
+  /// The user declined the warning; the phone is exactly as it was found.
+  cancelled,
 }
 
 /// Snapshot of the current auth user's cloud profile + linked business,

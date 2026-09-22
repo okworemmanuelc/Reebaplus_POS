@@ -14,7 +14,9 @@ import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
 import 'package:reebaplus_pos/features/auth/auth_post_verify_route.dart';
+import 'package:reebaplus_pos/features/auth/sign_in_failure_message.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
+import 'package:reebaplus_pos/features/auth/widgets/stale_business_clear_prompt.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart' show UserData;
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
@@ -169,6 +171,11 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       return;
     }
 
+    // Bind the #285 clear-other-business prompt to a context we have just
+    // confirmed is mounted; the closure re-checks `context.mounted` itself
+    // before it ever shows the dialog.
+    final confirmClearOtherBusiness = staleBusinessClearPrompt(context);
+
     try {
       // Save auth method as google
       await auth.saveAuthMethod('google');
@@ -178,11 +185,15 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       // and shared-till PIN rules stay in one place. Google sign-in is never a
       // PIN reset, so isPinReset stays false. setCurrentUser persists the device
       // user / last-email at real login, so we don't write them here.
-      final route = await resolvePostVerifyRoute(auth, email);
+      final route = await resolvePostVerifyRoute(
+        auth,
+        email,
+        confirmClearOtherBusiness: confirmClearOtherBusiness,
+      );
       if (!mounted) return;
       setState(() => _loading = false);
 
-      final Widget page = switch (route) {
+      final Widget? page = switch (route) {
         ExistingAccountRoute(:final account) => ExistingAccountScreen(
           email: email,
           account: account,
@@ -192,7 +203,15 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
             : NoAccountFoundScreen(email: email),
         LoginRoute(:final user) => LoginScreen(presetUser: user),
         CreatePinRoute(:final user) => CreatePinScreen(user: user),
+        // #285: both leave the phone exactly as it was found, so there is
+        // nowhere to route to — stay on this screen.
+        AccountLookupUnavailableRoute() => null,
+        SignInCancelledRoute() => null,
       };
+      if (route is AccountLookupUnavailableRoute) {
+        AppNotification.showError(context, kSignInNetworkMessage);
+      }
+      if (page == null) return;
 
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
@@ -215,11 +234,9 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       );
       if (!mounted) return;
       setState(() => _loading = false);
-      AppNotification.showError(
-        context,
-        'Signed in, but we could not load your account ($e). '
-        'Check your connection and try again.',
-      );
+      // #285 decision 8: plain wording, identical on both entry screens, and
+      // never the raw exception — the detail is already in the crash log above.
+      AppNotification.showError(context, signInFailureMessage(e));
     }
   }
 

@@ -29,7 +29,21 @@ class SyncCursorResetService {
     'backfill_tables::',
     // Per-business consecutive-pull-failure counter.
     'consecutive_pull_failures::',
+    // Per-business one-shot `users` backfill flag (#285): a cleared business
+    // that ever returns must run its backfill again, exactly like a new device.
+    'users_backfill_v1::',
   ];
+
+  /// Removes ONE business's pull-state keys, leaving every other business's
+  /// cursor intact. Called from `AppDatabase.clearBusinessData()` (#285): the
+  /// business being signed in to must keep its cursor so clearing an older
+  /// tenant does not force it into a full re-download.
+  static Future<void> clearForBusiness(String businessId) async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final prefix in _prefixes) {
+      await prefs.remove('$prefix$businessId');
+    }
+  }
 
   /// Removes every per-business pull-state key so the next pull runs full.
   /// Best-effort by the caller (`clearAllData` swallows any error).

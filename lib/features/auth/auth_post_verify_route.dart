@@ -34,6 +34,22 @@ class CreatePinRoute extends PostVerifyRoute {
   const CreatePinRoute(this.user);
 }
 
+/// The cloud could not be reached, and this device holds no local row to fall
+/// back on, so which business this login belongs to is simply unknown (#285).
+/// The screen shows the network message and stays put — routing to sign-up
+/// here would offer to create a second business for an email that already has
+/// one (invariant #9).
+class AccountLookupUnavailableRoute extends PostVerifyRoute {
+  const AccountLookupUnavailableRoute();
+}
+
+/// The user declined to clear an older business's un-uploaded work off this
+/// phone (#285 decision 3). The sign-in is abandoned and the phone is left
+/// exactly as it was found.
+class SignInCancelledRoute extends PostVerifyRoute {
+  const SignInCancelledRoute();
+}
+
 /// Resolves the post-verification destination for [email], shared by the
 /// email/OTP screen and the Google sign-in handler so the master-plan §7.2a
 /// rules live in exactly one place. Drift between two copies of this logic was
@@ -46,31 +62,52 @@ class CreatePinRoute extends PostVerifyRoute {
 /// [isPinReset] is true only on the Forgot-PIN flow, where a user who already
 /// has a PIN must still be routed to create a new one. Google sign-in is never
 /// a reset, so it leaves this false.
+///
+/// [confirmClearOtherBusiness] is asked once per older business that still
+/// holds un-uploaded work, and is required rather than optional so neither
+/// entry screen can silently destroy a shop's unsent sales (#285).
 Future<PostVerifyRoute> resolvePostVerifyRoute(
   AuthService auth,
   String email, {
+  required StaleBusinessConfirm confirmClearOtherBusiness,
   bool isPinReset = false,
 }) async {
-  final account = await auth.fetchSupabaseAccount();
+  final lookup = await auth.fetchSupabaseAccount();
+
+  // Decision 2: act only on a clear cloud answer. A network failure clears
+  // nothing — a local row still unlocks with its PIN; with none, say so rather
+  // than guessing.
+  if (lookup is SupabaseAccountUnavailable) {
+    final offlineUser = await auth.getUserByEmail(email);
+    if (offlineUser == null) return const AccountLookupUnavailableRoute();
+    return _pinRouteFor(offlineUser, isPinReset: isPinReset);
+  }
+
+  final account = switch (lookup) {
+    SupabaseAccountFound(:final account) => account,
+    SupabaseAccountNone() => null,
+    SupabaseAccountUnavailable() => null,
+  };
+
+  // Decision 1: the cloud has named this login's business (or positively said
+  // it has none). Anything else on this phone belongs to a business this login
+  // has left behind — a deleted tenant, or one the same Supabase identity was
+  // reused away from — and must go before the pull runs, or the stale `users`
+  // row's `auth_user_id` collides with the incoming one (SQLite 2067) and
+  // aborts the whole minimum-login pull.
+  final outcome = await auth.clearOtherLocalBusinesses(
+    keepBusinessId: account?.businessId,
+    confirm: confirmClearOtherBusiness,
+  );
+  if (outcome == StaleBusinessClearOutcome.cancelled) {
+    await auth.abandonSignIn();
+    return const SignInCancelledRoute();
+  }
+
   var localUser = await auth.getUserByEmail(
     email,
     preferredBusinessId: account?.businessId,
   );
-
-  // Cloud confirms this auth identity has no business, yet a local row for
-  // this email survives from a previous business on this device — most
-  // commonly: the same email re-registered after "Delete Business & Account"
-  // (§10.3) and the device's wipe never ran/completed. A confirmed
-  // `deleted_businesses` tombstone for the stale row's business wipes this
-  // device and clears `localUser`, so the email is treated as brand-new
-  // rather than logging into the dead tenant (tenant_mismatch / RLS errors
-  // on pull and push). Ambiguous results (offline, no tombstone) leave
-  // `localUser` untouched — offline PIN login must keep working.
-  if (account == null && localUser != null) {
-    if (await auth.wipeOrphanedLocalBusiness(localUser.businessId)) {
-      localUser = null;
-    }
-  }
 
   if (account != null && localUser == null) {
     return ExistingAccountRoute(account);
@@ -92,9 +129,13 @@ Future<PostVerifyRoute> resolvePostVerifyRoute(
     return const NoAccountFoundRoute();
   }
 
-  final user = localUser;
-  // A row seeded from the cloud profile carries the sentinel PIN — the user
-  // must set up a PIN on this device before they can sign in.
+  return _pinRouteFor(localUser, isPinReset: isPinReset);
+}
+
+/// PIN screen or PIN setup, depending on whether [user] already holds a real
+/// PIN on this device. A row seeded from the cloud profile carries the sentinel
+/// PIN — the user must set up a PIN here before they can sign in.
+PostVerifyRoute _pinRouteFor(UserData user, {required bool isPinReset}) {
   final isSetupRequired = user.pin == AuthService.setupRequiredPin;
   final hasPin = user.pin.isNotEmpty && !isSetupRequired;
   if (hasPin && !isPinReset) {

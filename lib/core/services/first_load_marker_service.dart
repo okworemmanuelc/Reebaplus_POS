@@ -25,6 +25,15 @@ class FirstLoadMarkerService {
     await prefs.setBool('$_prefix$businessId', true);
   }
 
+  /// Removes the marker for ONE business. Called from
+  /// `AppDatabase.clearBusinessData()` (#285 — an older business is cleared at
+  /// sign-in while the business being signed in to keeps its own marker), so
+  /// the cleared tenant re-shows the first-load overlay if it ever returns.
+  static Future<void> clearMarkerForBusiness(String businessId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_prefix$businessId');
+  }
+
   /// Removes ALL per-business markers. Called from `AppDatabase.clearAllData()`
   /// (logout / business-delete / onboarding reset) so a re-onboarded device
   /// re-shows the first-load overlay on its next pull.

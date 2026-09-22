@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
+import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
@@ -103,6 +104,11 @@ Future<void> _bootstrap() async {
         .timeout(const Duration(seconds: 5));
   } catch (_) {}
   markDbReady();
+
+  // #285: the database file now exists, so mark it (and its WAL sidecars) as
+  // excluded from iCloud backup. Android does the same declaratively in the
+  // manifest. Fire-and-forget — a backup attribute must never delay the till.
+  unawaited(BackupExclusionService.excludeLocalDatabase());
 
   // Schema self-heal audit ran inside beforeOpen above. If it found drift it
   // could not repair (missing column whose ALTER TABLE failed, or a missing
