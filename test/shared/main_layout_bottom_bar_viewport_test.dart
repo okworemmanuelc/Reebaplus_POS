@@ -38,6 +38,9 @@ void main() {
     'hint_pos_gestures': 2,
   };
 
+  // Sideways, but narrower than the 1024dp side-rail cutoff.
+  const sidewaysSevenInchTablet = Size(960, 600);
+
   const clipKey = Key('main-bottom-nav-clip');
   const alignKey = Key('main-bottom-nav-align');
   const navKey = Key('main-bottom-nav');
@@ -156,6 +159,7 @@ void main() {
 
         // Scroll down into content
         await tester.drag(scrollable, const Offset(0, -200));
+        await tester.pump(); // start the slide animation
         await tester.pump(const Duration(milliseconds: 250));
 
         // Stays fully visible
@@ -169,31 +173,53 @@ void main() {
     testWidgets(
       'A screen whose content fits without scrolling never hides the bar',
       (tester) async {
-        // Create environment with 0 products
-        final emptyEnv = await setupScreenTestEnvironment(
-          productCount: 0,
-          sharedPreferences: testPrefs,
-        );
+        // Create environment with 0 products. runAsync: the harness builds its
+        // database on the real clock — inside the widget test's fake clock the
+        // setup never completes and the test hangs.
+        final emptyEnv = (await tester.runAsync(
+          () => setupScreenTestEnvironment(
+            productCount: 0,
+            sharedPreferences: testPrefs,
+          ),
+        ))!;
         addTearDown(emptyEnv.dispose);
 
+        // The rule lives in MainLayout and covers every main tab. POS can't
+        // demonstrate it: its collapsing header always leaves scroll room
+        // sideways (92dp at 800x360, 49dp at 960x600, even with no products).
+        // The empty cart on a sideways 7" tablet — still under the 1024dp
+        // side-rail cutoff, so the bottom bar applies — genuinely fits.
+        NavigationService().setIndex(8); // Cart — same bare index app_drawer.dart uses
         await pumpMainLayout(
           tester,
           env: emptyEnv,
-          size: androidCompactLandscape,
+          size: sidewaysSevenInchTablet,
         );
 
         expect(barHeight(tester), greaterThan(40.0));
         expect(barFactor(tester), 1.0);
 
-        final scrollable = find.byKey(kPosScrollSurfaceKey);
-        if (scrollable.evaluate().isNotEmpty) {
-          // Dragging content that fits
-          await tester.drag(scrollable, const Offset(0, -100));
-          await tester.pump(const Duration(milliseconds: 250));
+        final vertical = tester
+            .stateList<ScrollableState>(find.byType(Scrollable))
+            .where((s) => s.position.axis == Axis.vertical)
+            .toList();
+        expect(vertical, hasLength(1));
+        expect(
+          vertical.single.position.maxScrollExtent,
+          lessThanOrEqualTo(0),
+          reason: 'Precondition: the empty cart must fit without scrolling at '
+              'this size, or this test checks nothing.',
+        );
 
-          expect(barHeight(tester), greaterThan(40.0));
-          expect(barFactor(tester), 1.0);
-        }
+        await tester.drag(
+          find.byWidget(vertical.single.widget),
+          const Offset(0, -100),
+        );
+        await tester.pump(); // start the slide animation
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(barHeight(tester), greaterThan(40.0));
+        expect(barFactor(tester), 1.0);
 
         await disposeScreen(tester);
       },
@@ -216,6 +242,7 @@ void main() {
 
         // Drag horizontally
         await tester.drag(searchBand, const Offset(-100, 0));
+        await tester.pump(); // start the slide animation
         await tester.pump(const Duration(milliseconds: 250));
 
         // Bar still visible
@@ -238,6 +265,7 @@ void main() {
         final scrollable = find.byKey(kPosScrollSurfaceKey);
         // Scroll into content -> bar hides
         await tester.drag(scrollable, const Offset(0, -180));
+        await tester.pump(); // start the slide animation
         await tester.pump(const Duration(milliseconds: 250));
         expect(barHeight(tester), 0.0);
 
@@ -267,11 +295,14 @@ void main() {
         final scrollable = find.byKey(kPosScrollSurfaceKey);
         // Scroll down
         await tester.drag(scrollable, const Offset(0, -120));
+        await tester.pump(); // start the slide animation
         await tester.pump(const Duration(milliseconds: 250));
         expect(barHeight(tester), 0.0);
 
-        // Scroll back all the way to top
-        await tester.drag(scrollable, const Offset(0, 300));
+        // Scroll back exactly to the top. Dragging further would overpull into
+        // pull-to-refresh, which starts a real sync — not what this checks.
+        await tester.drag(scrollable, const Offset(0, 120));
+        await tester.pump(); // start the slide animation
         await tester.pump(const Duration(milliseconds: 250));
 
         expect(barHeight(tester), greaterThan(40.0));
@@ -292,6 +323,7 @@ void main() {
 
         final scrollable = find.byKey(kPosScrollSurfaceKey);
         await tester.drag(scrollable, const Offset(0, -150));
+        await tester.pump(); // start the slide animation
         await tester.pump(const Duration(milliseconds: 250));
         expect(barHeight(tester), 0.0);
 
