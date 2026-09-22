@@ -254,7 +254,7 @@ void main() {
       'pixel7Portrait (412x915)': pixel7Portrait,
     }.entries) {
       testWidgets('${entry.key} keeps a 3-digit badge inside the complete '
-          'Approvals card at max text scale (1.3)', (tester) async {
+          'Approvals card and opens Approvals at max text scale (1.3)', (tester) async {
         final dummyReq = StockAdjustmentRequestData(
           id: 'req-1',
           businessId: env.businessId,
@@ -302,26 +302,13 @@ void main() {
         ]) {
           expect(find.descendant(of: card, matching: part), findsOneWidget);
         }
-        await teardownScreen(tester);
-      });
 
-      testWidgets('${entry.key} opens Approvals from its card at max text '
-          'scale (1.3)', (tester) async {
-        await pumpScreen(
-          tester,
-          env: env,
-          size: entry.value,
-          grantedKeys: grantedAll,
-          roleRank: 0,
-          textScaler: const TextScaler.linear(1.3),
-          screen: const ReportsHubScreen(),
-        );
-
-        await tester.tap(find.byKey(reportCardKey('Approvals')));
+        await tester.tap(card);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 600));
         expectNoOverflow(tester);
         expect(find.byType(StockApprovalsScreen), findsOneWidget);
+        expect(find.byType(ExpansionTile), findsWidgets);
         await teardownScreen(tester);
       });
     }
