@@ -8,7 +8,29 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-168 sessions logged. Codebase is live and being verified on-device.
+169 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #286 — Whole-row uploads send times without a time zone, so records land in the cloud an hour late (2026-09-21)
+Branch `fix/dataclass-serializer-utc-286`, cut from `main` (`83fbf7d`).
+- **Problem**:
+  - Found while investigating #285: records pushed to the cloud via whole-row Drift `DataClass` re-reads landed with timestamps shifted forward by the device's time-zone offset (e.g. +1h for WAT / UTC+1 in Nigeria).
+  - Cause: `serializeInsertable` (`lib/core/database/sync_helpers.dart`) used Drift's default `ValueSerializer.defaults(serializeDateTimeValuesAsString: true)`, which called `value.toIso8601String()` on local `DateTime`s without `.toUtc()`. Because Drift reads unix-seconds timestamps as local `DateTime`s, this produced zone-less strings (e.g. `2026-09-13T23:22:03.000`). Postgres interprets zone-less `timestamptz` strings as UTC, shifting them forward into the future by the device's offset.
+  - Affected tables: `users` (`createdAt`, `lastUpdatedAt`), `cost_batches` (`receivedAt`, `createdAt`, `lastUpdatedAt`), `inventory`, `settings`. Crucially, `cost_batches.received_at` is the FIFO cost queue sort key on-device and in cloud RPCs, so shifted timestamps could reorder batches and select the wrong cost layer for inventory COGS.
+- **Fix (`lib/core/database/sync_helpers.dart`)**:
+  - Replaced `_cloudSerializer` with `CloudValueSerializer extends ValueSerializer`:
+    - In `toJson<T>(T value)`, if `value is DateTime`, returns `value.toUtc().toIso8601String()`, guaranteeing UTC ISO-8601 format ending in `Z` (e.g. `2026-09-13T22:22:03.000Z`). Delegates non-DateTime types to default serializer.
+    - In `fromJson<T>(dynamic json)`, delegates to default serializer.
+  - In `serializeInsertable`, both the `DataClass` path (`toJson(serializer: _cloudSerializer)`) and `Companion` path (`val = _cloudSerializer.toJson(val)`) now use the exact same serializer, guaranteeing identical UTC output ending in `Z`.
+- **Verification**:
+  - Added `test/sync/sync_helpers_utc_test.dart` (7 tests, all passing):
+    - Red test verified first: `UserData` and `CostBatchData` serialization failed prior to fix (produced zone-less strings without `Z`), green after fix.
+    - Guard test: representative `DataClass` instances across synced tables (`BusinessData`, `StoreData`, `CategoryData`, `SupplierData`, `ProductData`, `InventoryData`, `CustomerData`, `OrderData`, `ExpenseData`, `SettingData`, `SessionData`) verify all `DateTime` fields serialize with `Z` suffix.
+    - Companion path output verified unchanged and produces `Z` suffix.
+    - Instant parity: `created_at` (UserData) matches UUIDv7 creation instant within seconds; `received_at` (CostBatchData) uses a deterministic UUIDv7 and asserts exact equality with the UUIDv7 embedded instant.
+    - DAO integration tests: `enqueueUpsert` with `UserData` and `CostBatchData` re-read from Drift enqueues payloads carrying UTC `Z` timestamps matching their respective UUIDv7 instants.
+  - Full sync suite (`test/sync/`, 244 tests) all pass.
+  - Full costing suite (`test/costing/`, 64 tests) all pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### PRD #239 Closed — Fixed chrome starves scrollable content on short and small viewports (2026-09-18)
 All 15 child issues and slices under PRD #239 have been completed, verified, and merged into `main`:
