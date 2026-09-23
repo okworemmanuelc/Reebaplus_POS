@@ -10,6 +10,16 @@ The human updates it when resolving open questions or making architectural decis
 
 171 sessions logged. Codebase is live and being verified on-device.
 
+### Issue #292 — Add Manufacturer asks only name + crate value; Crate Size Group tiles leave the Crates tab (2026-09-23)
+Branch `feat/add-manufacturer-name-crate-value-292`, cut from `main` (`5bb0671`), worked in `../drinkPosApp-wt-292` (other sessions share the main checkout). Slice of PRD #284; no blockers.
+- **Add Manufacturer** moved out of `inventory_screen.dart` into `lib/features/inventory/widgets/add_manufacturer_sheet.dart` (`AddManufacturerSheet.show`). It asks only **Name** + **Crate value (₦)** (writes `manufacturers.deposit_amount_kobo`). The "Initial Empty" box is gone: it wrote `emptyCrateStock`, which the Crates tab never reads (typing 20 showed 0). A new brand's opening number now comes from its first count (#290's Opening Count).
+- **Name validation**: a blank name or one already used by a live manufacturer (case-insensitive) is rejected in the form and nothing is written.
+- **Gate**: the Crates tab's "Add New" button renders only when `Gates.editProductPrice.allows(ref)` (CEO + Manager). Everyone else doesn't see it at all.
+- **Layout**: the sheet body is a `SingleChildScrollView` with `24 + deviceBottomPadding` bottom padding, so it scrolls on short screens and clears the system nav bar. The "Manufacturers" header title is now `Flexible` + ellipsis. Before this, the row overflowed by 57dp in the 412dp test harness when the button showed.
+- **Crate Size Group Assets removed from the Crates tab**: the tiles, their edit sheet, the `watchAllCrateSizeGroups` subscription in the screen, and the now-unreachable `InventoryDao.updateCrateGroupStock`. The `crate_size_groups` table, its rows, its sync and `SupplierService`'s watcher are untouched.
+- **Tests**: `test/inventory/add_manufacturer_sheet_test.dart` (10): visibility for CEO, Manager, Cashier and Stock keeper, with gates injected; name + crate value only, and the saved row; blank name and duplicate name rejected with no write; scroll + device-bottom-padding + save at 320x568 and 800x360; Crate Size Group section gone with the row unchanged, and the stats row still showing. `test/inventory/` 95/95, `test/crates` + crate-size-group DB tests + `test/permissions` 378/378, `flutter analyze` clean.
+- **Not verified**: keyboard lift on a real device. The test only checks that the padding follows `deviceBottomPadding` (the app-wide keyboard rule). Owner emulator check: open Inventory → Empty Crates → Add New, focus Crate value, and confirm the button stays reachable above the keyboard.
+
 ### Issue #282 — Approvals: request cards show no tap ripple, and debug builds report a framework error (2026-09-22)
 Branch `fix/approvals-card-tap-ripple-282`, cut from `main`.
 - **Problem**:
