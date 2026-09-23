@@ -889,30 +889,54 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Manually set a manufacturer's empty-crate count (management dialog). #157:
-  /// a manual "set to N" is recorded as a reconciling **delta** row (N − current)
-  /// so the correction has a traceable history instead of an off-ledger
-  /// overwrite. With a store active, the per-store cache is set absolutely and
-  /// the business total bumped by the same delta; the legacy (no-store) path
-  /// sets the business scalar absolutely.
-  Future<void> recordManualCountCorrection(
-    String manufacturerId,
-    int newStock, {
-    String? storeId,
+  /// Record a **Crate Count Correction**: [performedBy] counted [countedEmpties]
+  /// empties of [manufacturerId] at [storeId] (PRD #284 decision 6).
+  ///
+  /// The ledger moves by `counted − expected`, where *expected* is the derived
+  /// Empties Pool for that `(manufacturer, store)` — the same store-stamped,
+  /// customer-less `SUM(quantity_delta)` [watchEmptiesPoolByManufacturer]
+  /// shows — never the local cache, which can drift from the ledger.
+  ///
+  /// The row is an [kCrateMovementOpeningCount] when no earlier count or
+  /// opening-count row exists for that `(manufacturer, store)`, and a
+  /// [kCrateMovementCount] otherwise. It is written **even when nothing moved**
+  /// (`quantity_delta = 0`): a count is an event with an author, and the first
+  /// one is what makes every later one a real Count rather than an opening.
+  ///
+  /// Store and author are required: a count taken in All Stores used to write
+  /// an unstamped row that no store owned, so the All-Stores total stopped
+  /// equalling the sum of the stores (#290). A negative count is rejected
+  /// with an [ArgumentError] before anything is written.
+  ///
+  /// The per-store cache is set absolutely and the business scalar bumped by the
+  /// same delta; both are local projections of the ledger (#159).
+  Future<void> recordManualCountCorrection({
+    required String manufacturerId,
+    required String storeId,
+    required String performedBy,
+    required int countedEmpties,
   }) async {
+    if (countedEmpties < 0) {
+      throw ArgumentError.value(
+        countedEmpties,
+        'countedEmpties',
+        'a count cannot be negative',
+      );
+    }
     await transaction(() async {
-      final now = DateTime.now();
-      if (storeId != null) {
-        final currentBalance = await db.storeCrateBalancesDao.getBalance(
-          storeId: storeId,
-          manufacturerId: manufacturerId,
-        );
-        final delta = newStock - currentBalance;
-        await db.storeCrateBalancesDao.setBalance(
-          storeId: storeId,
-          manufacturerId: manufacturerId,
-          newBalance: newStock,
-        );
+      final basis = await _countBasis(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+      );
+      final delta = countedEmpties - basis.expected;
+      final isOpening = basis.priorCounts == 0;
+
+      await db.storeCrateBalancesDao.setBalance(
+        storeId: storeId,
+        manufacturerId: manufacturerId,
+        newBalance: countedEmpties,
+      );
+      if (delta != 0) {
         await customUpdate(
           'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
           "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
@@ -925,39 +949,55 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           updates: {manufacturers},
         );
         await _enqueueFullManufacturer(manufacturerId);
-        if (delta != 0) {
-          await _appendPoolLedgerRow(
-            manufacturerId: manufacturerId,
-            storeId: storeId,
-            quantityDelta: delta,
-            movementType: 'adjusted',
-          );
-        }
-      } else {
-        final mfr = await (select(
-          manufacturers,
-        )..where((t) => t.id.equals(manufacturerId) & whereBusiness(t))).getSingle();
-        final delta = newStock - mfr.emptyCrateStock;
-        await (update(manufacturers)
-              ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
-            .write(
-          ManufacturersCompanion(
-            id: Value(manufacturerId),
-            emptyCrateStock: Value(newStock),
-            lastUpdatedAt: Value(now),
-          ),
-        );
-        await _enqueueFullManufacturer(manufacturerId);
-        if (delta != 0) {
-          await _appendPoolLedgerRow(
-            manufacturerId: manufacturerId,
-            storeId: null,
-            quantityDelta: delta,
-            movementType: 'adjusted',
-          );
-        }
       }
+      await _appendPoolLedgerRow(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        quantityDelta: delta,
+        movementType: isOpening
+            ? kCrateMovementOpeningCount
+            : kCrateMovementCount,
+        performedBy: performedBy,
+      );
     });
+  }
+
+  /// What a count of [manufacturerId] at [storeId] is compared against: the
+  /// derived Empties Pool for that `(manufacturer, store)`, read once. The same
+  /// figure [watchEmptiesPoolByManufacturer] shows for the store and the one
+  /// [recordManualCountCorrection] moves the ledger from.
+  Future<int> expectedEmptiesAt({
+    required String manufacturerId,
+    required String storeId,
+  }) async =>
+      (await _countBasis(manufacturerId: manufacturerId, storeId: storeId))
+          .expected;
+
+  /// The store's derived pool and how many count rows it already holds, in one
+  /// read. Store-stamped, customer-less rows only — the Empties Pool's filter.
+  Future<({int expected, int priorCounts})> _countBasis({
+    required String manufacturerId,
+    required String storeId,
+  }) async {
+    final countTypes = kCrateCountMovementTypes.map((t) => "'$t'").join(',');
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(quantity_delta), 0) AS expected, '
+      '  COALESCE(SUM(CASE WHEN movement_type IN ($countTypes) '
+      '    THEN 1 ELSE 0 END), 0) AS prior_counts '
+      'FROM crate_ledger '
+      'WHERE business_id = ? AND manufacturer_id = ? AND store_id = ? '
+      '  AND customer_id IS NULL',
+      variables: [
+        Variable(requireBusinessId()),
+        Variable(manufacturerId),
+        Variable(storeId),
+      ],
+      readsFrom: {crateLedger},
+    ).getSingle();
+    return (
+      expected: row.read<int>('expected'),
+      priorCounts: row.read<int>('prior_counts'),
+    );
   }
 
   /// Move [quantity] empties of [manufacturerId] between two stores (§16.9),

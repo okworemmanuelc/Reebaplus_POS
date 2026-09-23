@@ -93,41 +93,154 @@ void main() {
       expect(damaged.single.storeId, isNull);
     });
 
-    test('recordManualCountCorrection (store-less) records a DELTA row (N-current)',
-        () async {
-      await db.cratePoolDao.recordManualCountCorrection(manufacturerId, 15);
-      expect(await scalar(), 15);
+  });
 
-      // A second correction downward records the negative delta, not an overwrite.
-      await db.cratePoolDao.recordManualCountCorrection(manufacturerId, 10);
-      expect(await scalar(), 10);
+  // #290 / PRD #284 decision 6 — a count belongs to a store and a person, and
+  // is an Opening Count or a Count, never the generic `adjusted`.
+  group('recordManualCountCorrection — store-stamped, attributed counts', () {
+    late AppDatabase db;
+    const storeB = 'store-2';
 
-      final rows = await ledger();
-      expect(rows.map((r) => r.quantityDelta).toList(), [15, -5]);
-      // The ledger sums to the current displayed count.
-      expect(rows.fold<int>(0, (s, r) => s + r.quantityDelta), 10);
+    setUp(() async {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      db.businessIdResolver = () => businessId;
+      await db.into(db.businesses).insert(
+            BusinessesCompanion.insert(id: const Value(businessId), name: 'Biz'),
+          );
+      await db.into(db.users).insert(
+            UsersCompanion.insert(
+              id: const Value(userId),
+              businessId: businessId,
+              name: 'U',
+              pin: '1234',
+            ),
+          );
+      for (final id in const [storeId, storeB]) {
+        await db.into(db.stores).insert(
+              StoresCompanion.insert(
+                id: Value(id),
+                businessId: businessId,
+                name: id,
+              ),
+            );
+      }
+      await db.into(db.manufacturers).insert(
+            ManufacturersCompanion.insert(
+              id: const Value(manufacturerId),
+              businessId: businessId,
+              name: 'Mfr',
+            ),
+          );
     });
 
-    test('recordManualCountCorrection (store) sets store balance + a store row',
-        () async {
-      await db.cratePoolDao.recordManualCountCorrection(
-        manufacturerId,
-        12,
-        storeId: storeId,
-      );
+    tearDown(() => db.close());
 
-      final bal = await db.storeCrateBalancesDao.getBalance(
+    Future<void> count(int counted, {String store = storeId}) =>
+        db.cratePoolDao.recordManualCountCorrection(
+          manufacturerId: manufacturerId,
+          storeId: store,
+          performedBy: userId,
+          countedEmpties: counted,
+        );
+
+    // Insertion (rowid) order — a plain scan of the table.
+    Future<List<CrateLedgerData>> ledger() => db.select(db.crateLedger).get();
+
+    Future<int> pool({String? store}) async =>
+        (await db.cratePoolDao
+                .watchEmptiesPoolByManufacturer(storeId: store)
+                .first)[manufacturerId] ??
+        0;
+
+    test('the first count at a store is an Opening Count; later ones are Counts; '
+        'every row is store-stamped and attributed', () async {
+      await count(15);
+      await count(10);
+
+      final rows = await ledger();
+      expect(rows.map((r) => r.movementType), ['opening_count', 'count']);
+      expect(rows.map((r) => r.quantityDelta), [15, -5]);
+      expect(rows.every((r) => r.storeId == storeId), isTrue);
+      expect(rows.every((r) => r.performedBy == userId), isTrue);
+      expect(rows.every((r) => r.customerId == null), isTrue);
+      expect(rows.any((r) => r.movementType == 'adjusted'), isFalse);
+      expect(await pool(store: storeId), 10);
+    });
+
+    test('the Opening Count is per (manufacturer, store)', () async {
+      await count(15);
+      await count(4, store: storeB);
+
+      final rows = await ledger();
+      expect(
+        rows.where((r) => r.storeId == storeB).single.movementType,
+        'opening_count',
+        reason: 'a count at store A must not make store B\'s first count a Count',
+      );
+    });
+
+    test('expected is the DERIVED pool, and pool credits are not counts',
+        () async {
+      // Ten empties came back through the pool (an `adjusted` credit). The
+      // first count is still an Opening Count, and it moves the ledger by the
+      // gap against the ledger's own figure.
+      await db.cratePoolDao.addEmptiesToPool(manufacturerId, 10, storeId: storeId);
+      // Drift the local cache away from the ledger: the count must not read it.
+      await db.storeCrateBalancesDao.setBalance(
         storeId: storeId,
         manufacturerId: manufacturerId,
+        newBalance: 99,
       );
-      expect(bal, 12);
-      expect(await scalar(), 12); // business total bumped by the same delta
+      await count(7);
 
-      final storeRows =
-          (await ledger()).where((r) => r.storeId == storeId).toList();
-      expect(storeRows.length, 1);
-      expect(storeRows.single.quantityDelta, 12);
-      expect(storeRows.single.movementType, 'adjusted');
+      final opening = (await ledger()).last;
+      expect(opening.movementType, 'opening_count');
+      expect(opening.quantityDelta, -3);
+      expect(await pool(store: storeId), 7);
+      expect(
+        await db.storeCrateBalancesDao.getBalance(
+          storeId: storeId,
+          manufacturerId: manufacturerId,
+        ),
+        7,
+        reason: 'the local projection is set to what was counted',
+      );
+    });
+
+    test('a count that matches is still recorded, so the next one is a Count',
+        () async {
+      await count(0);
+      await count(0);
+      final rows = await ledger();
+      expect(rows.map((r) => r.movementType), ['opening_count', 'count']);
+      expect(rows.map((r) => r.quantityDelta), [0, 0]);
+    });
+
+    test('a negative count is rejected and writes nothing', () async {
+      await expectLater(count(-1), throwsArgumentError);
+      expect(await ledger(), isEmpty);
+      expect(
+        await db.storeCrateBalancesDao.getBalance(
+          storeId: storeId,
+          manufacturerId: manufacturerId,
+        ),
+        0,
+      );
+    });
+
+    test('after counts at several stores, All Stores equals the sum of the '
+        'stores', () async {
+      await db.cratePoolDao.addEmptiesToPool(manufacturerId, 20, storeId: storeId);
+      await db.cratePoolDao.addEmptiesToPool(manufacturerId, 5, storeId: storeB);
+      await count(17);
+      await count(9, store: storeB);
+      await count(12);
+
+      final a = await pool(store: storeId);
+      final b = await pool(store: storeB);
+      expect(a, 12);
+      expect(b, 9);
+      expect(await pool(), a + b);
     });
   });
 

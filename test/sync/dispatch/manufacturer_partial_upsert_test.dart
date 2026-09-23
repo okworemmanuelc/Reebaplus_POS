@@ -7,6 +7,7 @@
 // — the empty-crate value / deposit / stock never reached the cloud and the row
 // retried forever. Each method now reads the row back and enqueues every column.
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
@@ -52,7 +53,30 @@ void main() {
 
   test('updateManufacturerStock enqueues a full row incl. name, but the pushed '
       'payload OMITS empty_crate_stock (#159 demote)', () async {
-    await db.inventoryDao.updateManufacturerStock(manufacturerId, 42);
+    // #290: a count needs a store and a person.
+    const storeId = 'store-1';
+    const userId = 'user-1';
+    await db.into(db.stores).insert(
+      StoresCompanion.insert(
+        id: const Value(storeId),
+        businessId: businessId,
+        name: 'Main',
+      ),
+    );
+    await db.into(db.users).insert(
+      UsersCompanion.insert(
+        id: const Value(userId),
+        businessId: businessId,
+        name: 'U',
+        pin: '1234',
+      ),
+    );
+    await db.inventoryDao.updateManufacturerStock(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+      performedBy: userId,
+      countedEmpties: 42,
+    );
     final p = await latestManufacturerUpsert();
     // The enqueued row is still full (NOT NULL `name` present, avoids the
     // 23502), and the local projection carries the new count…

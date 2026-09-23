@@ -62,11 +62,20 @@ const String kCrateWriteOffSourceManual = 'manual';
 /// second half of one event, not a later opinion about it.
 const String kCrateWriteOffSourceCustomerForfeit = 'customer_forfeit';
 
+/// A write-off taken against the **count-based Crate Shortage** (PRD #284
+/// decision 7): crates found missing at a count, for every brand whatever its
+/// arrangement. Written from #296 on. The older [kCrateWriteOffSourceManual]
+/// and [kCrateWriteOffSourceCustomerForfeit] rows are history only and never
+/// net against this figure.
+const String kCrateWriteOffSourceCountShortage = 'count_shortage';
+
 /// The closed set `crate_shortfall_writeoffs.source` may hold. Mirrors the cloud
-/// CHECK in `supabase/migrations/0176_crate_forfeit_netting.sql`.
+/// CHECK in `supabase/migrations/0179_crate_count_movements.sql` (first issued
+/// by 0176).
 const List<String> kCrateWriteOffSources = [
   kCrateWriteOffSourceManual,
   kCrateWriteOffSourceCustomerForfeit,
+  kCrateWriteOffSourceCountShortage,
 ];
 
 /// How a booked crate loss came to be booked.
@@ -75,7 +84,10 @@ enum CrateWriteOffSource {
   manual(kCrateWriteOffSourceManual),
 
   /// A customer kept the crates and their deposit with them (#217).
-  customerForfeit(kCrateWriteOffSourceCustomerForfeit);
+  customerForfeit(kCrateWriteOffSourceCustomerForfeit),
+
+  /// Crates found missing at a count were accepted as lost (PRD #284).
+  countShortage(kCrateWriteOffSourceCountShortage);
 
   const CrateWriteOffSource(this.wire);
 

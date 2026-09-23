@@ -312,13 +312,36 @@ part of the pool (those are debts, not on-hand stock).
 The append-only record of every crate movement — `crate_ledger` (customer- and
 business-side) and `supplier_crate_ledger`. One signed, store-stamped row per
 movement (`issued` / `returned` / `damaged` / `adjusted` / `transferred_in` /
-`transferred_out`; supplier side: `received` / `returned` / `adjusted`). It is
+`transferred_out`, and since #290 `count` / `opening_count` /
+`full_crate_damage` / `purchase`; supplier side: `received` / `returned` /
+`adjusted`). A row may carry a snapshotted per-crate value
+(`rate_per_crate_kobo`) on damage and purchase movements. It is
 the single source of truth; every crate balance is derived from it, exactly as
 the wallet balance is derived from `wallet_transactions`. Corrections are new
 compensating rows, never edits. Every movement routes through the one Crate Pool
 seam (`CratePoolDao`).
 _Avoid_: updating or deleting a ledger row; writing a crate table outside the
 seam; shipping a balance as an absolute value (only ledger rows sync).
+
+**Crate Count Correction**:
+Someone counted a brand's empties at a store, and the [Crate Ledger] moved by
+`counted − expected`, where *expected* is that store's [Empties Pool]. Always
+recorded against a **store** and the **person** who counted (`performed_by`),
+with its own movement type (`count`), and recorded even when the two agree. The
+input is what was counted, never the difference.
+_Avoid_: recording a count against no store (the All-Stores total stops being the
+sum of the stores); an anonymous count; filing a count as the generic `adjusted`
+(the shortage is derived from count rows alone, so a count hidden among pool
+credits is invisible to it).
+
+**Opening Count**:
+The first [Crate Count Correction] of a brand at a store — no earlier `count` or
+`opening_count` row exists for that `(manufacturer, store)`. It sets the number
+(`opening_count` movement) and raises no shortage, so pre-release numbers and a
+new brand's setup never read as a loss. It still shows who counted and the gap it
+closed.
+_Avoid_: treating the first post-release count as a shortage; letting a pool
+credit (`adjusted`) or an unchanged Save count as the opening.
 
 **Crate Deposit**:
 The refundable money a returnable crate is worth — its per-crate **rate** is

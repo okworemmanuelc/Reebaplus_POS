@@ -8,7 +8,22 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-171 sessions logged. Codebase is live and being verified on-device.
+172 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #290 — Crate counts belong to a store and a person (schema groundwork for PRD #284) (2026-09-23)
+Branch `feat/crate-count-store-author-290`, cut from `main` (`5bb0671`), worked in `../drinkPosApp-wt-290`.
+- **Schema (the whole of PRD #284 decision 15, one bump)**: Drift **v82** + cloud **`0179_crate_count_movements.sql`**.
+  - `crate_ledger.movement_type` CHECK + `count`, `opening_count`, `full_crate_damage`, `purchase`. Constants in the new `lib/core/crates/crate_ledger_movement_types.dart`.
+  - `crate_ledger.rate_per_crate_kobo` — nullable, `>= 0`, cloud `bigint`; frozen by the append-only trigger on both sides.
+  - `crate_shortfall_writeoffs.source` cloud CHECK + `count_shortage` (`kCrateWriteOffSourceCountShortage`, `CrateWriteOffSource.countShortage`). No Drift change for it — that set is cloud-only by design.
+  - v82 step = the v29 table-rebuild recipe; `newColumns` pins the new column to NULL (stale-column trap) and the v29 step now lists it too. Idempotent: a stepped-back DB keeps its snapshots.
+  - **Deployed**: remote verified through 0178, then 0179 pushed (cloud first, as the issue requires).
+- **Seam**: `CratePoolDao.recordManualCountCorrection` now requires `storeId`, `performedBy`, `countedEmpties`; the store-less branch is gone. Expected = the **derived** pool for `(manufacturer, store)` (was the local cache). First count per `(manufacturer, store)` writes `opening_count`, later ones `count`; never `adjusted`. A row is written even when nothing moved. Negative → `ArgumentError`, nothing written. New `expectedEmptiesAt` one-shot read.
+- **Manage sheet** (`inventory_screen.dart`): passes the active store + signed-in user. `crateCountStoreWithoutAsking` (new, `lib/core/crates/crate_count_store.dart`) — locked store, else the only selectable store, else the sheet shows a "Store counted" picker that prefills that store's expected empties. A count is recorded only when the figure is changed, so saving the deposit alone writes no count (and cannot burn a brand's Opening Count). Blank/non-numeric is rejected before anything is written. The sheet body now scrolls (it gained a picker); the diff there is mostly re-indentation — review with `-w`.
+- **Tests**: seam group (6) in `crate_pool_seam_test.dart`; `migration_upgrade_test.dart` v81→v82 (2, mutation-checked: dropping `newColumns` fails it); `crate_count_store_test.dart` (4); `test/inventory/manufacturer_manage_count_test.dart` (6, screen harness; `pumpScreen` gained `selectableStores`). Full suite **2353 pass / 271 skipped / 0 fail**; `flutter analyze` clean.
+- **Review fixes**: the v82 bump trigger is now re-created outside the rebuild guard, so a retried step always ends with it in place. In All Stores with one pickable store, the sheet now loads that store's own expected empties (`expectedEmptiesAt`) before the field can be edited; it used to prefill the business-wide total, which differs when crates sit in a van or a store the user can't pick.
+- **Found, not fixed (for #291)**: at 412dp the Crates tab brand card row overflows by ~57px (a horizontal `RenderFlex` in the list). The widget test runs at tablet width for that reason. #291 replaces the card.
+- **Docs**: `CONTEXT.md` — Crate Ledger movement list, new terms **Crate Count Correction** and **Opening Count**. The shortage redefinition, the new ADR and the ADR 0023 amendment belong to #293/#296.
 
 ### Issue #282 — Approvals: request cards show no tap ripple, and debug builds report a framework error (2026-09-22)
 Branch `fix/approvals-card-tap-ripple-282`, cut from `main`.
@@ -6397,15 +6412,12 @@ to the unit being picked up.
 carried over.)_
 - Toolchain: **Flutter 3.44.2** (stable, framework `c9a6c48`, 2026-06-10) • **Dart 3.12.2**
   • DevTools 2.57.0.
-- Drift client schema: **v81**.
-- Cloud migrations **in the repo** through **`0178_complete_onboarding_without_store.sql`**
-  (162 files). The `0174` gap is **deliberate** — commit `015e8ff` renumbered the #203
+- Drift client schema: **v82** (#290).
+- Cloud migrations **in the repo** through **`0179_crate_count_movements.sql`**
+  (163 files). The `0174` gap is **deliberate** — commit `015e8ff` renumbered the #203
   slice migrations around #209's `0173`; there is nothing missing to hunt for.
-  ⚠️ *Deployed*-through could **not** be verified this session: the Supabase MCP server is
-  unauthenticated in a non-interactive run, so no remote query was possible. Last recorded
-  deploy state is cloud **0168–0170** on prod (2026-07-29, flags still OFF) per
-  `BUILD_LOG.md`; treat anything after 0170 as **unconfirmed on remote** and check before
-  a `db push`.
+- Cloud migrations **deployed** through **0179** — verified 2026-09-23 with
+  `supabase migration list` (remote matched local through 0178; 0179 then pushed for #290).
 - Full suite: **2084 pass / 131 skipped / 0 failures** (2026-09-15).
 - `flutter test test/sync/` — **237 pass** (2026-09-15; was 115 at the Session 141 baseline).
 - `flutter analyze lib test` — **clean, 0 issues** (2026-09-15).

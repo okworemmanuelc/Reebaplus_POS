@@ -244,6 +244,7 @@ Future<BuildContext> pumpScreen(
   ThemeData? theme,
   Map<String, Object>? sharedPreferences,
   bool settle = true,
+  List<StoreData>? selectableStores,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -283,7 +284,9 @@ Future<BuildContext> pumpScreen(
       ),
       currencySymbolProvider.overrideWithValue('₦'),
       firstLoadSkeletonActiveProvider.overrideWithValue(false),
-      selectableStoresProvider.overrideWithValue([env.store]),
+      selectableStoresProvider.overrideWithValue(
+        selectableStores ?? [env.store],
+      ),
       gateContextProvider.overrideWithValue(
         GateContext(
           grantedKeys: grantedKeys,
