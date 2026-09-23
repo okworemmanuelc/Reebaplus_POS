@@ -3586,11 +3586,24 @@ void main() {
       final ids = await seedTenant(db1);
       final id = UuidV7.generate();
       await insertMovement(db1, ids, 'purchase', rate: 70000, id: id);
+      // The table already has the v82 shape, so the rebuild is skipped — the
+      // triggers must still be re-emitted (a retry after a partial run).
+      await db1.customStatement(
+        'DROP TRIGGER IF EXISTS bump_crate_ledger_last_updated_at',
+      );
       await db1.customStatement('PRAGMA user_version = 81');
       await db1.close();
 
       final db2 = await openAndInit();
       addTearDown(db2.close);
+      final bump = await db2
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type = 'trigger' "
+            "AND name = 'bump_crate_ledger_last_updated_at'",
+          )
+          .get();
+      expect(bump, isNotEmpty,
+          reason: 'the bump trigger is re-created on every run of the step');
       final row = await db2
           .customSelect(
             'SELECT rate_per_crate_kobo FROM crate_ledger WHERE id = ?',

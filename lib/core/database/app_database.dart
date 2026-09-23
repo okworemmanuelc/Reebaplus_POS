@@ -6290,21 +6290,24 @@ class AppDatabase extends _$AppDatabase {
             'CREATE INDEX idx_crate_ledger_owner_group '
             'ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
           );
-          await customStatement(
-            'DROP TRIGGER IF EXISTS bump_crate_ledger_last_updated_at',
-          );
-          await customStatement(
-            'CREATE TRIGGER bump_crate_ledger_last_updated_at '
-            'AFTER UPDATE ON crate_ledger '
-            'FOR EACH ROW '
-            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
-            'BEGIN '
-            "UPDATE crate_ledger SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
-            'END',
-          );
         }
-        // Emitted OUTSIDE the guard so a stepped-back DB still freezes the new
-        // column (the trigger text is derived from `_ledgerTables`).
+        // Every trigger is emitted OUTSIDE the guard, so a retry of this step
+        // (or a stepped-back DB whose table already has the v82 shape) always
+        // ends with the bump trigger and the append-only pair in place — the
+        // latter's text derives from `_ledgerTables`, so it freezes the new
+        // column too.
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_crate_ledger_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_crate_ledger_last_updated_at '
+          'AFTER UPDATE ON crate_ledger '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE crate_ledger SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
         await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
         await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
         for (final stmt in _ledgerTriggerStatements(

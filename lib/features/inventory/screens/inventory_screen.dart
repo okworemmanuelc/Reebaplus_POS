@@ -1980,15 +1980,52 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // store the user can pick, is used without asking; otherwise the sheet asks
     // which store was counted and prefills that store's expected empties.
     final selectableStores = ref.read(selectableStoresProvider);
+    final lockedStoreId = ref.read(lockedStoreProvider).value;
     String? countStoreId = crateCountStoreWithoutAsking(
-      lockedStoreId: ref.read(lockedStoreProvider).value,
+      lockedStoreId: lockedStoreId,
       selectableStoreIds: [for (final s in selectableStores) s.id],
     );
     final mustPickStore = countStoreId == null;
+    // [emptyCount] is the card's figure: the locked store's pool, or the
+    // business-wide pool in All Stores. An inferred store (All Stores, one
+    // selectable store) can differ from the business-wide figure — a van, or
+    // stores this user can't pick — so its own pool is loaded before the field
+    // can be edited.
+    final inferredStoreId = lockedStoreId == null ? countStoreId : null;
+    bool isBaselineLoading = inferredStoreId != null;
     // The figure the field was prefilled with. A count is recorded only when the
     // user changes it, so saving the deposit alone never writes a count.
-    String? countBaseline = mustPickStore ? null : emptyCount.toString();
+    String? countBaseline = mustPickStore || isBaselineLoading
+        ? null
+        : emptyCount.toString();
     final stockCtrl = TextEditingController(text: countBaseline ?? '');
+    BuildContext? sheetContext;
+    StateSetter? setSheetState;
+    if (inferredStoreId != null) {
+      unawaited(
+        ref
+            .read(databaseProvider)
+            .cratePoolDao
+            .expectedEmptiesAt(
+              manufacturerId: mfr.id,
+              storeId: inferredStoreId,
+            )
+            .then((expected) {
+              void apply() {
+                countBaseline = expected.toString();
+                stockCtrl.text = countBaseline!;
+                isBaselineLoading = false;
+              }
+
+              final sheet = sheetContext;
+              if (sheet == null) {
+                apply(); // the sheet hasn't built yet; its first build shows it
+              } else if (sheet.mounted) {
+                setSheetState?.call(apply);
+              }
+            }),
+      );
+    }
     final depositCtrl = TextEditingController();
     final crateValueCtrl = TextEditingController();
     const isCEO = true;
@@ -2002,7 +2039,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setB) => Container(
+        builder: (ctx, setB) {
+          sheetContext = ctx;
+          setSheetState = setB;
+          return Container(
           decoration: BoxDecoration(
             color: _surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -2076,9 +2116,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 _styledDialogField(
                   stockCtrl,
                   'Empty Crates In Stock',
-                  countStoreId == null ? 'Choose a store first' : 'e.g. 50',
+                  countStoreId == null
+                      ? 'Choose a store first'
+                      : isBaselineLoading
+                      ? 'Loading…'
+                      : 'e.g. 50',
                   isNumber: true,
-                  readOnly: countStoreId == null,
+                  readOnly: countStoreId == null || isBaselineLoading,
                 ),
                 const SizedBox(height: 12),
 
@@ -2224,7 +2268,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     final countText = stockCtrl.text.trim();
                     final storeId = countStoreId;
                     int? counted;
-                    if (storeId != null && countText != countBaseline) {
+                    if (storeId != null &&
+                        !isBaselineLoading &&
+                        countText != countBaseline) {
                       counted = int.tryParse(countText);
                       if (counted == null || counted < 0) {
                         AppNotification.showError(
@@ -2307,7 +2353,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               ],
             ),
           ),
-        ),
+        );
+        },
       ),
     );
   }

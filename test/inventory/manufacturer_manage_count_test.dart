@@ -101,6 +101,18 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// A read of a store's expected empties needs real async time between
+  /// frames before the sheet can show it.
+  Future<void> settleDatabase(WidgetTester tester) async {
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+  }
+
   Future<List<CrateLedgerData>> ledger() =>
       env.db.select(env.db.crateLedger).get();
 
@@ -141,17 +153,33 @@ void main() {
     await disposeScreen(tester);
   });
 
-  testWidgets('All Stores on a one-store business uses that store without '
-      'asking', (tester) async {
+  testWidgets('All Stores with one store to pick uses that store without '
+      'asking, and compares against THAT store\'s empties', (tester) async {
+    // 5 empties at the store this user can pick, 3 at one they can't. The
+    // All-Stores card shows the business-wide 8; the count must start from 5.
+    final mfrId = env.manufacturers.single.id;
+    await tester.runAsync(() async {
+      await env.db.cratePoolDao.addEmptiesToPool(mfrId, 5, storeId: env.storeId);
+      await env.db.cratePoolDao
+          .addEmptiesToPool(mfrId, 3, storeId: secondStore.id);
+    });
     await openManage(tester, allStores: true);
     expect(find.text('Store counted'), findsNothing);
+    await settleDatabase(tester);
+    expect(
+      tester.widget<TextField>(countField()).controller?.text,
+      '5',
+      reason: 'the inferred store\'s own pool, not the business-wide total',
+    );
 
     await tester.enterText(countField(), '4');
     await save(tester);
 
-    final row = (await tester.runAsync(ledger))!.single;
-    expect(row.storeId, env.storeId);
-    expect(row.performedBy, userId);
+    final rows = (await tester.runAsync(ledger))!;
+    final count = rows.singleWhere((r) => r.movementType == 'opening_count');
+    expect(count.storeId, env.storeId);
+    expect(count.performedBy, userId);
+    expect(count.quantityDelta, -1);
     await disposeScreen(tester);
   });
 
@@ -180,15 +208,7 @@ void main() {
     await tester.tap(find.text('Choose a store'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Second Store').last);
-    // The pick reads that store's expected empties from the database, which
-    // needs real async time between frames.
-    for (var i = 0; i < 5; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 20)),
-      );
-      await tester.pump();
-    }
-    await tester.pumpAndSettle();
+    await settleDatabase(tester);
     expect(
       tester.widget<TextField>(countField()).controller?.text,
       '0',
