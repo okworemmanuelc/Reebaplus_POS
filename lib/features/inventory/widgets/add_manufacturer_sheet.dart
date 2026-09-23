@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -15,7 +16,7 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 ///
 /// There is deliberately no opening empties box — a new brand's first number
 /// comes from its first count (an Opening Count, #290). Callers gate the
-/// entry point on `Gates.editProductPrice`; this sheet does not re-check it.
+/// entry point on `Gates.addManufacturer`; the save re-checks it at fire time.
 class AddManufacturerSheet extends ConsumerStatefulWidget {
   const AddManufacturerSheet({super.key, required this.existingNames});
 
@@ -66,6 +67,12 @@ class _AddManufacturerSheetState extends ConsumerState<AddManufacturerSheet> {
 
   Future<void> _save() async {
     if (_saving || !_formKey.currentState!.validate()) return;
+    // Re-check at fire time: access may have been revoked while the sheet was
+    // open, and the button that opened it only reflects the moment of the tap.
+    if (!Gates.addManufacturer.allowsNow(ref)) {
+      showGateDenied(context, Gates.addManufacturer);
+      return;
+    }
     final name = _nameCtrl.text.trim();
     final user = ref.read(authProvider).currentUser;
     final businessId = user?.businessId;
@@ -85,13 +92,6 @@ class _AddManufacturerSheetState extends ConsumerState<AddManufacturerSheet> {
               ),
             ),
           );
-      await ref
-          .read(activityLogProvider)
-          .logAction(
-            'add_manufacturer',
-            '${user?.name ?? 'Unknown'} added manufacturer: $name',
-          );
-      if (mounted) Navigator.pop(context);
     } catch (_) {
       if (mounted) {
         setState(() => _saving = false);
@@ -100,7 +100,27 @@ class _AddManufacturerSheetState extends ConsumerState<AddManufacturerSheet> {
           'Could not add manufacturer. Please try again.',
         );
       }
+      return;
     }
+
+    // The manufacturer is saved from here on. A failed log must not read as a
+    // failed add, or a retry would create a second manufacturer.
+    try {
+      await ref
+          .read(activityLogProvider)
+          .logAction(
+            'add_manufacturer',
+            '${user?.name ?? 'Unknown'} added manufacturer: $name',
+          );
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Manufacturer added, but the activity log could not be saved.',
+        );
+      }
+    }
+    if (mounted) Navigator.pop(context);
   }
 
   @override

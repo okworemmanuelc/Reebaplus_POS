@@ -1530,7 +1530,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     ),
                   ),
                 ),
-                if (Gates.editProductPrice.allows(ref))
+                if (Gates.addManufacturer.allows(ref))
                   AppButton(
                     text: 'Add New',
                     icon: FontAwesomeIcons.circlePlus.data,

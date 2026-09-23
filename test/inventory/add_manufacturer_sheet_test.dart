@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
@@ -49,7 +50,7 @@ void main() {
     Set<String> grantedKeys = ownerGrants,
     String roleSlug = 'ceo',
     String roleName = 'CEO',
-    int roleRank = 4,
+    int roleRank = GateTier.ceo,
   }) async {
     await pumpScreen(
       tester,
@@ -108,14 +109,40 @@ void main() {
 
   group('Add Manufacturer visibility', () {
     const roles = [
-      (slug: 'ceo', name: 'CEO', rank: 4, grants: ownerGrants, sees: true),
-      (slug: 'manager', name: 'Manager', rank: 3, grants: ownerGrants, sees: true),
-      (slug: 'cashier', name: 'Cashier', rank: 2, grants: baseGrants, sees: false),
+      (
+        slug: 'ceo',
+        name: 'CEO',
+        rank: GateTier.ceo,
+        grants: ownerGrants,
+        sees: true,
+      ),
+      (
+        slug: 'manager',
+        name: 'Manager',
+        rank: GateTier.manager,
+        grants: ownerGrants,
+        sees: true,
+      ),
+      (
+        slug: 'cashier',
+        name: 'Cashier',
+        rank: GateTier.cashier,
+        grants: baseGrants,
+        sees: false,
+      ),
       (
         slug: 'stock_keeper',
         name: 'Stock keeper',
-        rank: 1,
+        rank: GateTier.stockKeeper,
         grants: {...baseGrants, 'stock.add'},
+        sees: false,
+      ),
+      // A custom grant of the key alone doesn't reach below Manager.
+      (
+        slug: 'cashier',
+        name: 'Cashier granted Edit product',
+        rank: GateTier.cashier,
+        grants: ownerGrants,
         sees: false,
       ),
     ];
@@ -201,6 +228,71 @@ void main() {
         findsOneWidget,
       );
       expect(await manufacturers(), hasLength(1));
+      await disposeScreen(tester);
+    });
+
+    testWidgets(
+        'a failed activity log still keeps the manufacturer and closes the '
+        'sheet', (tester) async {
+      await openCratesTab(tester);
+      await openSheet(tester);
+      // No staff row → the activity log insert fails its foreign key.
+      await env.db.delete(env.db.users).go();
+
+      await tester.enterText(sheetField('Name'), 'Guinness Nigeria');
+      await tester.tap(sheetSaveButton());
+      await tester.pumpAndSettle();
+
+      expect(await manufacturers(), hasLength(1));
+      expect(find.byType(AddManufacturerSheet), findsNothing);
+      expect(
+        find.text(
+          'Manufacturer added, but the activity log could not be saved.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Could not add manufacturer. Please try again.'),
+          findsNothing);
+      // Let the error banner's auto-hide timer run out.
+      await tester.pump(const Duration(seconds: 5));
+      await disposeScreen(tester);
+    });
+
+    testWidgets('the save re-checks access and writes nothing when denied',
+        (tester) async {
+      // Opened directly: a Cashier holding the key alone fails the gate.
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        grantedKeys: ownerGrants,
+        roleSlug: 'cashier',
+        roleName: 'Cashier',
+        roleRank: GateTier.cashier,
+        screen: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () =>
+                  AddManufacturerSheet.show(context, existingNames: const []),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(sheetField('Name'), 'Guinness Nigeria');
+      await tester.tap(sheetSaveButton());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('You no longer have access to Add Manufacturer.'),
+        findsOneWidget,
+      );
+      expect(await manufacturers(), isEmpty);
+      // Let the error banner's auto-hide timer run out.
+      await tester.pump(const Duration(seconds: 5));
       await disposeScreen(tester);
     });
 

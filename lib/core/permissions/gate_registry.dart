@@ -67,6 +67,18 @@ abstract final class Gates {
     rule: Gate.key('products.edit_price'),
   );
 
+  /// Add a manufacturer from the Crates tab (#292). CEO or Manager holding
+  /// `products.edit_price` — the tier keeps a custom grant of the key to a
+  /// Cashier or Stock keeper from reaching it.
+  static const NamedGate addManufacturer = NamedGate(
+    name: 'addManufacturer',
+    action: 'Add Manufacturer',
+    rule: AndGate(
+      Gate.tierAtLeast(GateTier.manager),
+      Gate.key('products.edit_price'),
+    ),
+  );
+
   /// Edit a product's buying (cost) price — the receive edit-item modal
   /// (sub-gate of Receive Stock) and the Add Product screen's buying-price
   /// field (issue #20).
@@ -675,6 +687,7 @@ abstract final class Gates {
     receiveStock,
     addProduct,
     editProductPrice,
+    addManufacturer,
     editBuyingPrice,
     manageSuppliers,
     seeSalesMetric,
