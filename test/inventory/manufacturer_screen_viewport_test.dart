@@ -539,5 +539,160 @@ void main() {
 
       await disposeScreen(tester);
     });
+
+    testWidgets('brand card on InventoryScreen displays shortage badge when shortage exists (#293)',
+        (tester) async {
+      // Opening count sets baseline to 22 (0 shortage)
+      await env.db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturer.id,
+        storeId: env.storeId,
+        performedBy: 'test-user-1',
+        countedEmpties: 22,
+      );
+      // Second count is 15 -> opens 7 crates shortage
+      await env.db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturer.id,
+        storeId: env.storeId,
+        performedBy: 'test-user-1',
+        countedEmpties: 15,
+      );
+
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        screen: const InventoryScreen(),
+        grantedKeys: inventoryGrants,
+        overrides: [
+          currentBusinessProvider.overrideWith((ref) => business),
+          firstRunSurfaceStateProvider
+              .overrideWithValue(FirstRunSurfaceState.hasContent),
+        ],
+        settle: false,
+      );
+
+      await settleScreen(tester);
+
+      // Switch to Empty Crates tab
+      await tester.tap(find.widgetWithText(Tab, 'Empty Crates'));
+      await tester.pumpAndSettle();
+
+      // Brand card should display shortage badge
+      final badge = find.byKey(ValueKey('mfr_shortage_badge_${manufacturer.id}'));
+      expect(badge, findsOneWidget);
+      expect(find.descendant(of: badge, matching: find.text('⚠ 7 short')), findsOneWidget);
+
+      await disposeScreen(tester);
+    });
+  });
+
+  group('Count button & Shortage warning (#293)', () {
+    setUp(() async {
+      env = await setupScreenTestEnvironment(
+        businessType: 'Beverage distributor',
+        productCount: 0,
+      );
+      await seedTestData();
+    });
+
+    tearDown(() async {
+      await env.dispose();
+    });
+
+    testWidgets('Count button renders when stock.view is granted (Cashier / Stock keeper)',
+        (tester) async {
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        screen: ManufacturerScreen(manufacturer: manufacturer),
+        grantedKeys: {'stock.view'},
+        roleSlug: 'cashier',
+        roleName: 'Cashier',
+        roleRank: GateTier.cashier,
+        overrides: [currentBusinessProvider.overrideWith((ref) => business)],
+        settle: false,
+      );
+
+      await settleScreen(tester);
+
+      expectNoOverflow(tester);
+      expect(find.byKey(const ValueKey(kManufacturerCountButtonKey)), findsOneWidget);
+
+      await disposeScreen(tester);
+    });
+
+    testWidgets('Count button is hidden when stock.view is revoked',
+        (tester) async {
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        screen: ManufacturerScreen(manufacturer: manufacturer),
+        grantedKeys: {}, // no stock.view
+        roleSlug: 'cashier',
+        roleName: 'Cashier',
+        roleRank: GateTier.cashier,
+        overrides: [currentBusinessProvider.overrideWith((ref) => business)],
+        settle: false,
+      );
+
+      await settleScreen(tester);
+
+      expectNoOverflow(tester);
+      expect(find.byKey(const ValueKey(kManufacturerCountButtonKey)), findsNothing);
+
+      await disposeScreen(tester);
+    });
+
+    testWidgets('Short status card displays money text when shortage > 0',
+        (tester) async {
+      // Opening count sets baseline to 22 (0 shortage)
+      await env.db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturer.id,
+        storeId: env.storeId,
+        performedBy: 'test-user-1',
+        countedEmpties: 22,
+      );
+      // Second count is 15 -> opens 7 crates shortage
+      await env.db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturer.id,
+        storeId: env.storeId,
+        performedBy: 'test-user-1',
+        countedEmpties: 15,
+      );
+
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        screen: ManufacturerScreen(manufacturer: manufacturer),
+        grantedKeys: inventoryGrants,
+        roleSlug: 'ceo',
+        roleName: 'CEO',
+        roleRank: GateTier.ceo,
+        overrides: [currentBusinessProvider.overrideWith((ref) => business)],
+        settle: false,
+      );
+
+      await settleScreen(tester);
+
+      expectNoOverflow(tester);
+      final shortCard = find.byKey(
+        const ValueKey('${kManufacturerStatusKeyPrefix}short'),
+      );
+      await expectContentRowVisible(
+        tester,
+        shortCard,
+        scrollable: screenSurface(),
+      );
+
+      expect(shortCard, findsOneWidget);
+      expect(find.descendant(of: shortCard, matching: find.text('7 crates')), findsOneWidget);
+      // Warning value at ₦1,000/crate is ₦7,000
+      expect(find.descendant(of: shortCard, matching: find.text('₦7,000')), findsOneWidget);
+
+      await disposeScreen(tester);
+    });
   });
 }
