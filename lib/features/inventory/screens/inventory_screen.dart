@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +31,7 @@ import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.d
 import 'package:reebaplus_pos/features/inventory/widgets/crate_money_arrangement_section.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/add_manufacturer_sheet.dart';
 import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -103,13 +103,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
   int _totalCrateAssetsSum = 0;
-  List<CrateSizeGroupData> _dbCrateSizeGroups = [];
 
   bool _isFirstLoad = true;
   StreamSubscription<List<ProductDataWithStock>>? _productsSub;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<List<CategoryData>>? _categoriesSub;
-  StreamSubscription<List<CrateSizeGroupData>>? _crateSizeGroupsSub;
   StreamSubscription<int>? _emptyCratesSumSub;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -119,9 +117,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
-
-  List<CrateSizeGroupData> get _activeCrateSizeGroups =>
-      _dbCrateSizeGroups.where((cg) => cg.emptyCrateStock > 0).toList();
 
   void _onTabChanged() {
     if (mounted && _tabController.index != _currentTab) {
@@ -299,12 +294,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // Crates tab via fullCratesByManufacturerProvider /
       // storeCrateBalancesProvider so they re-scope to the active store
       // (§16.8.1 Phase 2) without re-plumbing imperative subscriptions.
-
-      _crateSizeGroupsSub = db.inventoryDao.watchAllCrateSizeGroups().listen((
-        data,
-      ) {
-        if (mounted) setState(() => _dbCrateSizeGroups = data);
-      });
     });
   }
 
@@ -313,7 +302,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _productsSub?.cancel();
     _manufacturersSub?.cancel();
     _categoriesSub?.cancel();
-    _crateSizeGroupsSub?.cancel();
     _emptyCratesSumSub?.cancel();
     _searchCtrl.dispose();
     _tabController.dispose();
@@ -1529,22 +1517,30 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Manufacturers',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.w800,
-                    color: _text,
-                    letterSpacing: -0.5,
+                Flexible(
+                  child: Text(
+                    'Manufacturers',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(18),
+                      fontWeight: FontWeight.w800,
+                      color: _text,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
-                AppButton(
-                  text: 'Add New',
-                  icon: FontAwesomeIcons.circlePlus.data,
-                  variant: AppButtonVariant.ghost,
-                  isFullWidth: false,
-                  onPressed: _showAddManufacturerDialog,
-                ),
+                if (Gates.editProductPrice.allows(ref))
+                  AppButton(
+                    text: 'Add New',
+                    icon: FontAwesomeIcons.circlePlus.data,
+                    variant: AppButtonVariant.ghost,
+                    isFullWidth: false,
+                    onPressed: () => AddManufacturerSheet.show(
+                      context,
+                      existingNames: [for (final m in _dbManufacturers) m.name],
+                    ),
+                  ),
               ],
             ),
 
@@ -1577,10 +1573,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 );
               }),
 
-            if (_activeCrateSizeGroups.isNotEmpty) ...[
-              SizedBox(height: context.getRSize(24)),
-              _buildCrateGroupAssets(context),
-            ],
           ],
         ),
       ),
@@ -1862,109 +1854,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               style: TextStyle(fontWeight: FontWeight.bold, color: _text),
             ),
             Text(subtitle, style: TextStyle(fontSize: 12, color: _subtext)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddManufacturerDialog() {
-    final nameCtrl = TextEditingController();
-    final stockCtrl = TextEditingController(text: '0');
-    final depositCtrl = TextEditingController(text: '0');
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + ctx.deviceBottomPadding),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Add Manufacturer',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: _text,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _styledDialogField(nameCtrl, 'Name', 'e.g. Nigerian Breweries'),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _styledDialogField(
-                    stockCtrl,
-                    'Initial Empty',
-                    '0',
-                    isNumber: true,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _styledDialogField(
-                    depositCtrl,
-                    'Deposit ($activeCurrencySymbol)',
-                    '0',
-                    isNumber: true,
-                    isCurrency: true,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            AppButton(
-              text: 'Add Manufacturer',
-              variant: AppButtonVariant.primary,
-              onPressed: () async {
-                if (nameCtrl.text.trim().isEmpty) return;
-                final mfrName = nameCtrl.text.trim();
-                final mfrBusinessId = ref
-                    .read(authProvider)
-                    .currentUser
-                    ?.businessId;
-                if (mfrBusinessId == null) return;
-                try {
-                  await ref
-                      .read(databaseProvider)
-                      .inventoryDao
-                      .insertManufacturer(
-                        ManufacturersCompanion.insert(
-                          name: mfrName,
-                          businessId: mfrBusinessId,
-                          emptyCrateStock: Value(
-                            int.tryParse(stockCtrl.text.trim()) ?? 0,
-                          ),
-                          depositAmountKobo: Value(
-                            ((parseCurrency(depositCtrl.text)) * 100).round(),
-                          ),
-                        ),
-                      );
-                  await ref
-                      .read(activityLogProvider)
-                      .logAction(
-                        'add_manufacturer',
-                        '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} added manufacturer: $mfrName',
-                      );
-                  if (context.mounted) Navigator.pop(ctx);
-                } catch (_) {
-                  if (ctx.mounted) {
-                    AppNotification.showError(
-                      ctx,
-                      'Could not add manufacturer. Please try again.',
-                    );
-                  }
-                }
-              },
-            ),
           ],
         ),
       ),
@@ -2289,177 +2178,4 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       fillColor: Theme.of(context).cardColor,
     );
   }
-
-  Widget _buildCrateGroupAssets(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(context.getRSize(8)),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.secondary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                FontAwesomeIcons.box.data,
-                size: context.getRSize(14),
-                color: Theme.of(context).colorScheme.secondary,
-              ),
-            ),
-            SizedBox(width: context.getRSize(10)),
-            Text(
-              'Crate Size Group Assets',
-              style: TextStyle(
-                fontSize: context.getRFontSize(16),
-                fontWeight: FontWeight.bold,
-                color: _text,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: context.getRSize(12)),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: context.isTablet ? 3 : 2,
-            mainAxisExtent: context.getRSize(120),
-            crossAxisSpacing: context.getRSize(12),
-            mainAxisSpacing: context.getRSize(12),
-          ),
-          itemCount: _activeCrateSizeGroups.length,
-          itemBuilder: (context, i) {
-            final grp = _activeCrateSizeGroups[i];
-            return Container(
-              padding: EdgeInsets.all(context.getRSize(16)),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    grp.name,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      fontWeight: FontWeight.bold,
-                      color: _text,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    '${grp.crateSizeLabel[0].toUpperCase()}${grp.crateSizeLabel.substring(1)}',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(11),
-                      color: _subtext,
-                    ),
-                  ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        grp.emptyCrateStock.toString(),
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(20),
-                          fontWeight: FontWeight.w900,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => _showUpdateCrateGroupDialog(grp),
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: _border,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(Icons.edit, size: 14, color: _text),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  void _showUpdateCrateGroupDialog(CrateSizeGroupData grp) {
-    final stockCtrl = TextEditingController(
-      text: grp.emptyCrateStock.toString(),
-    );
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + ctx.deviceBottomPadding),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Update ${grp.name}',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: _text,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _styledDialogField(
-              stockCtrl,
-              'Physical Stock',
-              '0',
-              isNumber: true,
-            ),
-            const SizedBox(height: 24),
-            AppButton(
-              text: 'Save Changes',
-              variant: AppButtonVariant.primary,
-              onPressed: () async {
-                final newStock =
-                    int.tryParse(stockCtrl.text.trim()) ?? grp.emptyCrateStock;
-                try {
-                  await ref
-                      .read(databaseProvider)
-                      .inventoryDao
-                      .updateCrateGroupStock(grp.id, newStock);
-                  await ref
-                      .read(activityLogProvider)
-                      .logAction(
-                        'crate_group_update',
-                        '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} set ${grp.name} crate stock to $newStock',
-                      );
-                  if (context.mounted) Navigator.pop(ctx);
-                } catch (_) {
-                  if (ctx.mounted) {
-                    AppNotification.showError(
-                      ctx,
-                      'Could not update crate stock. Please try again.',
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
 }
