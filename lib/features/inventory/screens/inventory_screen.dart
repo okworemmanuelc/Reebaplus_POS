@@ -23,6 +23,8 @@ import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
+import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
+import 'package:reebaplus_pos/features/inventory/screens/manufacturer_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/supplier_detail_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
@@ -1666,12 +1668,113 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final depositNaira = mfr.depositAmountKobo / 100;
     final totalAssets = stat.fullCratesEquiv + emptyCount;
 
+    final card = Material(
+      color: Theme.of(context).cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: _border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: ValueKey('$kManufacturerCardKeyPrefix${mfr.id}'),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ManufacturerScreen(manufacturer: mfr),
+            ),
+          );
+        },
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(context.getRSize(16)),
+              child: Row(
+                children: [
+                  Container(
+                    width: context.getRSize(44),
+                    height: context.getRSize(44),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.secondary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      FontAwesomeIcons.industry.data,
+                      color: Theme.of(context).colorScheme.secondary,
+                      size: context.getRSize(16),
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(14)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          mfr.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: context.getRFontSize(15),
+                            color: _text,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        if (depositNaira > 0)
+                          Text(
+                            'Crate value: ${formatCurrency(depositNaira)}',
+                            style: TextStyle(
+                              color: _subtext,
+                              fontSize: context.getRFontSize(11),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  _manageMfrButton(context, mfr, emptyCount: emptyCount),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: _border),
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: context.getRSize(16),
+                vertical: context.getRSize(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _mfrSimpleStat(
+                    context,
+                    'Full',
+                    stat.fullCratesEquiv.toString(),
+                    Theme.of(context).colorScheme.primary,
+                  ),
+                  _mfrSimpleStat(
+                    context,
+                    'Empty',
+                    emptyCount.toString(),
+                    AppColors.warning,
+                  ),
+                  _mfrSimpleStat(
+                    context,
+                    'Total',
+                    totalAssets.toString(),
+                    AppColors.success,
+                    isBold: true,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
     return Container(
       margin: EdgeInsets.only(bottom: context.getRSize(12)),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.025),
@@ -1680,90 +1783,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.all(context.getRSize(16)),
-            child: Row(
-              children: [
-                Container(
-                  width: context.getRSize(44),
-                  height: context.getRSize(44),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.secondary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    FontAwesomeIcons.industry.data,
-                    color: Theme.of(context).colorScheme.secondary,
-                    size: context.getRSize(16),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(14)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        mfr.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: context.getRFontSize(15),
-                          color: _text,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      if (depositNaira > 0)
-                        Text(
-                          'Deposit: ${formatCurrency(depositNaira)}',
-                          style: TextStyle(
-                            color: _subtext,
-                            fontSize: context.getRFontSize(11),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                _manageMfrButton(context, mfr, emptyCount: emptyCount),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: _border),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(16),
-              vertical: context.getRSize(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _mfrSimpleStat(
-                  context,
-                  'Full',
-                  stat.fullCratesEquiv.toString(),
-                  Theme.of(context).colorScheme.primary,
-                ),
-                _mfrSimpleStat(
-                  context,
-                  'Empty',
-                  emptyCount.toString(),
-                  AppColors.warning,
-                ),
-                _mfrSimpleStat(
-                  context,
-                  'Total',
-                  totalAssets.toString(),
-                  AppColors.success,
-                  isBold: true,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: card,
     );
   }
 

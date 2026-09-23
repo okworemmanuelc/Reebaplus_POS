@@ -10,6 +10,7 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
@@ -2217,6 +2218,60 @@ final fullCratesByManufacturerProvider = businessScopedStream<Map<String, int>>(
     return db.inventoryDao.watchFullCratesByManufacturer(storeId: storeId);
   },
   whenAbsent: const {},
+);
+
+/// The complete crate position for ONE manufacturer across its six statuses
+/// (#291, PRD #284 §5). Respects the locked store when active, or aggregates
+/// business-wide in "All Stores".
+final manufacturerCratePositionProvider =
+    businessScopedStreamFamily<ManufacturerCratePosition, String>(
+  (ref, db, businessId, manufacturerId) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.cratePoolDao.watchManufacturerCratePosition(
+      manufacturerId,
+      storeId: storeId,
+    );
+  },
+  whenAbsent: const ManufacturerCratePosition.zero(''),
+);
+
+/// Attribution of customer held deposits across all manufacturers (#291).
+/// Guarantees attributed deposits + unattributed == business-wide held deposit.
+final customerDepositAttributionProvider =
+    businessScopedStream<CustomerDepositAttribution>(
+  (ref, db, businessId) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.cratePoolDao.watchCustomerDepositAttribution(storeId: storeId);
+  },
+  whenAbsent: const CustomerDepositAttribution.zero(),
+);
+
+/// Chronological crate movements for ONE manufacturer (#291).
+/// Newest first; displays who, when, store, quantity delta, and movement label.
+final manufacturerCrateMovementsProvider =
+    businessScopedStreamFamily<List<CrateMovementHistoryEntry>, String>(
+  (ref, db, businessId, manufacturerId) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.cratePoolDao.watchManufacturerCrateMovements(
+      manufacturerId,
+      storeId: storeId,
+    );
+  },
+  whenAbsent: const [],
+);
+
+/// Tracked-bottle products belonging to ONE manufacturer (#291).
+/// Read-only product list for the manufacturer screen Products tab.
+final manufacturerProductsProvider =
+    businessScopedStreamFamily<List<ProductDataWithStock>, String>(
+  (ref, db, businessId, manufacturerId) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.cratePoolDao.watchManufacturerProducts(
+      manufacturerId,
+      storeId: storeId,
+    );
+  },
+  whenAbsent: const [],
 );
 
 // ── Daily Stock Count (master plan §17) ──────────────────────────────────────
