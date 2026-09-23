@@ -222,8 +222,8 @@ ManufacturerCratePosition computeManufacturerCratePosition({
     short: CrateStatusFigure(
       label: 'Short',
       count: shortCrates,
-      moneyKobo: 0,
-      hasMoney: false,
+      moneyKobo: shortCrates * rate,
+      hasMoney: shortCrates > 0,
     ),
     damaged: CrateStatusFigure(
       label: 'Damaged',
@@ -231,6 +231,81 @@ ManufacturerCratePosition computeManufacturerCratePosition({
       moneyKobo: damagedLossKobo ?? (damagedCrates * rate),
     ),
   );
+}
+
+/// A count movement input for the pure shortage fold function (#293, PRD #284 §7).
+class CrateCountMovement {
+  /// The store ID the count was performed at.
+  final String? storeId;
+
+  /// Movement type: `'count'` or `'opening_count'`.
+  final String movementType;
+
+  /// Quantity delta recorded on the movement (`counted - expected`).
+  final int quantityDelta;
+
+  /// When the count was performed.
+  final DateTime createdAt;
+
+  const CrateCountMovement({
+    this.storeId,
+    required this.movementType,
+    required this.quantityDelta,
+    required this.createdAt,
+  });
+}
+
+/// Folds count movements for a SINGLE store in chronological order to compute
+/// the open crate shortage (#293, PRD #284 §7).
+///
+/// Rules:
+/// - An Opening Count sets the number and raises no shortage (shortage = 0).
+/// - A count below expected (quantityDelta < 0) opens shortage by the gap:
+///   `shortage += -quantityDelta`.
+/// - A count above expected (quantityDelta > 0) closes open shortage first:
+///   `shortage = math.max(0, shortage - quantityDelta)`.
+///   Any excess only raises the warehouse and is NOT banked (cannot offset a later shortage).
+int foldCrateShortageForStore(Iterable<CrateCountMovement> movements) {
+  var shortage = 0;
+  for (final m in movements) {
+    if (m.movementType == 'opening_count') {
+      shortage = 0;
+    } else if (m.movementType == 'count') {
+      if (m.quantityDelta < 0) {
+        shortage += -m.quantityDelta;
+      } else if (m.quantityDelta > 0) {
+        final remaining = shortage - m.quantityDelta;
+        shortage = remaining > 0 ? remaining : 0;
+      }
+    }
+  }
+  return shortage;
+}
+
+/// Folds count movements per store, returning a map of `storeId -> openShortage`
+/// (#293, PRD #284 §7).
+Map<String, int> foldCrateShortagePerStore(Iterable<CrateCountMovement> movements) {
+  final byStore = <String, List<CrateCountMovement>>{};
+  for (final m in movements) {
+    byStore.putIfAbsent(m.storeId ?? '', () => []).add(m);
+  }
+  final result = <String, int>{};
+  for (final entry in byStore.entries) {
+    final sorted = List<CrateCountMovement>.from(entry.value)
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    result[entry.key] = foldCrateShortageForStore(sorted);
+  }
+  return result;
+}
+
+/// Computes total shortage across stores by folding count movements per store
+/// and summing the store shortages (#293, PRD #284 §7).
+///
+/// In All Stores, the business total equals the sum of open store shortages.
+/// Surplus in one store does NOT offset shortage in another store.
+int foldTotalCrateShortage(Iterable<CrateCountMovement> movements) {
+  final perStore = foldCrateShortagePerStore(movements);
+  return perStore.values.fold(0, (a, b) => a + b);
 }
 
 /// Attribution of customer held deposits across brands and any unattributed
@@ -370,6 +445,7 @@ const String kManufacturerStatusKeyPrefix = 'manufacturer_status_';
 const String kManufacturerProductKeyPrefix = 'manufacturer_product_';
 const String kManufacturerHistoryRowKeyPrefix = 'manufacturer_history_';
 const String kManufacturerAttributionNoteKey = 'manufacturer_attribution_note';
+const String kManufacturerCountButtonKey = 'manufacturer_count_button';
 
 /// Storage keys for tab scroll state persistence via [TabbedSliverScaffold].
 const String kManufacturerCratesStorageKey = 'manufacturer_crates_tab';

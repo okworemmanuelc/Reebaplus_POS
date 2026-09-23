@@ -193,6 +193,156 @@ void main() {
     });
   });
 
+  group('computeManufacturerCratePosition — Short status money valuation', () {
+    test('values shortage at count * crateValue and sets hasMoney = true when count > 0', () {
+      final pos = computeManufacturerCratePosition(
+        manufacturerId: 'mfr-short',
+        crateValueKobo: 250000, // ₦2,500
+        shortCrates: 7,
+      );
+
+      expect(pos.short.count, 7);
+      expect(pos.short.moneyKobo, 7 * 250000); // ₦17,500 (1,750,000 kobo)
+      expect(pos.short.hasMoney, isTrue);
+    });
+  });
+
+  group('pure shortage fold (PRD #284 §7, #293)', () {
+    final t0 = DateTime(2026, 9, 23, 10, 0);
+    final t1 = DateTime(2026, 9, 23, 11, 0);
+    final t2 = DateTime(2026, 9, 23, 12, 0);
+    final t3 = DateTime(2026, 9, 23, 13, 0);
+
+    test('an Opening Count sets the number and raises no shortage', () {
+      final movements = [
+        CrateCountMovement(
+          movementType: 'opening_count',
+          quantityDelta: -20, // counted 30 when expected 50
+          createdAt: t0,
+        ),
+      ];
+
+      expect(foldCrateShortageForStore(movements), 0);
+    });
+
+    test('a count below expected opens shortage by the gap', () {
+      final movements = [
+        CrateCountMovement(
+          movementType: 'opening_count',
+          quantityDelta: -10,
+          createdAt: t0,
+        ),
+        CrateCountMovement(
+          movementType: 'count',
+          quantityDelta: -8, // counted 8 below expected
+          createdAt: t1,
+        ),
+      ];
+
+      expect(foldCrateShortageForStore(movements), 8);
+    });
+
+    test('a count above expected closes open shortage first', () {
+      final movements = [
+        CrateCountMovement(
+          movementType: 'opening_count',
+          quantityDelta: 0,
+          createdAt: t0,
+        ),
+        CrateCountMovement(
+          movementType: 'count',
+          quantityDelta: -10, // 10 short
+          createdAt: t1,
+        ),
+        CrateCountMovement(
+          movementType: 'count',
+          quantityDelta: 4, // 4 found -> 6 short remaining
+          createdAt: t2,
+        ),
+      ];
+
+      expect(foldCrateShortageForStore(movements), 6);
+    });
+
+    test('surplus is not banked: surplus then a later short still shows the later shortage', () {
+      final movements = [
+        CrateCountMovement(
+          movementType: 'opening_count',
+          quantityDelta: 0,
+          createdAt: t0,
+        ),
+        CrateCountMovement(
+          movementType: 'count',
+          quantityDelta: -5, // 5 short
+          createdAt: t1,
+        ),
+        CrateCountMovement(
+          movementType: 'count',
+          quantityDelta: 15, // 15 surplus: closes 5 short, excess 10 is NOT banked
+          createdAt: t2,
+        ),
+      ];
+      // Shortage is fully closed to 0
+      expect(foldCrateShortageForStore(movements), 0);
+
+      // Later count is short 6
+      final laterMovements = [
+        ...movements,
+        CrateCountMovement(
+          movementType: 'count',
+          quantityDelta: -6,
+          createdAt: t3,
+        ),
+      ];
+      // Later shortage is 6, NOT offset by the unbanked 10 surplus from earlier
+      expect(foldCrateShortageForStore(laterMovements), 6);
+    });
+
+    test('multi-store summation: surplus in Store B never offsets shortage in Store A', () {
+      final movements = [
+        // Store A
+        CrateCountMovement(
+          storeId: 'store-a',
+          movementType: 'opening_count',
+          quantityDelta: 0,
+          createdAt: t0,
+        ),
+        CrateCountMovement(
+          storeId: 'store-a',
+          movementType: 'count',
+          quantityDelta: -10, // 10 short in Store A
+          createdAt: t1,
+        ),
+        // Store B
+        CrateCountMovement(
+          storeId: 'store-b',
+          movementType: 'opening_count',
+          quantityDelta: 0,
+          createdAt: t0,
+        ),
+        CrateCountMovement(
+          storeId: 'store-b',
+          movementType: 'count',
+          quantityDelta: 25, // 25 surplus in Store B
+          createdAt: t2,
+        ),
+      ];
+
+      final perStore = foldCrateShortagePerStore(movements);
+      expect(perStore['store-a'], 10);
+      expect(perStore['store-b'], 0);
+
+      // All Stores total = sum of store shortages = 10 + 0 = 10
+      expect(foldTotalCrateShortage(movements), 10);
+    });
+
+    test('empty movements list yields 0 shortage', () {
+      expect(foldCrateShortageForStore([]), 0);
+      expect(foldTotalCrateShortage([]), 0);
+      expect(foldCrateShortagePerStore([]), isEmpty);
+    });
+  });
+
   group('labelForCrateMovement', () {
     test('labels known and unknown movement kinds cleanly', () {
       expect(labelForCrateMovement('issued'), 'Issued to customer');
@@ -209,3 +359,4 @@ void main() {
     });
   });
 }
+

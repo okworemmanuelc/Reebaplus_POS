@@ -3081,14 +3081,19 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       return rawDelta < 0 ? -rawDelta : rawDelta;
     });
 
-    return Rx.combineLatest6(
+    // 7. Crate Shortage (#293, PRD #284 §7)
+    final shortageStream =
+        watchCrateShortageByManufacturer(manufacturerId, storeId: storeId);
+
+    return Rx.combineLatest7(
       mfrStream,
       warehouseStream,
       fullStream,
       onDepositStream,
       customerDebtStream,
       damagedStream,
-      (mfr, warehouse, full, onDeposit, customerDebt, damaged) {
+      shortageStream,
+      (mfr, warehouse, full, onDeposit, customerDebt, damaged, shortage) {
         final rate = mfr?.depositAmountKobo ?? 0;
         return computeManufacturerCratePosition(
           manufacturerId: manufacturerId,
@@ -3098,11 +3103,104 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           customerOnDepositCrates: onDeposit.crates,
           customerOnDepositKobo: onDeposit.kobo,
           customerNoDepositCrates: customerDebt,
-          shortCrates: 0,
+          shortCrates: shortage,
           damagedCrates: damaged,
         );
       },
     );
+  }
+
+  /// Watches the open crate shortage for ONE brand (#293, PRD #284 §7).
+  ///
+  /// Folded from count movements in chronological order. When [storeId] is set,
+  /// scopes to that store; when null, sums open shortages across all stores.
+  Stream<int> watchCrateShortageByManufacturer(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    var query = select(crateLedger)
+      ..where(
+        (t) =>
+            whereBusiness(t) &
+            t.manufacturerId.equals(manufacturerId) &
+            t.movementType.isIn([
+              kCrateMovementOpeningCount,
+              kCrateMovementCount,
+            ]),
+      )
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
+        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc),
+      ]);
+
+    if (storeId != null) {
+      query = query..where((t) => t.storeId.equals(storeId));
+    }
+
+    return query.watch().map((rows) {
+      final movements = rows.map((r) => CrateCountMovement(
+        storeId: r.storeId,
+        movementType: r.movementType,
+        quantityDelta: r.quantityDelta,
+        createdAt: r.createdAt,
+      ));
+      if (storeId != null) {
+        return foldCrateShortageForStore(movements);
+      } else {
+        return foldTotalCrateShortage(movements);
+      }
+    });
+  }
+
+  /// Watches open crate shortages for ALL brands, mapped as manufacturerId -> shortageCount (#293).
+  ///
+  /// When [storeId] is set, scopes to that store; when null, sums open shortages
+  /// across all stores per brand.
+  Stream<Map<String, int>> watchAllCrateShortages({String? storeId}) {
+    var query = select(crateLedger)
+      ..where(
+        (t) =>
+            whereBusiness(t) &
+            t.movementType.isIn([
+              kCrateMovementOpeningCount,
+              kCrateMovementCount,
+            ]),
+      )
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
+        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc),
+      ]);
+
+    if (storeId != null) {
+      query = query..where((t) => t.storeId.equals(storeId));
+    }
+
+    return query.watch().map((rows) {
+      final byManufacturer = <String, List<CrateCountMovement>>{};
+      for (final r in rows) {
+        final mfrId = r.manufacturerId;
+        if (mfrId == null) continue;
+        byManufacturer.putIfAbsent(mfrId, () => []).add(
+          CrateCountMovement(
+            storeId: r.storeId,
+            movementType: r.movementType,
+            quantityDelta: r.quantityDelta,
+            createdAt: r.createdAt,
+          ),
+        );
+      }
+
+      final result = <String, int>{};
+      for (final entry in byManufacturer.entries) {
+        final count = storeId != null
+            ? foldCrateShortageForStore(entry.value)
+            : foldTotalCrateShortage(entry.value);
+        if (count > 0) {
+          result[entry.key] = count;
+        }
+      }
+      return result;
+    });
   }
 
   /// Attribution of business-wide Customer Held Deposit across brands (#291).

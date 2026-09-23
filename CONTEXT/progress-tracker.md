@@ -8,9 +8,48 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-173 sessions logged. Codebase is live and being verified on-device.
+174 sessions logged. Codebase is live and being verified on-device.
 
-### Issue #291 — Manufacturer screen opens from the brand card and shows its crates by status (read-only) (2026-09-23)
+### Issue #293 — Count empties from the manufacturer screen; a gap becomes a Crate Shortage warning (2026-09-23)
+Branch `feat/crate-shortage-warning-293`, cut from `feat/manufacturer-screen-291`.
+- **Pure Shortage Folding (`lib/core/crates/manufacturer_crate_position.dart`)**:
+  - Implemented `foldCrateShortageForStore`, `foldCrateShortagePerStore`, and `foldTotalCrateShortage` over `CrateCountMovement`.
+  - Invariant rules:
+    - First count at a store is recorded as an `opening_count` and sets baseline with zero shortage (`shortage = 0`).
+    - Count below expected opens shortage by the gap (`-quantityDelta`).
+    - Count above expected closes open shortage first; excess surplus is unbanked (clamped to 0) and never offsets future shortages.
+    - Total shortage in All Stores (`storeId == null`) = `Σ store shortages` (surplus in Store B never offsets shortage in Store A).
+  - Short status card calculates `moneyKobo = shortCrates * rate` with `hasMoney = shortCrates > 0`.
+- **Database Streams (`lib/core/database/daos_crates.dart`)**:
+  - Added `watchCrateShortageByManufacturer(manufacturerId, storeId:)`.
+  - Added `watchAllCrateShortages(storeId:)` returning `Map<String, int>` of shortages by manufacturer ID.
+  - Wired `shortageStream` into `watchManufacturerCratePosition` via `Rx.combineLatest7` into `computeManufacturerCratePosition(..., shortCrates: shortage)`.
+- **Providers (`lib/core/providers/stream_providers.dart`)**:
+  - Added `crateShortagesByManufacturerProvider` watching `db.cratePoolDao.watchAllCrateShortages(storeId: storeId)`.
+- **Named Gate (`lib/core/permissions/gate_registry.dart`)**:
+  - Registered `Gates.countCrates` keyed on `stock.view` allowing Cashiers and Stock keepers to count empties; revoking `stock.view` hides the count action. Covered by `gate_registry_membership_test`.
+- **Count Sheet (`lib/features/inventory/widgets/count_manufacturer_empties_sheet.dart`)**:
+  - Implemented `CountManufacturerEmptiesSheet.show(context, manufacturer:)`.
+  - Uses `crateCountStoreWithoutAsking` (omits store picker if locked or single store; requires dropdown pick in All Stores on multi-store businesses).
+  - Displays expected empties via `cratePoolDao.expectedEmptiesAt`.
+  - Inputs counted empties with real-time *"This is what will be recorded"* difference and naira warning value.
+  - Rejects negative/non-numeric input before saving.
+  - Cancel writes nothing; Save records via `CratePoolDao.recordManualCountCorrection`.
+  - Viewport-safe with `SingleChildScrollView` and `context.deviceBottomPadding`.
+- **UI Integrations**:
+  - `ManufacturerScreen`: Added gated Count button (`kManufacturerCountButtonKey`) at top of Crates tab; Short status card displays money warning text when `shortCrates > 0`.
+  - `InventoryScreen`: Added `_shortageBadge` displaying `'⚠ $shortCount short'` (`mfr_shortage_badge_$mfrId`) on brand cards when shortage exists.
+- **Docs**:
+  - Created ADR `docs/adr/0028-count-based-crate-shortage.md`.
+  - Amended ADR `docs/adr/0023-crate-deposit-outflow-settlement.md` (§4 & §5).
+  - Updated `CONTEXT/architecture.md`.
+- **Verification**:
+  - `test/crates/manufacturer_crate_position_test.dart` (15 unit tests, all passing).
+  - `test/crates/crate_pool_seam_test.dart` (13 DB seam tests, all passing).
+  - `test/inventory/manufacturer_screen_viewport_test.dart` (16 viewport, gating, and badge tests, all passing).
+  - `test/inventory/count_manufacturer_empties_sheet_test.dart` (6 widget and viewport tests, all passing).
+  - `test/permissions/gate_registry_membership_test.dart` (passing).
+  - `flutter analyze` clean (0 errors, 0 warnings).
 Branch `feat/manufacturer-screen-291`, cut from `main`.
 - **Pure Arithmetic Function**: Added `ManufacturerCratePosition` and `computeManufacturerCratePosition` in `lib/core/crates/manufacturer_crate_position.dart` operating over plain values with zero database imports. Computes all 6 statuses:
   1. In the warehouse (derived Empties Pool count × crate value)

@@ -79,6 +79,15 @@ abstract final class Gates {
     ),
   );
 
+  /// Count empties from the manufacturer screen (#293, PRD #284 §14).
+  /// Keyed on `stock.view` so Cashiers and Stock keepers can count; revoking
+  /// `stock.view` hides it.
+  static const NamedGate countCrates = NamedGate(
+    name: 'countCrates',
+    action: 'Count Crates',
+    rule: Gate.key('stock.view'),
+  );
+
   /// Edit a product's buying (cost) price — the receive edit-item modal
   /// (sub-gate of Receive Stock) and the Add Product screen's buying-price
   /// field (issue #20).
@@ -688,6 +697,7 @@ abstract final class Gates {
     addProduct,
     editProductPrice,
     addManufacturer,
+    countCrates,
     editBuyingPrice,
     manageSuppliers,
     seeSalesMetric,
