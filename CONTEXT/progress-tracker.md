@@ -8,7 +8,29 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-172 sessions logged. Codebase is live and being verified on-device.
+173 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #291 — Manufacturer screen opens from the brand card and shows its crates by status (read-only) (2026-09-23)
+Branch `feat/manufacturer-screen-291`, cut from `main`.
+- **Pure Arithmetic Function**: Added `ManufacturerCratePosition` and `computeManufacturerCratePosition` in `lib/core/crates/manufacturer_crate_position.dart` operating over plain values with zero database imports. Computes all 6 statuses:
+  1. In the warehouse (derived Empties Pool count × crate value)
+  2. Full crates in stock (tracked-bottle products stock count × crate value)
+  3. With customers, on deposit (unsettled deposit lines; actual deposit paid in)
+  4. With customers, no deposit (customer crate debt count × crate value)
+  5. Short (shows 0 count and no money until #293)
+  6. Damaged (damage movements in current month; loss kobo or count × crate value)
+- **Attribution & History**: Added `computeCustomerDepositAttribution` guaranteeing `sum(attributed) + unattributed == businessWideHeldDepositKobo`, and `labelForCrateMovement` / `CrateMovementHistoryEntry` for chronological ledger movements.
+- **DAO & Stream Providers**: Added `watchManufacturerCratePosition(mfrId, storeId:)`, `watchCustomerDepositAttribution()`, `watchManufacturerProducts(mfrId)`, and `watchManufacturerCrateMovements(mfrId)` in `CratePoolDao` / `StreamProviders`.
+- **Screen**: Implemented `ManufacturerScreen` (`lib/features/inventory/screens/manufacturer_screen.dart`) built on `TabbedSliverScaffold` (ADR 0027) with Crates, Products, and History tabs:
+  - Header displays brand name, crate value, total crates, total value, and shortage (scrolls away while TabBar remains pinned).
+  - Role gating: Customer deposit money amount requires `Gates.crateDepositsReport` (CEO & Manager); absent for Cashier & Stock keeper.
+  - Non-crate business sees not-available fallback screen; non-crate businesses see no affordances on `InventoryScreen`.
+  - Brand cards on `InventoryScreen` display "Crate value:" and tap anywhere to open `ManufacturerScreen`.
+- **Verification**:
+  - `test/crates/manufacturer_crate_position_test.dart` (14 unit tests, all passing).
+  - `test/crates/manufacturer_crate_stream_test.dart` (6 DB stream tests, all passing).
+  - `test/inventory/manufacturer_screen_viewport_test.dart` (12 viewport and role gating tests across 4 viewports, all passing).
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #290 — Crate counts belong to a store and a person (schema groundwork for PRD #284) (2026-09-23)
 Branch `feat/crate-count-store-author-290`, cut from `main` (`5bb0671`), worked in `../drinkPosApp-wt-290`.

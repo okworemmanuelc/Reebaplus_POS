@@ -2987,4 +2987,254 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           ]))
         .watch();
   }
+
+  /// The complete six-status crate position of ONE brand (#291, PRD #284 §5).
+  ///
+  /// Combines the derived Empties Pool, tracked bottle product stock, unsettled
+  /// customer money deposits, derived customer crate debt, and current month damages
+  /// through [computeManufacturerCratePosition].
+  Stream<ManufacturerCratePosition> watchManufacturerCratePosition(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    // 1. Manufacturer rate
+    final mfrStream = (select(manufacturers)
+          ..where((t) => whereBusiness(t) & t.id.equals(manufacturerId))
+          ..limit(1))
+        .watchSingleOrNull();
+
+    // 2. Warehouse count (from Empties Pool)
+    final warehouseStream = watchEmptiesPoolByManufacturer(storeId: storeId);
+
+    // 3. Full crates in stock
+    final fullStream =
+        db.inventoryDao.watchFullCratesByManufacturer(storeId: storeId);
+
+    // 4. With customers, on deposit (unsettled money-track crate lines)
+    final sumDepositCrates = db.orderCrateLines.cratesTaken.sum();
+    final sumDepositPaid = db.orderCrateLines.depositPaidKobo.sum();
+    var onDepositPredicate =
+        db.orderCrateLines.businessId.equals(requireBusinessId()) &
+        db.orderCrateLines.manufacturerId.equals(manufacturerId) &
+        db.orderCrateLines.depositPaidKobo.isBiggerThanValue(0) &
+        db.orderCrateLines.settledAt.isNull();
+    if (storeId != null) {
+      onDepositPredicate =
+          onDepositPredicate & db.orders.storeId.equals(storeId);
+    }
+    final onDepositQuery = db.selectOnly(db.orderCrateLines).join([
+      innerJoin(db.orders, db.orders.id.equalsExp(db.orderCrateLines.orderId)),
+    ])
+      ..addColumns([sumDepositCrates, sumDepositPaid])
+      ..where(onDepositPredicate);
+    final onDepositStream = onDepositQuery.watch().map((rows) {
+      if (rows.isEmpty) return (crates: 0, kobo: 0);
+      final r = rows.first;
+      return (
+        crates: r.read(sumDepositCrates) ?? 0,
+        kobo: r.read(sumDepositPaid) ?? 0,
+      );
+    });
+
+    // 5. With customers, no deposit (derived customer debt by manufacturer)
+    final sumCustomerDebt = crateLedger.quantityDelta.sum();
+    var customerDebtPredicate = whereBusiness(crateLedger) &
+        crateLedger.manufacturerId.equals(manufacturerId) &
+        crateLedger.customerId.isNotNull();
+    if (storeId != null) {
+      customerDebtPredicate = customerDebtPredicate &
+          (crateLedger.storeId.equals(storeId) |
+              (crateLedger.storeId.isNull() & db.orders.storeId.equals(storeId)));
+    }
+    final customerDebtQuery = db.selectOnly(crateLedger).join([
+      leftOuterJoin(
+        db.orders,
+        db.orders.id.equalsExp(crateLedger.referenceOrderId),
+      ),
+    ])
+      ..addColumns([sumCustomerDebt])
+      ..where(customerDebtPredicate);
+    final customerDebtStream = customerDebtQuery.watch().map((rows) {
+      if (rows.isEmpty) return 0;
+      return rows.first.read(sumCustomerDebt) ?? 0;
+    });
+
+    // 6. Damaged in current month
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    final startOfNextMonth = DateTime(now.year, now.month + 1, 1);
+    final sumDamaged = crateLedger.quantityDelta.sum();
+    var damagedPredicate = whereBusiness(crateLedger) &
+        crateLedger.manufacturerId.equals(manufacturerId) &
+        crateLedger.movementType.equals('damaged') &
+        crateLedger.createdAt.isBiggerOrEqualValue(startOfMonth) &
+        crateLedger.createdAt.isSmallerThanValue(startOfNextMonth);
+    if (storeId != null) {
+      damagedPredicate = damagedPredicate & crateLedger.storeId.equals(storeId);
+    }
+    final damagedQuery = db.selectOnly(crateLedger)
+      ..addColumns([sumDamaged])
+      ..where(damagedPredicate);
+    final damagedStream = damagedQuery.watch().map((rows) {
+      if (rows.isEmpty) return 0;
+      final rawDelta = rows.first.read(sumDamaged) ?? 0;
+      return rawDelta < 0 ? -rawDelta : rawDelta;
+    });
+
+    return Rx.combineLatest6(
+      mfrStream,
+      warehouseStream,
+      fullStream,
+      onDepositStream,
+      customerDebtStream,
+      damagedStream,
+      (mfr, warehouse, full, onDeposit, customerDebt, damaged) {
+        final rate = mfr?.depositAmountKobo ?? 0;
+        return computeManufacturerCratePosition(
+          manufacturerId: manufacturerId,
+          crateValueKobo: rate,
+          warehouseCrates: warehouse[manufacturerId] ?? 0,
+          fullCrates: full[manufacturerId] ?? 0,
+          customerOnDepositCrates: onDeposit.crates,
+          customerOnDepositKobo: onDeposit.kobo,
+          customerNoDepositCrates: customerDebt,
+          shortCrates: 0,
+          damagedCrates: damaged,
+        );
+      },
+    );
+  }
+
+  /// Attribution of business-wide Customer Held Deposit across brands (#291).
+  ///
+  /// Guarantees that the sum of attributed brand deposits plus unattributed deposit
+  /// equals the business-wide Held Deposit from the wallet ledger.
+  Stream<CustomerDepositAttribution> watchCustomerDepositAttribution({
+    String? storeId,
+  }) {
+    // 1. Business-wide Held Deposit from wallet transactions
+    final heldDepositStream =
+        db.walletTransactionsDao.watchCrateDepositSummary().map((s) => s.heldKobo);
+
+    // 2. Unsettled money-track deposits per manufacturer
+    final sumDepositPaid = db.orderCrateLines.depositPaidKobo.sum();
+    var predicate = db.orderCrateLines.businessId.equals(requireBusinessId()) &
+        db.orderCrateLines.depositPaidKobo.isBiggerThanValue(0) &
+        db.orderCrateLines.settledAt.isNull();
+    if (storeId != null) {
+      predicate = predicate & db.orders.storeId.equals(storeId);
+    }
+    final query = db.selectOnly(db.orderCrateLines).join([
+      innerJoin(db.orders, db.orders.id.equalsExp(db.orderCrateLines.orderId)),
+    ])
+      ..addColumns([db.orderCrateLines.manufacturerId, sumDepositPaid])
+      ..where(predicate)
+      ..groupBy([db.orderCrateLines.manufacturerId]);
+
+    final brandDepositsStream = query.watch().map((rows) {
+      final out = <String, int>{};
+      for (final r in rows) {
+        final mId = r.read(db.orderCrateLines.manufacturerId);
+        final kobo = r.read(sumDepositPaid) ?? 0;
+        if (mId != null && kobo > 0) {
+          out[mId] = kobo;
+        }
+      }
+      return out;
+    });
+
+    return Rx.combineLatest2<int, Map<String, int>, CustomerDepositAttribution>(
+      heldDepositStream,
+      brandDepositsStream,
+      (heldKobo, brandDeposits) => computeCustomerDepositAttribution(
+        businessWideHeldDepositKobo: heldKobo,
+        brandDepositsKobo: brandDeposits,
+      ),
+    );
+  }
+
+  /// Every crate movement for ONE brand, newest first (#291).
+  ///
+  /// Joins who (performedBy -> users.name), when (createdAt), store
+  /// (storeId / orders.storeId -> stores.name), and movement kind.
+  Stream<List<CrateMovementHistoryEntry>> watchManufacturerCrateMovements(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    var predicate = whereBusiness(crateLedger) &
+        crateLedger.manufacturerId.equals(manufacturerId);
+    if (storeId != null) {
+      predicate = predicate &
+          (crateLedger.storeId.equals(storeId) |
+              (crateLedger.storeId.isNull() & db.orders.storeId.equals(storeId)));
+    }
+
+    final orderStores = db.alias(db.stores, 'order_stores');
+
+    final query = select(crateLedger).join([
+      leftOuterJoin(db.users, db.users.id.equalsExp(crateLedger.performedBy)),
+      leftOuterJoin(
+        db.orders,
+        db.orders.id.equalsExp(crateLedger.referenceOrderId),
+      ),
+      leftOuterJoin(db.stores, db.stores.id.equalsExp(crateLedger.storeId)),
+      leftOuterJoin(orderStores, orderStores.id.equalsExp(db.orders.storeId)),
+    ])
+      ..where(predicate)
+      ..orderBy([
+        OrderingTerm(expression: crateLedger.createdAt, mode: OrderingMode.desc),
+      ]);
+
+    return query.watch().map((rows) {
+      return rows.map((row) {
+        final entry = row.readTable(crateLedger);
+        final user = row.readTableOrNull(db.users);
+        final store = row.readTableOrNull(db.stores);
+        final orderStore = row.readTableOrNull(orderStores);
+        return CrateMovementHistoryEntry(
+          id: entry.id,
+          movementType: entry.movementType,
+          movementLabel: labelForCrateMovement(entry.movementType),
+          quantityDelta: entry.quantityDelta,
+          createdAt: entry.createdAt,
+          performedByName: user?.name,
+          storeName: store?.name ?? orderStore?.name,
+        );
+      }).toList();
+    });
+  }
+
+  /// Brand's active products with stock, ordered by name (#291).
+  Stream<List<ProductDataWithStock>> watchManufacturerProducts(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    final stockExpr = db.inventory.quantity.sum();
+    var predicate = db.products.businessId.equals(requireBusinessId()) &
+        db.products.manufacturerId.equals(manufacturerId) &
+        db.products.isDeleted.equals(false);
+    var invJoinPredicate = db.inventory.productId.equalsExp(db.products.id);
+    if (storeId != null) {
+      invJoinPredicate = invJoinPredicate & db.inventory.storeId.equals(storeId);
+    }
+
+    final query = db.select(db.products).join([
+      leftOuterJoin(db.inventory, invJoinPredicate),
+    ])
+      ..addColumns([stockExpr])
+      ..where(predicate)
+      ..groupBy([db.products.id])
+      ..orderBy([
+        OrderingTerm(expression: db.products.name, mode: OrderingMode.asc),
+      ]);
+
+    return query.watch().map((rows) {
+      return rows.map((r) {
+        final p = r.readTable(db.products);
+        final stock = r.read(stockExpr) ?? 0;
+        return ProductDataWithStock(product: p, totalStock: stock);
+      }).toList();
+    });
+  }
 }
+

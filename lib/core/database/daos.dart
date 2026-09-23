@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/crates/crate_ledger_movement_types.dart';
 // #216: the brand-level Crate Shortfall — derived through the seam above, with
 // only the write-off DECISION persisted.
 import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
+import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';
