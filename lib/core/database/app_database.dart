@@ -1530,6 +1530,13 @@ class CrateLedger extends Table {
   // customer-scoped, not store-scoped).
   TextColumn get storeId => text().nullable().references(Stores, #id)();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
+
+  /// v82 (PRD #284 decision 15): one per-crate value, in kobo, SNAPSHOTTED at
+  /// write time. It holds the crate value on `damaged` and `full_crate_damage`
+  /// rows (so a later crate value change never restates a booked loss) and the
+  /// price paid on `purchase` rows. Null on every other movement and on every
+  /// row written before v82. The cloud column is `bigint` (0179).
+  IntColumn get ratePerCrateKobo => integer().nullable()();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
   TextColumn get voidReason => text().nullable()();
@@ -1542,7 +1549,10 @@ class CrateLedger extends Table {
 
   @override
   List<String> get customConstraints => [
-    "CHECK (movement_type IN ('issued','returned','damaged','adjusted','transferred_in','transferred_out'))",
+    // v82 (PRD #284): + count, opening_count, full_crate_damage, purchase. The
+    // closed set lives in `lib/core/crates/crate_ledger_movement_types.dart`.
+    "CHECK (movement_type IN ('issued','returned','damaged','adjusted','transferred_in','transferred_out','count','opening_count','full_crate_damage','purchase'))",
+    'CHECK (rate_per_crate_kobo IS NULL OR rate_per_crate_kobo >= 0)',
     // v28: relaxed from a customer⊕manufacturer XOR to "at least one owner".
     // A customer crate row now sets BOTH customer_id (owner) and
     // manufacturer_id (whose crates); a business/manufacturer-stock row sets
@@ -2902,7 +2912,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 81;
+  int get schemaVersion => 82;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3925,7 +3935,12 @@ class AppDatabase extends _$AppDatabase {
           // exist. The v44 guarded ALTER then sees it present and skips. Without
           // this, a ≤v28→v29 upgrade crashes ("no such column store_id").
           await m.alterTable(
-            TableMigration(crateLedger, newColumns: [crateLedger.storeId]),
+            TableMigration(
+              crateLedger,
+              // v82 added `rate_per_crate_kobo`, which a pre-v29 table lacks
+              // too — list it as new (NULL) for the same stale-column reason.
+              newColumns: [crateLedger.storeId, crateLedger.ratePerCrateKobo],
+            ),
           );
           // drift's alterTable re-applies the rebuilt table's existing indexes
           // (with their OLD definitions), so DROP-then-CREATE here: it makes the
@@ -6206,6 +6221,98 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+
+      if (from < 82) {
+        // ── v82 — #290: a count belongs to a store and a person ─────────────
+        //
+        // PRD #284 decision 15 — the WHOLE manufacturer-screen PRD's schema in
+        // one step, so its later slices never fight over a version number.
+        // Mirrors supabase/migrations/0179_crate_count_movements.sql.
+        //
+        //   1. crate_ledger.movement_type CHECK widened for `count`,
+        //      `opening_count`, `full_crate_damage` and `purchase`.
+        //   2. crate_ledger gains ONE nullable column, `rate_per_crate_kobo`
+        //      (a per-crate value snapshotted on damage / full-crate-damage
+        //      rows, the price paid on purchase rows), CHECKed >= 0.
+        //   3. crate_shortfall_writeoffs.source gains `count_shortage`. That set
+        //      is a CLOUD-only CHECK (see the column doc), so nothing changes
+        //      here for it — the client simply gains the constant.
+        //
+        // SQLite cannot ALTER a CHECK, so (1) is the v29 crate_ledger rebuild
+        // recipe once more: alterTable(TableMigration) copies every row 1:1,
+        // then DROP-then-CREATE each index and re-emit the bump trigger and the
+        // append-only pair from `_ledgerTables` (whose crate_ledger entry now
+        // freezes `rate_per_crate_kobo` too). A pure WIDENING, so the copy can
+        // never fail on existing data, and no row changes type: every existing
+        // count stays the `adjusted` it was written as (ADR 0021 — history is
+        // never restated). Rebuilding an append-only table is safe because the
+        // copy-and-swap drops the source table and SQLite fires no row trigger
+        // on DROP TABLE.
+        //
+        // `newColumns` pins `rate_per_crate_kobo` to NULL on the copy: it does
+        // not exist on the v81-shaped table, and without this the stale-column
+        // trap would write the STRING 'rate_per_crate_kobo' into every row.
+        // A LATER step adding a crate_ledger column must pin it here as well as
+        // in v29.
+        //
+        // Idempotent: a DB stepped back to < 82 with the column already present
+        // must NOT list it as new (that would null out real snapshots), and one
+        // already carrying the widened CHECK needs no rebuild at all.
+        final ledgerSql =
+            (await customSelect(
+              "SELECT sql FROM sqlite_master WHERE type = 'table' "
+              "AND name = 'crate_ledger'",
+            ).getSingle()).read<String>('sql');
+        final hasRateColumn = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('crate_ledger') "
+          "WHERE name = 'rate_per_crate_kobo'",
+        ).get()).isNotEmpty;
+        if (!hasRateColumn || !ledgerSql.contains("'opening_count'")) {
+          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
+          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+          await m.alterTable(
+            TableMigration(
+              crateLedger,
+              newColumns: [if (!hasRateColumn) crateLedger.ratePerCrateKobo],
+            ),
+          );
+          await customStatement(
+            'DROP INDEX IF EXISTS idx_crate_ledger_business_lua',
+          );
+          await customStatement(
+            'CREATE INDEX idx_crate_ledger_business_lua '
+            'ON crate_ledger (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'DROP INDEX IF EXISTS idx_crate_ledger_owner_group',
+          );
+          await customStatement(
+            'CREATE INDEX idx_crate_ledger_owner_group '
+            'ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
+          );
+          await customStatement(
+            'DROP TRIGGER IF EXISTS bump_crate_ledger_last_updated_at',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_crate_ledger_last_updated_at '
+            'AFTER UPDATE ON crate_ledger '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE crate_ledger SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+        // Emitted OUTSIDE the guard so a stepped-back DB still freezes the new
+        // column (the trigger text is derived from `_ledgerTables`).
+        await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
+        await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+        for (final stmt in _ledgerTriggerStatements(
+          _ledgerTables.firstWhere((l) => l.table == 'crate_ledger'),
+        )) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -6882,6 +6989,9 @@ const List<_LedgerImmutability> _ledgerTables = [
     'reference_order_id',
     'reference_return_id',
     'performed_by',
+    // v82 (PRD #284): a snapshotted value is frozen with the movement it
+    // values — an edit would restate a booked loss (ADR 0021).
+    'rate_per_crate_kobo',
     'created_at',
   ]),
   // v71 (#141, van-sales spec §4.4) — the driver consignment ledger. Only the

@@ -3390,4 +3390,222 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v81 -> v82 (a count belongs to a store and a person, #290)',
+      () {
+    Future<String> tableSqlOf(AppDatabase db, String table) async {
+      final row = await db
+          .customSelect(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            variables: [Variable<String>(table)],
+          )
+          .getSingle();
+      return row.read<String>('sql');
+    }
+
+    /// Reverts crate_ledger to its v81 shape: no `rate_per_crate_kobo`, and the
+    /// six-value movement CHECK. Recreated WITHOUT FKs (the v77 revert's shape)
+    /// so the copy is unconstrained; the migration rebuilds the real table.
+    Future<void> revertCrateLedger(AppDatabase db) async {
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      await db.customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
+      await db.customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+      await db.customStatement('DROP TABLE IF EXISTS crate_ledger');
+      await db.customStatement(
+        'CREATE TABLE crate_ledger ('
+        'id TEXT NOT NULL PRIMARY KEY, business_id TEXT NOT NULL, '
+        'customer_id TEXT, manufacturer_id TEXT, crate_size_group_id TEXT, '
+        'quantity_delta INTEGER NOT NULL, movement_type TEXT NOT NULL, '
+        'reference_order_id TEXT, reference_return_id TEXT, store_id TEXT, '
+        'performed_by TEXT, voided_at INTEGER, voided_by TEXT, '
+        'void_reason TEXT, created_at INTEGER NOT NULL DEFAULT 0, '
+        'last_updated_at INTEGER NOT NULL DEFAULT 0, '
+        "CHECK (movement_type IN ('issued','returned','damaged','adjusted',"
+        "'transferred_in','transferred_out')), "
+        'CHECK (customer_id IS NOT NULL OR manufacturer_id IS NOT NULL))',
+      );
+      await db.customStatement('PRAGMA foreign_keys = ON');
+    }
+
+    Future<Map<String, String>> seedTenant(AppDatabase db) async {
+      final biz = UuidV7.generate();
+      final store = UuidV7.generate();
+      final mfr = UuidV7.generate();
+      final user = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name, type) VALUES (?, 'Biz', 'Bar')",
+        [biz],
+      );
+      await db.customStatement(
+        "INSERT INTO stores (id, business_id, name) VALUES (?, ?, 'Main')",
+        [store, biz],
+      );
+      await db.customStatement(
+        "INSERT INTO manufacturers (id, business_id, name) VALUES (?, ?, 'Star')",
+        [mfr, biz],
+      );
+      await db.customStatement(
+        'INSERT INTO users (id, business_id, name, pin) '
+        "VALUES (?, ?, 'U', '1234')",
+        [user, biz],
+      );
+      return {'biz': biz, 'store': store, 'mfr': mfr, 'user': user};
+    }
+
+    Future<void> insertMovement(
+      AppDatabase db,
+      Map<String, String> ids,
+      String type, {
+      int delta = 1,
+      Object? rate,
+      String? id,
+    }) => db.customStatement(
+      'INSERT INTO crate_ledger (id, business_id, manufacturer_id, store_id, '
+      'quantity_delta, movement_type, performed_by, rate_per_crate_kobo) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        id ?? UuidV7.generate(),
+        ids['biz']!,
+        ids['mfr']!,
+        ids['store']!,
+        delta,
+        type,
+        ids['user']!,
+        rate,
+      ],
+    );
+
+    test('widens the movement CHECK, adds a NULL rate column, and carries every '
+        'existing row through untouched', () async {
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      await revertCrateLedger(db1);
+      expect(
+        await columnsOf(db1, 'crate_ledger'),
+        isNot(contains('rate_per_crate_kobo')),
+        reason: 'teeth: the v81 shape must genuinely lack the column',
+      );
+      final adjustedId = UuidV7.generate();
+      final issuedId = UuidV7.generate();
+      await db1.customStatement(
+        'INSERT INTO crate_ledger (id, business_id, manufacturer_id, store_id, '
+        'quantity_delta, movement_type, created_at, last_updated_at) '
+        "VALUES (?, ?, ?, ?, 12, 'adjusted', 1785000000, 1785000000)",
+        [adjustedId, ids['biz']!, ids['mfr']!, ids['store']!],
+      );
+      await db1.customStatement(
+        'INSERT INTO crate_ledger (id, business_id, customer_id, '
+        'manufacturer_id, quantity_delta, movement_type, created_at, '
+        "last_updated_at) VALUES (?, ?, NULL, ?, -2, 'damaged', 1785000001, "
+        '1785000001)',
+        [issuedId, ids['biz']!, ids['mfr']!],
+      );
+      await db1.customStatement('PRAGMA user_version = 81');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      // (1) Existing rows survived exactly — no count is relabelled.
+      final rows = await db2
+          .customSelect(
+            'SELECT id, movement_type, quantity_delta, store_id, '
+            'rate_per_crate_kobo, created_at FROM crate_ledger '
+            'ORDER BY created_at',
+          )
+          .get();
+      expect(rows, hasLength(2));
+      expect(rows[0].read<String>('id'), adjustedId);
+      expect(rows[0].read<String>('movement_type'), 'adjusted');
+      expect(rows[0].read<int>('quantity_delta'), 12);
+      expect(rows[0].read<String?>('store_id'), ids['store']!);
+      expect(rows[1].read<String>('movement_type'), 'damaged');
+      // The stale-column trap would have written the STRING here.
+      expect(rows.map((r) => r.read<int?>('rate_per_crate_kobo')), [
+        null,
+        null,
+      ]);
+
+      // (2) The four new movement types are accepted.
+      final sql = await tableSqlOf(db2, 'crate_ledger');
+      for (final t in const [
+        'count',
+        'opening_count',
+        'full_crate_damage',
+        'purchase',
+      ]) {
+        expect(sql, contains("'$t'"));
+        await insertMovement(db2, ids, t, rate: 50000);
+      }
+      await expectLater(
+        insertMovement(db2, ids, 'stolen'),
+        throwsA(anything),
+        reason: 'the set is still closed',
+      );
+      await expectLater(
+        insertMovement(db2, ids, 'purchase', rate: -1),
+        throwsA(anything),
+        reason: 'a per-crate value is never negative',
+      );
+
+      // (3) Still append-only — and the snapshot is frozen with the rest.
+      await expectLater(
+        db2.customStatement(
+          'UPDATE crate_ledger SET rate_per_crate_kobo = 1 '
+          "WHERE movement_type = 'purchase'",
+        ),
+        throwsA(anything),
+      );
+      await expectLater(
+        db2.customStatement('DELETE FROM crate_ledger'),
+        throwsA(anything),
+      );
+
+      // (4) Indexes and the bump trigger came back.
+      final objects = await db2
+          .customSelect(
+            'SELECT name FROM sqlite_master '
+            "WHERE tbl_name = 'crate_ledger' AND type IN ('index','trigger')",
+          )
+          .get();
+      expect(
+        objects.map((r) => r.read<String>('name')),
+        containsAll(const [
+          'idx_crate_ledger_business_lua',
+          'idx_crate_ledger_owner_group',
+          'bump_crate_ledger_last_updated_at',
+          'crate_ledger_immutable',
+          'crate_ledger_no_delete',
+        ]),
+      );
+    });
+
+    test('the upgrade step is idempotent and never nulls a real snapshot',
+        () async {
+      final db1 = await openAndInit();
+      final ids = await seedTenant(db1);
+      final id = UuidV7.generate();
+      await insertMovement(db1, ids, 'purchase', rate: 70000, id: id);
+      await db1.customStatement('PRAGMA user_version = 81');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final row = await db2
+          .customSelect(
+            'SELECT rate_per_crate_kobo FROM crate_ledger WHERE id = ?',
+            variables: [Variable<String>(id)],
+          )
+          .getSingle();
+      expect(row.read<int?>('rate_per_crate_kobo'), 70000);
+      await expectLater(
+        db2.customStatement(
+          'UPDATE crate_ledger SET rate_per_crate_kobo = 1 WHERE id = ?',
+          [id],
+        ),
+        throwsA(anything),
+        reason: 'the re-run still leaves the snapshot frozen',
+      );
+    });
+  });
 }

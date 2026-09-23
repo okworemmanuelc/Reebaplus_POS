@@ -9929,7 +9929,7 @@ class CrateShortfallWriteoffData extends DataClass
   /// row a v80 device pushes before it upgrades — lands in the bucket it was
   /// always in. Nothing is backfilled and no figure moves at upgrade.
   ///
-  /// The value set is enforced by a cloud CHECK (0174) rather than a Drift
+  /// The value set is enforced by a cloud CHECK (0176) rather than a Drift
   /// table-level CHECK, exactly as `manufacturers.crate_money_arrangement` and
   /// `stores.kind` are: SQLite cannot add a table constraint without rebuilding
   /// the table, and rebuilding an append-only money ledger to gain a constraint
@@ -20027,6 +20027,17 @@ class $CrateLedgerTable extends CrateLedger
       'REFERENCES users (id)',
     ),
   );
+  static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
+    'ratePerCrateKobo',
+  );
+  @override
+  late final GeneratedColumn<int> ratePerCrateKobo = GeneratedColumn<int>(
+    'rate_per_crate_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _voidedAtMeta = const VerificationMeta(
     'voidedAt',
   );
@@ -20101,6 +20112,7 @@ class $CrateLedgerTable extends CrateLedger
     referenceReturnId,
     storeId,
     performedBy,
+    ratePerCrateKobo,
     voidedAt,
     voidedBy,
     voidReason,
@@ -20209,6 +20221,15 @@ class $CrateLedgerTable extends CrateLedger
         ),
       );
     }
+    if (data.containsKey('rate_per_crate_kobo')) {
+      context.handle(
+        _ratePerCrateKoboMeta,
+        ratePerCrateKobo.isAcceptableOrUnknown(
+          data['rate_per_crate_kobo']!,
+          _ratePerCrateKoboMeta,
+        ),
+      );
+    }
     if (data.containsKey('voided_at')) {
       context.handle(
         _voidedAtMeta,
@@ -20295,6 +20316,10 @@ class $CrateLedgerTable extends CrateLedger
         DriftSqlType.string,
         data['${effectivePrefix}performed_by'],
       ),
+      ratePerCrateKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rate_per_crate_kobo'],
+      ),
       voidedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}voided_at'],
@@ -20336,6 +20361,13 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
   final String? referenceReturnId;
   final String? storeId;
   final String? performedBy;
+
+  /// v82 (PRD #284 decision 15): one per-crate value, in kobo, SNAPSHOTTED at
+  /// write time. It holds the crate value on `damaged` and `full_crate_damage`
+  /// rows (so a later crate value change never restates a booked loss) and the
+  /// price paid on `purchase` rows. Null on every other movement and on every
+  /// row written before v82. The cloud column is `bigint` (0179).
+  final int? ratePerCrateKobo;
   final DateTime? voidedAt;
   final String? voidedBy;
   final String? voidReason;
@@ -20353,6 +20385,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     this.referenceReturnId,
     this.storeId,
     this.performedBy,
+    this.ratePerCrateKobo,
     this.voidedAt,
     this.voidedBy,
     this.voidReason,
@@ -20386,6 +20419,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     }
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
+    }
+    if (!nullToAbsent || ratePerCrateKobo != null) {
+      map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
     }
     if (!nullToAbsent || voidedAt != null) {
       map['voided_at'] = Variable<DateTime>(voidedAt);
@@ -20428,6 +20464,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       performedBy: performedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(performedBy),
+      ratePerCrateKobo: ratePerCrateKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ratePerCrateKobo),
       voidedAt: voidedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(voidedAt),
@@ -20461,6 +20500,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       ),
       storeId: serializer.fromJson<String?>(json['storeId']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
+      ratePerCrateKobo: serializer.fromJson<int?>(json['ratePerCrateKobo']),
       voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
       voidedBy: serializer.fromJson<String?>(json['voidedBy']),
       voidReason: serializer.fromJson<String?>(json['voidReason']),
@@ -20483,6 +20523,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       'referenceReturnId': serializer.toJson<String?>(referenceReturnId),
       'storeId': serializer.toJson<String?>(storeId),
       'performedBy': serializer.toJson<String?>(performedBy),
+      'ratePerCrateKobo': serializer.toJson<int?>(ratePerCrateKobo),
       'voidedAt': serializer.toJson<DateTime?>(voidedAt),
       'voidedBy': serializer.toJson<String?>(voidedBy),
       'voidReason': serializer.toJson<String?>(voidReason),
@@ -20503,6 +20544,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     Value<String?> referenceReturnId = const Value.absent(),
     Value<String?> storeId = const Value.absent(),
     Value<String?> performedBy = const Value.absent(),
+    Value<int?> ratePerCrateKobo = const Value.absent(),
     Value<DateTime?> voidedAt = const Value.absent(),
     Value<String?> voidedBy = const Value.absent(),
     Value<String?> voidReason = const Value.absent(),
@@ -20528,6 +20570,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
         : this.referenceReturnId,
     storeId: storeId.present ? storeId.value : this.storeId,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    ratePerCrateKobo: ratePerCrateKobo.present
+        ? ratePerCrateKobo.value
+        : this.ratePerCrateKobo,
     voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
     voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
     voidReason: voidReason.present ? voidReason.value : this.voidReason,
@@ -20565,6 +20610,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       performedBy: data.performedBy.present
           ? data.performedBy.value
           : this.performedBy,
+      ratePerCrateKobo: data.ratePerCrateKobo.present
+          ? data.ratePerCrateKobo.value
+          : this.ratePerCrateKobo,
       voidedAt: data.voidedAt.present ? data.voidedAt.value : this.voidedAt,
       voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
       voidReason: data.voidReason.present
@@ -20591,6 +20639,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
           ..write('referenceReturnId: $referenceReturnId, ')
           ..write('storeId: $storeId, ')
           ..write('performedBy: $performedBy, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
           ..write('voidReason: $voidReason, ')
@@ -20613,6 +20662,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     referenceReturnId,
     storeId,
     performedBy,
+    ratePerCrateKobo,
     voidedAt,
     voidedBy,
     voidReason,
@@ -20634,6 +20684,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
           other.referenceReturnId == this.referenceReturnId &&
           other.storeId == this.storeId &&
           other.performedBy == this.performedBy &&
+          other.ratePerCrateKobo == this.ratePerCrateKobo &&
           other.voidedAt == this.voidedAt &&
           other.voidedBy == this.voidedBy &&
           other.voidReason == this.voidReason &&
@@ -20653,6 +20704,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
   final Value<String?> referenceReturnId;
   final Value<String?> storeId;
   final Value<String?> performedBy;
+  final Value<int?> ratePerCrateKobo;
   final Value<DateTime?> voidedAt;
   final Value<String?> voidedBy;
   final Value<String?> voidReason;
@@ -20671,6 +20723,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     this.referenceReturnId = const Value.absent(),
     this.storeId = const Value.absent(),
     this.performedBy = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
     this.voidReason = const Value.absent(),
@@ -20690,6 +20743,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     this.referenceReturnId = const Value.absent(),
     this.storeId = const Value.absent(),
     this.performedBy = const Value.absent(),
+    this.ratePerCrateKobo = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
     this.voidReason = const Value.absent(),
@@ -20711,6 +20765,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     Expression<String>? referenceReturnId,
     Expression<String>? storeId,
     Expression<String>? performedBy,
+    Expression<int>? ratePerCrateKobo,
     Expression<DateTime>? voidedAt,
     Expression<String>? voidedBy,
     Expression<String>? voidReason,
@@ -20730,6 +20785,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
       if (referenceReturnId != null) 'reference_return_id': referenceReturnId,
       if (storeId != null) 'store_id': storeId,
       if (performedBy != null) 'performed_by': performedBy,
+      if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
       if (voidedAt != null) 'voided_at': voidedAt,
       if (voidedBy != null) 'voided_by': voidedBy,
       if (voidReason != null) 'void_reason': voidReason,
@@ -20751,6 +20807,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     Value<String?>? referenceReturnId,
     Value<String?>? storeId,
     Value<String?>? performedBy,
+    Value<int?>? ratePerCrateKobo,
     Value<DateTime?>? voidedAt,
     Value<String?>? voidedBy,
     Value<String?>? voidReason,
@@ -20770,6 +20827,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
       referenceReturnId: referenceReturnId ?? this.referenceReturnId,
       storeId: storeId ?? this.storeId,
       performedBy: performedBy ?? this.performedBy,
+      ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
       voidedAt: voidedAt ?? this.voidedAt,
       voidedBy: voidedBy ?? this.voidedBy,
       voidReason: voidReason ?? this.voidReason,
@@ -20815,6 +20873,9 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     if (performedBy.present) {
       map['performed_by'] = Variable<String>(performedBy.value);
     }
+    if (ratePerCrateKobo.present) {
+      map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
+    }
     if (voidedAt.present) {
       map['voided_at'] = Variable<DateTime>(voidedAt.value);
     }
@@ -20850,6 +20911,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
           ..write('referenceReturnId: $referenceReturnId, ')
           ..write('storeId: $storeId, ')
           ..write('performedBy: $performedBy, ')
+          ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
           ..write('voidReason: $voidReason, ')
@@ -82322,6 +82384,7 @@ typedef $$CrateLedgerTableCreateCompanionBuilder =
       Value<String?> referenceReturnId,
       Value<String?> storeId,
       Value<String?> performedBy,
+      Value<int?> ratePerCrateKobo,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
       Value<String?> voidReason,
@@ -82342,6 +82405,7 @@ typedef $$CrateLedgerTableUpdateCompanionBuilder =
       Value<String?> referenceReturnId,
       Value<String?> storeId,
       Value<String?> performedBy,
+      Value<int?> ratePerCrateKobo,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
       Value<String?> voidReason,
@@ -82554,6 +82618,11 @@ class $$CrateLedgerTableFilterComposer
 
   ColumnFilters<String> get movementType => $composableBuilder(
     column: $table.movementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -82809,6 +82878,11 @@ class $$CrateLedgerTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get voidedAt => $composableBuilder(
     column: $table.voidedAt,
     builder: (column) => ColumnOrderings(column),
@@ -83057,6 +83131,11 @@ class $$CrateLedgerTableAnnotationComposer
 
   GeneratedColumn<String> get movementType => $composableBuilder(
     column: $table.movementType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get ratePerCrateKobo => $composableBuilder(
+    column: $table.ratePerCrateKobo,
     builder: (column) => column,
   );
 
@@ -83334,6 +83413,7 @@ class $$CrateLedgerTableTableManager
                 Value<String?> referenceReturnId = const Value.absent(),
                 Value<String?> storeId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
+                Value<int?> ratePerCrateKobo = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
                 Value<String?> voidReason = const Value.absent(),
@@ -83352,6 +83432,7 @@ class $$CrateLedgerTableTableManager
                 referenceReturnId: referenceReturnId,
                 storeId: storeId,
                 performedBy: performedBy,
+                ratePerCrateKobo: ratePerCrateKobo,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
                 voidReason: voidReason,
@@ -83372,6 +83453,7 @@ class $$CrateLedgerTableTableManager
                 Value<String?> referenceReturnId = const Value.absent(),
                 Value<String?> storeId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
+                Value<int?> ratePerCrateKobo = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
                 Value<String?> voidReason = const Value.absent(),
@@ -83390,6 +83472,7 @@ class $$CrateLedgerTableTableManager
                 referenceReturnId: referenceReturnId,
                 storeId: storeId,
                 performedBy: performedBy,
+                ratePerCrateKobo: ratePerCrateKobo,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
                 voidReason: voidReason,
