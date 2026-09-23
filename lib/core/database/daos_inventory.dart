@@ -569,28 +569,6 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Future<void> updateCrateGroupStock(String groupId, int newStock) async {
-    final now = DateTime.now();
-    final comp = CrateSizeGroupsCompanion(
-      id: Value(groupId),
-      emptyCrateStock: Value(newStock),
-      lastUpdatedAt: Value(now),
-    );
-    await (update(
-      crateSizeGroups,
-    )..where((t) => t.id.equals(groupId) & whereBusiness(t))).write(comp);
-    // Full-row enqueue: a partial crate_size_groups upsert omits NOT NULL name.
-    final fullGroup = await (select(
-      crateSizeGroups,
-    )..where((t) => t.id.equals(groupId) & whereBusiness(t))).getSingleOrNull();
-    if (fullGroup != null) {
-      await db.syncDao.enqueueUpsert(
-        'crate_size_groups',
-        fullGroup.toCompanion(true),
-      );
-    }
-  }
-
   /// Increment a manufacturer's empty-crate stock counter. Used by the
   /// receive-delivery and crate-return flows to credit the physical pool of
   /// returnable crates held against a manufacturer. Delegates to the Crate Pool
