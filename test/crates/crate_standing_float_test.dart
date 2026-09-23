@@ -294,8 +294,10 @@ void main() {
           .watchEmptiesPoolByManufacturer()
           .first;
       await db.cratePoolDao.recordManualCountCorrection(
-        floatBrand,
-        (pool[floatBrand] ?? 0) - 5,
+        manufacturerId: floatBrand,
+        storeId: storeId,
+        performedBy: stockKeeperId,
+        countedEmpties: (pool[floatBrand] ?? 0) - 5,
       );
 
       expect(await netCashOut(), cashBefore);

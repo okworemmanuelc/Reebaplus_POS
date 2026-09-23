@@ -77,18 +77,20 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
-  /// Manually set a manufacturer's empty-crate count (management dialog).
-  /// Delegates to the Crate Pool seam (#157), which records the correction as a
-  /// reconciling ledger delta and maintains the scalar + per-store caches.
-  Future<void> updateManufacturerStock(
-    String id,
-    int newStock, {
-    String? storeId,
+  /// Record a count of a manufacturer's empties at a store (management dialog).
+  /// Delegates to the Crate Pool seam (#157), which records it as a store-
+  /// stamped, attributed Count or Opening Count ledger row (#290).
+  Future<void> updateManufacturerStock({
+    required String manufacturerId,
+    required String storeId,
+    required String performedBy,
+    required int countedEmpties,
   }) async {
     await db.cratePoolDao.recordManualCountCorrection(
-      id,
-      newStock,
+      manufacturerId: manufacturerId,
       storeId: storeId,
+      performedBy: performedBy,
+      countedEmpties: countedEmpties,
     );
   }
 

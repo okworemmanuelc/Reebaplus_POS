@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -1975,7 +1976,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     ManufacturerData mfr, {
     required int emptyCount,
   }) {
-    final stockCtrl = TextEditingController(text: emptyCount.toString());
+    // #290: a count always belongs to a store. A locked store, or the only
+    // store the user can pick, is used without asking; otherwise the sheet asks
+    // which store was counted and prefills that store's expected empties.
+    final selectableStores = ref.read(selectableStoresProvider);
+    String? countStoreId = crateCountStoreWithoutAsking(
+      lockedStoreId: ref.read(lockedStoreProvider).value,
+      selectableStoreIds: [for (final s in selectableStores) s.id],
+    );
+    final mustPickStore = countStoreId == null;
+    // The figure the field was prefilled with. A count is recorded only when the
+    // user changes it, so saving the deposit alone never writes a count.
+    String? countBaseline = mustPickStore ? null : emptyCount.toString();
+    final stockCtrl = TextEditingController(text: countBaseline ?? '');
     final depositCtrl = TextEditingController();
     final crateValueCtrl = TextEditingController();
     const isCEO = true;
@@ -2000,236 +2013,299 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             24,
             24 + ctx.deviceBottomPadding,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Update ${mfr.name}',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: _text,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _styledDialogField(
-                stockCtrl,
-                'Empty Crates In Stock',
-                'e.g. 50',
-                isNumber: true,
-              ),
-              const SizedBox(height: 12),
-
-              // Deposit Amount with CEO Check
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Deposit Amount ($activeCurrencySymbol)',
+          // #290 adds a store picker; scroll rather than overflow.
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Update ${mfr.name}',
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: _subtext,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: _text,
                         ),
                       ),
-                      Row(
-                        children: [
-                          _modeChip(
-                            'Add',
-                            depositMode == 'add',
-                            () => setB(() => depositMode = 'add'),
-                          ),
-                          const SizedBox(width: 4),
-                          _modeChip(
-                            'Change',
-                            depositMode == 'change',
-                            () => setB(() => depositMode = 'change'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _styledDialogField(
-                    depositCtrl,
-                    '',
-                    depositMode == 'add' ? 'Amount to add' : 'New total amount',
-                    isNumber: true,
-                    isCurrency: true,
-                    readOnly: !isCEO,
-                    showLabel: false,
-                  ),
-                ],
-              ),
-
-              if (isCEO) ...[
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
+                if (mustPickStore) ...[
+                  AppDropdown<String>(
+                    value: countStoreId,
+                    labelText: 'Store counted',
+                    hintText: 'Choose a store',
+                    items: [
+                      for (final store in selectableStores)
+                        DropdownMenuItem(
+                          value: store.id,
+                          child: Text(store.name, style: TextStyle(color: _text)),
+                        ),
+                    ],
+                    onChanged: (id) async {
+                      if (id == null) return;
+                      final expected = (await ref
+                              .read(databaseProvider)
+                              .cratePoolDao
+                              .expectedEmptiesAt(
+                                manufacturerId: mfr.id,
+                                storeId: id,
+                              ))
+                          .toString();
+                      // The sheet may have closed while the pool was read.
+                      if (!ctx.mounted) return;
+                      setB(() {
+                        countStoreId = id;
+                        countBaseline = expected;
+                        stockCtrl.text = expected;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                _styledDialogField(
+                  stockCtrl,
+                  'Empty Crates In Stock',
+                  countStoreId == null ? 'Choose a store first' : 'e.g. 50',
+                  isNumber: true,
+                  readOnly: countStoreId == null,
+                ),
+                const SizedBox(height: 12),
+
+                // Deposit Amount with CEO Check
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Deposit Amount ($activeCurrencySymbol)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: _subtext,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            _modeChip(
+                              'Add',
+                              depositMode == 'add',
+                              () => setB(() => depositMode = 'add'),
+                            ),
+                            const SizedBox(width: 4),
+                            _modeChip(
+                              'Change',
+                              depositMode == 'change',
+                              () => setB(() => depositMode = 'change'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _styledDialogField(
+                      depositCtrl,
+                      '',
+                      depositMode == 'add' ? 'Amount to add' : 'New total amount',
+                      isNumber: true,
+                      isCurrency: true,
+                      readOnly: !isCEO,
+                      showLabel: false,
+                    ),
+                  ],
+                ),
+
+                if (isCEO) ...[
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.primary.withValues(alpha: 0.1),
+                      ).colorScheme.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1),
+                      ),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.shieldHalved.data,
-                                size: 14,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'CEO: CRATE PRICE',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w900,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  FontAwesomeIcons.shieldHalved.data,
+                                  size: 14,
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              _modeChip(
-                                'Add',
-                                priceMode == 'add',
-                                () => setB(() => priceMode = 'add'),
-                                small: true,
-                              ),
-                              const SizedBox(width: 4),
-                              _modeChip(
-                                'Change',
-                                priceMode == 'change',
-                                () => setB(() => priceMode = 'change'),
-                                small: true,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _styledDialogField(
-                        crateValueCtrl,
-                        'Bulk Update Price ($activeCurrencySymbol)',
-                        priceMode == 'add'
-                            ? '+ /- amount'
-                            : 'New price for all items',
-                        isNumber: true,
-                        isCurrency: true,
-                      ),
-                    ],
+                                const SizedBox(width: 8),
+                                Text(
+                                  'CEO: CRATE PRICE',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                _modeChip(
+                                  'Add',
+                                  priceMode == 'add',
+                                  () => setB(() => priceMode = 'add'),
+                                  small: true,
+                                ),
+                                const SizedBox(width: 4),
+                                _modeChip(
+                                  'Change',
+                                  priceMode == 'change',
+                                  () => setB(() => priceMode = 'change'),
+                                  small: true,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _styledDialogField(
+                          crateValueCtrl,
+                          'Bulk Update Price ($activeCurrencySymbol)',
+                          priceMode == 'add'
+                              ? '+ /- amount'
+                              : 'New price for all items',
+                          isNumber: true,
+                          isCurrency: true,
+                        ),
+                      ],
+                    ),
                   ),
+                ],
+
+                // #211 — the brand's Crate Money Arrangement (ADR 0023 rule 3).
+                // Self-gating (crate business + Gates.crateMoneyArrangement) and
+                // self-saving: it confirms and writes on its own rather than
+                // riding the Save button below, because a money policy must not be
+                // half-chosen and abandoned. Renders nothing for a non-crate
+                // business or a role without money permission.
+                CrateMoneyArrangementSection(
+                  manufacturer: mfr,
+                  surfaceColor: _surface,
+                  textColor: _text,
+                  subtextColor: _subtext,
                 ),
-              ],
 
-              // #211 — the brand's Crate Money Arrangement (ADR 0023 rule 3).
-              // Self-gating (crate business + Gates.crateMoneyArrangement) and
-              // self-saving: it confirms and writes on its own rather than
-              // riding the Save button below, because a money policy must not be
-              // half-chosen and abandoned. Renders nothing for a non-crate
-              // business or a role without money permission.
-              CrateMoneyArrangementSection(
-                manufacturer: mfr,
-                surfaceColor: _surface,
-                textColor: _text,
-                subtextColor: _subtext,
-              ),
-
-              const SizedBox(height: 32),
-              AppButton(
-                text: 'Save Changes',
-                variant: AppButtonVariant.primary,
-                onPressed: () async {
-                  final db = ref.read(databaseProvider);
-                  try {
-                    // Update Stock
-                    await db.inventoryDao.updateManufacturerStock(
-                      mfr.id,
-                      int.tryParse(stockCtrl.text.trim()) ?? emptyCount,
-                      storeId: ref.read(lockedStoreProvider).value,
-                    );
-
-                    // Update Deposit
-                    if (isCEO && depositCtrl.text.isNotEmpty) {
-                      final inputVal = parseCurrency(depositCtrl.text);
-                      final inputKobo = (inputVal * 100).round();
-                      int newDepositKobo = mfr.depositAmountKobo;
-                      if (depositMode == 'add') {
-                        newDepositKobo += inputKobo;
-                      } else {
-                        newDepositKobo = inputKobo;
-                      }
-                      await db.inventoryDao.updateManufacturerDeposit(
-                        mfr.id,
-                        newDepositKobo,
-                      );
-                    }
-
-                    // Update Product Crate Values
-                    if (isCEO && crateValueCtrl.text.isNotEmpty) {
-                      final inputVal = parseCurrency(crateValueCtrl.text);
-                      final inputKobo = (inputVal * 100).round();
-
-                      if (priceMode == 'add') {
-                        await db.catalogDao.updateManufacturerEmptyCrateValue(
-                          mfr.id,
-                          inputKobo,
+                const SizedBox(height: 32),
+                AppButton(
+                  text: 'Save Changes',
+                  variant: AppButtonVariant.primary,
+                  onPressed: () async {
+                    final db = ref.read(databaseProvider);
+                    // #290: validate the count before anything is written, so a
+                    // rejected count leaves the whole sheet unsaved.
+                    final countText = stockCtrl.text.trim();
+                    final storeId = countStoreId;
+                    int? counted;
+                    if (storeId != null && countText != countBaseline) {
+                      counted = int.tryParse(countText);
+                      if (counted == null || counted < 0) {
+                        AppNotification.showError(
+                          ctx,
+                          'Enter the number of empties you counted (0 or more).',
                         );
-                      } else {
-                        await db.catalogDao.updateManufacturerEmptyCrateValue(
-                          mfr.id,
-                          inputKobo,
-                        );
+                        return;
                       }
                     }
-
-                    await ref
-                        .read(activityLogProvider)
-                        .logAction(
-                          'update_manufacturer',
-                          '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} updated crate stock/deposit for ${mfr.name}',
-                        );
-                    if (context.mounted) Navigator.pop(ctx);
-                  } catch (_) {
-                    if (ctx.mounted) {
+                    final userId = ref.read(authProvider).currentUser?.id;
+                    if (counted != null && userId == null) {
                       AppNotification.showError(
                         ctx,
-                        'Could not save changes. Please try again.',
+                        'Sign in again to record a count.',
                       );
+                      return;
                     }
-                  }
-                },
-              ),
-            ],
+                    try {
+                      // Record the count against its store and the person.
+                      if (storeId != null && counted != null && userId != null) {
+                        await db.inventoryDao.updateManufacturerStock(
+                          manufacturerId: mfr.id,
+                          storeId: storeId,
+                          performedBy: userId,
+                          countedEmpties: counted,
+                        );
+                      }
+
+                      // Update Deposit
+                      if (isCEO && depositCtrl.text.isNotEmpty) {
+                        final inputVal = parseCurrency(depositCtrl.text);
+                        final inputKobo = (inputVal * 100).round();
+                        int newDepositKobo = mfr.depositAmountKobo;
+                        if (depositMode == 'add') {
+                          newDepositKobo += inputKobo;
+                        } else {
+                          newDepositKobo = inputKobo;
+                        }
+                        await db.inventoryDao.updateManufacturerDeposit(
+                          mfr.id,
+                          newDepositKobo,
+                        );
+                      }
+
+                      // Update Product Crate Values
+                      if (isCEO && crateValueCtrl.text.isNotEmpty) {
+                        final inputVal = parseCurrency(crateValueCtrl.text);
+                        final inputKobo = (inputVal * 100).round();
+
+                        if (priceMode == 'add') {
+                          await db.catalogDao.updateManufacturerEmptyCrateValue(
+                            mfr.id,
+                            inputKobo,
+                          );
+                        } else {
+                          await db.catalogDao.updateManufacturerEmptyCrateValue(
+                            mfr.id,
+                            inputKobo,
+                          );
+                        }
+                      }
+
+                      await ref
+                          .read(activityLogProvider)
+                          .logAction(
+                            'update_manufacturer',
+                            '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} updated crate stock/deposit for ${mfr.name}',
+                          );
+                      if (context.mounted) Navigator.pop(ctx);
+                    } catch (_) {
+                      if (ctx.mounted) {
+                        AppNotification.showError(
+                          ctx,
+                          'Could not save changes. Please try again.',
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -183,9 +183,10 @@ void main() {
       );
       await expectBusinessEqualsSumOfStores();
       await db.cratePoolDao.recordManualCountCorrection(
-        manufacturerA,
-        20,
+        manufacturerId: manufacturerA,
         storeId: storeA,
+        performedBy: userId,
+        countedEmpties: 20,
       );
       await expectBusinessEqualsSumOfStores();
 
