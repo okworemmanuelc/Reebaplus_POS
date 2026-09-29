@@ -262,6 +262,7 @@ void main() {
       expect(row.storeId, env.storeId);
       expect(row.performedBy, 'test-user-id');
       expect(row.ratePerCrateKobo, 150000);
+      expect(row.reason, 'broken');
 
       await finish(tester);
     });

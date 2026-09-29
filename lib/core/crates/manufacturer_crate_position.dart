@@ -425,6 +425,18 @@ String labelForCrateMovement(String movementType) {
   }
 }
 
+/// Human-readable label for a crate damage reason code (`crate_ledger.reason`).
+String labelForCrateDamageReason(String reason) {
+  switch (reason) {
+    case 'rotten_wood':
+      return 'Rotten wood';
+    default:
+      if (reason.isEmpty) return reason;
+      final spaced = reason.replaceAll('_', ' ');
+      return '${spaced[0].toUpperCase()}${spaced.substring(1).toLowerCase()}';
+  }
+}
+
 /// A single movement row for the Manufacturer screen's History tab.
 class CrateMovementHistoryEntry {
   final String id;
@@ -434,6 +446,7 @@ class CrateMovementHistoryEntry {
   final DateTime createdAt;
   final String? performedByName;
   final String? storeName;
+  final String? reason;
 
   const CrateMovementHistoryEntry({
     required this.id,
@@ -443,6 +456,7 @@ class CrateMovementHistoryEntry {
     required this.createdAt,
     this.performedByName,
     this.storeName,
+    this.reason,
   });
 }
 /// Test and widget keys for the Manufacturer screen (#291).

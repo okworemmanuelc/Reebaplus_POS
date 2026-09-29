@@ -212,6 +212,8 @@ class _RecordDamagedCratesSheetState
     final quantity = _quantity;
     if (quantity == null || quantity <= 0) return;
 
+    setState(() => _saving = true);
+
     final db = ref.read(databaseProvider);
     final currentWarehouse = await db.cratePoolDao.expectedEmptiesAt(
       manufacturerId: widget.manufacturer.id,
@@ -219,6 +221,7 @@ class _RecordDamagedCratesSheetState
     );
     if (quantity > currentWarehouse) {
       if (mounted) {
+        setState(() => _saving = false);
         AppNotification.showError(
           context,
           'Only $currentWarehouse empty crate${currentWarehouse == 1 ? '' : 's'} in warehouse',
@@ -227,7 +230,6 @@ class _RecordDamagedCratesSheetState
       return;
     }
 
-    setState(() => _saving = true);
     try {
       await db.cratePoolDao.recordDamage(
         widget.manufacturer.id,
@@ -235,6 +237,7 @@ class _RecordDamagedCratesSheetState
         storeId: _storeId,
         performedBy: performedBy,
         ratePerCrateKobo: widget.manufacturer.depositAmountKobo,
+        reason: _reason,
       );
     } catch (e, st) {
       CrashReporter.record(

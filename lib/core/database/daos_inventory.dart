@@ -609,6 +609,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     String? storeId,
     String? performedBy,
     int? ratePerCrateKobo,
+    String? reason,
   }) async {
     await db.cratePoolDao.recordDamage(
       manufacturerId,
@@ -616,6 +617,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       storeId: storeId,
       performedBy: performedBy,
       ratePerCrateKobo: ratePerCrateKobo,
+      reason: reason,
     );
   }
 
@@ -627,6 +629,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     required int crates,
     String? performedBy,
     int? ratePerCrateKobo,
+    String? reason,
   }) async {
     await db.cratePoolDao.recordFullCrateDamage(
       manufacturerId: manufacturerId,
@@ -634,6 +637,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       crates: crates,
       performedBy: performedBy,
       ratePerCrateKobo: ratePerCrateKobo,
+      reason: reason,
     );
   }
 

@@ -95,8 +95,8 @@ void main() {
 
     test('rejects damage exceeding warehouse count and ignores non-positive quantities',
         () async {
-      expect(
-        () => db.inventoryDao
+      await expectLater(
+        db.inventoryDao
             .recordEmptyCrateDamage(manufacturerId, 25, storeId: storeId),
         throwsArgumentError,
       );

@@ -1,7 +1,9 @@
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 
 /// #297 — Record damaged empties through the Crate Pool seam
 /// (`CratePoolDao.recordDamage`).
@@ -171,6 +173,46 @@ void main() {
     expect(posAfter.damaged.moneyKobo, 300000);
   });
 
+  test('persists the reason on the damage movement and shows it in History',
+      () async {
+    await db.cratePoolDao.recordDamage(
+      manufacturerId,
+      2,
+      storeId: storeA,
+      performedBy: userId,
+      reason: 'rotten_wood',
+    );
+
+    final row = await (db.select(db.crateLedger)
+          ..where((t) => t.movementType.equals('damaged')))
+        .getSingle();
+    expect(row.reason, 'rotten_wood');
+
+    final history = await db.cratePoolDao
+        .watchManufacturerCrateMovements(manufacturerId)
+        .first;
+    final entry = history.firstWhere((h) => h.movementType == 'damaged');
+    expect(entry.reason, 'rotten_wood');
+    expect(entry.movementLabel, 'Damaged · Rotten wood');
+  });
+
+  test('the reason is frozen with the movement (append-only)', () async {
+    await db.cratePoolDao.recordDamage(
+      manufacturerId,
+      1,
+      storeId: storeA,
+      performedBy: userId,
+      reason: 'broken',
+    );
+    await expectLater(
+      db.customStatement(
+        "UPDATE crate_ledger SET reason = 'other' "
+        "WHERE movement_type = 'damaged'",
+      ),
+      throwsA(anything),
+    );
+  });
+
   test('History labels it as Damaged', () async {
     await db.cratePoolDao.recordDamage(
       manufacturerId,
@@ -189,7 +231,17 @@ void main() {
 
   test('Daily Reconciliation values damaged crates at snapshotted rate with fallback to current rate', () {
     final now = DateTime.now();
-    final depositByMfr = {manufacturerId: 200000}; // current rate is ₦2,000
+    final mfr = ManufacturerData(
+      id: manufacturerId,
+      businessId: businessId,
+      name: 'Mfr',
+      emptyCrateStock: 15,
+      depositAmountKobo: 200000, // current rate is ₦2,000
+      crateMoneyArrangement: kCrateMoneyArrangementNone,
+      isDeleted: false,
+      createdAt: now,
+      lastUpdatedAt: now,
+    );
 
     // Row 1: snapshotted rate of ₦1,200 (120,000 kobo), lost 3
     final snapshottedRow = CrateLedgerData(
@@ -217,23 +269,22 @@ void main() {
       lastUpdatedAt: now,
     );
 
-    int computeDamageDeposit(List<CrateLedgerData> crateDamages) {
-      var crateDamageDepositKobo = 0;
-      for (final c in crateDamages) {
-        if (c.voidedAt != null) continue;
-        final lostEmpties = -c.quantityDelta;
-        if (lostEmpties <= 0) continue;
-        final rate = c.ratePerCrateKobo ?? (depositByMfr[c.manufacturerId] ?? 0);
-        crateDamageDepositKobo += lostEmpties * rate;
-      }
-      return crateDamageDepositKobo;
-    }
+    int crateDamageDepositKoboFor(List<CrateLedgerData> crateDamages) =>
+        reconDataFrom(
+          ReconInputs(
+            start: DateTime(2026, 9, 29),
+            endExclusive: DateTime(2026, 9, 30),
+            crateDamages: crateDamages,
+            manufacturers: [mfr],
+            showCrates: true,
+          ),
+        ).crateDamageDepositKobo;
 
-    expect(computeDamageDeposit([snapshottedRow]), 360000,
+    expect(crateDamageDepositKoboFor([snapshottedRow]), 360000,
         reason: '3 * 120,000 kobo snapshotted (not current 200,000)');
-    expect(computeDamageDeposit([legacyRow]), 400000,
+    expect(crateDamageDepositKoboFor([legacyRow]), 400000,
         reason: '2 * 200,000 kobo fallback to current rate for legacy row');
-    expect(computeDamageDeposit([snapshottedRow, legacyRow]), 760000);
+    expect(crateDamageDepositKoboFor([snapshottedRow, legacyRow]), 760000);
   });
 
   group('Full crate damage (#299)', () {
@@ -323,6 +374,28 @@ void main() {
             ..where((t) => t.movementType.equals('full_crate_damage')))
           .get();
       expect(damageRows.single.ratePerCrateKobo, 150000);
+    });
+
+    test('persists the reason on the full_crate_damage leg', () async {
+      await db.cratePoolDao.recordFullCrateDamage(
+        manufacturerId: manufacturerId,
+        storeId: storeA,
+        crates: 1,
+        performedBy: userId,
+        reason: 'spilled',
+      );
+
+      final row = await (db.select(db.crateLedger)
+            ..where((t) => t.movementType.equals('full_crate_damage')))
+          .getSingle();
+      expect(row.reason, 'spilled');
+
+      final history = await db.cratePoolDao
+          .watchManufacturerCrateMovements(manufacturerId)
+          .first;
+      final entry =
+          history.firstWhere((h) => h.movementType == 'full_crate_damage');
+      expect(entry.movementLabel, 'Full crate damage · Spilled');
     });
 
     test('ignores non-positive quantities', () async {

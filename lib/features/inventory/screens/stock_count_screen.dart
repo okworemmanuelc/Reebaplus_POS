@@ -659,28 +659,34 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               final reason = 'damage:$reasonKey';
 
               try {
-                // §17.2: reduces system stock. Routes through adjustStock so the
-                // stock_adjustments + stock_transactions ledger (and the cloud)
-                // record it; reason `damage:<key>` distinguishes it from a count
-                // adjustment for the Ring 3 report.
-                await db.inventoryDao.adjustStock(
-                  p.product.id,
-                  p.storeId,
-                  -qty,
-                  reason,
-                  staffId,
-                );
-                // #299: damaging a full crate of drinks (tracked bottle) always
-                // damages its crate too, writing a full_crate_damage leg with
-                // snapshotted per-crate rate.
-                if (isTrackedBottle && p.product.manufacturerId != null) {
-                  await db.cratePoolDao.recordFullCrateDamage(
-                    manufacturerId: p.product.manufacturerId!,
-                    storeId: p.storeId,
-                    crates: qty,
-                    performedBy: staffId,
+                // §17.2/#299: drink stock and (when applicable) the crate shell
+                // loss are committed or rolled back together — a partial write
+                // would leave stock reduced without the matching crate leg.
+                await db.transaction(() async {
+                  // §17.2: reduces system stock. Routes through adjustStock so the
+                  // stock_adjustments + stock_transactions ledger (and the cloud)
+                  // record it; reason `damage:<key>` distinguishes it from a count
+                  // adjustment for the Ring 3 report.
+                  await db.inventoryDao.adjustStock(
+                    p.product.id,
+                    p.storeId,
+                    -qty,
+                    reason,
+                    staffId,
                   );
-                }
+                  // #299: damaging a full crate of drinks (tracked bottle) always
+                  // damages its crate too, writing a full_crate_damage leg with
+                  // snapshotted per-crate rate.
+                  if (isTrackedBottle && p.product.manufacturerId != null) {
+                    await db.cratePoolDao.recordFullCrateDamage(
+                      manufacturerId: p.product.manufacturerId!,
+                      storeId: p.storeId,
+                      crates: qty,
+                      performedBy: staffId,
+                      reason: reasonKey,
+                    );
+                  }
+                });
               } catch (_) {
                 if (!sheetCtx.mounted) return;
                 setSheet(() => submitting = false);

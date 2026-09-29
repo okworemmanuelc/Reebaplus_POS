@@ -223,6 +223,7 @@ void main() {
     expect(leg.storeId, env.storeId);
     expect(leg.manufacturerId, manufacturerId);
     expect(leg.ratePerCrateKobo, 200000); // ₦2,000 snapshotted
+    expect(leg.reason, 'broken');
 
     // Verify Empties Pool (warehouse count) is UNCHANGED (10)
     final poolAfter = await env.db.cratePoolDao

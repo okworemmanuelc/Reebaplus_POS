@@ -8,7 +8,15 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-178 sessions logged. Codebase is live and being verified on-device.
+179 sessions logged. Codebase is live and being verified on-device.
+
+### PR #311 review follow-ups + damage reason on the movement (#297 AC) (2026-09-29)
+Branch `feat/full-crate-damage-299`.
+- **Review fixes**: `recordDamage`'s warehouse check now runs inside its transaction; both manufacturer fallback-rate lookups are business-scoped (`whereBusiness`); Stock Count's `adjustStock` + `recordFullCrateDamage` run in one `db.transaction`; `RecordDamagedCratesSheet._save` sets `_saving` before the async warehouse check; tests await the rejected future and call the real `reconDataFrom`.
+- **Schema — Drift v83 / cloud 0180**: `crate_ledger.reason TEXT NULL` — the reason code picked when crates were lost (`broken`/`burnt`/`rotten_wood` from the manufacturer sheet; `broken`/`expired`/`spilled`/`theft`/`other` from Stock Count). Set on `damaged` + `full_crate_damage` rows, frozen in the append-only set (local `_ledgerTables` + cloud `enforce_append_only` re-derive). Pinned as a new column in the v29 and v82 rebuilds (stale-column trap). Nothing backfilled.
+- `recordDamage` / `recordFullCrateDamage` (and the `InventoryDao` forwarders) take `String? reason`; History shows `"<kind> · <Reason>"` via `labelForCrateDamageReason`.
+- **DEPLOY ORDERING**: push `0180_crate_ledger_reason.sql` to the cloud BEFORE shipping the v83 client, or v83 pushes of `reason` jam the outbox.
+- Verification: new seam tests (reason persisted + History label, frozen, full-crate leg), UI tests assert `reason == 'broken'`, `onUpgrade v82 -> v83` group (2 tests). Full suite: 2460 passed, 271 skipped. `flutter analyze` clean.
 
 ### Issue #299 — Damaging a full crate of drinks damages its crate too, with the crate loss counted once (2026-09-29)
 Branch `feat/full-crate-damage-299`, cut from `feat/record-damaged-empties-297`.

@@ -854,8 +854,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
 
   /// Debit the physical pool because STORED empties were damaged/lost (§17.2,
   /// #297). The scalar is clamped at zero. Appends a `damaged` crate_ledger
-  /// row with storeId, attributed [performedBy] and snapshotted
-  /// [ratePerCrateKobo] (defaulting to the manufacturer's current crate value).
+  /// row with storeId, attributed [performedBy], the [reason] code and the
+  /// snapshotted [ratePerCrateKobo] (defaulting to the manufacturer's current
+  /// crate value).
   ///
   /// Damage above the store's warehouse count is rejected with an
   /// [ArgumentError] before anything is written (#297).
@@ -865,22 +866,23 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     String? storeId,
     String? performedBy,
     int? ratePerCrateKobo,
+    String? reason,
   }) async {
     if (quantity <= 0) return;
-    if (storeId != null) {
-      final available = await expectedEmptiesAt(
-        manufacturerId: manufacturerId,
-        storeId: storeId,
-      );
-      if (quantity > available) {
-        throw ArgumentError.value(
-          quantity,
-          'quantity',
-          'Damage ($quantity) cannot exceed warehouse count ($available) at store $storeId',
-        );
-      }
-    }
     await transaction(() async {
+      if (storeId != null) {
+        final available = await expectedEmptiesAt(
+          manufacturerId: manufacturerId,
+          storeId: storeId,
+        );
+        if (quantity > available) {
+          throw ArgumentError.value(
+            quantity,
+            'quantity',
+            'Damage ($quantity) cannot exceed warehouse count ($available) at store $storeId',
+          );
+        }
+      }
       await customUpdate(
         'UPDATE manufacturers SET empty_crate_stock = MAX(0, empty_crate_stock - ?), '
         "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
@@ -902,7 +904,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       }
       final rate = ratePerCrateKobo ??
           (await (select(manufacturers)
-                ..where((t) => t.id.equals(manufacturerId)))
+                ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
               .getSingleOrNull())
               ?.depositAmountKobo;
       await _appendPoolLedgerRow(
@@ -912,6 +914,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         movementType: 'damaged',
         performedBy: performedBy,
         ratePerCrateKobo: rate,
+        reason: reason,
       );
     });
   }
@@ -919,8 +922,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// Record the crate leg of a **full crate of drinks** being damaged (§17.2, #299).
   ///
   /// Appends a `full_crate_damage` [crateLedger] row with [storeId], attributed
-  /// [performedBy] and snapshotted [ratePerCrateKobo] (defaulting to the
-  /// manufacturer's current crate value).
+  /// [performedBy], the [reason] code and the snapshotted [ratePerCrateKobo]
+  /// (defaulting to the manufacturer's current crate value).
   ///
   /// This leg is EXCLUDED from the Empties Pool (the warehouse count doesn't
   /// change because it was never an empty). Its loss is valued once from the
@@ -931,12 +934,13 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required int crates,
     String? performedBy,
     int? ratePerCrateKobo,
+    String? reason,
   }) async {
     if (crates <= 0) return;
     await transaction(() async {
       final rate = ratePerCrateKobo ??
           (await (select(manufacturers)
-                ..where((t) => t.id.equals(manufacturerId)))
+                ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
               .getSingleOrNull())
               ?.depositAmountKobo;
       await _appendPoolLedgerRow(
@@ -946,6 +950,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         movementType: kCrateMovementFullCrateDamage,
         performedBy: performedBy,
         ratePerCrateKobo: rate,
+        reason: reason,
       );
     });
   }
@@ -2719,6 +2724,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     String? performedBy,
     String? orderId,
     int? ratePerCrateKobo,
+    String? reason,
   }) async {
     final ledgerComp = CrateLedgerCompanion.insert(
       id: Value(
@@ -2736,6 +2742,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       referenceOrderId: Value(orderId),
       performedBy: Value(performedBy),
       ratePerCrateKobo: Value(ratePerCrateKobo),
+      reason: Value(reason),
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(crateLedger).insert(ledgerComp);
@@ -3422,14 +3429,19 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         final entry = row.readTable(crateLedger);
         final user = row.readTableOrNull(db.users);
         final store = row.readTableOrNull(db.stores);
+        final reason = entry.reason;
+        final kind = labelForCrateMovement(entry.movementType);
         return CrateMovementHistoryEntry(
           id: entry.id,
           movementType: entry.movementType,
-          movementLabel: labelForCrateMovement(entry.movementType),
+          movementLabel: reason == null || reason.isEmpty
+              ? kind
+              : '$kind · ${labelForCrateDamageReason(reason)}',
           quantityDelta: entry.quantityDelta,
           createdAt: entry.createdAt,
           performedByName: user?.name,
           storeName: store?.name,
+          reason: reason,
         );
       }).toList();
     });

@@ -1537,6 +1537,12 @@ class CrateLedger extends Table {
   /// price paid on `purchase` rows. Null on every other movement and on every
   /// row written before v82. The cloud column is `bigint` (0179).
   IntColumn get ratePerCrateKobo => integer().nullable()();
+
+  /// v83 (#297/#299): why the crates were lost, as the reason code the owner
+  /// picked (`broken`, `burnt`, `rotten_wood`, `expired`, `spilled`, `theft`,
+  /// `other`). Set on `damaged` and `full_crate_damage` rows; null on every
+  /// other movement and on every row written before v83.
+  TextColumn get reason => text().nullable()();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
   TextColumn get voidReason => text().nullable()();
@@ -2912,7 +2918,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 82;
+  int get schemaVersion => 83;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3937,9 +3943,14 @@ class AppDatabase extends _$AppDatabase {
           await m.alterTable(
             TableMigration(
               crateLedger,
-              // v82 added `rate_per_crate_kobo`, which a pre-v29 table lacks
-              // too — list it as new (NULL) for the same stale-column reason.
-              newColumns: [crateLedger.storeId, crateLedger.ratePerCrateKobo],
+              // v82 added `rate_per_crate_kobo` and v83 `reason`, which a
+              // pre-v29 table lacks too — list them as new (NULL) for the same
+              // stale-column reason.
+              newColumns: [
+                crateLedger.storeId,
+                crateLedger.ratePerCrateKobo,
+                crateLedger.reason,
+              ],
             ),
           );
           // drift's alterTable re-applies the rebuilt table's existing indexes
@@ -6267,13 +6278,22 @@ class AppDatabase extends _$AppDatabase {
           "SELECT 1 FROM pragma_table_info('crate_ledger') "
           "WHERE name = 'rate_per_crate_kobo'",
         ).get()).isNotEmpty;
+        // v83 added `reason`; a v81-shaped table lacks it, so pin it to NULL on
+        // the copy for the same stale-column reason.
+        final hasReasonColumn = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('crate_ledger') "
+          "WHERE name = 'reason'",
+        ).get()).isNotEmpty;
         if (!hasRateColumn || !ledgerSql.contains("'opening_count'")) {
           await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
           await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
           await m.alterTable(
             TableMigration(
               crateLedger,
-              newColumns: [if (!hasRateColumn) crateLedger.ratePerCrateKobo],
+              newColumns: [
+                if (!hasRateColumn) crateLedger.ratePerCrateKobo,
+                if (!hasReasonColumn) crateLedger.reason,
+              ],
             ),
           );
           await customStatement(
@@ -6308,6 +6328,33 @@ class AppDatabase extends _$AppDatabase {
           "UPDATE crate_ledger SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
           'END',
         );
+        await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
+        await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+        for (final stmt in _ledgerTriggerStatements(
+          _ledgerTables.firstWhere((l) => l.table == 'crate_ledger'),
+        )) {
+          await customStatement(stmt);
+        }
+      }
+
+      if (from < 83) {
+        // ── v83 — #297/#299: a damage movement carries its reason ───────────
+        //
+        // Mirrors supabase/migrations/0180_crate_ledger_reason.sql. One
+        // nullable TEXT column, so a plain ALTER (no rebuild): no CHECK changes.
+        // Guarded, because a DB that came through the v29 or v82 rebuild
+        // already has it (both pin it as a new column).
+        //
+        // The append-only pair is re-emitted from `_ledgerTables`, whose
+        // crate_ledger entry now freezes `reason` too — a relabelled reason
+        // would rewrite why a booked loss happened (ADR 0021).
+        final hasReasonColumn = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('crate_ledger') "
+          "WHERE name = 'reason'",
+        ).get()).isNotEmpty;
+        if (!hasReasonColumn) {
+          await customStatement('ALTER TABLE crate_ledger ADD COLUMN reason TEXT');
+        }
         await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
         await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
         for (final stmt in _ledgerTriggerStatements(
@@ -6995,6 +7042,8 @@ const List<_LedgerImmutability> _ledgerTables = [
     // v82 (PRD #284): a snapshotted value is frozen with the movement it
     // values — an edit would restate a booked loss (ADR 0021).
     'rate_per_crate_kobo',
+    // v83 (#297/#299): why a loss was booked is frozen with the loss.
+    'reason',
     'created_at',
   ]),
   // v71 (#141, van-sales spec §4.4) — the driver consignment ledger. Only the

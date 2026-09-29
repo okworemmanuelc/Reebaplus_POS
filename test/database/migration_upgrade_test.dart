@@ -3621,4 +3621,134 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v82 -> v83 (a damage movement carries its reason, #297)',
+      () {
+    /// Reverts crate_ledger to its v82 shape: `rate_per_crate_kobo` and the
+    /// widened movement CHECK, but no `reason`. Recreated WITHOUT FKs so the
+    /// seed rows are unconstrained; indexes + bump trigger restored so only the
+    /// column is missing.
+    Future<void> revertToV82CrateLedger(AppDatabase db) async {
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      await db.customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
+      await db.customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+      await db.customStatement('DROP TABLE IF EXISTS crate_ledger');
+      await db.customStatement(
+        'CREATE TABLE crate_ledger ('
+        'id TEXT NOT NULL PRIMARY KEY, business_id TEXT NOT NULL, '
+        'customer_id TEXT, manufacturer_id TEXT, crate_size_group_id TEXT, '
+        'quantity_delta INTEGER NOT NULL, movement_type TEXT NOT NULL, '
+        'reference_order_id TEXT, reference_return_id TEXT, store_id TEXT, '
+        'performed_by TEXT, rate_per_crate_kobo INTEGER, voided_at INTEGER, '
+        'voided_by TEXT, void_reason TEXT, '
+        'created_at INTEGER NOT NULL DEFAULT 0, '
+        'last_updated_at INTEGER NOT NULL DEFAULT 0, '
+        "CHECK (movement_type IN ('issued','returned','damaged','adjusted',"
+        "'transferred_in','transferred_out','count','opening_count',"
+        "'full_crate_damage','purchase')), "
+        'CHECK (rate_per_crate_kobo IS NULL OR rate_per_crate_kobo >= 0), '
+        'CHECK (customer_id IS NOT NULL OR manufacturer_id IS NOT NULL))',
+      );
+      await db.customStatement(
+        'CREATE INDEX idx_crate_ledger_business_lua '
+        'ON crate_ledger (business_id, last_updated_at)',
+      );
+      await db.customStatement(
+        'CREATE INDEX idx_crate_ledger_owner_group '
+        'ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
+      );
+      await db.customStatement('PRAGMA foreign_keys = ON');
+    }
+
+    test('adds a NULL reason column, keeps every row, and freezes the reason',
+        () async {
+      final db1 = await openAndInit();
+      await revertToV82CrateLedger(db1);
+      expect(
+        await columnsOf(db1, 'crate_ledger'),
+        isNot(contains('reason')),
+        reason: 'teeth: the v82 shape must genuinely lack the column',
+      );
+      final biz = UuidV7.generate();
+      final mfr = UuidV7.generate();
+      final damagedId = UuidV7.generate();
+      await db1.customStatement(
+        'INSERT INTO crate_ledger (id, business_id, manufacturer_id, '
+        'quantity_delta, movement_type, rate_per_crate_kobo, created_at, '
+        "last_updated_at) VALUES (?, ?, ?, -2, 'damaged', 150000, 1785000000, "
+        '1785000000)',
+        [damagedId, biz, mfr],
+      );
+      await db1.customStatement('PRAGMA user_version = 82');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(await columnsOf(db2, 'crate_ledger'), contains('reason'));
+
+      final row = await db2
+          .customSelect(
+            'SELECT movement_type, rate_per_crate_kobo, reason '
+            'FROM crate_ledger WHERE id = ?',
+            variables: [Variable<String>(damagedId)],
+          )
+          .getSingle();
+      expect(row.read<String>('movement_type'), 'damaged');
+      expect(row.read<int?>('rate_per_crate_kobo'), 150000);
+      expect(row.read<String?>('reason'), isNull,
+          reason: 'nothing is backfilled');
+
+      await expectLater(
+        db2.customStatement(
+          "UPDATE crate_ledger SET reason = 'broken' WHERE id = ?",
+          [damagedId],
+        ),
+        throwsA(anything),
+        reason: 'the reason is frozen with the movement',
+      );
+      await expectLater(
+        db2.customStatement('DELETE FROM crate_ledger'),
+        throwsA(anything),
+      );
+
+      final triggers = await db2
+          .customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'trigger' "
+            "AND tbl_name = 'crate_ledger'",
+          )
+          .get();
+      expect(
+        triggers.map((r) => r.read<String>('name')),
+        containsAll(const ['crate_ledger_immutable', 'crate_ledger_no_delete']),
+      );
+    });
+
+    test('the step is idempotent and never nulls a real reason', () async {
+      final db1 = await openAndInit();
+      final biz = UuidV7.generate();
+      final mfr = UuidV7.generate();
+      final id = UuidV7.generate();
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1.customStatement(
+        'INSERT INTO crate_ledger (id, business_id, manufacturer_id, '
+        "quantity_delta, movement_type, reason) VALUES (?, ?, ?, -1, "
+        "'damaged', 'burnt')",
+        [id, biz, mfr],
+      );
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+      await db1.customStatement('PRAGMA user_version = 82');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final row = await db2
+          .customSelect(
+            'SELECT reason FROM crate_ledger WHERE id = ?',
+            variables: [Variable<String>(id)],
+          )
+          .getSingle();
+      expect(row.read<String?>('reason'), 'burnt');
+    });
+  });
 }
