@@ -230,7 +230,7 @@ void main() {
   });
 
   test('Daily Reconciliation values damaged crates at snapshotted rate with fallback to current rate', () {
-    final now = DateTime.now();
+    final now = DateTime(2026, 9, 29, 10);
     final mfr = ManufacturerData(
       id: manufacturerId,
       businessId: businessId,

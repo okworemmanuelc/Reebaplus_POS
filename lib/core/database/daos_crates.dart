@@ -1606,6 +1606,21 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// Net crates owed to suppliers for ONE brand, across every supplier
+  /// (positive = we owe them, negative = they owe us). The crate value change
+  /// preview (#295) prices this at the old and new rate.
+  Future<int> supplierCrateDebtCratesFor(String manufacturerId) async {
+    final sumExpr = supplierCrateLedger.quantityDelta.sum();
+    final row = await (selectOnly(supplierCrateLedger)
+          ..addColumns([sumExpr])
+          ..where(
+            whereBusiness(supplierCrateLedger) &
+                supplierCrateLedger.manufacturerId.equals(manufacturerId),
+          ))
+        .getSingle();
+    return row.read(sumExpr) ?? 0;
+  }
+
   /// #163 — the business-wide supplier crate DEBT valued in kobo at the current
   /// per-manufacturer deposit rate, DERIVED from the append-only
   /// `supplier_crate_ledger` (never the demoted `supplier_crate_balances`

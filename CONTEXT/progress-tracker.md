@@ -7,6 +7,28 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #298 — Crate value fill-in for sales made before a brand had a value (2026-09-29)
+Branch `feat/crate-value-fillin-298`, stacked on `feat/manufacturer-settings-295` (#295). Worked in `../drinkPosApp-wt-298`.
+- **Write**: `InventoryDao.updateManufacturerDeposit` (the #295 single write path) now runs in a transaction and, on a `0 → positive` change only, calls `OrderCrateLinesDao.fillUnratedLines(brandId, rate)`. It stamps that brand's order crate lines still at `deposit_rate_kobo = 0`, once. Real-rate lines, other brands' lines, and any later positive → positive change are untouched.
+- **No money**: only `deposit_rate_kobo` + `last_updated_at` change. `deposit_paid_kobo` stays 0, so the lines stay Crate-Track; no wallet/expense/payment row is written.
+- **Sync**: each stamped line is enqueued as a FULL `order_crate_lines` row (`toCompanion(true)`).
+- **Confirmation**: `CrateValueChangeSheet` takes `unsetLines` (from `countUnratedLines`, 0→positive only) and says how many past lines will be filled in.
+- **Checkout warning** for a brand with no value is unchanged.
+- **Tests**: `test/crates/crate_value_fillin_test.dart`. Full suite green; `flutter analyze` clean.
+- **CodeRabbit round 1 (PR #309)**: `countUnratedLines` loaded every matching row to read `.length`; it now counts in SQL (`selectOnly` + `id.count()`, the `daos_permissions.countForRole` idiom). It runs on the UI path before the confirmation, so the rows were being fetched for nothing.
+
+
+### Issue #295 — Manufacturer Settings tab; old Manage sheet deleted (2026-09-29)
+Branch `feat/manufacturer-settings-295`, cut from `main` (`34c6a3c`). Worked in `../drinkPosApp-wt-295`.
+- **Settings tab** (`manufacturer_settings_tab.dart`): Name + Crate value, one box each (no Add/Change chips). Save goes through `InventoryDao.updateManufacturerDeposit(id, kobo, {name})` **only** — it never calls the catalog DAO's `updateManufacturerEmptyCrateValue`; bumps `last_updated_at`, no fan-out to products (ADR 0024). Gate `Gates.editProductPrice`, re-checked at fire time. Rename-only saves skip the confirmation.
+- **Confirmation** (`crate_value_change_sheet.dart`, pure maths in `core/crates/crate_value_change_impact.dart`): before a value change is written it lists, in naira, every re-priced status, the brand's supplier crate debt (`CratePoolDao.supplierCrateDebtCratesFor`) and the Daily Reconciliation total; states past sales/damages/write-offs/refunds and customer deposit don't move and new sales (open carts too) charge the new value. Cancel/back-out writes nothing.
+- **Arrangement** moved into the tab, CEO-only (`Gates.crateMoneyArrangement`), under a divider with a "saves on its own" heading; `CrateMoneyArrangementSection` unchanged.
+- **Tab gating**: Settings omitted when neither gate allows (Stock keeper, Cashier). `ManufacturerScreen` now uses `TickerProviderStateMixin` and rebuilds its `TabController` when the tab count changes.
+- **Deleted**: Manage button, `_showUpdateManufacturerDialog`, `_modeChip`, `_styledDialogField`, hardcoded `isCEO = true` (−478 lines in `inventory_screen.dart`) and `manufacturer_manage_count_test.dart` (count is covered by the Count sheet tests from #293).
+- **Tests**: `test/inventory/manufacturer_settings_tab_test.dart` (impact maths, role gating, write boundary, backing out, snapshotted lines, 320x568 + 800x360). `crate_money_arrangement_test.dart` reader allow-list now names the tab file.
+- **Verified**: `flutter analyze` clean; full suite green apart from the two fixed above.
+- **Review notes left as-is**: hardcoded strings/`fontWeight`/28px sheet radius match sibling sheets (`buy_crates_sheet.dart`).
+- **CodeRabbit round 1 (PR #308)**: the tab's controllers were filled once in `initState`, so a crate value changed on another device left the box showing the old figure and a later Save wrote that stale figure back over it. `didUpdateWidget` now takes the new stored value **only where the box still shows the old one**, so an edit in progress survives. Also wrapped the `supplierCrateDebtCratesFor` read in the save's error path — it used to escape the callback and leave Save looking dead. Two tests added.
 
 179 sessions logged. Codebase is live and being verified on-device.
 
