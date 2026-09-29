@@ -2239,10 +2239,7 @@ final manufacturerCratePositionProvider =
 /// Guarantees attributed deposits + unattributed == business-wide held deposit.
 final customerDepositAttributionProvider =
     businessScopedStream<CustomerDepositAttribution>(
-  (ref, db, businessId) {
-    final storeId = ref.watch(lockedStoreProvider).value;
-    return db.cratePoolDao.watchCustomerDepositAttribution(storeId: storeId);
-  },
+  (ref, db, businessId) => db.cratePoolDao.watchCustomerDepositAttribution(),
   whenAbsent: const CustomerDepositAttribution.zero(),
 );
 

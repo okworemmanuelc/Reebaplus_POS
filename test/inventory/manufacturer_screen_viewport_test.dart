@@ -256,6 +256,11 @@ void main() {
         find.descendant(of: depositCard, matching: find.text('₦2,000')),
         findsOneWidget,
       );
+      // Header total includes the customer deposit (22 × ₦1,000 + ₦2,000).
+      expect(
+        find.textContaining('₦24,000 total value', findRichText: true),
+        findsOneWidget,
+      );
 
       await disposeScreen(tester);
     });
@@ -325,6 +330,12 @@ void main() {
         find.descendant(of: depositCard, matching: find.text('₦2,000')),
         findsNothing,
       );
+      // Header total leaves the hidden deposit out, so it can't be
+      // recovered by subtraction.
+      expect(
+        find.textContaining('₦22,000 total value', findRichText: true),
+        findsOneWidget,
+      );
 
       await disposeScreen(tester);
     });
@@ -361,6 +372,12 @@ void main() {
       expect(
         find.descendant(of: depositCard, matching: find.text('₦2,000')),
         findsNothing,
+      );
+      // Header total leaves the hidden deposit out, so it can't be
+      // recovered by subtraction.
+      expect(
+        find.textContaining('₦22,000 total value', findRichText: true),
+        findsOneWidget,
       );
 
       await disposeScreen(tester);

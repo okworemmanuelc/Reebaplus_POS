@@ -119,7 +119,13 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           tabBarChromeExtent: _tabBarChromeExtent,
           headerSlivers: [
             SliverToBoxAdapter(
-              child: _buildHeader(context, theme, mfr, position),
+              child: _buildHeader(
+                context,
+                theme,
+                mfr,
+                position,
+                canSeeCustomerDepositMoney,
+              ),
             ),
           ],
           tabBar: Container(
@@ -202,9 +208,15 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     ThemeData theme,
     ManufacturerData mfr,
     ManufacturerCratePosition pos,
+    bool canSeeCustomerDepositMoney,
   ) {
     final crateValueNaira = mfr.depositAmountKobo / 100;
-    final totalCrateValueNaira = pos.totalCrateValueKobo / 100;
+    // Without the deposit gate, leave Customer deposit out of the total so it
+    // can't be recovered by subtracting the visible status figures.
+    final totalCrateValueKobo = canSeeCustomerDepositMoney
+        ? pos.totalCrateValueKobo
+        : pos.totalCrateValueKobo - pos.withCustomersOnDeposit.moneyKobo;
+    final totalCrateValueNaira = totalCrateValueKobo / 100;
     final hasShort = pos.short.count > 0;
 
     return Container(
@@ -697,7 +709,9 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
             final details = [
               dateFormat.format(entry.createdAt),
               if (entry.performedByName?.isNotEmpty == true) 'by ${entry.performedByName}',
-              if (entry.storeName?.isNotEmpty == true) entry.storeName!,
+              // A movement no store can be resolved for (e.g. an approved
+              // return with no order) appears only under All Stores; say so.
+              entry.storeName?.isNotEmpty == true ? entry.storeName! : 'No store',
             ].join(' • ');
 
             return Container(

@@ -3017,7 +3017,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         db.orderCrateLines.businessId.equals(requireBusinessId()) &
         db.orderCrateLines.manufacturerId.equals(manufacturerId) &
         db.orderCrateLines.depositPaidKobo.isBiggerThanValue(0) &
-        db.orderCrateLines.settledAt.isNull();
+        db.orderCrateLines.settledAt.isNull() &
+        // Cancel releases the held deposit in the wallet but never stamps
+        // settledAt, so a cancelled sale's line would otherwise count forever.
+        db.orders.status.isNotValue('cancelled');
     if (storeId != null) {
       onDepositPredicate =
           onDepositPredicate & db.orders.storeId.equals(storeId);
@@ -3042,16 +3045,12 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         crateLedger.manufacturerId.equals(manufacturerId) &
         crateLedger.customerId.isNotNull();
     if (storeId != null) {
-      customerDebtPredicate = customerDebtPredicate &
-          (crateLedger.storeId.equals(storeId) |
-              (crateLedger.storeId.isNull() & db.orders.storeId.equals(storeId)));
+      customerDebtPredicate =
+          customerDebtPredicate & _ledgerStoreExpr().equals(storeId);
     }
-    final customerDebtQuery = db.selectOnly(crateLedger).join([
-      leftOuterJoin(
-        db.orders,
-        db.orders.id.equalsExp(crateLedger.referenceOrderId),
-      ),
-    ])
+    final customerDebtQuery = db.selectOnly(crateLedger).join(
+      _ledgerStoreJoins(),
+    )
       ..addColumns([sumCustomerDebt])
       ..where(customerDebtPredicate);
     final customerDebtStream = customerDebtQuery.watch().map((rows) {
@@ -3109,21 +3108,22 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   ///
   /// Guarantees that the sum of attributed brand deposits plus unattributed deposit
   /// equals the business-wide Held Deposit from the wallet ledger.
-  Stream<CustomerDepositAttribution> watchCustomerDepositAttribution({
-    String? storeId,
-  }) {
+  ///
+  /// Business-wide on BOTH sides: Held Deposit has no store axis, so a
+  /// store-filtered brand sum would push other stores' deposit into
+  /// "unattributed".
+  Stream<CustomerDepositAttribution> watchCustomerDepositAttribution() {
     // 1. Business-wide Held Deposit from wallet transactions
     final heldDepositStream =
         db.walletTransactionsDao.watchCrateDepositSummary().map((s) => s.heldKobo);
 
     // 2. Unsettled money-track deposits per manufacturer
     final sumDepositPaid = db.orderCrateLines.depositPaidKobo.sum();
-    var predicate = db.orderCrateLines.businessId.equals(requireBusinessId()) &
+    final predicate =
+        db.orderCrateLines.businessId.equals(requireBusinessId()) &
         db.orderCrateLines.depositPaidKobo.isBiggerThanValue(0) &
-        db.orderCrateLines.settledAt.isNull();
-    if (storeId != null) {
-      predicate = predicate & db.orders.storeId.equals(storeId);
-    }
+        db.orderCrateLines.settledAt.isNull() &
+        db.orders.status.isNotValue('cancelled');
     final query = db.selectOnly(db.orderCrateLines).join([
       innerJoin(db.orders, db.orders.id.equalsExp(db.orderCrateLines.orderId)),
     ])
@@ -3164,21 +3164,13 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     var predicate = whereBusiness(crateLedger) &
         crateLedger.manufacturerId.equals(manufacturerId);
     if (storeId != null) {
-      predicate = predicate &
-          (crateLedger.storeId.equals(storeId) |
-              (crateLedger.storeId.isNull() & db.orders.storeId.equals(storeId)));
+      predicate = predicate & _ledgerStoreExpr().equals(storeId);
     }
-
-    final orderStores = db.alias(db.stores, 'order_stores');
 
     final query = select(crateLedger).join([
       leftOuterJoin(db.users, db.users.id.equalsExp(crateLedger.performedBy)),
-      leftOuterJoin(
-        db.orders,
-        db.orders.id.equalsExp(crateLedger.referenceOrderId),
-      ),
-      leftOuterJoin(db.stores, db.stores.id.equalsExp(crateLedger.storeId)),
-      leftOuterJoin(orderStores, orderStores.id.equalsExp(db.orders.storeId)),
+      ..._ledgerStoreJoins(),
+      leftOuterJoin(db.stores, db.stores.id.equalsExp(_ledgerStoreExpr())),
     ])
       ..where(predicate)
       ..orderBy([
@@ -3190,7 +3182,6 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         final entry = row.readTable(crateLedger);
         final user = row.readTableOrNull(db.users);
         final store = row.readTableOrNull(db.stores);
-        final orderStore = row.readTableOrNull(orderStores);
         return CrateMovementHistoryEntry(
           id: entry.id,
           movementType: entry.movementType,
@@ -3198,10 +3189,40 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           quantityDelta: entry.quantityDelta,
           createdAt: entry.createdAt,
           performedByName: user?.name,
-          storeName: store?.name ?? orderStore?.name,
+          storeName: store?.name,
         );
       }).toList();
     });
+  }
+
+  // The store a customer-crate ledger row belongs to: its own storeId, else the
+  // sale's store, else (for an approved queue return, which is written with no
+  // store) the store of the order the return was raised against. A return with
+  // no order resolves to null and shows only under All Stores.
+  static const _returnOrdersAlias = 'return_orders';
+
+  Expression<String> _ledgerStoreExpr() => coalesce([
+        crateLedger.storeId,
+        db.orders.storeId,
+        db.alias(db.orders, _returnOrdersAlias).storeId,
+      ]);
+
+  List<Join> _ledgerStoreJoins() {
+    final returnOrders = db.alias(db.orders, _returnOrdersAlias);
+    return [
+      leftOuterJoin(
+        db.orders,
+        db.orders.id.equalsExp(crateLedger.referenceOrderId),
+      ),
+      leftOuterJoin(
+        db.pendingCrateReturns,
+        db.pendingCrateReturns.id.equalsExp(crateLedger.referenceReturnId),
+      ),
+      leftOuterJoin(
+        returnOrders,
+        returnOrders.id.equalsExp(db.pendingCrateReturns.orderId),
+      ),
+    ];
   }
 
   /// Brand's active products with stock, ordered by name (#291).
