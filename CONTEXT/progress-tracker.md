@@ -8,7 +8,12 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-174 sessions logged. Codebase is live and being verified on-device.
+175 sessions logged. Codebase is live and being verified on-device.
+
+### Release 1.0.8+8 — Play Store AAB Build (2026-09-28)
+- Bumped version to `1.0.8+8` in `pubspec.yaml`, `lib/core/services/crash_reporter.dart` (`kAppVersion`), and `docs/LEARNING_ROADMAP.md`.
+- Verified `flutter analyze` clean with 0 errors and 0 warnings.
+- Prepared and built release Android App Bundle (`build/app/outputs/bundle/release/app-release.aab`) for Google Play Store upload.
 
 ### Issue #294 — Buy crates from the manufacturer screen, with no profit effect (2026-09-23)
 Branch `feat/buy-crates-294`, cut from `feat/manufacturer-screen-291`; rebased 2026-09-29 onto `feat/crate-shortage-warning-293` (#291 merged as PR #303; this PR stacks on #293's PR #304). Worked in `../drinkPosApp-wt-294`.
