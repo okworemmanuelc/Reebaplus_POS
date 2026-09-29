@@ -388,4 +388,245 @@ void main() {
       await db2.close();
     });
   });
+
+  group('crate shortage stream (#293, PRD #284 §7)', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      db.businessIdResolver = () => businessId;
+      await db.into(db.businesses).insert(
+            BusinessesCompanion.insert(
+              id: const Value(businessId),
+              name: 'Biz',
+            ),
+          );
+      await db.into(db.users).insert(
+            UsersCompanion.insert(
+              id: const Value(userId),
+              businessId: businessId,
+              name: 'U',
+              pin: '1234',
+            ),
+          );
+      await db.into(db.stores).insert(
+            StoresCompanion.insert(
+              id: const Value(storeId),
+              businessId: businessId,
+              name: 'Store 1',
+            ),
+          );
+      await db.into(db.stores).insert(
+            StoresCompanion.insert(
+              id: const Value('store-2'),
+              businessId: businessId,
+              name: 'Store 2',
+            ),
+          );
+      await db.into(db.manufacturers).insert(
+            ManufacturersCompanion.insert(
+              id: const Value(manufacturerId),
+              businessId: businessId,
+              name: 'Mfr',
+              depositAmountKobo: const Value(250000),
+            ),
+          );
+      await db.into(db.manufacturers).insert(
+            ManufacturersCompanion.insert(
+              id: const Value('mfr-swap'),
+              businessId: businessId,
+              name: 'Swap Mfr',
+              depositAmountKobo: const Value(0),
+              crateMoneyArrangement: const Value('none'),
+            ),
+          );
+    });
+
+    tearDown(() => db.close());
+
+    test('first count raises no shortage; second lower count raises shortage', () async {
+      // First count: opening count setting empties to 50 when expected was 0
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 50,
+      );
+
+      var shortage = await db.cratePoolDao
+          .watchCrateShortageByManufacturer(manufacturerId, storeId: storeId)
+          .first;
+      expect(shortage, 0);
+
+      // Second count: expected is 50, but counted 42 -> shortage of 8
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 42,
+      );
+
+      shortage = await db.cratePoolDao
+          .watchCrateShortageByManufacturer(manufacturerId, storeId: storeId)
+          .first;
+      expect(shortage, 8);
+    });
+
+    test('short then found closes shortage; surplus then later short shows unbanked surplus', () async {
+      // Opening count: 100
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 100,
+      );
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer(manufacturerId, storeId: storeId)
+            .first,
+        0,
+      );
+
+      // Count 90 -> 10 short
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 90,
+      );
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer(manufacturerId, storeId: storeId)
+            .first,
+        10,
+      );
+
+      // Count 95 -> found 5, leaves 5 short
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 95,
+      );
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer(manufacturerId, storeId: storeId)
+            .first,
+        5,
+      );
+
+      // Count 110 -> 15 surplus over expected 95. Closes open 5 shortage, but does not bank 10.
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 110,
+      );
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer(manufacturerId, storeId: storeId)
+            .first,
+        0,
+      );
+
+      // Next count: expected is 110, counted 105 -> 5 short (not offset by previous surplus!)
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 105,
+      );
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer(manufacturerId, storeId: storeId)
+            .first,
+        5,
+      );
+    });
+
+    test('shortage is tracked for arrangement-off (swap-only) brands', () async {
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: 'mfr-swap',
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 20,
+      );
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer('mfr-swap', storeId: storeId)
+            .first,
+        0,
+      );
+
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: 'mfr-swap',
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 14,
+      );
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer('mfr-swap', storeId: storeId)
+            .first,
+        6,
+      );
+    });
+
+    test('All Stores sums open shortages across stores without netting across stores', () async {
+      // Store 1: opening 50, then counted 45 -> 5 short
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 50,
+      );
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        performedBy: userId,
+        countedEmpties: 45,
+      );
+
+      // Store 2: opening 30, then counted 38 -> surplus in Store 2!
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: 'store-2',
+        performedBy: userId,
+        countedEmpties: 30,
+      );
+      await db.cratePoolDao.recordManualCountCorrection(
+        manufacturerId: manufacturerId,
+        storeId: 'store-2',
+        performedBy: userId,
+        countedEmpties: 38,
+      );
+
+      // Store 1 has 5 shortage
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer(manufacturerId, storeId: storeId)
+            .first,
+        5,
+      );
+      // Store 2 has 0 shortage
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer(manufacturerId, storeId: 'store-2')
+            .first,
+        0,
+      );
+
+      // In All Stores (storeId == null), sum across stores is 5 (Store 2 surplus does not net out Store 1)
+      expect(
+        await db.cratePoolDao
+            .watchCrateShortageByManufacturer(manufacturerId, storeId: null)
+            .first,
+        5,
+      );
+
+      // watchAllCrateShortages map verification
+      final allShortages = await db.cratePoolDao.watchAllCrateShortages(storeId: null).first;
+      expect(allShortages[manufacturerId], 5);
+    });
+  });
 }

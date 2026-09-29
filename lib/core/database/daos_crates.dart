@@ -962,6 +962,71 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Record [quantity] crates of [manufacturerId] **bought** into [storeId]'s
+  /// warehouse by [performedBy], at [pricePerCrateKobo] each (#294, PRD #284
+  /// decision 9).
+  ///
+  /// Appends one store-stamped, attributed [kCrateMovementPurchase] row that
+  /// raises the Empties Pool and carries the price paid in
+  /// `rate_per_crate_kobo`, for the later net-worth work.
+  ///
+  /// **Rule A: buying a crate swaps cash for an owned asset, profit 0.** So this
+  /// writes no wallet, expense, supplier-account, write-off or profit leg — only
+  /// the crate row and the local pool projections (the per-store cache and the
+  /// business scalar), exactly as [addEmptiesToPool] keeps them.
+  ///
+  /// A quantity below 1 or a negative price is rejected with an
+  /// [ArgumentError] before anything is written.
+  Future<void> recordCratePurchase({
+    required String manufacturerId,
+    required String storeId,
+    required String performedBy,
+    required int quantity,
+    required int pricePerCrateKobo,
+  }) async {
+    if (quantity <= 0) {
+      throw ArgumentError.value(
+        quantity,
+        'quantity',
+        'at least one crate must be bought',
+      );
+    }
+    if (pricePerCrateKobo < 0) {
+      throw ArgumentError.value(
+        pricePerCrateKobo,
+        'pricePerCrateKobo',
+        'a price cannot be negative',
+      );
+    }
+    await transaction(() async {
+      await customUpdate(
+        'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
+        "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+        'WHERE id = ? AND business_id = ?',
+        variables: [
+          Variable(quantity),
+          Variable(manufacturerId),
+          Variable(requireBusinessId()),
+        ],
+        updates: {manufacturers},
+      );
+      await _enqueueFullManufacturer(manufacturerId);
+      await db.storeCrateBalancesDao.applyDelta(
+        storeId: storeId,
+        manufacturerId: manufacturerId,
+        delta: quantity,
+      );
+      await _appendPoolLedgerRow(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        quantityDelta: quantity,
+        movementType: kCrateMovementPurchase,
+        performedBy: performedBy,
+        ratePerCrateKobo: pricePerCrateKobo,
+      );
+    });
+  }
+
   /// What a count of [manufacturerId] at [storeId] is compared against: the
   /// derived Empties Pool for that `(manufacturer, store)`, read once. The same
   /// figure [watchEmptiesPoolByManufacturer] shows for the store and the one
@@ -2592,6 +2657,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String movementType,
     String? performedBy,
     String? orderId,
+    int? ratePerCrateKobo,
   }) async {
     final ledgerComp = CrateLedgerCompanion.insert(
       id: Value(
@@ -2608,6 +2674,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       movementType: movementType,
       referenceOrderId: Value(orderId),
       performedBy: Value(performedBy),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(crateLedger).insert(ledgerComp);
@@ -2987,4 +3054,378 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           ]))
         .watch();
   }
+
+  /// The complete six-status crate position of ONE brand (#291, PRD #284 §5).
+  ///
+  /// Combines the derived Empties Pool, tracked bottle product stock, unsettled
+  /// customer money deposits, derived customer crate debt, and current month damages
+  /// through [computeManufacturerCratePosition].
+  Stream<ManufacturerCratePosition> watchManufacturerCratePosition(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    // 1. Manufacturer rate
+    final mfrStream = (select(manufacturers)
+          ..where((t) => whereBusiness(t) & t.id.equals(manufacturerId))
+          ..limit(1))
+        .watchSingleOrNull();
+
+    // 2. Warehouse count (from Empties Pool)
+    final warehouseStream = watchEmptiesPoolByManufacturer(storeId: storeId);
+
+    // 3. Full crates in stock
+    final fullStream =
+        db.inventoryDao.watchFullCratesByManufacturer(storeId: storeId);
+
+    // 4. With customers, on deposit (unsettled money-track crate lines)
+    final sumDepositCrates = db.orderCrateLines.cratesTaken.sum();
+    final sumDepositPaid = db.orderCrateLines.depositPaidKobo.sum();
+    var onDepositPredicate =
+        db.orderCrateLines.businessId.equals(requireBusinessId()) &
+        db.orderCrateLines.manufacturerId.equals(manufacturerId) &
+        db.orderCrateLines.depositPaidKobo.isBiggerThanValue(0) &
+        db.orderCrateLines.settledAt.isNull() &
+        // Cancel releases the held deposit in the wallet but never stamps
+        // settledAt, so a cancelled sale's line would otherwise count forever.
+        db.orders.status.isNotValue('cancelled');
+    if (storeId != null) {
+      onDepositPredicate =
+          onDepositPredicate & db.orders.storeId.equals(storeId);
+    }
+    final onDepositQuery = db.selectOnly(db.orderCrateLines).join([
+      innerJoin(db.orders, db.orders.id.equalsExp(db.orderCrateLines.orderId)),
+    ])
+      ..addColumns([sumDepositCrates, sumDepositPaid])
+      ..where(onDepositPredicate);
+    final onDepositStream = onDepositQuery.watch().map((rows) {
+      if (rows.isEmpty) return (crates: 0, kobo: 0);
+      final r = rows.first;
+      return (
+        crates: r.read(sumDepositCrates) ?? 0,
+        kobo: r.read(sumDepositPaid) ?? 0,
+      );
+    });
+
+    // 5. With customers, no deposit (derived customer debt by manufacturer)
+    final sumCustomerDebt = crateLedger.quantityDelta.sum();
+    var customerDebtPredicate = whereBusiness(crateLedger) &
+        crateLedger.manufacturerId.equals(manufacturerId) &
+        crateLedger.customerId.isNotNull();
+    if (storeId != null) {
+      customerDebtPredicate =
+          customerDebtPredicate & _ledgerStoreExpr().equals(storeId);
+    }
+    final customerDebtQuery = db.selectOnly(crateLedger).join(
+      _ledgerStoreJoins(),
+    )
+      ..addColumns([sumCustomerDebt])
+      ..where(customerDebtPredicate);
+    final customerDebtStream = customerDebtQuery.watch().map((rows) {
+      if (rows.isEmpty) return 0;
+      return rows.first.read(sumCustomerDebt) ?? 0;
+    });
+
+    // 6. Damaged in current month
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    final startOfNextMonth = DateTime(now.year, now.month + 1, 1);
+    final sumDamaged = crateLedger.quantityDelta.sum();
+    var damagedPredicate = whereBusiness(crateLedger) &
+        crateLedger.manufacturerId.equals(manufacturerId) &
+        crateLedger.movementType.equals('damaged') &
+        crateLedger.createdAt.isBiggerOrEqualValue(startOfMonth) &
+        crateLedger.createdAt.isSmallerThanValue(startOfNextMonth);
+    if (storeId != null) {
+      damagedPredicate = damagedPredicate & crateLedger.storeId.equals(storeId);
+    }
+    final damagedQuery = db.selectOnly(crateLedger)
+      ..addColumns([sumDamaged])
+      ..where(damagedPredicate);
+    final damagedStream = damagedQuery.watch().map((rows) {
+      if (rows.isEmpty) return 0;
+      final rawDelta = rows.first.read(sumDamaged) ?? 0;
+      return rawDelta < 0 ? -rawDelta : rawDelta;
+    });
+
+    // 7. Crate Shortage (#293, PRD #284 §7)
+    final shortageStream =
+        watchCrateShortageByManufacturer(manufacturerId, storeId: storeId);
+
+    return Rx.combineLatest7(
+      mfrStream,
+      warehouseStream,
+      fullStream,
+      onDepositStream,
+      customerDebtStream,
+      damagedStream,
+      shortageStream,
+      (mfr, warehouse, full, onDeposit, customerDebt, damaged, shortage) {
+        final rate = mfr?.depositAmountKobo ?? 0;
+        return computeManufacturerCratePosition(
+          manufacturerId: manufacturerId,
+          crateValueKobo: rate,
+          warehouseCrates: warehouse[manufacturerId] ?? 0,
+          fullCrates: full[manufacturerId] ?? 0,
+          customerOnDepositCrates: onDeposit.crates,
+          customerOnDepositKobo: onDeposit.kobo,
+          customerNoDepositCrates: customerDebt,
+          shortCrates: shortage,
+          damagedCrates: damaged,
+        );
+      },
+    );
+  }
+
+  /// Watches the open crate shortage for ONE brand (#293, PRD #284 §7).
+  ///
+  /// Folded from count movements in chronological order. When [storeId] is set,
+  /// scopes to that store; when null, sums open shortages across all stores.
+  Stream<int> watchCrateShortageByManufacturer(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    var query = select(crateLedger)
+      ..where(
+        (t) =>
+            whereBusiness(t) &
+            t.manufacturerId.equals(manufacturerId) &
+            // Same basis as the warehouse count: store-held, not a customer's.
+            t.storeId.isNotNull() &
+            t.customerId.isNull() &
+            t.movementType.isIn([
+              kCrateMovementOpeningCount,
+              kCrateMovementCount,
+            ]),
+      )
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
+        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc),
+      ]);
+
+    if (storeId != null) {
+      query = query..where((t) => t.storeId.equals(storeId));
+    }
+
+    return query.watch().map((rows) {
+      final movements = rows.map((r) => CrateCountMovement(
+        storeId: r.storeId,
+        movementType: r.movementType,
+        quantityDelta: r.quantityDelta,
+        createdAt: r.createdAt,
+      ));
+      if (storeId != null) {
+        return foldCrateShortageForStore(movements);
+      } else {
+        return foldTotalCrateShortage(movements);
+      }
+    });
+  }
+
+  /// Watches open crate shortages for ALL brands, mapped as manufacturerId -> shortageCount (#293).
+  ///
+  /// When [storeId] is set, scopes to that store; when null, sums open shortages
+  /// across all stores per brand.
+  Stream<Map<String, int>> watchAllCrateShortages({String? storeId}) {
+    var query = select(crateLedger)
+      ..where(
+        (t) =>
+            whereBusiness(t) &
+            t.storeId.isNotNull() &
+            t.customerId.isNull() &
+            t.movementType.isIn([
+              kCrateMovementOpeningCount,
+              kCrateMovementCount,
+            ]),
+      )
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
+        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc),
+      ]);
+
+    if (storeId != null) {
+      query = query..where((t) => t.storeId.equals(storeId));
+    }
+
+    return query.watch().map((rows) {
+      final byManufacturer = <String, List<CrateCountMovement>>{};
+      for (final r in rows) {
+        final mfrId = r.manufacturerId;
+        if (mfrId == null) continue;
+        byManufacturer.putIfAbsent(mfrId, () => []).add(
+          CrateCountMovement(
+            storeId: r.storeId,
+            movementType: r.movementType,
+            quantityDelta: r.quantityDelta,
+            createdAt: r.createdAt,
+          ),
+        );
+      }
+
+      final result = <String, int>{};
+      for (final entry in byManufacturer.entries) {
+        final count = storeId != null
+            ? foldCrateShortageForStore(entry.value)
+            : foldTotalCrateShortage(entry.value);
+        if (count > 0) {
+          result[entry.key] = count;
+        }
+      }
+      return result;
+    });
+  }
+
+  /// Attribution of business-wide Customer Held Deposit across brands (#291).
+  ///
+  /// Guarantees that the sum of attributed brand deposits plus unattributed deposit
+  /// equals the business-wide Held Deposit from the wallet ledger.
+  ///
+  /// Business-wide on BOTH sides: Held Deposit has no store axis, so a
+  /// store-filtered brand sum would push other stores' deposit into
+  /// "unattributed".
+  Stream<CustomerDepositAttribution> watchCustomerDepositAttribution() {
+    // 1. Business-wide Held Deposit from wallet transactions
+    final heldDepositStream =
+        db.walletTransactionsDao.watchCrateDepositSummary().map((s) => s.heldKobo);
+
+    // 2. Unsettled money-track deposits per manufacturer
+    final sumDepositPaid = db.orderCrateLines.depositPaidKobo.sum();
+    final predicate =
+        db.orderCrateLines.businessId.equals(requireBusinessId()) &
+        db.orderCrateLines.depositPaidKobo.isBiggerThanValue(0) &
+        db.orderCrateLines.settledAt.isNull() &
+        db.orders.status.isNotValue('cancelled');
+    final query = db.selectOnly(db.orderCrateLines).join([
+      innerJoin(db.orders, db.orders.id.equalsExp(db.orderCrateLines.orderId)),
+    ])
+      ..addColumns([db.orderCrateLines.manufacturerId, sumDepositPaid])
+      ..where(predicate)
+      ..groupBy([db.orderCrateLines.manufacturerId]);
+
+    final brandDepositsStream = query.watch().map((rows) {
+      final out = <String, int>{};
+      for (final r in rows) {
+        final mId = r.read(db.orderCrateLines.manufacturerId);
+        final kobo = r.read(sumDepositPaid) ?? 0;
+        if (mId != null && kobo > 0) {
+          out[mId] = kobo;
+        }
+      }
+      return out;
+    });
+
+    return Rx.combineLatest2<int, Map<String, int>, CustomerDepositAttribution>(
+      heldDepositStream,
+      brandDepositsStream,
+      (heldKobo, brandDeposits) => computeCustomerDepositAttribution(
+        businessWideHeldDepositKobo: heldKobo,
+        brandDepositsKobo: brandDeposits,
+      ),
+    );
+  }
+
+  /// Every crate movement for ONE brand, newest first (#291).
+  ///
+  /// Joins who (performedBy -> users.name), when (createdAt), store
+  /// (storeId / orders.storeId -> stores.name), and movement kind.
+  Stream<List<CrateMovementHistoryEntry>> watchManufacturerCrateMovements(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    var predicate = whereBusiness(crateLedger) &
+        crateLedger.manufacturerId.equals(manufacturerId);
+    if (storeId != null) {
+      predicate = predicate & _ledgerStoreExpr().equals(storeId);
+    }
+
+    final query = select(crateLedger).join([
+      leftOuterJoin(db.users, db.users.id.equalsExp(crateLedger.performedBy)),
+      ..._ledgerStoreJoins(),
+      leftOuterJoin(db.stores, db.stores.id.equalsExp(_ledgerStoreExpr())),
+    ])
+      ..where(predicate)
+      ..orderBy([
+        OrderingTerm(expression: crateLedger.createdAt, mode: OrderingMode.desc),
+      ]);
+
+    return query.watch().map((rows) {
+      return rows.map((row) {
+        final entry = row.readTable(crateLedger);
+        final user = row.readTableOrNull(db.users);
+        final store = row.readTableOrNull(db.stores);
+        return CrateMovementHistoryEntry(
+          id: entry.id,
+          movementType: entry.movementType,
+          movementLabel: labelForCrateMovement(entry.movementType),
+          quantityDelta: entry.quantityDelta,
+          createdAt: entry.createdAt,
+          performedByName: user?.name,
+          storeName: store?.name,
+        );
+      }).toList();
+    });
+  }
+
+  // The store a customer-crate ledger row belongs to: its own storeId, else the
+  // sale's store, else (for an approved queue return, which is written with no
+  // store) the store of the order the return was raised against. A return with
+  // no order resolves to null and shows only under All Stores.
+  static const _returnOrdersAlias = 'return_orders';
+
+  Expression<String> _ledgerStoreExpr() => coalesce([
+        crateLedger.storeId,
+        db.orders.storeId,
+        db.alias(db.orders, _returnOrdersAlias).storeId,
+      ]);
+
+  List<Join> _ledgerStoreJoins() {
+    final returnOrders = db.alias(db.orders, _returnOrdersAlias);
+    return [
+      leftOuterJoin(
+        db.orders,
+        db.orders.id.equalsExp(crateLedger.referenceOrderId),
+      ),
+      leftOuterJoin(
+        db.pendingCrateReturns,
+        db.pendingCrateReturns.id.equalsExp(crateLedger.referenceReturnId),
+      ),
+      leftOuterJoin(
+        returnOrders,
+        returnOrders.id.equalsExp(db.pendingCrateReturns.orderId),
+      ),
+    ];
+  }
+
+  /// Brand's active products with stock, ordered by name (#291).
+  Stream<List<ProductDataWithStock>> watchManufacturerProducts(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    final stockExpr = db.inventory.quantity.sum();
+    var predicate = db.products.businessId.equals(requireBusinessId()) &
+        db.products.manufacturerId.equals(manufacturerId) &
+        db.products.isDeleted.equals(false);
+    var invJoinPredicate = db.inventory.productId.equalsExp(db.products.id);
+    if (storeId != null) {
+      invJoinPredicate = invJoinPredicate & db.inventory.storeId.equals(storeId);
+    }
+
+    final query = db.select(db.products).join([
+      leftOuterJoin(db.inventory, invJoinPredicate),
+    ])
+      ..addColumns([stockExpr])
+      ..where(predicate)
+      ..groupBy([db.products.id])
+      ..orderBy([
+        OrderingTerm(expression: db.products.name, mode: OrderingMode.asc),
+      ]);
+
+    return query.watch().map((rows) {
+      return rows.map((r) {
+        final p = r.readTable(db.products);
+        final stock = r.read(stockExpr) ?? 0;
+        return ProductDataWithStock(product: p, totalStock: stock);
+      }).toList();
+    });
+  }
 }
+

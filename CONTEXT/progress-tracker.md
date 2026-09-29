@@ -8,12 +8,93 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-173 sessions logged. Codebase is live and being verified on-device.
+175 sessions logged. Codebase is live and being verified on-device.
 
 ### Release 1.0.8+8 — Play Store AAB Build (2026-09-28)
 - Bumped version to `1.0.8+8` in `pubspec.yaml`, `lib/core/services/crash_reporter.dart` (`kAppVersion`), and `docs/LEARNING_ROADMAP.md`.
 - Verified `flutter analyze` clean with 0 errors and 0 warnings.
 - Prepared and built release Android App Bundle (`build/app/outputs/bundle/release/app-release.aab`) for Google Play Store upload.
+
+### Issue #294 — Buy crates from the manufacturer screen, with no profit effect (2026-09-23)
+Branch `feat/buy-crates-294`, cut from `feat/manufacturer-screen-291`; rebased 2026-09-29 onto `feat/crate-shortage-warning-293` (#291 merged as PR #303; this PR stacks on #293's PR #304). Worked in `../drinkPosApp-wt-294`.
+- **Seam**: new `CratePoolDao.recordCratePurchase({manufacturerId, storeId, performedBy, quantity, pricePerCrateKobo})`. It appends one store-stamped, attributed `purchase` row with the price paid in `rate_per_crate_kobo`. It also raises the local projections (per-store cache + business scalar) the way `addEmptiesToPool` does. **Rule A**: no wallet, expense, supplier-account, write-off or profit leg. A quantity below 1 or a negative price is an `ArgumentError`, and nothing is written. `_appendPoolLedgerRow` gained an optional `ratePerCrateKobo`. No schema change: #290's v82 / cloud 0179 already allow `purchase` and the column.
+- **Sheet**: `lib/features/inventory/widgets/buy_crates_sheet.dart` (`BuyCratesSheet.show`) asks for number of crates and **price paid per crate**. The store is asked only when `crateCountStoreWithoutAsking` can't infer it (All Stores with more than one pickable store). A "This is what will be recorded" line shows the quantity, the store, the total paid (qty × price) and "does not change profit". A blank or zero quantity, a blank price, or a missing store is rejected before writing. Save re-checks `Gates.confirmCrateDeposit.allowsNow`. A failed write keeps the sheet open. The body is a `SingleChildScrollView` with bottom padding `getRSize(24) + deviceBottomPadding`.
+- **Screen**: the Crates tab's action row is a `Wrap` holding #293's Count (`Gates.countCrates`) and Buy crates (`Gates.confirmCrateDeposit`, CEO + Manager). The row renders when either gate allows, so a Stock keeper or Cashier sees Count only. History already labels `purchase` as "Purchased" (#291's `labelForCrateMovement`).
+- **Choice made**: the issue says "amount paid", but the column is per crate. So the sheet asks per-crate price and shows the total. That avoids a rounding step when the total doesn't divide evenly.
+- **Tests**: `test/crates/crate_purchase_seam_test.dart` (6). The Rule A test counts rows in every table in `sqlite_master` and requires that only `crate_ledger`, `store_crate_balances` and `sync_queue` change. It also requires that only `crate_ledger` + `manufacturers` go to the cloud. `test/inventory/buy_crates_sheet_test.dart` (11) covers: role visibility for all four roles (mutation-checked: an open gate turns the Stock keeper/Cashier cases red); the recorded line and the saved row; Cancel writes nothing; blank/zero rejected; one store in All Stores asks no store; multi-store All Stores must pick a store and lands in it; scroll + bottom padding + save at 320x568 and 800x360. Full suite **2407 pass / 271 skipped / 0 fail** (before the rebase onto #293); `flutter analyze lib test` clean.
+- **Not verified**: keyboard lift on a real device. The harness can't fake the keyboard, so the test pins the padding rule instead.
+
+### Issue #293 — Count empties from the manufacturer screen; a gap becomes a Crate Shortage warning (2026-09-23)
+Branch `feat/crate-shortage-warning-293`, cut from `feat/manufacturer-screen-291`.
+- **Pure Shortage Folding (`lib/core/crates/manufacturer_crate_position.dart`)**:
+  - Implemented `foldCrateShortageForStore`, `foldCrateShortagePerStore`, and `foldTotalCrateShortage` over `CrateCountMovement`.
+  - Invariant rules:
+    - First count at a store is recorded as an `opening_count` and sets baseline with zero shortage (`shortage = 0`).
+    - Count below expected opens shortage by the gap (`-quantityDelta`).
+    - Count above expected closes open shortage first; excess surplus is unbanked (clamped to 0) and never offsets future shortages.
+    - Total shortage in All Stores (`storeId == null`) = `Σ store shortages` (surplus in Store B never offsets shortage in Store A).
+  - Short status card calculates `moneyKobo = shortCrates * rate` with `hasMoney = shortCrates > 0`.
+- **Database Streams (`lib/core/database/daos_crates.dart`)**:
+  - Added `watchCrateShortageByManufacturer(manufacturerId, storeId:)`.
+  - Added `watchAllCrateShortages(storeId:)` returning `Map<String, int>` of shortages by manufacturer ID.
+  - Wired `shortageStream` into `watchManufacturerCratePosition` via `Rx.combineLatest7` into `computeManufacturerCratePosition(..., shortCrates: shortage)`.
+- **Providers (`lib/core/providers/stream_providers.dart`)**:
+  - Added `crateShortagesByManufacturerProvider` watching `db.cratePoolDao.watchAllCrateShortages(storeId: storeId)`.
+- **Named Gate (`lib/core/permissions/gate_registry.dart`)**:
+  - Registered `Gates.countCrates` keyed on `stock.view` allowing Cashiers and Stock keepers to count empties; revoking `stock.view` hides the count action. Covered by `gate_registry_membership_test`.
+- **Count Sheet (`lib/features/inventory/widgets/count_manufacturer_empties_sheet.dart`)**:
+  - Implemented `CountManufacturerEmptiesSheet.show(context, manufacturer:)`.
+  - Uses `crateCountStoreWithoutAsking` (omits store picker if locked or single store; requires dropdown pick in All Stores on multi-store businesses).
+  - Displays expected empties via `cratePoolDao.expectedEmptiesAt`.
+  - Inputs counted empties with real-time *"This is what will be recorded"* difference and naira warning value.
+  - Rejects negative/non-numeric input before saving.
+  - Cancel writes nothing; Save records via `CratePoolDao.recordManualCountCorrection`.
+  - Viewport-safe with `SingleChildScrollView` and `context.deviceBottomPadding`.
+- **UI Integrations**:
+  - `ManufacturerScreen`: Added gated Count button (`kManufacturerCountButtonKey`) at top of Crates tab; Short status card displays money warning text when `shortCrates > 0`.
+  - `InventoryScreen`: Added `_shortageBadge` displaying `'⚠ $shortCount short'` (`mfr_shortage_badge_$mfrId`) on brand cards when shortage exists.
+- **Docs**:
+  - Created ADR `docs/adr/0028-count-based-crate-shortage.md`.
+  - Amended ADR `docs/adr/0023-crate-deposit-outflow-settlement.md` (§4 & §5).
+  - Updated `CONTEXT/architecture.md`.
+- **Verification**:
+  - `test/crates/manufacturer_crate_position_test.dart` (16 unit tests incl. the tied-timestamp review test, all passing).
+  - `test/crates/crate_pool_seam_test.dart` (13 DB seam tests, all passing).
+  - `test/inventory/manufacturer_screen_viewport_test.dart` (16 viewport, gating, and badge tests, all passing).
+  - `test/inventory/count_manufacturer_empties_sheet_test.dart` (6 widget and viewport tests, all passing).
+  - `test/permissions/gate_registry_membership_test.dart` (passing).
+  - `flutter analyze` clean (0 errors, 0 warnings).
+- **Review follow-ups (CodeRabbit on PR #304, 2026-09-29)**:
+  - `foldCrateShortagePerStore` breaks tied `createdAt` by incoming order (the DAO's createdAt-then-id), since `List.sort` is not stable.
+  - Both shortage streams count only store-held rows (`store_id` set, no customer), the same basis as the warehouse count, so a store-less legacy row can't add a phantom shortage to All Stores.
+  - Count sheet: a stale expected-empties lookup for a store the user has switched away from is discarded; Save has an in-flight guard (button shows loading and is disabled); a missing user id stops the save with an error instead of recording `performedBy: ''`.
+
+### Issue #291 — Manufacturer screen opens from the brand card and shows its crates by status (read-only) (2026-09-23)
+Branch `feat/manufacturer-screen-291`, cut from `main`.
+- **Pure Arithmetic Function**: Added `ManufacturerCratePosition` and `computeManufacturerCratePosition` in `lib/core/crates/manufacturer_crate_position.dart` operating over plain values with zero database imports. Computes all 6 statuses:
+  1. In the warehouse (derived Empties Pool count × crate value)
+  2. Full crates in stock (tracked-bottle products stock count × crate value)
+  3. With customers, on deposit (unsettled deposit lines; actual deposit paid in)
+  4. With customers, no deposit (customer crate debt count × crate value)
+  5. Short (shows 0 count and no money until #293)
+  6. Damaged (damage movements in current month; loss kobo or count × crate value)
+- **Attribution & History**: Added `computeCustomerDepositAttribution` guaranteeing `sum(attributed) + unattributed == businessWideHeldDepositKobo`, and `labelForCrateMovement` / `CrateMovementHistoryEntry` for chronological ledger movements.
+- **DAO & Stream Providers**: Added `watchManufacturerCratePosition(mfrId, storeId:)`, `watchCustomerDepositAttribution()`, `watchManufacturerProducts(mfrId)`, and `watchManufacturerCrateMovements(mfrId)` in `CratePoolDao` / `StreamProviders`.
+- **Screen**: Implemented `ManufacturerScreen` (`lib/features/inventory/screens/manufacturer_screen.dart`) built on `TabbedSliverScaffold` (ADR 0027) with Crates, Products, and History tabs:
+  - Header displays brand name, crate value, total crates, total value, and shortage (scrolls away while TabBar remains pinned).
+  - Role gating: Customer deposit money amount requires `Gates.crateDepositsReport` (CEO & Manager); absent for Cashier & Stock keeper.
+  - Non-crate business sees not-available fallback screen; non-crate businesses see no affordances on `InventoryScreen`.
+  - Brand cards on `InventoryScreen` display "Crate value:" and tap anywhere to open `ManufacturerScreen`.
+- **Verification**:
+  - `test/crates/manufacturer_crate_position_test.dart` (8 unit tests, all passing).
+  - `test/crates/manufacturer_crate_stream_test.dart` (6 DB stream tests: 4 original + 2 review fixes, all passing).
+  - `test/inventory/manufacturer_screen_viewport_test.dart` (12 viewport and role gating tests across 4 viewports, all passing).
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
+- **Review follow-ups (CodeRabbit on PR #303, 2026-09-29)**:
+  - Cancelled sales are excluded from "With customers, on deposit" and from attribution: cancel releases the wallet deposit but never stamps `order_crate_lines.settledAt`.
+  - `watchCustomerDepositAttribution()` is business-wide on both sides (no `storeId`), since Held Deposit has no store axis.
+  - Customer crate rows scope by `COALESCE(ledger.store_id, sale's store, approved return's order's store)`, so approved queue returns (written with no store) land in the right store and All Stores = sum of stores. A return with no order shows only under All Stores, labelled "No store" in History.
+  - Header total leaves out Customer deposit money for users without `Gates.crateDepositsReport`, so the hidden amount can't be recovered by subtraction.
 
 ### Issue #290 — Crate counts belong to a store and a person (schema groundwork for PRD #284) (2026-09-23)
 Branch `feat/crate-count-store-author-290`, cut from `main` (`5bb0671`), worked in `../drinkPosApp-wt-290`.
