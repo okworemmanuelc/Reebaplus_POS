@@ -102,17 +102,27 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     int depositKobo, {
     String? name,
   }) async {
-    final now = DateTime.now();
-    final comp = ManufacturersCompanion(
-      id: Value(id),
-      name: name == null ? const Value.absent() : Value(name),
-      depositAmountKobo: Value(depositKobo),
-      lastUpdatedAt: Value(now),
-    );
-    await (update(
-      manufacturers,
-    )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
-    await _enqueueFullManufacturer(id);
+    await transaction(() async {
+      final previous = await (select(
+        manufacturers,
+      )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
+      final now = DateTime.now();
+      final comp = ManufacturersCompanion(
+        id: Value(id),
+        name: name == null ? const Value.absent() : Value(name),
+        depositAmountKobo: Value(depositKobo),
+        lastUpdatedAt: Value(now),
+      );
+      await (update(
+        manufacturers,
+      )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
+      await _enqueueFullManufacturer(id);
+      // #298: the FIRST real value (0 → positive) fills in the sales made while
+      // the brand had none. A later positive → positive change fills nothing.
+      if (previous != null && previous.depositAmountKobo <= 0 && depositKobo > 0) {
+        await db.orderCrateLinesDao.fillUnratedLines(id, depositKobo);
+      }
+    });
   }
 
   Future<List<ProductDataWithStock>> getProductsWithStock({

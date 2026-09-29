@@ -145,8 +145,13 @@ class _ManufacturerSettingsSliversState
       // The preview reads before it writes. A failed read must say so rather
       // than escape this callback and leave the owner staring at a dead Save.
       final int debtCrates;
+      final int unsetLines;
       try {
         debtCrates = await db.cratePoolDao.supplierCrateDebtCratesFor(mfr.id);
+        // Only the first real value (0 → positive) fills past sales in (#298).
+        unsetLines = mfr.depositAmountKobo <= 0 && newKobo > 0
+            ? await db.orderCrateLinesDao.countUnratedLines(mfr.id)
+            : 0;
       } catch (_) {
         if (mounted) {
           AppNotification.showError(
@@ -160,6 +165,7 @@ class _ManufacturerSettingsSliversState
       final confirmed = await CrateValueChangeSheet.show(
         context,
         brandName: mfr.name,
+        unsetLines: unsetLines,
         impact: computeCrateValueChangeImpact(
           position: widget.position,
           newKobo: newKobo,
