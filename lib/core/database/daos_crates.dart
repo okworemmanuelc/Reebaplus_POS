@@ -962,6 +962,71 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Record [quantity] crates of [manufacturerId] **bought** into [storeId]'s
+  /// warehouse by [performedBy], at [pricePerCrateKobo] each (#294, PRD #284
+  /// decision 9).
+  ///
+  /// Appends one store-stamped, attributed [kCrateMovementPurchase] row that
+  /// raises the Empties Pool and carries the price paid in
+  /// `rate_per_crate_kobo`, for the later net-worth work.
+  ///
+  /// **Rule A: buying a crate swaps cash for an owned asset, profit 0.** So this
+  /// writes no wallet, expense, supplier-account, write-off or profit leg — only
+  /// the crate row and the local pool projections (the per-store cache and the
+  /// business scalar), exactly as [addEmptiesToPool] keeps them.
+  ///
+  /// A quantity below 1 or a negative price is rejected with an
+  /// [ArgumentError] before anything is written.
+  Future<void> recordCratePurchase({
+    required String manufacturerId,
+    required String storeId,
+    required String performedBy,
+    required int quantity,
+    required int pricePerCrateKobo,
+  }) async {
+    if (quantity <= 0) {
+      throw ArgumentError.value(
+        quantity,
+        'quantity',
+        'at least one crate must be bought',
+      );
+    }
+    if (pricePerCrateKobo < 0) {
+      throw ArgumentError.value(
+        pricePerCrateKobo,
+        'pricePerCrateKobo',
+        'a price cannot be negative',
+      );
+    }
+    await transaction(() async {
+      await customUpdate(
+        'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
+        "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+        'WHERE id = ? AND business_id = ?',
+        variables: [
+          Variable(quantity),
+          Variable(manufacturerId),
+          Variable(requireBusinessId()),
+        ],
+        updates: {manufacturers},
+      );
+      await _enqueueFullManufacturer(manufacturerId);
+      await db.storeCrateBalancesDao.applyDelta(
+        storeId: storeId,
+        manufacturerId: manufacturerId,
+        delta: quantity,
+      );
+      await _appendPoolLedgerRow(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        quantityDelta: quantity,
+        movementType: kCrateMovementPurchase,
+        performedBy: performedBy,
+        ratePerCrateKobo: pricePerCrateKobo,
+      );
+    });
+  }
+
   /// What a count of [manufacturerId] at [storeId] is compared against: the
   /// derived Empties Pool for that `(manufacturer, store)`, read once. The same
   /// figure [watchEmptiesPoolByManufacturer] shows for the store and the one
@@ -2592,6 +2657,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String movementType,
     String? performedBy,
     String? orderId,
+    int? ratePerCrateKobo,
   }) async {
     final ledgerComp = CrateLedgerCompanion.insert(
       id: Value(
@@ -2608,6 +2674,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       movementType: movementType,
       referenceOrderId: Value(orderId),
       performedBy: Value(performedBy),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(crateLedger).insert(ledgerComp);
