@@ -66,10 +66,15 @@ Branch `feat/manufacturer-screen-291`, cut from `main`.
   - Non-crate business sees not-available fallback screen; non-crate businesses see no affordances on `InventoryScreen`.
   - Brand cards on `InventoryScreen` display "Crate value:" and tap anywhere to open `ManufacturerScreen`.
 - **Verification**:
-  - `test/crates/manufacturer_crate_position_test.dart` (14 unit tests, all passing).
-  - `test/crates/manufacturer_crate_stream_test.dart` (6 DB stream tests, all passing).
+  - `test/crates/manufacturer_crate_position_test.dart` (8 unit tests, all passing).
+  - `test/crates/manufacturer_crate_stream_test.dart` (6 DB stream tests: 4 original + 2 review fixes, all passing).
   - `test/inventory/manufacturer_screen_viewport_test.dart` (12 viewport and role gating tests across 4 viewports, all passing).
   - `flutter analyze lib test` clean (0 errors, 0 warnings).
+- **Review follow-ups (CodeRabbit on PR #303, 2026-09-29)**:
+  - Cancelled sales are excluded from "With customers, on deposit" and from attribution: cancel releases the wallet deposit but never stamps `order_crate_lines.settledAt`.
+  - `watchCustomerDepositAttribution()` is business-wide on both sides (no `storeId`), since Held Deposit has no store axis.
+  - Customer crate rows scope by `COALESCE(ledger.store_id, sale's store, approved return's order's store)`, so approved queue returns (written with no store) land in the right store and All Stores = sum of stores. A return with no order shows only under All Stores, labelled "No store" in History.
+  - Header total leaves out Customer deposit money for users without `Gates.crateDepositsReport`, so the hidden amount can't be recovered by subtraction.
 
 ### Issue #290 — Crate counts belong to a store and a person (schema groundwork for PRD #284) (2026-09-23)
 Branch `feat/crate-count-store-author-290`, cut from `main` (`5bb0671`), worked in `../drinkPosApp-wt-290`.

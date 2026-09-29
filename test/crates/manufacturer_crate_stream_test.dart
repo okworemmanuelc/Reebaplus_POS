@@ -473,4 +473,120 @@ void main() {
       },
     );
   });
+
+  group('CratePoolDao - manufacturer streams, review fixes (#291)', () {
+    Future<void> insertOrder(String id, String storeId, String status) =>
+        db.into(db.orders).insert(
+              OrdersCompanion.insert(
+                id: Value(id),
+                businessId: businessId,
+                orderNumber: 'ORD-$id',
+                totalAmountKobo: 100000,
+                netAmountKobo: 100000,
+                paymentType: 'cash',
+                status: status,
+                storeId: Value(storeId),
+              ),
+            );
+
+    Future<void> insertDepositLine(String orderId, int crates, int kobo) =>
+        db.into(db.orderCrateLines).insert(
+              OrderCrateLinesCompanion.insert(
+                id: Value(UuidV7.generate()),
+                businessId: businessId,
+                orderId: orderId,
+                manufacturerId: mfrA,
+                cratesTaken: crates,
+                depositPaidKobo: Value(kobo),
+              ),
+            );
+
+    test(
+      'a cancelled sale\'s unsettled deposit line counts in neither the '
+      'position nor the attribution',
+      () async {
+        await insertOrder('o-live', storeA, 'completed');
+        await insertOrder('o-cancelled', storeA, 'cancelled');
+        await insertDepositLine('o-live', 2, 200000);
+        await insertDepositLine('o-cancelled', 5, 500000);
+
+        final pos =
+            await db.cratePoolDao.watchManufacturerCratePosition(mfrA).first;
+        expect(pos.withCustomersOnDeposit.count, 2);
+        expect(pos.withCustomersOnDeposit.moneyKobo, 200000);
+
+        final attribution =
+            await db.cratePoolDao.watchCustomerDepositAttribution().first;
+        expect(attribution.attributedKoboByManufacturer[mfrA], 200000);
+      },
+    );
+
+    test(
+      'an approved queue return (no store on the row) scopes by its order\'s '
+      'store, so All Stores equals the sum of the stores',
+      () async {
+        await insertOrder('o-a', storeA, 'completed');
+        await insertOrder('o-b', storeB, 'completed');
+        // Crates issued without deposit: 4 at store A, 3 at store B.
+        for (final (orderId, qty) in [('o-a', 4), ('o-b', 3)]) {
+          await db.into(db.crateLedger).insert(
+                CrateLedgerCompanion.insert(
+                  id: Value(UuidV7.generate()),
+                  businessId: businessId,
+                  customerId: const Value(customerId),
+                  manufacturerId: const Value(mfrA),
+                  quantityDelta: qty,
+                  movementType: 'issued',
+                  referenceOrderId: Value(orderId),
+                ),
+              );
+        }
+        // An approved return of 1 against order A, written with no store —
+        // the shape recordApprovedCustomerReturn writes.
+        await db.into(db.pendingCrateReturns).insert(
+              PendingCrateReturnsCompanion.insert(
+                id: const Value('ret-1'),
+                businessId: businessId,
+                orderId: const Value('o-a'),
+                customerId: customerId,
+                manufacturerId: mfrA,
+                quantity: 1,
+                submittedBy: userId,
+                status: const Value('approved'),
+              ),
+            );
+        await db.cratePoolDao.recordApprovedCustomerReturn(
+          customerId: customerId,
+          manufacturerId: mfrA,
+          returnId: 'ret-1',
+          ledgerId: UuidV7.generate(),
+          quantity: 1,
+          approvedBy: userId,
+          useDomainRpc: true,
+        );
+
+        final dao = db.cratePoolDao;
+        final all = await dao.watchManufacturerCratePosition(mfrA).first;
+        final a = await dao
+            .watchManufacturerCratePosition(mfrA, storeId: storeA)
+            .first;
+        final b = await dao
+            .watchManufacturerCratePosition(mfrA, storeId: storeB)
+            .first;
+        expect(a.withCustomersNoDeposit.count, 3);
+        expect(b.withCustomersNoDeposit.count, 3);
+        expect(
+          all.withCustomersNoDeposit.count,
+          a.withCustomersNoDeposit.count + b.withCustomersNoDeposit.count,
+        );
+
+        final historyA = await dao
+            .watchManufacturerCrateMovements(mfrA, storeId: storeA)
+            .first;
+        final returned =
+            historyA.singleWhere((e) => e.movementType == 'returned');
+        expect(returned.storeName, 'Main Store');
+      },
+    );
+  });
 }
