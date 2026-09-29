@@ -343,6 +343,16 @@ closed.
 _Avoid_: treating the first post-release count as a shortage; letting a pool
 credit (`adjusted`) or an unchanged Save count as the opening.
 
+**Crate Purchase**:
+Crates bought from a manufacturer into a store's warehouse (UI: **Buy crates**,
+#294). One store-stamped, attributed `purchase` row raises that store's [Empties
+Pool] and carries the price paid per crate in `rate_per_crate_kobo`. Under Rule A
+a crate is an owned asset, so buying one swaps cash for a crate with **profit
+0**: no wallet, expense, supplier-account or profit leg is written. What was paid
+waits on the row for the net-worth work.
+_Avoid_: booking a purchase as an expense; filing it as a count or as the generic
+`adjusted` (it is neither a correction nor a pool credit).
+
 **Crate Deposit**:
 The refundable money a returnable crate is worth (UI label: **Crate value**) — its per-crate **rate** is
 `manufacturers.deposit_amount_kobo`, snapshotted onto `order_crate_lines.

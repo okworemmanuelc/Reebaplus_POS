@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/buy_crates_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/count_manufacturer_empties_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
@@ -328,8 +329,12 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     CustomerDepositAttribution attribution,
     ManufacturerData mfr,
   ) {
+    final canCount = Gates.countCrates.allows(ref);
+    // Buy crates moves money out, so it stays with managers (#294). Hidden,
+    // not disabled, for everyone else.
+    final canBuy = Gates.confirmCrateDeposit.allows(ref);
     return [
-      if (Gates.countCrates.allows(ref))
+      if (canCount || canBuy)
         SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
@@ -338,19 +343,33 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
               context.getRSize(16),
               context.getRSize(4),
             ),
-            child: Row(
+            // Wrap, not Row: two buttons can't fit side by side at 320dp.
+            child: Wrap(
+              spacing: context.getRSize(8),
+              runSpacing: context.getRSize(8),
               children: [
-                AppButton(
-                  key: const ValueKey(kManufacturerCountButtonKey),
-                  text: 'Count',
-                  icon: FontAwesomeIcons.clipboardCheck.data,
-                  variant: AppButtonVariant.primary,
-                  isFullWidth: false,
-                  onPressed: () => CountManufacturerEmptiesSheet.show(
-                    context,
-                    manufacturer: mfr,
+                if (canCount)
+                  AppButton(
+                    key: const ValueKey(kManufacturerCountButtonKey),
+                    text: 'Count',
+                    icon: FontAwesomeIcons.clipboardCheck.data,
+                    variant: AppButtonVariant.primary,
+                    isFullWidth: false,
+                    onPressed: () => CountManufacturerEmptiesSheet.show(
+                      context,
+                      manufacturer: mfr,
+                    ),
                   ),
-                ),
+                if (canBuy)
+                  AppButton(
+                    key: const ValueKey(kBuyCratesButtonKey),
+                    text: 'Buy crates',
+                    icon: FontAwesomeIcons.cartPlus.data,
+                    variant: AppButtonVariant.outline,
+                    isFullWidth: false,
+                    onPressed: () =>
+                        BuyCratesSheet.show(context, manufacturer: mfr),
+                  ),
               ],
             ),
           ),
