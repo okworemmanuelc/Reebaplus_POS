@@ -77,6 +77,8 @@ The same rule makes a `standing_float` coherent: lost crates eat float headroom
 and raise the Shortfall, but move no money, because the supplier has not taken
 anything yet. Money moves on real top-ups and payouts only.
 
+*(Note: Amending ADR 0028 formalizes warehouse empty crate discrepancies as count-based **Crate Shortage**, derived chronologically per `(manufacturer, store)` via `CratePoolDao.recordManualCountCorrection` with unbanked surplus).*
+
 ### 5. A Shortfall is a warning until it is written off
 
 A Shortfall is a *suspicion* — crates turn up behind the store, a driver returns
@@ -88,6 +90,8 @@ decision rather than a screen calculation.
 Consequently, for a brand with a Placed Deposit, a customer forfeit nets to zero:
 the customer's money is kept, and the matching Shortfall it creates is what
 cancels it out.
+
+*(Note: Under ADR 0028, a count-based Shortage is similarly treated as an operational warning valued at `open count × crate value`, rather than an immediate financial loss).*
 
 ### 6. Counts are physical, money is financial — and they are gated differently
 

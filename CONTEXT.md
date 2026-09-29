@@ -344,7 +344,7 @@ _Avoid_: treating the first post-release count as a shortage; letting a pool
 credit (`adjusted`) or an unchanged Save count as the opening.
 
 **Crate Deposit**:
-The refundable money a returnable crate is worth — its per-crate **rate** is
+The refundable money a returnable crate is worth (UI label: **Crate value**) — its per-crate **rate** is
 `manufacturers.deposit_amount_kobo`, snapshotted onto `order_crate_lines.
 deposit_rate_kobo` at sale time so a later rate edit never changes a historic
 settlement. The rate is read **live** from that column
@@ -361,7 +361,7 @@ us) is [Held Deposit]; the outflow leg (money we pay a supplier) is
 
 **Held Deposit**:
 Deposit money the shop is currently holding for a customer against crates they
-took but haven't returned — the `crate_deposit`-family legs on the customer
+took but haven't returned (UI label: **Customer deposit**) — the `crate_deposit`-family legs on the customer
 wallet ledger (net = paid-in − refunded − forfeited). It is a liability: money
 owed back. Net-position honesty (#163) subtracts it from business worth.
 _Avoid_: counting held deposits as income; leaving them inflated after a return
@@ -381,7 +381,7 @@ deposit as both money held and crates owed); netting a money-track return agains
 the crate ledger.
 
 **Placed Deposit**:
-Refundable money the business has paid a supplier against crates it holds — the
+Refundable money the business has paid a supplier against crates it holds (UI label: **Deposit paid**) — the
 exact mirror of [Held Deposit], and an **asset**: cash left the drawer but the
 money is still ours, so business worth is unchanged. Held per
 `(supplier, manufacturer)` pair, because only the supplier you paid can pay you
@@ -408,16 +408,18 @@ neither covers any particular crates. Everything else on a float brand —
 deliveries, hand-backs, and crates going missing — moves **no money at all**.
 _Avoid_: charging a loss when a crate on a float brand goes missing (the supplier
 has not deducted anything, so it would show money leaving that nobody took — it
-is a [Crate Shortfall]); moving the float on an ordinary delivery.
+is a [Crate Shortage]); moving the float on an ordinary delivery.
 
-**Crate Shortfall**:
-The gap between crates owed to suppliers and empties actually on hand, valued at
-the manufacturer rate — **brand-level and deliberately unattributed** to any one
-supplier, because nothing identifies which supplier's crate went missing. A
-warning, not a booked loss, until someone writes it off (which is when it hits
-profit).
-_Avoid_: allocating a shortfall to a supplier before settlement; writing it off
-on a timer; letting it sit unclearable (a warning nobody can clear is ignored).
+**Crate Shortage** *(formerly Crate Shortfall)*:
+The crates found missing at a physical count per `(manufacturer, store)`, worked
+out by folding count rows in time order: a count below expected opens shortage by
+the gap; a count above expected closes open shortage first, and excess surplus is
+not banked (cannot offset future shortages). Opening counts set baseline and
+raise no shortage. Tracked for all brands regardless of Crate Money Arrangement.
+A warning valued at `open shortage × crate value`, not a loss, until written off (ADR 0028).
+_Avoid_: calculating shortage from depot debt minus empties; allocating a
+shortage across stores or netting surplus in one store against another; banking
+count surplus to mask future losses.
 
 **Supplier Crate Debt**:
 The empty crates owed to one supplier for full crates they delivered —
