@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/buy_crates_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/count_manufacturer_empties_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/manufacturer_settings_tab.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
@@ -21,7 +22,8 @@ import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 ///
 /// Opens by tapping any brand card on Inventory → Crates.
 /// Built on [TabbedSliverScaffold] so the brand summary header scrolls away
-/// cleanly and the [TabBar] pins under it across three tabs:
+/// cleanly and the [TabBar] pins under it across up to four tabs (Settings is
+/// omitted for a role that can edit nothing on it, #295):
 ///   1. Crates — the six canonical statuses
 ///   2. Products — brand products with crate value
 ///   3. History — chronological crate ledger movements
@@ -38,13 +40,29 @@ class ManufacturerScreen extends ConsumerStatefulWidget {
 }
 
 class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+    with TickerProviderStateMixin {
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+  }
+
+  /// The Settings tab exists only for a role that can edit something on it, so
+  /// the tab count follows the gates (#295).
+  void _syncTabCount(int length) {
+    if (_tabController.length == length) return;
+    final previous = _tabController.index;
+    // The old bar is still mounted during this build, so it's disposed once the
+    // frame has swapped in the new controller.
+    final old = _tabController;
+    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    _tabController = TabController(
+      length: length,
+      vsync: this,
+      initialIndex: previous < length ? previous : 0,
+    );
   }
 
   @override
@@ -110,6 +128,8 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     final canSeeCustomerDepositMoney = Gates.crateDepositsReport.allows(ref);
 
     final theme = Theme.of(context);
+    final showSettings = canEditManufacturerSettings(ref);
+    _syncTabCount(showSettings ? 4 : 3);
 
     return Scaffold(
       key: const ValueKey(kManufacturerScreenKey),
@@ -134,7 +154,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           tabBar: Container(
             color: Colors.transparent,
             padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
-            child: _buildTabBar(theme),
+            child: _buildTabBar(theme, showSettings: showSettings),
           ),
           tabViews: [
             TabSliverView(
@@ -156,13 +176,23 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
               storageKey: kManufacturerHistoryStorageKey,
               slivers: _historyTabSlivers(context, theme, movements),
             ),
+            if (showSettings)
+              TabSliverView(
+                storageKey: kManufacturerSettingsStorageKey,
+                slivers: [
+                  ManufacturerSettingsSlivers(
+                    manufacturer: mfr,
+                    position: position,
+                  ),
+                ],
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTabBar(ThemeData theme) {
+  Widget _buildTabBar(ThemeData theme, {required bool showSettings}) {
     return Container(
       margin: EdgeInsets.only(bottom: _tabBarBottomMargin),
       decoration: BoxDecoration(
@@ -197,10 +227,11 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
             fontSize: context.getRFontSize(13),
           ),
           dividerColor: Colors.transparent,
-          tabs: const [
-            Tab(text: 'Crates'),
-            Tab(text: 'Products'),
-            Tab(text: 'History'),
+          tabs: [
+            const Tab(text: 'Crates'),
+            const Tab(text: 'Products'),
+            const Tab(text: 'History'),
+            if (showSettings) const Tab(text: 'Settings'),
           ],
         ),
       ),

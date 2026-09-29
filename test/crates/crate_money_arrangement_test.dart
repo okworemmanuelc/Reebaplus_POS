@@ -629,7 +629,7 @@ void main() {
         'lib/core/permissions/gate_registry.dart',
         // The one surface that shows and sets it.
         'lib/features/inventory/widgets/crate_money_arrangement_section.dart',
-        'lib/features/inventory/screens/inventory_screen.dart',
+        'lib/features/inventory/widgets/manufacturer_settings_tab.dart',
         // #212 — THE FIRST READERS THAT ACT ON THE VALUE. Everything above this
         // line stores, syncs, guards or displays the setting; these two decide
         // money from it, so the `none` release gate below is what keeps them
