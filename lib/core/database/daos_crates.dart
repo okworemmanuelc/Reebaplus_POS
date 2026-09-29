@@ -3122,6 +3122,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         (t) =>
             whereBusiness(t) &
             t.manufacturerId.equals(manufacturerId) &
+            // Same basis as the warehouse count: store-held, not a customer's.
+            t.storeId.isNotNull() &
+            t.customerId.isNull() &
             t.movementType.isIn([
               kCrateMovementOpeningCount,
               kCrateMovementCount,
@@ -3160,6 +3163,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       ..where(
         (t) =>
             whereBusiness(t) &
+            t.storeId.isNotNull() &
+            t.customerId.isNull() &
             t.movementType.isIn([
               kCrateMovementOpeningCount,
               kCrateMovementCount,

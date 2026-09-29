@@ -73,6 +73,7 @@ class _CountManufacturerEmptiesSheetState
   bool _isLoadingExpected = false;
   String? _errorMessage;
   bool _mustPickStore = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -117,14 +118,16 @@ class _CountManufacturerEmptiesSheetState
         manufacturerId: widget.manufacturer.id,
         storeId: storeId,
       );
-      if (mounted) {
+      // A slower lookup for a store the user has since switched away from
+      // must not overwrite the current store's figure.
+      if (mounted && storeId == _selectedStoreId) {
         setState(() {
           _expectedEmpties = expected;
           _isLoadingExpected = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && storeId == _selectedStoreId) {
         setState(() {
           _isLoadingExpected = false;
           _errorMessage = 'Could not load expected empties: $e';
@@ -134,6 +137,7 @@ class _CountManufacturerEmptiesSheetState
   }
 
   Future<void> _handleSave() async {
+    if (_isSaving) return;
     final storeId = _selectedStoreId;
     if (storeId == null) {
       setState(() => _errorMessage = 'Please select a store.');
@@ -157,9 +161,15 @@ class _CountManufacturerEmptiesSheetState
       return;
     }
 
-    final user = ref.read(authProvider).currentUser;
-    final performedBy = user?.id ?? '';
+    final performedBy = ref.read(authProvider).currentUser?.id;
+    if (performedBy == null || performedBy.isEmpty) {
+      setState(
+        () => _errorMessage = 'Could not tell who is counting. Sign in again.',
+      );
+      return;
+    }
 
+    setState(() => _isSaving = true);
     try {
       final db = ref.read(databaseProvider);
       await db.cratePoolDao.recordManualCountCorrection(
@@ -176,6 +186,8 @@ class _CountManufacturerEmptiesSheetState
       if (mounted) {
         setState(() => _errorMessage = 'Failed to record count: $e');
       }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -446,7 +458,8 @@ class _CountManufacturerEmptiesSheetState
                     key: const ValueKey(kCountEmptiesSaveButtonKey),
                     text: 'Save Count',
                     variant: AppButtonVariant.primary,
-                    onPressed: _handleSave,
+                    isLoading: _isSaving,
+                    onPressed: _isSaving ? null : _handleSave,
                   ),
                 ),
               ],

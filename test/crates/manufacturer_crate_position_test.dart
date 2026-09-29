@@ -336,6 +336,33 @@ void main() {
       expect(foldTotalCrateShortage(movements), 10);
     });
 
+    test('tied timestamps keep incoming (DAO createdAt-then-id) order', () {
+      // Over 32 items so List.sort leaves insertion sort; an unstable sort
+      // could move the Opening Count and change the answer.
+      final at = DateTime(2026, 9, 1, 9);
+      CrateCountMovement count(String type, int delta) => CrateCountMovement(
+            storeId: 'store-a',
+            movementType: type,
+            quantityDelta: delta,
+            createdAt: at,
+          );
+      final countsThenOpening = [
+        for (var i = 0; i < 40; i++) count('count', -1),
+        count('opening_count', 0),
+      ];
+      final openingThenCounts = [
+        count('opening_count', 0),
+        for (var i = 0; i < 40; i++) count('count', -1),
+      ];
+
+      expect(foldCrateShortagePerStore(countsThenOpening)['store-a'], 0);
+      expect(foldCrateShortagePerStore(openingThenCounts)['store-a'], 40);
+      expect(
+        foldCrateShortagePerStore(openingThenCounts)['store-a'],
+        foldCrateShortageForStore(openingThenCounts),
+      );
+    });
+
     test('empty movements list yields 0 shortage', () {
       expect(foldCrateShortageForStore([]), 0);
       expect(foldTotalCrateShortage([]), 0);

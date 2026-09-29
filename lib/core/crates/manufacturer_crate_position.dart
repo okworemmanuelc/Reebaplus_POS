@@ -291,9 +291,14 @@ Map<String, int> foldCrateShortagePerStore(Iterable<CrateCountMovement> movement
   }
   final result = <String, int>{};
   for (final entry in byStore.entries) {
-    final sorted = List<CrateCountMovement>.from(entry.value)
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    result[entry.key] = foldCrateShortageForStore(sorted);
+    // List.sort is not stable, so tied timestamps fall back to incoming order
+    // (the DAO's createdAt-then-id order), matching the single-store fold.
+    final indexed = entry.value.indexed.toList()
+      ..sort((a, b) {
+        final byTime = a.$2.createdAt.compareTo(b.$2.createdAt);
+        return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
+      });
+    result[entry.key] = foldCrateShortageForStore(indexed.map((e) => e.$2));
   }
   return result;
 }

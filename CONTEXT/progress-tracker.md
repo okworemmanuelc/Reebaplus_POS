@@ -44,12 +44,18 @@ Branch `feat/crate-shortage-warning-293`, cut from `feat/manufacturer-screen-291
   - Amended ADR `docs/adr/0023-crate-deposit-outflow-settlement.md` (§4 & §5).
   - Updated `CONTEXT/architecture.md`.
 - **Verification**:
-  - `test/crates/manufacturer_crate_position_test.dart` (15 unit tests, all passing).
+  - `test/crates/manufacturer_crate_position_test.dart` (16 unit tests incl. the tied-timestamp review test, all passing).
   - `test/crates/crate_pool_seam_test.dart` (13 DB seam tests, all passing).
   - `test/inventory/manufacturer_screen_viewport_test.dart` (16 viewport, gating, and badge tests, all passing).
   - `test/inventory/count_manufacturer_empties_sheet_test.dart` (6 widget and viewport tests, all passing).
   - `test/permissions/gate_registry_membership_test.dart` (passing).
   - `flutter analyze` clean (0 errors, 0 warnings).
+- **Review follow-ups (CodeRabbit on PR #304, 2026-09-29)**:
+  - `foldCrateShortagePerStore` breaks tied `createdAt` by incoming order (the DAO's createdAt-then-id), since `List.sort` is not stable.
+  - Both shortage streams count only store-held rows (`store_id` set, no customer), the same basis as the warehouse count, so a store-less legacy row can't add a phantom shortage to All Stores.
+  - Count sheet: a stale expected-empties lookup for a store the user has switched away from is discarded; Save has an in-flight guard (button shows loading and is disabled); a missing user id stops the save with an error instead of recording `performedBy: ''`.
+
+### Issue #291 — Manufacturer screen opens from the brand card and shows its crates by status (read-only) (2026-09-23)
 Branch `feat/manufacturer-screen-291`, cut from `main`.
 - **Pure Arithmetic Function**: Added `ManufacturerCratePosition` and `computeManufacturerCratePosition` in `lib/core/crates/manufacturer_crate_position.dart` operating over plain values with zero database imports. Computes all 6 statuses:
   1. In the warehouse (derived Empties Pool count × crate value)
