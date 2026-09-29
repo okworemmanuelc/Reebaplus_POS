@@ -16,8 +16,6 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart'
-    show kCrateLostSuffix;
 
 /// Damage reasons (§17.2). Key (stored on the stock_adjustment reason as
 /// `damage:<key>`) → human label shown in the form + History.
@@ -613,15 +611,6 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     if (_items.isEmpty) return;
     ProductStockWithStore? product;
     String reasonKey = 'broken';
-    // §17.2 crate-aware damages. Only meaningful for a tracked bottle
-    // (unit=='bottle' && trackEmpties): 'none' (crate intact), 'full' (the
-    // full crate — item + its container — was lost) or 'empty' (a stored
-    // returned empty was damaged).
-    String crateFate = 'none';
-    // Crate-fate surfaces are gated on the combined business opt-in, not just a
-    // product's trackEmpties — when the business has crate tracking OFF, a
-    // legacy product still flagged trackEmpties must never offer a crate fate
-    // or write empty-crate ledger rows.
     final tracksCrates = businessTracksCrates(ref.read(currentBusinessProvider));
     // Reuse the State-owned controller; clear any value left from a prior open.
     _damageQtyCtrl.clear();
@@ -652,105 +641,13 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               final reasonLabel = _kDamageReasons[reasonKey]!;
               final p = product!;
 
-              // §17.2 crate-aware: only a tracked bottle can carry a crate fate,
-              // and only when the business opted into crate tracking.
+              // #299: damaging a full crate of drinks (a tracked-bottle product)
+              // always damages its crate too, with the crate's loss counted once.
               final isTrackedBottle =
                   tracksCrates &&
                   p.product.unit?.toLowerCase() == 'bottle' &&
                   p.product.trackEmpties;
-              final fate = isTrackedBottle ? crateFate : 'none';
 
-              // §17.2 crate-aware — STORED empty damaged: a crate-only loss. No
-              // drink is involved, so it touches NO bottle stock and books no
-              // damage cost; it only debits the empty-crate pool (+ store balance
-              // + a `damaged` crate_ledger row) and forfeits the deposit, which
-              // the Statement reads from that ledger row. Quantity here means
-              // empty crates, validated against the held-empties pool, not stock.
-              if (fate == 'empty') {
-                final mfrId = p.product.manufacturerId;
-                if (mfrId == null) {
-                  AppNotification.showError(
-                    sheetCtx,
-                    'This product has no manufacturer, so its empties '
-                    'can\'t be tracked.',
-                  );
-                  return;
-                }
-                final pool =
-                    ref.read(emptyCratesByManufacturerProvider).valueOrNull ??
-                    const <String, int>{};
-                final available = pool[mfrId] ?? 0;
-                if (qty > available) {
-                  AppNotification.showError(
-                    sheetCtx,
-                    'Only $available empty crate${available == 1 ? '' : 's'} '
-                    'in stock.',
-                  );
-                  return;
-                }
-                setSheet(() => submitting = true);
-                try {
-                  await db.inventoryDao.recordEmptyCrateDamage(
-                    mfrId,
-                    qty,
-                    storeId: p.storeId,
-                  );
-                } catch (e, st) {
-                  CrashReporter.record(
-                    e,
-                    st,
-                    context: 'inventory.damage.crate_empty_debit',
-                  );
-                  if (!sheetCtx.mounted) return;
-                  setSheet(() => submitting = false);
-                  AppNotification.showError(
-                    sheetCtx,
-                    'Could not record the damaged empties. Try again.',
-                  );
-                  return;
-                }
-                try {
-                  await logService.logAction(
-                    'stock_damage',
-                    'Damaged empties recorded: $qty × ${p.product.name} '
-                        '($reasonLabel)',
-                    productId: p.product.id,
-                    storeId: p.storeId,
-                  );
-                  await _notifyManagersAndCeo(
-                    db,
-                    type: 'stock_damage',
-                    message:
-                        'Damaged empties recorded: $qty × ${p.product.name} '
-                        '($reasonLabel).',
-                    severity: 'warning',
-                  );
-                  if (!sheetCtx.mounted) return;
-                  Navigator.pop(sheetCtx);
-                  await _loadProducts();
-                  if (!context.mounted) return;
-                  AppNotification.showSuccess(
-                    context,
-                    'Recorded $qty damaged empt${qty == 1 ? 'y' : 'ies'}.',
-                  );
-                } catch (_) {
-                  if (!sheetCtx.mounted) return;
-                  setSheet(() => submitting = false);
-                  Navigator.pop(sheetCtx);
-                  await _loadProducts();
-                  if (!context.mounted) return;
-                  AppNotification.showError(
-                    context,
-                    'Empties debited, but logging the activity failed.',
-                  );
-                }
-                return;
-              }
-
-              // none / full: a damaged product (the drink is lost). 'full' also
-              // forfeits the crate deposit — the held-empties pool is untouched
-              // (that container was never a returned empty), so it rides purely
-              // on the +cratelost reason suffix the Statement reads.
               if (qty > p.totalStock) {
                 AppNotification.showError(
                   sheetCtx,
@@ -759,22 +656,37 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 return;
               }
               setSheet(() => submitting = true);
-              final reason =
-                  'damage:$reasonKey${fate == 'full' ? kCrateLostSuffix : ''}';
+              final reason = 'damage:$reasonKey';
 
               try {
-                // §17.2: reduces system stock. Routes through adjustStock so the
-                // stock_adjustments + stock_transactions ledger (and the cloud)
-                // record it; reason `damage:<key>[+cratelost]` distinguishes it
-                // from a count adjustment for the Ring 3 report and carries the
-                // full-crate fate the Statement reads.
-                await db.inventoryDao.adjustStock(
-                  p.product.id,
-                  p.storeId,
-                  -qty,
-                  reason,
-                  staffId,
-                );
+                // §17.2/#299: drink stock and (when applicable) the crate shell
+                // loss are committed or rolled back together — a partial write
+                // would leave stock reduced without the matching crate leg.
+                await db.transaction(() async {
+                  // §17.2: reduces system stock. Routes through adjustStock so the
+                  // stock_adjustments + stock_transactions ledger (and the cloud)
+                  // record it; reason `damage:<key>` distinguishes it from a count
+                  // adjustment for the Ring 3 report.
+                  await db.inventoryDao.adjustStock(
+                    p.product.id,
+                    p.storeId,
+                    -qty,
+                    reason,
+                    staffId,
+                  );
+                  // #299: damaging a full crate of drinks (tracked bottle) always
+                  // damages its crate too, writing a full_crate_damage leg with
+                  // snapshotted per-crate rate.
+                  if (isTrackedBottle && p.product.manufacturerId != null) {
+                    await db.cratePoolDao.recordFullCrateDamage(
+                      manufacturerId: p.product.manufacturerId!,
+                      storeId: p.storeId,
+                      crates: qty,
+                      performedBy: staffId,
+                      reason: reasonKey,
+                    );
+                  }
+                });
               } catch (_) {
                 if (!sheetCtx.mounted) return;
                 setSheet(() => submitting = false);
@@ -875,14 +787,6 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       }).toList(),
                       onChanged: (v) => setSheet(() {
                         product = v;
-                        // Crate fate only applies to a tracked bottle; reset it
-                        // when switching to a product that can't carry one.
-                        final tb =
-                            tracksCrates &&
-                            v != null &&
-                            v.product.unit?.toLowerCase() == 'bottle' &&
-                            v.product.trackEmpties;
-                        if (!tb) crateFate = 'none';
                       }),
                     ),
                     SizedBox(height: context.getRSize(14)),
@@ -908,34 +812,6 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       onChanged: (v) =>
                           setSheet(() => reasonKey = v ?? reasonKey),
                     ),
-                    // §17.2 crate-aware: a tracked bottle can lose its crate
-                    // deposit too. Ask whether the empty crate went with it.
-                    if (tracksCrates &&
-                        product != null &&
-                        product!.product.unit?.toLowerCase() == 'bottle' &&
-                        product!.product.trackEmpties) ...[
-                      SizedBox(height: context.getRSize(14)),
-                      AppDropdown<String>(
-                        labelText: 'Empty crate',
-                        value: crateFate,
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'none',
-                            child: Text('Crate intact — only the item lost'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'full',
-                            child: Text('Crate lost with the item'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'empty',
-                            child: Text('A stored empty crate was damaged'),
-                          ),
-                        ],
-                        onChanged: (v) =>
-                            setSheet(() => crateFate = v ?? crateFate),
-                      ),
-                    ],
                     SizedBox(height: context.getRSize(20)),
                     SizedBox(
                       width: double.infinity,
@@ -1509,6 +1385,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         actions: [
           if (!_loading && _items.isNotEmpty)
             IconButton(
+              key: const Key('stock_count_record_damages_button'),
               icon: Icon(
                 FontAwesomeIcons.triangleExclamation.data,
                 color: _text,

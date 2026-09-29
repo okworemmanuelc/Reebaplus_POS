@@ -603,7 +603,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         whereBusiness(crateLedger) &
         crateLedger.customerId.isNull() &
         crateLedger.storeId.isNotNull() &
-        crateLedger.manufacturerId.isNotNull();
+        crateLedger.manufacturerId.isNotNull() &
+        crateLedger.movementType.isNotValue(kCrateMovementFullCrateDamage);
     if (storeId != null) {
       predicate = predicate & crateLedger.storeId.equals(storeId);
     }
@@ -851,16 +852,37 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Debit the physical pool because STORED empties were damaged/lost (§17.2).
-  /// The scalar is clamped at zero. #157: appends a `damaged` crate_ledger row
-  /// even when no store is locked.
+  /// Debit the physical pool because STORED empties were damaged/lost (§17.2,
+  /// #297). The scalar is clamped at zero. Appends a `damaged` crate_ledger
+  /// row with storeId, attributed [performedBy], the [reason] code and the
+  /// snapshotted [ratePerCrateKobo] (defaulting to the manufacturer's current
+  /// crate value).
+  ///
+  /// Damage above the store's warehouse count is rejected with an
+  /// [ArgumentError] before anything is written (#297).
   Future<void> recordDamage(
     String manufacturerId,
     int quantity, {
     String? storeId,
+    String? performedBy,
+    int? ratePerCrateKobo,
+    String? reason,
   }) async {
     if (quantity <= 0) return;
     await transaction(() async {
+      if (storeId != null) {
+        final available = await expectedEmptiesAt(
+          manufacturerId: manufacturerId,
+          storeId: storeId,
+        );
+        if (quantity > available) {
+          throw ArgumentError.value(
+            quantity,
+            'quantity',
+            'Damage ($quantity) cannot exceed warehouse count ($available) at store $storeId',
+          );
+        }
+      }
       await customUpdate(
         'UPDATE manufacturers SET empty_crate_stock = MAX(0, empty_crate_stock - ?), '
         "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
@@ -880,11 +902,55 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           delta: -quantity,
         );
       }
+      final rate = ratePerCrateKobo ??
+          (await (select(manufacturers)
+                ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
+              .getSingleOrNull())
+              ?.depositAmountKobo;
       await _appendPoolLedgerRow(
         manufacturerId: manufacturerId,
         storeId: storeId,
         quantityDelta: -quantity,
         movementType: 'damaged',
+        performedBy: performedBy,
+        ratePerCrateKobo: rate,
+        reason: reason,
+      );
+    });
+  }
+
+  /// Record the crate leg of a **full crate of drinks** being damaged (§17.2, #299).
+  ///
+  /// Appends a `full_crate_damage` [crateLedger] row with [storeId], attributed
+  /// [performedBy], the [reason] code and the snapshotted [ratePerCrateKobo]
+  /// (defaulting to the manufacturer's current crate value).
+  ///
+  /// This leg is EXCLUDED from the Empties Pool (the warehouse count doesn't
+  /// change because it was never an empty). Its loss is valued once from the
+  /// leg's snapshot in Daily Reconciliation and the brand's Damaged status.
+  Future<void> recordFullCrateDamage({
+    required String manufacturerId,
+    required String storeId,
+    required int crates,
+    String? performedBy,
+    int? ratePerCrateKobo,
+    String? reason,
+  }) async {
+    if (crates <= 0) return;
+    await transaction(() async {
+      final rate = ratePerCrateKobo ??
+          (await (select(manufacturers)
+                ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
+              .getSingleOrNull())
+              ?.depositAmountKobo;
+      await _appendPoolLedgerRow(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        quantityDelta: -crates,
+        movementType: kCrateMovementFullCrateDamage,
+        performedBy: performedBy,
+        ratePerCrateKobo: rate,
+        reason: reason,
       );
     });
   }
@@ -1051,7 +1117,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       '    THEN 1 ELSE 0 END), 0) AS prior_counts '
       'FROM crate_ledger '
       'WHERE business_id = ? AND manufacturer_id = ? AND store_id = ? '
-      '  AND customer_id IS NULL',
+      '  AND customer_id IS NULL AND movement_type != \'$kCrateMovementFullCrateDamage\'',
       variables: [
         Variable(requireBusinessId()),
         Variable(manufacturerId),
@@ -2673,6 +2739,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     String? performedBy,
     String? orderId,
     int? ratePerCrateKobo,
+    String? reason,
   }) async {
     final ledgerComp = CrateLedgerCompanion.insert(
       id: Value(
@@ -2690,6 +2757,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       referenceOrderId: Value(orderId),
       performedBy: Value(performedBy),
       ratePerCrateKobo: Value(ratePerCrateKobo),
+      reason: Value(reason),
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(crateLedger).insert(ledgerComp);
@@ -3140,27 +3208,26 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       return rows.first.read(sumCustomerDebt) ?? 0;
     });
 
-    // 6. Damaged in current month
+    // 6. Damaged in current month (#297)
     final now = DateTime.now();
     final startOfMonth = DateTime(now.year, now.month, 1);
     final startOfNextMonth = DateTime(now.year, now.month + 1, 1);
-    final sumDamaged = crateLedger.quantityDelta.sum();
-    var damagedPredicate = whereBusiness(crateLedger) &
-        crateLedger.manufacturerId.equals(manufacturerId) &
-        crateLedger.movementType.equals('damaged') &
-        crateLedger.createdAt.isBiggerOrEqualValue(startOfMonth) &
-        crateLedger.createdAt.isSmallerThanValue(startOfNextMonth);
-    if (storeId != null) {
-      damagedPredicate = damagedPredicate & crateLedger.storeId.equals(storeId);
-    }
-    final damagedQuery = db.selectOnly(crateLedger)
-      ..addColumns([sumDamaged])
-      ..where(damagedPredicate);
-    final damagedStream = damagedQuery.watch().map((rows) {
-      if (rows.isEmpty) return 0;
-      final rawDelta = rows.first.read(sumDamaged) ?? 0;
-      return rawDelta < 0 ? -rawDelta : rawDelta;
-    });
+    final damagedQuery = select(crateLedger)
+      ..where((t) {
+        var pred = whereBusiness(t) &
+            t.manufacturerId.equals(manufacturerId) &
+            t.movementType.isIn([
+              kCrateMovementDamaged,
+              kCrateMovementFullCrateDamage,
+            ]) &
+            t.createdAt.isBiggerOrEqualValue(startOfMonth) &
+            t.createdAt.isSmallerThanValue(startOfNextMonth);
+        if (storeId != null) {
+          pred = pred & t.storeId.equals(storeId);
+        }
+        return pred;
+      });
+    final damagedStream = damagedQuery.watch();
 
     // 7. Crate Shortage (#293, PRD #284 §7)
     final shortageStream =
@@ -3174,8 +3241,17 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       customerDebtStream,
       damagedStream,
       shortageStream,
-      (mfr, warehouse, full, onDeposit, customerDebt, damaged, shortage) {
+      (mfr, warehouse, full, onDeposit, customerDebt, damagedRows, shortage) {
         final rate = mfr?.depositAmountKobo ?? 0;
+        var damagedCount = 0;
+        var damagedLossKobo = 0;
+        for (final r in damagedRows) {
+          final lost = -r.quantityDelta;
+          if (lost > 0) {
+            damagedCount += lost;
+            damagedLossKobo += lost * (r.ratePerCrateKobo ?? rate);
+          }
+        }
         return computeManufacturerCratePosition(
           manufacturerId: manufacturerId,
           crateValueKobo: rate,
@@ -3185,7 +3261,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           customerOnDepositKobo: onDeposit.kobo,
           customerNoDepositCrates: customerDebt,
           shortCrates: shortage,
-          damagedCrates: damaged,
+          damagedCrates: damagedCount,
+          damagedLossKobo: damagedLossKobo,
         );
       },
     );
@@ -3367,14 +3444,19 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         final entry = row.readTable(crateLedger);
         final user = row.readTableOrNull(db.users);
         final store = row.readTableOrNull(db.stores);
+        final reason = entry.reason;
+        final kind = labelForCrateMovement(entry.movementType);
         return CrateMovementHistoryEntry(
           id: entry.id,
           movementType: entry.movementType,
-          movementLabel: labelForCrateMovement(entry.movementType),
+          movementLabel: reason == null || reason.isEmpty
+              ? kind
+              : '$kind · ${labelForCrateDamageReason(reason)}',
           quantityDelta: entry.quantityDelta,
           createdAt: entry.createdAt,
           performedByName: user?.name,
           storeName: store?.name,
+          reason: reason,
         );
       }).toList();
     });

@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/buy_crates_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/count_manufacturer_empties_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manufacturer_settings_tab.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/record_damaged_crates_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
@@ -387,6 +388,18 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                     variant: AppButtonVariant.primary,
                     isFullWidth: false,
                     onPressed: () => CountManufacturerEmptiesSheet.show(
+                      context,
+                      manufacturer: mfr,
+                    ),
+                  ),
+                if (canCount)
+                  AppButton(
+                    key: const ValueKey(kManufacturerRecordDamagedButtonKey),
+                    text: 'Record damaged',
+                    icon: FontAwesomeIcons.triangleExclamation.data,
+                    variant: AppButtonVariant.outline,
+                    isFullWidth: false,
+                    onPressed: () => RecordDamagedCratesSheet.show(
                       context,
                       manufacturer: mfr,
                     ),

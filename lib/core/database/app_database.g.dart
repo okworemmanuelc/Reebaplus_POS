@@ -20038,6 +20038,15 @@ class $CrateLedgerTable extends CrateLedger
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _voidedAtMeta = const VerificationMeta(
     'voidedAt',
   );
@@ -20113,6 +20122,7 @@ class $CrateLedgerTable extends CrateLedger
     storeId,
     performedBy,
     ratePerCrateKobo,
+    reason,
     voidedAt,
     voidedBy,
     voidReason,
@@ -20230,6 +20240,12 @@ class $CrateLedgerTable extends CrateLedger
         ),
       );
     }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    }
     if (data.containsKey('voided_at')) {
       context.handle(
         _voidedAtMeta,
@@ -20320,6 +20336,10 @@ class $CrateLedgerTable extends CrateLedger
         DriftSqlType.int,
         data['${effectivePrefix}rate_per_crate_kobo'],
       ),
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      ),
       voidedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}voided_at'],
@@ -20368,6 +20388,12 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
   /// price paid on `purchase` rows. Null on every other movement and on every
   /// row written before v82. The cloud column is `bigint` (0179).
   final int? ratePerCrateKobo;
+
+  /// v83 (#297/#299): why the crates were lost, as the reason code the owner
+  /// picked (`broken`, `burnt`, `rotten_wood`, `expired`, `spilled`, `theft`,
+  /// `other`). Set on `damaged` and `full_crate_damage` rows; null on every
+  /// other movement and on every row written before v83.
+  final String? reason;
   final DateTime? voidedAt;
   final String? voidedBy;
   final String? voidReason;
@@ -20386,6 +20412,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     this.storeId,
     this.performedBy,
     this.ratePerCrateKobo,
+    this.reason,
     this.voidedAt,
     this.voidedBy,
     this.voidReason,
@@ -20422,6 +20449,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     }
     if (!nullToAbsent || ratePerCrateKobo != null) {
       map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
+    }
+    if (!nullToAbsent || reason != null) {
+      map['reason'] = Variable<String>(reason);
     }
     if (!nullToAbsent || voidedAt != null) {
       map['voided_at'] = Variable<DateTime>(voidedAt);
@@ -20467,6 +20497,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       ratePerCrateKobo: ratePerCrateKobo == null && nullToAbsent
           ? const Value.absent()
           : Value(ratePerCrateKobo),
+      reason: reason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reason),
       voidedAt: voidedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(voidedAt),
@@ -20501,6 +20534,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       storeId: serializer.fromJson<String?>(json['storeId']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
       ratePerCrateKobo: serializer.fromJson<int?>(json['ratePerCrateKobo']),
+      reason: serializer.fromJson<String?>(json['reason']),
       voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
       voidedBy: serializer.fromJson<String?>(json['voidedBy']),
       voidReason: serializer.fromJson<String?>(json['voidReason']),
@@ -20524,6 +20558,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       'storeId': serializer.toJson<String?>(storeId),
       'performedBy': serializer.toJson<String?>(performedBy),
       'ratePerCrateKobo': serializer.toJson<int?>(ratePerCrateKobo),
+      'reason': serializer.toJson<String?>(reason),
       'voidedAt': serializer.toJson<DateTime?>(voidedAt),
       'voidedBy': serializer.toJson<String?>(voidedBy),
       'voidReason': serializer.toJson<String?>(voidReason),
@@ -20545,6 +20580,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     Value<String?> storeId = const Value.absent(),
     Value<String?> performedBy = const Value.absent(),
     Value<int?> ratePerCrateKobo = const Value.absent(),
+    Value<String?> reason = const Value.absent(),
     Value<DateTime?> voidedAt = const Value.absent(),
     Value<String?> voidedBy = const Value.absent(),
     Value<String?> voidReason = const Value.absent(),
@@ -20573,6 +20609,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     ratePerCrateKobo: ratePerCrateKobo.present
         ? ratePerCrateKobo.value
         : this.ratePerCrateKobo,
+    reason: reason.present ? reason.value : this.reason,
     voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
     voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
     voidReason: voidReason.present ? voidReason.value : this.voidReason,
@@ -20613,6 +20650,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       ratePerCrateKobo: data.ratePerCrateKobo.present
           ? data.ratePerCrateKobo.value
           : this.ratePerCrateKobo,
+      reason: data.reason.present ? data.reason.value : this.reason,
       voidedAt: data.voidedAt.present ? data.voidedAt.value : this.voidedAt,
       voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
       voidReason: data.voidReason.present
@@ -20640,6 +20678,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
           ..write('storeId: $storeId, ')
           ..write('performedBy: $performedBy, ')
           ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('reason: $reason, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
           ..write('voidReason: $voidReason, ')
@@ -20663,6 +20702,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     storeId,
     performedBy,
     ratePerCrateKobo,
+    reason,
     voidedAt,
     voidedBy,
     voidReason,
@@ -20685,6 +20725,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
           other.storeId == this.storeId &&
           other.performedBy == this.performedBy &&
           other.ratePerCrateKobo == this.ratePerCrateKobo &&
+          other.reason == this.reason &&
           other.voidedAt == this.voidedAt &&
           other.voidedBy == this.voidedBy &&
           other.voidReason == this.voidReason &&
@@ -20705,6 +20746,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
   final Value<String?> storeId;
   final Value<String?> performedBy;
   final Value<int?> ratePerCrateKobo;
+  final Value<String?> reason;
   final Value<DateTime?> voidedAt;
   final Value<String?> voidedBy;
   final Value<String?> voidReason;
@@ -20724,6 +20766,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     this.storeId = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.ratePerCrateKobo = const Value.absent(),
+    this.reason = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
     this.voidReason = const Value.absent(),
@@ -20744,6 +20787,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     this.storeId = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.ratePerCrateKobo = const Value.absent(),
+    this.reason = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
     this.voidReason = const Value.absent(),
@@ -20766,6 +20810,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     Expression<String>? storeId,
     Expression<String>? performedBy,
     Expression<int>? ratePerCrateKobo,
+    Expression<String>? reason,
     Expression<DateTime>? voidedAt,
     Expression<String>? voidedBy,
     Expression<String>? voidReason,
@@ -20786,6 +20831,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
       if (storeId != null) 'store_id': storeId,
       if (performedBy != null) 'performed_by': performedBy,
       if (ratePerCrateKobo != null) 'rate_per_crate_kobo': ratePerCrateKobo,
+      if (reason != null) 'reason': reason,
       if (voidedAt != null) 'voided_at': voidedAt,
       if (voidedBy != null) 'voided_by': voidedBy,
       if (voidReason != null) 'void_reason': voidReason,
@@ -20808,6 +20854,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     Value<String?>? storeId,
     Value<String?>? performedBy,
     Value<int?>? ratePerCrateKobo,
+    Value<String?>? reason,
     Value<DateTime?>? voidedAt,
     Value<String?>? voidedBy,
     Value<String?>? voidReason,
@@ -20828,6 +20875,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
       storeId: storeId ?? this.storeId,
       performedBy: performedBy ?? this.performedBy,
       ratePerCrateKobo: ratePerCrateKobo ?? this.ratePerCrateKobo,
+      reason: reason ?? this.reason,
       voidedAt: voidedAt ?? this.voidedAt,
       voidedBy: voidedBy ?? this.voidedBy,
       voidReason: voidReason ?? this.voidReason,
@@ -20876,6 +20924,9 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     if (ratePerCrateKobo.present) {
       map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
     }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
     if (voidedAt.present) {
       map['voided_at'] = Variable<DateTime>(voidedAt.value);
     }
@@ -20912,6 +20963,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
           ..write('storeId: $storeId, ')
           ..write('performedBy: $performedBy, ')
           ..write('ratePerCrateKobo: $ratePerCrateKobo, ')
+          ..write('reason: $reason, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
           ..write('voidReason: $voidReason, ')
@@ -82385,6 +82437,7 @@ typedef $$CrateLedgerTableCreateCompanionBuilder =
       Value<String?> storeId,
       Value<String?> performedBy,
       Value<int?> ratePerCrateKobo,
+      Value<String?> reason,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
       Value<String?> voidReason,
@@ -82406,6 +82459,7 @@ typedef $$CrateLedgerTableUpdateCompanionBuilder =
       Value<String?> storeId,
       Value<String?> performedBy,
       Value<int?> ratePerCrateKobo,
+      Value<String?> reason,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
       Value<String?> voidReason,
@@ -82623,6 +82677,11 @@ class $$CrateLedgerTableFilterComposer
 
   ColumnFilters<int> get ratePerCrateKobo => $composableBuilder(
     column: $table.ratePerCrateKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -82883,6 +82942,11 @@ class $$CrateLedgerTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get voidedAt => $composableBuilder(
     column: $table.voidedAt,
     builder: (column) => ColumnOrderings(column),
@@ -83138,6 +83202,9 @@ class $$CrateLedgerTableAnnotationComposer
     column: $table.ratePerCrateKobo,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
 
   GeneratedColumn<DateTime> get voidedAt =>
       $composableBuilder(column: $table.voidedAt, builder: (column) => column);
@@ -83414,6 +83481,7 @@ class $$CrateLedgerTableTableManager
                 Value<String?> storeId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<int?> ratePerCrateKobo = const Value.absent(),
+                Value<String?> reason = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
                 Value<String?> voidReason = const Value.absent(),
@@ -83433,6 +83501,7 @@ class $$CrateLedgerTableTableManager
                 storeId: storeId,
                 performedBy: performedBy,
                 ratePerCrateKobo: ratePerCrateKobo,
+                reason: reason,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
                 voidReason: voidReason,
@@ -83454,6 +83523,7 @@ class $$CrateLedgerTableTableManager
                 Value<String?> storeId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<int?> ratePerCrateKobo = const Value.absent(),
+                Value<String?> reason = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
                 Value<String?> voidReason = const Value.absent(),
@@ -83473,6 +83543,7 @@ class $$CrateLedgerTableTableManager
                 storeId: storeId,
                 performedBy: performedBy,
                 ratePerCrateKobo: ratePerCrateKobo,
+                reason: reason,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
                 voidReason: voidReason,

@@ -30,7 +30,65 @@ Branch `feat/manufacturer-settings-295`, cut from `main` (`34c6a3c`). Worked in 
 - **Review notes left as-is**: hardcoded strings/`fontWeight`/28px sheet radius match sibling sheets (`buy_crates_sheet.dart`).
 - **CodeRabbit round 1 (PR #308)**: the tab's controllers were filled once in `initState`, so a crate value changed on another device left the box showing the old figure and a later Save wrote that stale figure back over it. `didUpdateWidget` now takes the new stored value **only where the box still shows the old one**, so an edit in progress survives. Also wrapped the `supplierCrateDebtCratesFor` read in the save's error path — it used to escape the callback and leave Save looking dead. Two tests added.
 
-176 sessions logged. Codebase is live and being verified on-device.
+179 sessions logged. Codebase is live and being verified on-device.
+
+### PR #311 review follow-ups + damage reason on the movement (#297 AC) (2026-09-29)
+Branch `feat/full-crate-damage-299`.
+- **Review fixes**: `recordDamage`'s warehouse check now runs inside its transaction; both manufacturer fallback-rate lookups are business-scoped (`whereBusiness`); Stock Count's `adjustStock` + `recordFullCrateDamage` run in one `db.transaction`; `RecordDamagedCratesSheet._save` sets `_saving` before the async warehouse check; tests await the rejected future and call the real `reconDataFrom`.
+- **Schema — Drift v83 / cloud 0180**: `crate_ledger.reason TEXT NULL` — the reason code picked when crates were lost (`broken`/`burnt`/`rotten_wood` from the manufacturer sheet; `broken`/`expired`/`spilled`/`theft`/`other` from Stock Count). Set on `damaged` + `full_crate_damage` rows, frozen in the append-only set (local `_ledgerTables` + cloud `enforce_append_only` re-derive). Pinned as a new column in the v29 and v82 rebuilds (stale-column trap). Nothing backfilled.
+- `recordDamage` / `recordFullCrateDamage` (and the `InventoryDao` forwarders) take `String? reason`; History shows `"<kind> · <Reason>"` via `labelForCrateDamageReason`.
+- **DEPLOY ORDERING**: push `0180_crate_ledger_reason.sql` to the cloud BEFORE shipping the v83 client, or v83 pushes of `reason` jam the outbox.
+- Verification: new seam tests (reason persisted + History label, frozen, full-crate leg), UI tests assert `reason == 'broken'`, `onUpgrade v82 -> v83` group (2 tests). Full suite: 2460 passed, 271 skipped. `flutter analyze` clean.
+
+### Issue #299 — Damaging a full crate of drinks damages its crate too, with the crate loss counted once (2026-09-29)
+Branch `feat/full-crate-damage-299`, cut from `feat/record-damaged-empties-297`.
+- **Seam & Database**:
+  - Added `CratePoolDao.recordFullCrateDamage({manufacturerId, storeId, crates, performedBy, ratePerCrateKobo})`.
+  - Appends a `full_crate_damage` row to `crate_ledger` with `quantityDelta: -crates`, attributed `performedBy`, and snapshotted `ratePerCrateKobo` (defaults to manufacturer's `depositAmountKobo`).
+  - Excluded `kCrateMovementFullCrateDamage` from `watchEmptiesPoolByManufacturer`, `_countBasis`, and `expectedEmptiesAt`, so the physical warehouse empties count remains unchanged by full crate damages.
+  - Included `kCrateMovementFullCrateDamage` in `watchManufacturerCratePosition`: counts under the brand's Damaged status alongside `damaged` movements, with its loss valued using the snapshotted rate (`r.ratePerCrateKobo ?? rate`).
+  - Added `labelForCrateMovement` mapping: `'full_crate_damage': return 'Full crate damage'`.
+  - Updated `InventoryDao.watchAllCrateDamages()` to include both `kCrateMovementDamaged` and `kCrateMovementFullCrateDamage`.
+- **Reconciliation Valuation**:
+  - In `lib/features/dashboard/reconciliation/recon_data.dart`, dropped `damageForfeitsFullCrate(a.reason)` branch on stock adjustments. Crate shell loss is valued exactly once directly from `crateDamages` snapshots, preventing double-counting and guaranteeing immutability against later manufacturer rate changes.
+- **StockCountScreen**:
+  - Removed crate fate dropdown and `kCrateLostSuffix` from product damage sheet.
+  - When recording product damage for tracked bottles (`isTrackedBottle && p.product.manufacturerId != null`), calls `db.cratePoolDao.recordFullCrateDamage`.
+  - Added test key `'stock_count_record_damages_button'` to the Record Damages header action.
+- **Verification**:
+  - `test/crates/crate_damage_test.dart` (6 tests, all passing): verified that stock adjustments no longer contribute crate loss via today's-rate suffix, crate shell loss is booked exactly once from the `full_crate_damage` leg's snapshot, and later crate value changes do not restate the loss.
+  - `test/crates/crate_damage_seam_test.dart` (9 tests, all passing): verified `recordFullCrateDamage` appends `full_crate_damage` leg with snapshot, leaves Empties Pool unchanged, updates Damaged status and History, defaults rate when omitted, and ignores non-positive quantities.
+  - `test/inventory/stock_damage_full_crate_test.dart` (2 widget tests, all passing): verified that product damage sheet no longer offers crate fate dropdown, damaging tracked bottles writes stock adjustment and snapshotted `full_crate_damage` leg without altering the Empties Pool, and damaging non-tracked products records no `full_crate_damage` leg.
+  - All 345 tests in `test/crates/` pass. All 150 tests in `test/inventory/` pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
+
+### Issue #297 — Record damaged empties per brand from the manufacturer screen (2026-09-29)
+Branch `feat/record-damaged-empties-297`, cut from `main`.
+- **Seam**:
+  - Updated `CratePoolDao.recordDamage` to accept `String? performedBy` and `int? ratePerCrateKobo` (snapshots the rate, defaulting to the manufacturer's `depositAmountKobo`).
+  - Added warehouse count check via `expectedEmptiesAt(manufacturerId: manufacturerId, storeId: storeId)`; damage exceeding the store's warehouse count throws `ArgumentError` and writes nothing.
+  - Forwarded parameters through `InventoryDao.recordEmptyCrateDamage`.
+  - Updated `watchManufacturerCratePosition`: queries current-month `damaged` movements directly from `crateLedger` and computes `damagedCount` and snapshotted `damagedLossKobo = sum(lost * (r.ratePerCrateKobo ?? rate))`.
+- **Live Defect Fix (Daily Reconciliation)**:
+  - In `lib/features/dashboard/reconciliation/recon_data.dart` (`computeReconData`), updated crate damage valuation to read snapshotted `c.ratePerCrateKobo`, falling back to `depositByMfr[c.manufacturerId] ?? 0` for legacy rows without a snapshot.
+- **StockCountScreen Cleanup**:
+  - Removed "stored empty damaged" option (`'empty'`) from the product damage sheet and removed the `fate == 'empty'` handling block from `submit()` in `lib/features/inventory/screens/stock_count_screen.dart` ("Full crate lost" stays).
+- **Sheet (`RecordDamagedCratesSheet`)**:
+  - Created `lib/features/inventory/widgets/record_damaged_crates_sheet.dart` (`RecordDamagedCratesSheet.show`).
+  - Inputs: store picker (shown only in All Stores on multi-store business via `crateCountStoreWithoutAsking`), quantity (`AppInput`, digits only, validated against store's warehouse count), reason (`AppDropdown`: `broken`, `burnt`, `rotten_wood`, `other`).
+  - Live loss preview: shows `-$quantity crates from $storeName's warehouse. Loss: $total ($quantity × $each) • $reasonLabel.`
+  - Gated by `Gates.countCrates.allowsNow(ref)`.
+  - Save: calls `cratePoolDao.recordDamage(...)`, logs activity (`activityLogProvider.logAction`), notifies managers and CEO (`_notifyManagersAndCeo`), shows success notification, and closes sheet. Cancel writes nothing.
+  - Keyboard and viewport safe (`SingleChildScrollView`, `context.deviceBottomPadding`).
+- **Screen Integration**:
+  - Added "Record damaged" button (`kManufacturerRecordDamagedButtonKey`) next to Count button in `ManufacturerScreen` under `canCount` (`Gates.countCrates`), opening `RecordDamagedCratesSheet.show`.
+- **Verification**:
+  - `test/crates/crate_damage_seam_test.dart` (6 tests, all passing): attributed, store-stamped damage movement; rate defaulting and snapshotting; rejection when damage exceeds warehouse count; booked loss remains unchanged when crate value changes later; History label; Daily Reconciliation snapshotted valuation.
+  - `test/crates/crate_damage_test.dart` (4 tests, all passing): updated to assert ArgumentError and zero writes on damage exceeding warehouse count.
+  - `test/inventory/record_damaged_crates_sheet_test.dart` (11 tests, all passing): role visibility, live loss line, quantity validation, rejection on warehouse count breach, cancel, All Stores multi-store store picker, compact 320x568 and landscape 800x360 viewports.
+  - `test/inventory/manufacturer_screen_viewport_test.dart` (16 tests, all passing).
+  - All 340 tests in `test/crates/` pass. All 148 tests in `test/inventory/` pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #266 — Customer Detail viewport tests fail in the hour after midnight (2026-09-22)
 Branch `fix/customer-detail-viewport-midnight-266`, cut from `main` (`19e0b72`); rebased onto `main` 2026-09-29. Test-only change; no app code touched.

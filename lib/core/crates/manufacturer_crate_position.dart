@@ -412,6 +412,8 @@ String labelForCrateMovement(String movementType) {
       return 'Transferred out';
     case 'purchase':
       return 'Purchased';
+    case 'full_crate_damage':
+      return 'Full crate damage';
     default:
       if (movementType.isEmpty) return 'Movement';
       final words = movementType.replaceAll('_', ' ').split(' ');
@@ -420,6 +422,18 @@ String labelForCrateMovement(String movementType) {
               ? ''
               : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
           .join(' ');
+  }
+}
+
+/// Human-readable label for a crate damage reason code (`crate_ledger.reason`).
+String labelForCrateDamageReason(String reason) {
+  switch (reason) {
+    case 'rotten_wood':
+      return 'Rotten wood';
+    default:
+      if (reason.isEmpty) return reason;
+      final spaced = reason.replaceAll('_', ' ');
+      return '${spaced[0].toUpperCase()}${spaced.substring(1).toLowerCase()}';
   }
 }
 
@@ -432,6 +446,7 @@ class CrateMovementHistoryEntry {
   final DateTime createdAt;
   final String? performedByName;
   final String? storeName;
+  final String? reason;
 
   const CrateMovementHistoryEntry({
     required this.id,
@@ -441,6 +456,7 @@ class CrateMovementHistoryEntry {
     required this.createdAt,
     this.performedByName,
     this.storeName,
+    this.reason,
   });
 }
 /// Test and widget keys for the Manufacturer screen (#291).
@@ -451,6 +467,8 @@ const String kManufacturerProductKeyPrefix = 'manufacturer_product_';
 const String kManufacturerHistoryRowKeyPrefix = 'manufacturer_history_';
 const String kManufacturerAttributionNoteKey = 'manufacturer_attribution_note';
 const String kManufacturerCountButtonKey = 'manufacturer_count_button';
+const String kManufacturerRecordDamagedButtonKey =
+    'manufacturer_record_damaged_button';
 
 /// Storage keys for tab scroll state persistence via [TabbedSliverScaffold].
 const String kManufacturerCratesStorageKey = 'manufacturer_crates_tab';

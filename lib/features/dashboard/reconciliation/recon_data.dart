@@ -2022,23 +2022,23 @@ ReconData reconDataFrom(ReconInputs input) {
     // the current-cost fallback — the deliberately-labelled behaviour.
     damageCostKobo += lossValueKobo(a.valueKobo, units, p?.buyingPriceKobo);
     damageRetailKobo += units * (p?.retailerPriceKobo ?? 0);
-    if (damageForfeitsFullCrate(a.reason)) {
-      crateDamageDepositKobo += units * (depositByMfr[p?.manufacturerId] ?? 0);
-    }
+    // #299: the crate shell's loss is valued once from the crate leg's snapshot
+    // (full_crate_damage in crateDamages below). The stock adjustment carries the
+    // drink loss only, replacing the +cratelost today's-rate valuation path.
   }
-  // §17.2 crate-aware: a STORED empty damaged writes no stock_adjustment (no
-  // drink lost) — only a `damaged` crate_ledger movement. Forfeit its deposit
-  // here so the Statement still recognises the loss. The pool debit it also
-  // makes is reflected separately in "Empty crates held" (the stock view), so
-  // the period P&L (flow) and the held-empties asset (stock) never double-count
-  // the same crate.
+  // §17.2, #297, #299 crate-aware: stored empty damage (`damaged`) and full crate
+  // damage (`full_crate_damage`) movements forfeit their deposit here so the
+  // Statement recognises the shell loss from their snapshotted rate. The pool
+  // debit damaged empties make is reflected separately in "Empty crates held" (the
+  // stock view), so the period P&L (flow) and the held-empties asset (stock) never
+  // double-count the same crate.
   for (final c in crateDamages) {
     if (c.voidedAt != null) continue;
     if (!inSpan(c.createdAt) || !inScope(c.storeId)) continue;
     final lostEmpties = -c.quantityDelta;
     if (lostEmpties <= 0) continue;
-    crateDamageDepositKobo +=
-        lostEmpties * (depositByMfr[c.manufacturerId] ?? 0);
+    final rate = c.ratePerCrateKobo ?? (depositByMfr[c.manufacturerId] ?? 0);
+    crateDamageDepositKobo += lostEmpties * rate;
   }
 
   // ── Stock audit + shortage value (latest count per store/date in span) ───
