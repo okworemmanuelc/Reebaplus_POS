@@ -8,7 +8,12 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-172 sessions logged. Codebase is live and being verified on-device.
+173 sessions logged. Codebase is live and being verified on-device.
+
+### Release 1.0.8+8 — Play Store AAB Build (2026-09-28)
+- Bumped version to `1.0.8+8` in `pubspec.yaml`, `lib/core/services/crash_reporter.dart` (`kAppVersion`), and `docs/LEARNING_ROADMAP.md`.
+- Verified `flutter analyze` clean with 0 errors and 0 warnings.
+- Prepared and built release Android App Bundle (`build/app/outputs/bundle/release/app-release.aab`) for Google Play Store upload.
 
 ### Issue #290 — Crate counts belong to a store and a person (schema groundwork for PRD #284) (2026-09-23)
 Branch `feat/crate-count-store-author-290`, cut from `main` (`5bb0671`), worked in `../drinkPosApp-wt-290`.
