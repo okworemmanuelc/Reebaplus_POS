@@ -851,15 +851,34 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Debit the physical pool because STORED empties were damaged/lost (§17.2).
-  /// The scalar is clamped at zero. #157: appends a `damaged` crate_ledger row
-  /// even when no store is locked.
+  /// Debit the physical pool because STORED empties were damaged/lost (§17.2,
+  /// #297). The scalar is clamped at zero. Appends a `damaged` crate_ledger
+  /// row with storeId, attributed [performedBy] and snapshotted
+  /// [ratePerCrateKobo] (defaulting to the manufacturer's current crate value).
+  ///
+  /// Damage above the store's warehouse count is rejected with an
+  /// [ArgumentError] before anything is written (#297).
   Future<void> recordDamage(
     String manufacturerId,
     int quantity, {
     String? storeId,
+    String? performedBy,
+    int? ratePerCrateKobo,
   }) async {
     if (quantity <= 0) return;
+    if (storeId != null) {
+      final available = await expectedEmptiesAt(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+      );
+      if (quantity > available) {
+        throw ArgumentError.value(
+          quantity,
+          'quantity',
+          'Damage ($quantity) cannot exceed warehouse count ($available) at store $storeId',
+        );
+      }
+    }
     await transaction(() async {
       await customUpdate(
         'UPDATE manufacturers SET empty_crate_stock = MAX(0, empty_crate_stock - ?), '
@@ -880,11 +899,18 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           delta: -quantity,
         );
       }
+      final rate = ratePerCrateKobo ??
+          (await (select(manufacturers)
+                ..where((t) => t.id.equals(manufacturerId)))
+              .getSingleOrNull())
+              ?.depositAmountKobo;
       await _appendPoolLedgerRow(
         manufacturerId: manufacturerId,
         storeId: storeId,
         quantityDelta: -quantity,
         movementType: 'damaged',
+        performedBy: performedBy,
+        ratePerCrateKobo: rate,
       );
     });
   }
@@ -3125,27 +3151,23 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       return rows.first.read(sumCustomerDebt) ?? 0;
     });
 
-    // 6. Damaged in current month
+    // 6. Damaged in current month (#297)
     final now = DateTime.now();
     final startOfMonth = DateTime(now.year, now.month, 1);
     final startOfNextMonth = DateTime(now.year, now.month + 1, 1);
-    final sumDamaged = crateLedger.quantityDelta.sum();
-    var damagedPredicate = whereBusiness(crateLedger) &
-        crateLedger.manufacturerId.equals(manufacturerId) &
-        crateLedger.movementType.equals('damaged') &
-        crateLedger.createdAt.isBiggerOrEqualValue(startOfMonth) &
-        crateLedger.createdAt.isSmallerThanValue(startOfNextMonth);
-    if (storeId != null) {
-      damagedPredicate = damagedPredicate & crateLedger.storeId.equals(storeId);
-    }
-    final damagedQuery = db.selectOnly(crateLedger)
-      ..addColumns([sumDamaged])
-      ..where(damagedPredicate);
-    final damagedStream = damagedQuery.watch().map((rows) {
-      if (rows.isEmpty) return 0;
-      final rawDelta = rows.first.read(sumDamaged) ?? 0;
-      return rawDelta < 0 ? -rawDelta : rawDelta;
-    });
+    final damagedQuery = select(crateLedger)
+      ..where((t) {
+        var pred = whereBusiness(t) &
+            t.manufacturerId.equals(manufacturerId) &
+            t.movementType.equals('damaged') &
+            t.createdAt.isBiggerOrEqualValue(startOfMonth) &
+            t.createdAt.isSmallerThanValue(startOfNextMonth);
+        if (storeId != null) {
+          pred = pred & t.storeId.equals(storeId);
+        }
+        return pred;
+      });
+    final damagedStream = damagedQuery.watch();
 
     // 7. Crate Shortage (#293, PRD #284 §7)
     final shortageStream =
@@ -3159,8 +3181,17 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       customerDebtStream,
       damagedStream,
       shortageStream,
-      (mfr, warehouse, full, onDeposit, customerDebt, damaged, shortage) {
+      (mfr, warehouse, full, onDeposit, customerDebt, damagedRows, shortage) {
         final rate = mfr?.depositAmountKobo ?? 0;
+        var damagedCount = 0;
+        var damagedLossKobo = 0;
+        for (final r in damagedRows) {
+          final lost = -r.quantityDelta;
+          if (lost > 0) {
+            damagedCount += lost;
+            damagedLossKobo += lost * (r.ratePerCrateKobo ?? rate);
+          }
+        }
         return computeManufacturerCratePosition(
           manufacturerId: manufacturerId,
           crateValueKobo: rate,
@@ -3170,7 +3201,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           customerOnDepositKobo: onDeposit.kobo,
           customerNoDepositCrates: customerDebt,
           shortCrates: shortage,
-          damagedCrates: damaged,
+          damagedCrates: damagedCount,
+          damagedLossKobo: damagedLossKobo,
         );
       },
     );

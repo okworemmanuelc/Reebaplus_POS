@@ -8,7 +8,35 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-176 sessions logged. Codebase is live and being verified on-device.
+177 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #297 — Record damaged empties per brand from the manufacturer screen (2026-09-29)
+Branch `feat/record-damaged-empties-297`, cut from `main`.
+- **Seam**:
+  - Updated `CratePoolDao.recordDamage` to accept `String? performedBy` and `int? ratePerCrateKobo` (snapshots the rate, defaulting to the manufacturer's `depositAmountKobo`).
+  - Added warehouse count check via `expectedEmptiesAt(manufacturerId: manufacturerId, storeId: storeId)`; damage exceeding the store's warehouse count throws `ArgumentError` and writes nothing.
+  - Forwarded parameters through `InventoryDao.recordEmptyCrateDamage`.
+  - Updated `watchManufacturerCratePosition`: queries current-month `damaged` movements directly from `crateLedger` and computes `damagedCount` and snapshotted `damagedLossKobo = sum(lost * (r.ratePerCrateKobo ?? rate))`.
+- **Live Defect Fix (Daily Reconciliation)**:
+  - In `lib/features/dashboard/reconciliation/recon_data.dart` (`computeReconData`), updated crate damage valuation to read snapshotted `c.ratePerCrateKobo`, falling back to `depositByMfr[c.manufacturerId] ?? 0` for legacy rows without a snapshot.
+- **StockCountScreen Cleanup**:
+  - Removed "stored empty damaged" option (`'empty'`) from the product damage sheet and removed the `fate == 'empty'` handling block from `submit()` in `lib/features/inventory/screens/stock_count_screen.dart` ("Full crate lost" stays).
+- **Sheet (`RecordDamagedCratesSheet`)**:
+  - Created `lib/features/inventory/widgets/record_damaged_crates_sheet.dart` (`RecordDamagedCratesSheet.show`).
+  - Inputs: store picker (shown only in All Stores on multi-store business via `crateCountStoreWithoutAsking`), quantity (`AppInput`, digits only, validated against store's warehouse count), reason (`AppDropdown`: `broken`, `burnt`, `rotten_wood`, `other`).
+  - Live loss preview: shows `-$quantity crates from $storeName's warehouse. Loss: $total ($quantity × $each) • $reasonLabel.`
+  - Gated by `Gates.countCrates.allowsNow(ref)`.
+  - Save: calls `cratePoolDao.recordDamage(...)`, logs activity (`activityLogProvider.logAction`), notifies managers and CEO (`_notifyManagersAndCeo`), shows success notification, and closes sheet. Cancel writes nothing.
+  - Keyboard and viewport safe (`SingleChildScrollView`, `context.deviceBottomPadding`).
+- **Screen Integration**:
+  - Added "Record damaged" button (`kManufacturerRecordDamagedButtonKey`) next to Count button in `ManufacturerScreen` under `canCount` (`Gates.countCrates`), opening `RecordDamagedCratesSheet.show`.
+- **Verification**:
+  - `test/crates/crate_damage_seam_test.dart` (6 tests, all passing): attributed, store-stamped damage movement; rate defaulting and snapshotting; rejection when damage exceeds warehouse count; booked loss remains unchanged when crate value changes later; History label; Daily Reconciliation snapshotted valuation.
+  - `test/crates/crate_damage_test.dart` (4 tests, all passing): updated to assert ArgumentError and zero writes on damage exceeding warehouse count.
+  - `test/inventory/record_damaged_crates_sheet_test.dart` (11 tests, all passing): role visibility, live loss line, quantity validation, rejection on warehouse count breach, cancel, All Stores multi-store store picker, compact 320x568 and landscape 800x360 viewports.
+  - `test/inventory/manufacturer_screen_viewport_test.dart` (16 tests, all passing).
+  - All 340 tests in `test/crates/` pass. All 148 tests in `test/inventory/` pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #266 — Customer Detail viewport tests fail in the hour after midnight (2026-09-22)
 Branch `fix/customer-detail-viewport-midnight-266`, cut from `main` (`19e0b72`); rebased onto `main` 2026-09-29. Test-only change; no app code touched.

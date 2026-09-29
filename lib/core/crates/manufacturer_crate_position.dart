@@ -451,6 +451,8 @@ const String kManufacturerProductKeyPrefix = 'manufacturer_product_';
 const String kManufacturerHistoryRowKeyPrefix = 'manufacturer_history_';
 const String kManufacturerAttributionNoteKey = 'manufacturer_attribution_note';
 const String kManufacturerCountButtonKey = 'manufacturer_count_button';
+const String kManufacturerRecordDamagedButtonKey =
+    'manufacturer_record_damaged_button';
 
 /// Storage keys for tab scroll state persistence via [TabbedSliverScaffold].
 const String kManufacturerCratesStorageKey = 'manufacturer_crates_tab';

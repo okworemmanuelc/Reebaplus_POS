@@ -660,92 +660,6 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                   p.product.trackEmpties;
               final fate = isTrackedBottle ? crateFate : 'none';
 
-              // §17.2 crate-aware — STORED empty damaged: a crate-only loss. No
-              // drink is involved, so it touches NO bottle stock and books no
-              // damage cost; it only debits the empty-crate pool (+ store balance
-              // + a `damaged` crate_ledger row) and forfeits the deposit, which
-              // the Statement reads from that ledger row. Quantity here means
-              // empty crates, validated against the held-empties pool, not stock.
-              if (fate == 'empty') {
-                final mfrId = p.product.manufacturerId;
-                if (mfrId == null) {
-                  AppNotification.showError(
-                    sheetCtx,
-                    'This product has no manufacturer, so its empties '
-                    'can\'t be tracked.',
-                  );
-                  return;
-                }
-                final pool =
-                    ref.read(emptyCratesByManufacturerProvider).valueOrNull ??
-                    const <String, int>{};
-                final available = pool[mfrId] ?? 0;
-                if (qty > available) {
-                  AppNotification.showError(
-                    sheetCtx,
-                    'Only $available empty crate${available == 1 ? '' : 's'} '
-                    'in stock.',
-                  );
-                  return;
-                }
-                setSheet(() => submitting = true);
-                try {
-                  await db.inventoryDao.recordEmptyCrateDamage(
-                    mfrId,
-                    qty,
-                    storeId: p.storeId,
-                  );
-                } catch (e, st) {
-                  CrashReporter.record(
-                    e,
-                    st,
-                    context: 'inventory.damage.crate_empty_debit',
-                  );
-                  if (!sheetCtx.mounted) return;
-                  setSheet(() => submitting = false);
-                  AppNotification.showError(
-                    sheetCtx,
-                    'Could not record the damaged empties. Try again.',
-                  );
-                  return;
-                }
-                try {
-                  await logService.logAction(
-                    'stock_damage',
-                    'Damaged empties recorded: $qty × ${p.product.name} '
-                        '($reasonLabel)',
-                    productId: p.product.id,
-                    storeId: p.storeId,
-                  );
-                  await _notifyManagersAndCeo(
-                    db,
-                    type: 'stock_damage',
-                    message:
-                        'Damaged empties recorded: $qty × ${p.product.name} '
-                        '($reasonLabel).',
-                    severity: 'warning',
-                  );
-                  if (!sheetCtx.mounted) return;
-                  Navigator.pop(sheetCtx);
-                  await _loadProducts();
-                  if (!context.mounted) return;
-                  AppNotification.showSuccess(
-                    context,
-                    'Recorded $qty damaged empt${qty == 1 ? 'y' : 'ies'}.',
-                  );
-                } catch (_) {
-                  if (!sheetCtx.mounted) return;
-                  setSheet(() => submitting = false);
-                  Navigator.pop(sheetCtx);
-                  await _loadProducts();
-                  if (!context.mounted) return;
-                  AppNotification.showError(
-                    context,
-                    'Empties debited, but logging the activity failed.',
-                  );
-                }
-                return;
-              }
 
               // none / full: a damaged product (the drink is lost). 'full' also
               // forfeits the crate deposit — the held-empties pool is untouched
@@ -926,10 +840,6 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                           DropdownMenuItem(
                             value: 'full',
                             child: Text('Crate lost with the item'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'empty',
-                            child: Text('A stored empty crate was damaged'),
                           ),
                         ],
                         onChanged: (v) =>

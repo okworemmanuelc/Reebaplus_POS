@@ -56,6 +56,15 @@ void main() {
               depositAmountKobo: const Value(50000),
             ),
           );
+      await db.into(db.crateLedger).insert(
+            CrateLedgerCompanion.insert(
+              businessId: businessId,
+              manufacturerId: const Value(manufacturerId),
+              storeId: const Value(storeId),
+              quantityDelta: 10,
+              movementType: 'count',
+            ),
+          );
     });
 
     tearDown(() async => db.close());
@@ -84,14 +93,18 @@ void main() {
       expect(bal.balance, -3);
     });
 
-    test('clamps the pool at zero and ignores non-positive quantities',
+    test('rejects damage exceeding warehouse count and ignores non-positive quantities',
         () async {
-      await db.inventoryDao
-          .recordEmptyCrateDamage(manufacturerId, 25, storeId: storeId);
+      expect(
+        () => db.inventoryDao
+            .recordEmptyCrateDamage(manufacturerId, 25, storeId: storeId),
+        throwsArgumentError,
+      );
+
       final mfr = await (db.select(db.manufacturers)
             ..where((t) => t.id.equals(manufacturerId)))
           .getSingle();
-      expect(mfr.emptyCrateStock, 0);
+      expect(mfr.emptyCrateStock, 10);
 
       await db.inventoryDao
           .recordEmptyCrateDamage(manufacturerId, 0, storeId: storeId);
@@ -100,8 +113,8 @@ void main() {
       final ledger = await (db.select(db.crateLedger)
             ..where((t) => t.movementType.equals('damaged')))
           .get();
-      // Only the one real debit wrote a ledger row.
-      expect(ledger.length, 1);
+      // No damaged ledger rows written.
+      expect(ledger, isEmpty);
     });
   });
 }

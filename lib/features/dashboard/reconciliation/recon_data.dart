@@ -2037,8 +2037,8 @@ ReconData reconDataFrom(ReconInputs input) {
     if (!inSpan(c.createdAt) || !inScope(c.storeId)) continue;
     final lostEmpties = -c.quantityDelta;
     if (lostEmpties <= 0) continue;
-    crateDamageDepositKobo +=
-        lostEmpties * (depositByMfr[c.manufacturerId] ?? 0);
+    final rate = c.ratePerCrateKobo ?? (depositByMfr[c.manufacturerId] ?? 0);
+    crateDamageDepositKobo += lostEmpties * rate;
   }
 
   // ── Stock audit + shortage value (latest count per store/date in span) ───

@@ -602,11 +602,15 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     String manufacturerId,
     int quantity, {
     String? storeId,
+    String? performedBy,
+    int? ratePerCrateKobo,
   }) async {
     await db.cratePoolDao.recordDamage(
       manufacturerId,
       quantity,
       storeId: storeId,
+      performedBy: performedBy,
+      ratePerCrateKobo: ratePerCrateKobo,
     );
   }
 
