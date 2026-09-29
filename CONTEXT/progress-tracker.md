@@ -15,6 +15,7 @@ Branch `feat/crate-value-fillin-298`, stacked on `feat/manufacturer-settings-295
 - **Confirmation**: `CrateValueChangeSheet` takes `unsetLines` (from `countUnratedLines`, 0→positive only) and says how many past lines will be filled in.
 - **Checkout warning** for a brand with no value is unchanged.
 - **Tests**: `test/crates/crate_value_fillin_test.dart`. Full suite green; `flutter analyze` clean.
+- **CodeRabbit round 1 (PR #309)**: `countUnratedLines` loaded every matching row to read `.length`; it now counts in SQL (`selectOnly` + `id.count()`, the `daos_permissions.countForRole` idiom). It runs on the UI path before the confirmation, so the rows were being fetched for nothing.
 
 
 ### Issue #295 — Manufacturer Settings tab; old Manage sheet deleted (2026-09-29)

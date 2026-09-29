@@ -2530,15 +2530,16 @@ class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
   /// Crate lines of [manufacturerId] still at a snapshotted rate of 0 — sales
   /// made while the brand had no crate value (#298).
   Future<int> countUnratedLines(String manufacturerId) async {
-    final rows = await (select(orderCrateLines)
+    final countCol = orderCrateLines.id.count();
+    final row = await (selectOnly(orderCrateLines)
+          ..addColumns([countCol])
           ..where(
-            (t) =>
-                whereBusiness(t) &
-                t.manufacturerId.equals(manufacturerId) &
-                t.depositRateKobo.equals(0),
+            whereBusiness(orderCrateLines) &
+                orderCrateLines.manufacturerId.equals(manufacturerId) &
+                orderCrateLines.depositRateKobo.equals(0),
           ))
-        .get();
-    return rows.length;
+        .getSingle();
+    return row.read(countCol) ?? 0;
   }
 
   /// **Crate value fill-in (#298, PRD #284 §11)** — stamps every one of
