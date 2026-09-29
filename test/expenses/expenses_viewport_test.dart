@@ -90,7 +90,7 @@ void main() {
           ),
         );
 
-    final now = DateTime.now();
+    final now = seedAnchorToday();
     for (var i = 1; i <= count; i++) {
       await db.into(db.expenses).insert(
             ExpensesCompanion.insert(

@@ -154,7 +154,7 @@ void main() {
       ),
     );
 
-    final now = DateTime.now();
+    final now = seedAnchorToday();
     for (var i = 1; i <= entryCount; i++) {
       final isInvoice = i.isOdd;
       await db.into(db.supplierLedgerEntries).insert(

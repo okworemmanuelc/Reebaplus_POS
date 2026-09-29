@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
@@ -46,6 +47,15 @@ void main() {
                 .startsWith(kCustomerCreditRowKeyPrefix),
         description: 'customer credit history row',
       );
+
+  // Issue #266 — these are layout tests, so the date filter must not decide
+  // what is on screen. Two guards, each enough on its own:
+  //   1. Every pump uses the CEO rank, so the period filter keeps its default
+  //      'To Date' (everything). The harness default rank is not CEO, and below
+  //      Manager the period is clamped to 'Today'.
+  //   2. Seeded rows hang off [seedAnchorToday], never off the clock, so all
+  //      of them fall inside the current calendar day whatever time the suite
+  //      runs. Oldest row is 250 minutes back — 07:50, still today.
 
   Finder tabSurface() => find
       .descendant(
@@ -93,7 +103,7 @@ void main() {
             ),
           );
 
-      final now = DateTime.now();
+      final anchor = seedAnchorToday();
       for (var i = 1; i <= 10; i++) {
         await db.into(db.walletTransactions).insert(
               WalletTransactionsCompanion.insert(
@@ -105,7 +115,7 @@ void main() {
                 amountKobo: 50000 * i,
                 signedAmountKobo: i.isEven ? 50000 * i : -50000 * i,
                 referenceType: i.isEven ? 'topup_cash' : 'order_payment',
-                createdAt: Value(now.subtract(Duration(hours: i))),
+                createdAt: Value(anchor.subtract(Duration(minutes: i))),
               ),
             );
       }
@@ -123,6 +133,7 @@ void main() {
           size: size,
           screen: CustomerDetailScreen(customer: Customer.fromDb(customerData)),
           grantedKeys: customerGrants,
+          roleRank: GateTier.ceo,
           settle: false,
         );
 
@@ -179,6 +190,7 @@ void main() {
           size: size,
           screen: CustomerDetailScreen(customer: Customer.fromDb(customerData)),
           grantedKeys: customerGrants,
+          roleRank: GateTier.ceo,
           settle: false,
         );
 
@@ -235,7 +247,7 @@ void main() {
             ),
           );
 
-      final now = DateTime.now();
+      final anchor = seedAnchorToday();
       for (var i = 1; i <= 25; i++) {
         await db.into(db.walletTransactions).insert(
               WalletTransactionsCompanion.insert(
@@ -247,7 +259,7 @@ void main() {
                 amountKobo: 10000 * i,
                 signedAmountKobo: i.isEven ? 10000 * i : -10000 * i,
                 referenceType: 'topup_cash',
-                createdAt: Value(now.subtract(Duration(minutes: i * 10))),
+                createdAt: Value(anchor.subtract(Duration(minutes: i * 10))),
               ),
             );
       }
@@ -264,6 +276,7 @@ void main() {
         size: pixel7Portrait,
         screen: CustomerDetailScreen(customer: Customer.fromDb(customerData)),
         grantedKeys: customerGrants,
+        roleRank: GateTier.ceo,
         settle: false,
       );
 
@@ -305,6 +318,7 @@ void main() {
         size: pixel7Portrait,
         screen: CustomerDetailScreen(customer: Customer.fromDb(customerData)),
         grantedKeys: customerGrants,
+        roleRank: GateTier.ceo,
         settle: false,
       );
 

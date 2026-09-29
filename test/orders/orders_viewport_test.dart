@@ -69,7 +69,7 @@ void main() {
     String status = 'pending',
   }) async {
     final db = env.db;
-    final now = DateTime.now();
+    final now = seedAnchorToday();
     final customerId = await db.customersDao.addCustomer(
       CustomersCompanion.insert(
         businessId: env.businessId,
