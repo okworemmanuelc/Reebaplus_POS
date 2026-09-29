@@ -8,7 +8,29 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-177 sessions logged. Codebase is live and being verified on-device.
+178 sessions logged. Codebase is live and being verified on-device.
+
+### Issue #299 — Damaging a full crate of drinks damages its crate too, with the crate loss counted once (2026-09-29)
+Branch `feat/full-crate-damage-299`, cut from `feat/record-damaged-empties-297`.
+- **Seam & Database**:
+  - Added `CratePoolDao.recordFullCrateDamage({manufacturerId, storeId, crates, performedBy, ratePerCrateKobo})`.
+  - Appends a `full_crate_damage` row to `crate_ledger` with `quantityDelta: -crates`, attributed `performedBy`, and snapshotted `ratePerCrateKobo` (defaults to manufacturer's `depositAmountKobo`).
+  - Excluded `kCrateMovementFullCrateDamage` from `watchEmptiesPoolByManufacturer`, `_countBasis`, and `expectedEmptiesAt`, so the physical warehouse empties count remains unchanged by full crate damages.
+  - Included `kCrateMovementFullCrateDamage` in `watchManufacturerCratePosition`: counts under the brand's Damaged status alongside `damaged` movements, with its loss valued using the snapshotted rate (`r.ratePerCrateKobo ?? rate`).
+  - Added `labelForCrateMovement` mapping: `'full_crate_damage': return 'Full crate damage'`.
+  - Updated `InventoryDao.watchAllCrateDamages()` to include both `kCrateMovementDamaged` and `kCrateMovementFullCrateDamage`.
+- **Reconciliation Valuation**:
+  - In `lib/features/dashboard/reconciliation/recon_data.dart`, dropped `damageForfeitsFullCrate(a.reason)` branch on stock adjustments. Crate shell loss is valued exactly once directly from `crateDamages` snapshots, preventing double-counting and guaranteeing immutability against later manufacturer rate changes.
+- **StockCountScreen**:
+  - Removed crate fate dropdown and `kCrateLostSuffix` from product damage sheet.
+  - When recording product damage for tracked bottles (`isTrackedBottle && p.product.manufacturerId != null`), calls `db.cratePoolDao.recordFullCrateDamage`.
+  - Added test key `'stock_count_record_damages_button'` to the Record Damages header action.
+- **Verification**:
+  - `test/crates/crate_damage_test.dart` (6 tests, all passing): verified that stock adjustments no longer contribute crate loss via today's-rate suffix, crate shell loss is booked exactly once from the `full_crate_damage` leg's snapshot, and later crate value changes do not restate the loss.
+  - `test/crates/crate_damage_seam_test.dart` (9 tests, all passing): verified `recordFullCrateDamage` appends `full_crate_damage` leg with snapshot, leaves Empties Pool unchanged, updates Damaged status and History, defaults rate when omitted, and ignores non-positive quantities.
+  - `test/inventory/stock_damage_full_crate_test.dart` (2 widget tests, all passing): verified that product damage sheet no longer offers crate fate dropdown, damaging tracked bottles writes stock adjustment and snapshotted `full_crate_damage` leg without altering the Empties Pool, and damaging non-tracked products records no `full_crate_damage` leg.
+  - All 345 tests in `test/crates/` pass. All 150 tests in `test/inventory/` pass.
+  - `flutter analyze lib test` clean (0 errors, 0 warnings).
 
 ### Issue #297 — Record damaged empties per brand from the manufacturer screen (2026-09-29)
 Branch `feat/record-damaged-empties-297`, cut from `main`.

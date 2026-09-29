@@ -412,6 +412,8 @@ String labelForCrateMovement(String movementType) {
       return 'Transferred out';
     case 'purchase':
       return 'Purchased';
+    case 'full_crate_damage':
+      return 'Full crate damage';
     default:
       if (movementType.isEmpty) return 'Movement';
       final words = movementType.replaceAll('_', ' ').split(' ');

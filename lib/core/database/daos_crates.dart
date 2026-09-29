@@ -603,7 +603,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         whereBusiness(crateLedger) &
         crateLedger.customerId.isNull() &
         crateLedger.storeId.isNotNull() &
-        crateLedger.manufacturerId.isNotNull();
+        crateLedger.manufacturerId.isNotNull() &
+        crateLedger.movementType.isNotValue(kCrateMovementFullCrateDamage);
     if (storeId != null) {
       predicate = predicate & crateLedger.storeId.equals(storeId);
     }
@@ -915,6 +916,40 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Record the crate leg of a **full crate of drinks** being damaged (§17.2, #299).
+  ///
+  /// Appends a `full_crate_damage` [crateLedger] row with [storeId], attributed
+  /// [performedBy] and snapshotted [ratePerCrateKobo] (defaulting to the
+  /// manufacturer's current crate value).
+  ///
+  /// This leg is EXCLUDED from the Empties Pool (the warehouse count doesn't
+  /// change because it was never an empty). Its loss is valued once from the
+  /// leg's snapshot in Daily Reconciliation and the brand's Damaged status.
+  Future<void> recordFullCrateDamage({
+    required String manufacturerId,
+    required String storeId,
+    required int crates,
+    String? performedBy,
+    int? ratePerCrateKobo,
+  }) async {
+    if (crates <= 0) return;
+    await transaction(() async {
+      final rate = ratePerCrateKobo ??
+          (await (select(manufacturers)
+                ..where((t) => t.id.equals(manufacturerId)))
+              .getSingleOrNull())
+              ?.depositAmountKobo;
+      await _appendPoolLedgerRow(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        quantityDelta: -crates,
+        movementType: kCrateMovementFullCrateDamage,
+        performedBy: performedBy,
+        ratePerCrateKobo: rate,
+      );
+    });
+  }
+
   /// Record a **Crate Count Correction**: [performedBy] counted [countedEmpties]
   /// empties of [manufacturerId] at [storeId] (PRD #284 decision 6).
   ///
@@ -1077,7 +1112,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       '    THEN 1 ELSE 0 END), 0) AS prior_counts '
       'FROM crate_ledger '
       'WHERE business_id = ? AND manufacturer_id = ? AND store_id = ? '
-      '  AND customer_id IS NULL',
+      '  AND customer_id IS NULL AND movement_type != \'$kCrateMovementFullCrateDamage\'',
       variables: [
         Variable(requireBusinessId()),
         Variable(manufacturerId),
@@ -3159,7 +3194,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       ..where((t) {
         var pred = whereBusiness(t) &
             t.manufacturerId.equals(manufacturerId) &
-            t.movementType.equals('damaged') &
+            t.movementType.isIn([
+              kCrateMovementDamaged,
+              kCrateMovementFullCrateDamage,
+            ]) &
             t.createdAt.isBiggerOrEqualValue(startOfMonth) &
             t.createdAt.isSmallerThanValue(startOfNextMonth);
         if (storeId != null) {

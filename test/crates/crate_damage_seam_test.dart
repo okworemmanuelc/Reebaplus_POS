@@ -235,5 +235,115 @@ void main() {
         reason: '2 * 200,000 kobo fallback to current rate for legacy row');
     expect(computeDamageDeposit([snapshottedRow, legacyRow]), 760000);
   });
+
+  group('Full crate damage (#299)', () {
+    test(
+        'recordFullCrateDamage appends full_crate_damage leg with snapshot, '
+        'leaves Empties Pool unchanged, and updates Damaged status and History', () async {
+      final poolBeforeA = await pool(store: storeA);
+      final poolBeforeB = await pool(store: storeB);
+      final expectedBefore = await db.cratePoolDao.expectedEmptiesAt(
+        manufacturerId: manufacturerId,
+        storeId: storeA,
+      );
+
+      await db.cratePoolDao.recordFullCrateDamage(
+        manufacturerId: manufacturerId,
+        storeId: storeA,
+        crates: 4,
+        performedBy: userId,
+        ratePerCrateKobo: 140000,
+      );
+
+      // Empties Pool (warehouse count) and expectedEmptiesAt are UNCHANGED
+      expect(await pool(store: storeA), poolBeforeA);
+      expect(await pool(store: storeB), poolBeforeB);
+      expect(await pool(), poolBeforeA + poolBeforeB);
+      expect(
+        await db.cratePoolDao.expectedEmptiesAt(
+          manufacturerId: manufacturerId,
+          storeId: storeA,
+        ),
+        expectedBefore,
+      );
+
+      // Verify the appended crate_ledger row
+      final damageRows = await (db.select(db.crateLedger)
+            ..where((t) => t.movementType.equals('full_crate_damage')))
+          .get();
+      expect(damageRows.length, 1);
+      final row = damageRows.single;
+      expect(row.movementType, 'full_crate_damage');
+      expect(row.quantityDelta, -4);
+      expect(row.storeId, storeA);
+      expect(row.performedBy, userId);
+      expect(row.ratePerCrateKobo, 140000);
+      expect(row.manufacturerId, manufacturerId);
+      expect(row.customerId, isNull);
+
+      // Damaged status reflects count and snapshotted loss
+      final posBefore = await db.cratePoolDao
+          .watchManufacturerCratePosition(manufacturerId, storeId: storeA)
+          .first;
+      expect(posBefore.damaged.count, 4);
+      expect(posBefore.damaged.moneyKobo, 560000); // 4 * 140,000
+
+      // Later crate value increase does not change booked shell loss
+      await (db.update(db.manufacturers)..where((t) => t.id.equals(manufacturerId)))
+          .write(
+        const ManufacturersCompanion(
+          depositAmountKobo: Value(250000),
+        ),
+      );
+
+      final posAfter = await db.cratePoolDao
+          .watchManufacturerCratePosition(manufacturerId, storeId: storeA)
+          .first;
+      expect(posAfter.damaged.count, 4);
+      expect(posAfter.damaged.moneyKobo, 560000); // Still 560,000, NOT 1,000,000
+
+      // History labels it as 'Full crate damage'
+      final history = await db.cratePoolDao
+          .watchManufacturerCrateMovements(manufacturerId)
+          .first;
+      final entry =
+          history.firstWhere((h) => h.movementType == 'full_crate_damage');
+      expect(entry.movementLabel, 'Full crate damage');
+    });
+
+    test('defaults ratePerCrateKobo to manufacturer crate value if omitted', () async {
+      await db.cratePoolDao.recordFullCrateDamage(
+        manufacturerId: manufacturerId,
+        storeId: storeA,
+        crates: 2,
+        performedBy: userId,
+      );
+
+      final damageRows = await (db.select(db.crateLedger)
+            ..where((t) => t.movementType.equals('full_crate_damage')))
+          .get();
+      expect(damageRows.single.ratePerCrateKobo, 150000);
+    });
+
+    test('ignores non-positive quantities', () async {
+      final beforeRows = await db.select(db.crateLedger).get();
+
+      await db.cratePoolDao.recordFullCrateDamage(
+        manufacturerId: manufacturerId,
+        storeId: storeA,
+        crates: 0,
+        performedBy: userId,
+      );
+      await db.cratePoolDao.recordFullCrateDamage(
+        manufacturerId: manufacturerId,
+        storeId: storeA,
+        crates: -1,
+        performedBy: userId,
+      );
+
+      final afterRows = await db.select(db.crateLedger).get();
+      expect(afterRows.length, beforeRows.length);
+    });
+  });
 }
 

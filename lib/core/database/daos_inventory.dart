@@ -35,7 +35,12 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// instead. Business-scoped.
   Stream<List<CrateLedgerData>> watchAllCrateDamages() {
     return (select(crateLedger)
-          ..where((t) => whereBusiness(t) & t.movementType.equals('damaged'))
+          ..where((t) =>
+              whereBusiness(t) &
+              t.movementType.isIn([
+                kCrateMovementDamaged,
+                kCrateMovementFullCrateDamage,
+              ]))
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch();
   }
@@ -609,6 +614,24 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       manufacturerId,
       quantity,
       storeId: storeId,
+      performedBy: performedBy,
+      ratePerCrateKobo: ratePerCrateKobo,
+    );
+  }
+
+  /// Record the crate leg of a full crate of drinks being damaged (§17.2, #299).
+  /// Forwarded to [CratePoolDao.recordFullCrateDamage].
+  Future<void> recordFullCrateDamage({
+    required String manufacturerId,
+    required String storeId,
+    required int crates,
+    String? performedBy,
+    int? ratePerCrateKobo,
+  }) async {
+    await db.cratePoolDao.recordFullCrateDamage(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+      crates: crates,
       performedBy: performedBy,
       ratePerCrateKobo: ratePerCrateKobo,
     );
