@@ -12,6 +12,9 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/buy_crates_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/count_manufacturer_empties_sheet.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
 /// Read-only Manufacturer screen (#291, PRD #284 §5).
@@ -142,6 +145,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                 position,
                 canSeeCustomerDepositMoney,
                 attribution,
+                mfr,
               ),
             ),
             TabSliverView(
@@ -323,10 +327,55 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     ManufacturerCratePosition pos,
     bool canSeeCustomerDepositMoney,
     CustomerDepositAttribution attribution,
+    ManufacturerData mfr,
   ) {
+    final canCount = Gates.countCrates.allows(ref);
+    // Buy crates moves money out, so it stays with managers (#294). Hidden,
+    // not disabled, for everyone else.
+    final canBuy = Gates.confirmCrateDeposit.allows(ref);
     return [
+      if (canCount || canBuy)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              context.getRSize(16),
+              context.getRSize(8),
+              context.getRSize(16),
+              context.getRSize(4),
+            ),
+            // Wrap, not Row: two buttons can't fit side by side at 320dp.
+            child: Wrap(
+              spacing: context.getRSize(8),
+              runSpacing: context.getRSize(8),
+              children: [
+                if (canCount)
+                  AppButton(
+                    key: const ValueKey(kManufacturerCountButtonKey),
+                    text: 'Count',
+                    icon: FontAwesomeIcons.clipboardCheck.data,
+                    variant: AppButtonVariant.primary,
+                    isFullWidth: false,
+                    onPressed: () => CountManufacturerEmptiesSheet.show(
+                      context,
+                      manufacturer: mfr,
+                    ),
+                  ),
+                if (canBuy)
+                  AppButton(
+                    key: const ValueKey(kBuyCratesButtonKey),
+                    text: 'Buy crates',
+                    icon: FontAwesomeIcons.cartPlus.data,
+                    variant: AppButtonVariant.outline,
+                    isFullWidth: false,
+                    onPressed: () =>
+                        BuyCratesSheet.show(context, manufacturer: mfr),
+                  ),
+              ],
+            ),
+          ),
+        ),
       SliverToBoxAdapter(
-        child: SizedBox(height: context.getRSize(8)),
+        child: SizedBox(height: context.getRSize(4)),
       ),
       SliverToBoxAdapter(
         child: _buildStatusCard(
@@ -385,7 +434,9 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           keySuffix: 'short',
           title: 'Short',
           countText: '${pos.short.count} crates',
-          moneyText: null,
+          moneyText: pos.short.count > 0
+              ? formatCurrency(pos.short.moneyKobo / 100)
+              : null,
           icon: FontAwesomeIcons.triangleExclamation.data,
           iconColor: AppColors.warning,
           countColor: pos.short.count > 0 ? AppColors.warning : null,

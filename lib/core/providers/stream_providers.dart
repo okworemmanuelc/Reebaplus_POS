@@ -2220,6 +2220,17 @@ final fullCratesByManufacturerProvider = businessScopedStream<Map<String, int>>(
   whenAbsent: const {},
 );
 
+/// Open crate shortage per manufacturer (`manufacturerId → shortageCount`).
+/// When a store is locked, scopes to that store; otherwise sums shortages across
+/// all stores per manufacturer (#293, PRD #284 §7).
+final crateShortagesByManufacturerProvider = businessScopedStream<Map<String, int>>(
+  (ref, db, businessId) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.cratePoolDao.watchAllCrateShortages(storeId: storeId);
+  },
+  whenAbsent: const {},
+);
+
 /// The complete crate position for ONE manufacturer across its six statuses
 /// (#291, PRD #284 §5). Respects the locked store when active, or aggregates
 /// business-wide in "All Stores".

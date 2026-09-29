@@ -962,6 +962,71 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Record [quantity] crates of [manufacturerId] **bought** into [storeId]'s
+  /// warehouse by [performedBy], at [pricePerCrateKobo] each (#294, PRD #284
+  /// decision 9).
+  ///
+  /// Appends one store-stamped, attributed [kCrateMovementPurchase] row that
+  /// raises the Empties Pool and carries the price paid in
+  /// `rate_per_crate_kobo`, for the later net-worth work.
+  ///
+  /// **Rule A: buying a crate swaps cash for an owned asset, profit 0.** So this
+  /// writes no wallet, expense, supplier-account, write-off or profit leg — only
+  /// the crate row and the local pool projections (the per-store cache and the
+  /// business scalar), exactly as [addEmptiesToPool] keeps them.
+  ///
+  /// A quantity below 1 or a negative price is rejected with an
+  /// [ArgumentError] before anything is written.
+  Future<void> recordCratePurchase({
+    required String manufacturerId,
+    required String storeId,
+    required String performedBy,
+    required int quantity,
+    required int pricePerCrateKobo,
+  }) async {
+    if (quantity <= 0) {
+      throw ArgumentError.value(
+        quantity,
+        'quantity',
+        'at least one crate must be bought',
+      );
+    }
+    if (pricePerCrateKobo < 0) {
+      throw ArgumentError.value(
+        pricePerCrateKobo,
+        'pricePerCrateKobo',
+        'a price cannot be negative',
+      );
+    }
+    await transaction(() async {
+      await customUpdate(
+        'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
+        "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+        'WHERE id = ? AND business_id = ?',
+        variables: [
+          Variable(quantity),
+          Variable(manufacturerId),
+          Variable(requireBusinessId()),
+        ],
+        updates: {manufacturers},
+      );
+      await _enqueueFullManufacturer(manufacturerId);
+      await db.storeCrateBalancesDao.applyDelta(
+        storeId: storeId,
+        manufacturerId: manufacturerId,
+        delta: quantity,
+      );
+      await _appendPoolLedgerRow(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        quantityDelta: quantity,
+        movementType: kCrateMovementPurchase,
+        performedBy: performedBy,
+        ratePerCrateKobo: pricePerCrateKobo,
+      );
+    });
+  }
+
   /// What a count of [manufacturerId] at [storeId] is compared against: the
   /// derived Empties Pool for that `(manufacturer, store)`, read once. The same
   /// figure [watchEmptiesPoolByManufacturer] shows for the store and the one
@@ -2592,6 +2657,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String movementType,
     String? performedBy,
     String? orderId,
+    int? ratePerCrateKobo,
   }) async {
     final ledgerComp = CrateLedgerCompanion.insert(
       id: Value(
@@ -2608,6 +2674,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       movementType: movementType,
       referenceOrderId: Value(orderId),
       performedBy: Value(performedBy),
+      ratePerCrateKobo: Value(ratePerCrateKobo),
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(crateLedger).insert(ledgerComp);
@@ -3080,14 +3147,19 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       return rawDelta < 0 ? -rawDelta : rawDelta;
     });
 
-    return Rx.combineLatest6(
+    // 7. Crate Shortage (#293, PRD #284 §7)
+    final shortageStream =
+        watchCrateShortageByManufacturer(manufacturerId, storeId: storeId);
+
+    return Rx.combineLatest7(
       mfrStream,
       warehouseStream,
       fullStream,
       onDepositStream,
       customerDebtStream,
       damagedStream,
-      (mfr, warehouse, full, onDeposit, customerDebt, damaged) {
+      shortageStream,
+      (mfr, warehouse, full, onDeposit, customerDebt, damaged, shortage) {
         final rate = mfr?.depositAmountKobo ?? 0;
         return computeManufacturerCratePosition(
           manufacturerId: manufacturerId,
@@ -3097,11 +3169,109 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           customerOnDepositCrates: onDeposit.crates,
           customerOnDepositKobo: onDeposit.kobo,
           customerNoDepositCrates: customerDebt,
-          shortCrates: 0,
+          shortCrates: shortage,
           damagedCrates: damaged,
         );
       },
     );
+  }
+
+  /// Watches the open crate shortage for ONE brand (#293, PRD #284 §7).
+  ///
+  /// Folded from count movements in chronological order. When [storeId] is set,
+  /// scopes to that store; when null, sums open shortages across all stores.
+  Stream<int> watchCrateShortageByManufacturer(
+    String manufacturerId, {
+    String? storeId,
+  }) {
+    var query = select(crateLedger)
+      ..where(
+        (t) =>
+            whereBusiness(t) &
+            t.manufacturerId.equals(manufacturerId) &
+            // Same basis as the warehouse count: store-held, not a customer's.
+            t.storeId.isNotNull() &
+            t.customerId.isNull() &
+            t.movementType.isIn([
+              kCrateMovementOpeningCount,
+              kCrateMovementCount,
+            ]),
+      )
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
+        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc),
+      ]);
+
+    if (storeId != null) {
+      query = query..where((t) => t.storeId.equals(storeId));
+    }
+
+    return query.watch().map((rows) {
+      final movements = rows.map((r) => CrateCountMovement(
+        storeId: r.storeId,
+        movementType: r.movementType,
+        quantityDelta: r.quantityDelta,
+        createdAt: r.createdAt,
+      ));
+      if (storeId != null) {
+        return foldCrateShortageForStore(movements);
+      } else {
+        return foldTotalCrateShortage(movements);
+      }
+    });
+  }
+
+  /// Watches open crate shortages for ALL brands, mapped as manufacturerId -> shortageCount (#293).
+  ///
+  /// When [storeId] is set, scopes to that store; when null, sums open shortages
+  /// across all stores per brand.
+  Stream<Map<String, int>> watchAllCrateShortages({String? storeId}) {
+    var query = select(crateLedger)
+      ..where(
+        (t) =>
+            whereBusiness(t) &
+            t.storeId.isNotNull() &
+            t.customerId.isNull() &
+            t.movementType.isIn([
+              kCrateMovementOpeningCount,
+              kCrateMovementCount,
+            ]),
+      )
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
+        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc),
+      ]);
+
+    if (storeId != null) {
+      query = query..where((t) => t.storeId.equals(storeId));
+    }
+
+    return query.watch().map((rows) {
+      final byManufacturer = <String, List<CrateCountMovement>>{};
+      for (final r in rows) {
+        final mfrId = r.manufacturerId;
+        if (mfrId == null) continue;
+        byManufacturer.putIfAbsent(mfrId, () => []).add(
+          CrateCountMovement(
+            storeId: r.storeId,
+            movementType: r.movementType,
+            quantityDelta: r.quantityDelta,
+            createdAt: r.createdAt,
+          ),
+        );
+      }
+
+      final result = <String, int>{};
+      for (final entry in byManufacturer.entries) {
+        final count = storeId != null
+            ? foldCrateShortageForStore(entry.value)
+            : foldTotalCrateShortage(entry.value);
+        if (count > 0) {
+          result[entry.key] = count;
+        }
+      }
+      return result;
+    });
   }
 
   /// Attribution of business-wide Customer Held Deposit across brands (#291).

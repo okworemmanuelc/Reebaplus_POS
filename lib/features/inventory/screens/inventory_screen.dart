@@ -1491,6 +1491,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           const <String, int>{};
     }
 
+    final shortagesByMfr =
+        ref.watch(crateShortagesByManufacturerProvider).valueOrNull ??
+        const <String, int>{};
+
     final stats = _computeCrateStats(fullByMfr, emptyByMfr);
     int emptyForMfr(ManufacturerData mfr) => emptyByMfr[mfr.id] ?? 0;
 
@@ -1573,6 +1577,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   mfr,
                   stat,
                   emptyCount: emptyForMfr(mfr),
+                  shortCount: shortagesByMfr[mfr.id] ?? 0,
                 );
               }),
 
@@ -1664,6 +1669,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     ManufacturerData mfr,
     ManufacturerCrateStats stat, {
     required int emptyCount,
+    int shortCount = 0,
   }) {
     final depositNaira = mfr.depositAmountKobo / 100;
     final totalAssets = stat.fullCratesEquiv + emptyCount;
@@ -1710,14 +1716,25 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          mfr.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: context.getRFontSize(15),
-                            color: _text,
-                            letterSpacing: -0.5,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                mfr.name,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: context.getRFontSize(15),
+                                  color: _text,
+                                  letterSpacing: -0.5,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (shortCount > 0) ...[
+                              SizedBox(width: context.getRSize(6)),
+                              _shortageBadge(context, shortCount, mfr.id),
+                            ],
+                          ],
                         ),
                         if (depositNaira > 0)
                           Text(
@@ -1784,6 +1801,31 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         ],
       ),
       child: card,
+    );
+  }
+
+  Widget _shortageBadge(BuildContext context, int shortCount, String mfrId) {
+    return Container(
+      key: ValueKey('mfr_shortage_badge_$mfrId'),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(6),
+        vertical: context.getRSize(2),
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(context.radiusS),
+        border: Border.all(
+          color: AppColors.warning.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Text(
+        '⚠ $shortCount short',
+        style: TextStyle(
+          color: AppColors.warning,
+          fontSize: context.getRFontSize(10),
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 
