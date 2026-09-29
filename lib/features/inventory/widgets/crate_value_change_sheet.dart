@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 const String kCrateValueChangeSheetKey = 'crate_value_change_sheet';
 const String kCrateValueChangeConfirmKey = 'crate_value_change_confirm';
 const String kCrateValueChangeCancelKey = 'crate_value_change_cancel';
+const String kCrateValueChangeUnsetLinesKey = 'crate_value_change_unset_lines';
 
 /// The confirmation shown before a crate value change is written (#295, PRD
 /// #284 §10): what moves, in naira, and what does not. Resolves `true` only
@@ -19,21 +20,31 @@ class CrateValueChangeSheet extends StatelessWidget {
     super.key,
     required this.brandName,
     required this.impact,
+    this.unsetLines = 0,
   });
 
   final String brandName;
   final CrateValueChangeImpact impact;
 
+  /// Past crate lines sold while the brand had no crate value; they take the
+  /// new value once it is set (#298). Zero unless this is the first value.
+  final int unsetLines;
+
   static Future<bool> show(
     BuildContext context, {
     required String brandName,
     required CrateValueChangeImpact impact,
+    int unsetLines = 0,
   }) async {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => CrateValueChangeSheet(brandName: brandName, impact: impact),
+      builder: (_) => CrateValueChangeSheet(
+        brandName: brandName,
+        impact: impact,
+        unsetLines: unsetLines,
+      ),
     );
     return confirmed ?? false;
   }
@@ -109,6 +120,17 @@ class CrateValueChangeSheet extends StatelessWidget {
               '(${_signed(impact.totalDeltaKobo)} in total).',
               style: theme.textTheme.bodyMedium,
             ),
+            if (unsetLines > 0) ...[
+              SizedBox(height: context.getRSize(8)),
+              Text(
+                '$unsetLines past crate ${unsetLines == 1 ? 'line' : 'lines'} '
+                'sold before this brand had a crate value will be filled in at '
+                '${formatCurrency(impact.newKobo / 100)}. No money is collected '
+                'or refunded for them.',
+                key: const ValueKey(kCrateValueChangeUnsetLinesKey),
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
             SizedBox(height: context.getRSize(16)),
             Text(
               'What does not move',

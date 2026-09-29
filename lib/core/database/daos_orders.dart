@@ -2527,6 +2527,62 @@ class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
     return order?.storeId;
   }
 
+  /// Crate lines of [manufacturerId] still at a snapshotted rate of 0 — sales
+  /// made while the brand had no crate value (#298).
+  Future<int> countUnratedLines(String manufacturerId) async {
+    final rows = await (select(orderCrateLines)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.manufacturerId.equals(manufacturerId) &
+                t.depositRateKobo.equals(0),
+          ))
+        .get();
+    return rows.length;
+  }
+
+  /// **Crate value fill-in (#298, PRD #284 §11)** — stamps every one of
+  /// [manufacturerId]'s crate lines still at rate 0 with [rateKobo], once, when
+  /// the brand's crate value goes `0 → positive`. Mirrors the cost backfill
+  /// (F5): gap-only, no restatement.
+  ///
+  /// Writes ONLY the rate and `last_updated_at`: no wallet, deposit, expense or
+  /// profit leg, `depositPaidKobo` stays as it was, so an unpaid line stays
+  /// Crate-Track (the customer owes crates, not money). Lines with a real rate
+  /// are never touched. Each stamped line is enqueued as a FULL row — a partial
+  /// companion would omit NOT NULL columns and be rejected. Returns how many
+  /// lines were filled.
+  Future<int> fillUnratedLines(String manufacturerId, int rateKobo) async {
+    if (rateKobo <= 0) return 0;
+    return transaction(() async {
+      final ids = await (select(orderCrateLines)
+            ..where(
+              (t) =>
+                  whereBusiness(t) &
+                  t.manufacturerId.equals(manufacturerId) &
+                  t.depositRateKobo.equals(0),
+            ))
+          .map((r) => r.id)
+          .get();
+      if (ids.isEmpty) return 0;
+      await (update(orderCrateLines)
+            ..where((t) => whereBusiness(t) & t.id.isIn(ids)))
+          .write(
+        OrderCrateLinesCompanion(
+          depositRateKobo: Value(rateKobo),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
+      final stamped = await (select(orderCrateLines)
+            ..where((t) => whereBusiness(t) & t.id.isIn(ids)))
+          .get();
+      for (final row in stamped) {
+        await db.syncDao.enqueueUpsert('order_crate_lines', row.toCompanion(true));
+      }
+      return stamped.length;
+    });
+  }
+
   /// Record one (order, brand) crate line at sale (§13.4) and enqueue it for
   /// sync. Routed through the DAO so the write reaches the cloud (CLAUDE.md §5).
   /// Stamps business_id + last_updated_at like the other synced-table writers.
