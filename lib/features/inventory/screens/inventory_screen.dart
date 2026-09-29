@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -12,7 +11,6 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart'; // RESPONSIVE: utility imported
-import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -20,7 +18,6 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
-import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
@@ -31,13 +28,11 @@ import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.d
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/crate_money_arrangement_section.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/add_manufacturer_sheet.dart';
 import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
@@ -1748,7 +1743,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       ],
                     ),
                   ),
-                  _manageMfrButton(context, mfr, emptyCount: emptyCount),
                 ],
               ),
             ),
@@ -1860,37 +1854,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _manageMfrButton(
-    BuildContext context,
-    ManufacturerData mfr, {
-    required int emptyCount,
-  }) {
-    return InkWell(
-      onTap: () => _showUpdateManufacturerDialog(mfr, emptyCount: emptyCount),
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(12),
-          vertical: context.getRSize(8),
-        ),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-          ),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          'Manage',
-          style: TextStyle(
-            fontSize: context.getRFontSize(11),
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildEmptyCratesState(
     BuildContext context,
     String title,
@@ -1920,447 +1883,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           ],
         ),
       ),
-    );
-  }
-
-  void _showUpdateManufacturerDialog(
-    ManufacturerData mfr, {
-    required int emptyCount,
-  }) {
-    // #290: a count always belongs to a store. A locked store, or the only
-    // store the user can pick, is used without asking; otherwise the sheet asks
-    // which store was counted and prefills that store's expected empties.
-    final selectableStores = ref.read(selectableStoresProvider);
-    final lockedStoreId = ref.read(lockedStoreProvider).value;
-    String? countStoreId = crateCountStoreWithoutAsking(
-      lockedStoreId: lockedStoreId,
-      selectableStoreIds: [for (final s in selectableStores) s.id],
-    );
-    final mustPickStore = countStoreId == null;
-    // [emptyCount] is the card's figure: the locked store's pool, or the
-    // business-wide pool in All Stores. An inferred store (All Stores, one
-    // selectable store) can differ from the business-wide figure — a van, or
-    // stores this user can't pick — so its own pool is loaded before the field
-    // can be edited.
-    final inferredStoreId = lockedStoreId == null ? countStoreId : null;
-    bool isBaselineLoading = inferredStoreId != null;
-    // The figure the field was prefilled with. A count is recorded only when the
-    // user changes it, so saving the deposit alone never writes a count.
-    String? countBaseline = mustPickStore || isBaselineLoading
-        ? null
-        : emptyCount.toString();
-    final stockCtrl = TextEditingController(text: countBaseline ?? '');
-    BuildContext? sheetContext;
-    StateSetter? setSheetState;
-    if (inferredStoreId != null) {
-      unawaited(
-        ref
-            .read(databaseProvider)
-            .cratePoolDao
-            .expectedEmptiesAt(
-              manufacturerId: mfr.id,
-              storeId: inferredStoreId,
-            )
-            .then((expected) {
-              void apply() {
-                countBaseline = expected.toString();
-                stockCtrl.text = countBaseline!;
-                isBaselineLoading = false;
-              }
-
-              final sheet = sheetContext;
-              if (sheet == null) {
-                apply(); // the sheet hasn't built yet; its first build shows it
-              } else if (sheet.mounted) {
-                setSheetState?.call(apply);
-              }
-            }),
-      );
-    }
-    final depositCtrl = TextEditingController();
-    final crateValueCtrl = TextEditingController();
-    const isCEO = true;
-
-    // Default modes
-    String depositMode = 'change'; // 'add' | 'change'
-    String priceMode = 'change'; // 'add' | 'change'
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setB) {
-          sheetContext = ctx;
-          setSheetState = setB;
-          return Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            24 + ctx.deviceBottomPadding,
-          ),
-          // #290 adds a store picker; scroll rather than overflow.
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Update ${mfr.name}',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: _text,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                if (mustPickStore) ...[
-                  AppDropdown<String>(
-                    value: countStoreId,
-                    labelText: 'Store counted',
-                    hintText: 'Choose a store',
-                    items: [
-                      for (final store in selectableStores)
-                        DropdownMenuItem(
-                          value: store.id,
-                          child: Text(store.name, style: TextStyle(color: _text)),
-                        ),
-                    ],
-                    onChanged: (id) async {
-                      if (id == null) return;
-                      final expected = (await ref
-                              .read(databaseProvider)
-                              .cratePoolDao
-                              .expectedEmptiesAt(
-                                manufacturerId: mfr.id,
-                                storeId: id,
-                              ))
-                          .toString();
-                      // The sheet may have closed while the pool was read.
-                      if (!ctx.mounted) return;
-                      setB(() {
-                        countStoreId = id;
-                        countBaseline = expected;
-                        stockCtrl.text = expected;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                _styledDialogField(
-                  stockCtrl,
-                  'Empty Crates In Stock',
-                  countStoreId == null
-                      ? 'Choose a store first'
-                      : isBaselineLoading
-                      ? 'Loading…'
-                      : 'e.g. 50',
-                  isNumber: true,
-                  readOnly: countStoreId == null || isBaselineLoading,
-                ),
-                const SizedBox(height: 12),
-
-                // Deposit Amount with CEO Check
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Deposit Amount ($activeCurrencySymbol)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: _subtext,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            _modeChip(
-                              'Add',
-                              depositMode == 'add',
-                              () => setB(() => depositMode = 'add'),
-                            ),
-                            const SizedBox(width: 4),
-                            _modeChip(
-                              'Change',
-                              depositMode == 'change',
-                              () => setB(() => depositMode = 'change'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _styledDialogField(
-                      depositCtrl,
-                      '',
-                      depositMode == 'add' ? 'Amount to add' : 'New total amount',
-                      isNumber: true,
-                      isCurrency: true,
-                      readOnly: !isCEO,
-                      showLabel: false,
-                    ),
-                  ],
-                ),
-
-                if (isCEO) ...[
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  FontAwesomeIcons.shieldHalved.data,
-                                  size: 14,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'CEO: CRATE PRICE',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w900,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                _modeChip(
-                                  'Add',
-                                  priceMode == 'add',
-                                  () => setB(() => priceMode = 'add'),
-                                  small: true,
-                                ),
-                                const SizedBox(width: 4),
-                                _modeChip(
-                                  'Change',
-                                  priceMode == 'change',
-                                  () => setB(() => priceMode = 'change'),
-                                  small: true,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _styledDialogField(
-                          crateValueCtrl,
-                          'Bulk Update Price ($activeCurrencySymbol)',
-                          priceMode == 'add'
-                              ? '+ /- amount'
-                              : 'New price for all items',
-                          isNumber: true,
-                          isCurrency: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                // #211 — the brand's Crate Money Arrangement (ADR 0023 rule 3).
-                // Self-gating (crate business + Gates.crateMoneyArrangement) and
-                // self-saving: it confirms and writes on its own rather than
-                // riding the Save button below, because a money policy must not be
-                // half-chosen and abandoned. Renders nothing for a non-crate
-                // business or a role without money permission.
-                CrateMoneyArrangementSection(
-                  manufacturer: mfr,
-                  surfaceColor: _surface,
-                  textColor: _text,
-                  subtextColor: _subtext,
-                ),
-
-                const SizedBox(height: 32),
-                AppButton(
-                  text: 'Save Changes',
-                  variant: AppButtonVariant.primary,
-                  onPressed: () async {
-                    final db = ref.read(databaseProvider);
-                    // #290: validate the count before anything is written, so a
-                    // rejected count leaves the whole sheet unsaved.
-                    final countText = stockCtrl.text.trim();
-                    final storeId = countStoreId;
-                    int? counted;
-                    if (storeId != null &&
-                        !isBaselineLoading &&
-                        countText != countBaseline) {
-                      counted = int.tryParse(countText);
-                      if (counted == null || counted < 0) {
-                        AppNotification.showError(
-                          ctx,
-                          'Enter the number of empties you counted (0 or more).',
-                        );
-                        return;
-                      }
-                    }
-                    final userId = ref.read(authProvider).currentUser?.id;
-                    if (counted != null && userId == null) {
-                      AppNotification.showError(
-                        ctx,
-                        'Sign in again to record a count.',
-                      );
-                      return;
-                    }
-                    try {
-                      // Record the count against its store and the person.
-                      if (storeId != null && counted != null && userId != null) {
-                        await db.inventoryDao.updateManufacturerStock(
-                          manufacturerId: mfr.id,
-                          storeId: storeId,
-                          performedBy: userId,
-                          countedEmpties: counted,
-                        );
-                      }
-
-                      // Update Deposit
-                      if (isCEO && depositCtrl.text.isNotEmpty) {
-                        final inputVal = parseCurrency(depositCtrl.text);
-                        final inputKobo = (inputVal * 100).round();
-                        int newDepositKobo = mfr.depositAmountKobo;
-                        if (depositMode == 'add') {
-                          newDepositKobo += inputKobo;
-                        } else {
-                          newDepositKobo = inputKobo;
-                        }
-                        await db.inventoryDao.updateManufacturerDeposit(
-                          mfr.id,
-                          newDepositKobo,
-                        );
-                      }
-
-                      // Update Product Crate Values
-                      if (isCEO && crateValueCtrl.text.isNotEmpty) {
-                        final inputVal = parseCurrency(crateValueCtrl.text);
-                        final inputKobo = (inputVal * 100).round();
-
-                        if (priceMode == 'add') {
-                          await db.catalogDao.updateManufacturerEmptyCrateValue(
-                            mfr.id,
-                            inputKobo,
-                          );
-                        } else {
-                          await db.catalogDao.updateManufacturerEmptyCrateValue(
-                            mfr.id,
-                            inputKobo,
-                          );
-                        }
-                      }
-
-                      await ref
-                          .read(activityLogProvider)
-                          .logAction(
-                            'update_manufacturer',
-                            '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} updated crate stock/deposit for ${mfr.name}',
-                          );
-                      if (context.mounted) Navigator.pop(ctx);
-                    } catch (_) {
-                      if (ctx.mounted) {
-                        AppNotification.showError(
-                          ctx,
-                          'Could not save changes. Please try again.',
-                        );
-                      }
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-        },
-      ),
-    );
-  }
-
-  Widget _modeChip(
-    String label,
-    bool active,
-    VoidCallback onTap, {
-    bool small = false,
-  }) {
-    final color = active ? Theme.of(context).colorScheme.primary : _subtext;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: small ? 8 : 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: active ? color.withValues(alpha: 0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: active ? color : _border, width: 1.5),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: small ? 9 : 10,
-            fontWeight: FontWeight.w900,
-            color: active ? color : _subtext,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _styledDialogField(
-    TextEditingController ctrl,
-    String label,
-    String hint, {
-    bool isNumber = false,
-    bool isCurrency = false,
-    bool readOnly = false,
-    bool showLabel = true,
-  }) {
-    return AppInput(
-      controller: ctrl,
-      labelText: showLabel ? label : null,
-      hintText: hint,
-      readOnly: readOnly,
-      keyboardType: isNumber
-          ? (isCurrency
-                ? const TextInputType.numberWithOptions(decimal: true)
-                : TextInputType.number)
-          : TextInputType.text,
-      inputFormatters: isCurrency
-          ? [CurrencyInputFormatter()]
-          : (isNumber ? [FilteringTextInputFormatter.digitsOnly] : null),
-      fillColor: Theme.of(context).cardColor,
     );
   }
 }

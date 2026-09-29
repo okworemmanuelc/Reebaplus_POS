@@ -8,6 +8,17 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
+### Issue #295 — Manufacturer Settings tab; old Manage sheet deleted (2026-09-29)
+Branch `feat/manufacturer-settings-295`, cut from `main` (`34c6a3c`). Worked in `../drinkPosApp-wt-295`.
+- **Settings tab** (`manufacturer_settings_tab.dart`): Name + Crate value, one box each (no Add/Change chips). Save goes through `InventoryDao.updateManufacturerDeposit(id, kobo, {name})` **only** — it never calls the catalog DAO's `updateManufacturerEmptyCrateValue`; bumps `last_updated_at`, no fan-out to products (ADR 0024). Gate `Gates.editProductPrice`, re-checked at fire time. Rename-only saves skip the confirmation.
+- **Confirmation** (`crate_value_change_sheet.dart`, pure maths in `core/crates/crate_value_change_impact.dart`): before a value change is written it lists, in naira, every re-priced status, the brand's supplier crate debt (`CratePoolDao.supplierCrateDebtCratesFor`) and the Daily Reconciliation total; states past sales/damages/write-offs/refunds and customer deposit don't move and new sales (open carts too) charge the new value. Cancel/back-out writes nothing.
+- **Arrangement** moved into the tab, CEO-only (`Gates.crateMoneyArrangement`), under a divider with a "saves on its own" heading; `CrateMoneyArrangementSection` unchanged.
+- **Tab gating**: Settings omitted when neither gate allows (Stock keeper, Cashier). `ManufacturerScreen` now uses `TickerProviderStateMixin` and rebuilds its `TabController` when the tab count changes.
+- **Deleted**: Manage button, `_showUpdateManufacturerDialog`, `_modeChip`, `_styledDialogField`, hardcoded `isCEO = true` (−478 lines in `inventory_screen.dart`) and `manufacturer_manage_count_test.dart` (count is covered by the Count sheet tests from #293).
+- **Tests**: `test/inventory/manufacturer_settings_tab_test.dart` (impact maths, role gating, write boundary, backing out, snapshotted lines, 320x568 + 800x360). `crate_money_arrangement_test.dart` reader allow-list now names the tab file.
+- **Verified**: `flutter analyze` clean; full suite green apart from the two fixed above.
+- **Review notes left as-is**: hardcoded strings/`fontWeight`/28px sheet radius match sibling sheets (`buy_crates_sheet.dart`).
+
 176 sessions logged. Codebase is live and being verified on-device.
 
 ### Issue #266 — Customer Detail viewport tests fail in the hour after midnight (2026-09-22)

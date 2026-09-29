@@ -94,10 +94,18 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  Future<void> updateManufacturerDeposit(String id, int depositKobo) async {
+  /// The ONE write path for a brand's crate value (ADR 0024, #295). [name]
+  /// renames the brand in the same write. Never fans out to product rows, and
+  /// never touches the Crate Money Arrangement.
+  Future<void> updateManufacturerDeposit(
+    String id,
+    int depositKobo, {
+    String? name,
+  }) async {
     final now = DateTime.now();
     final comp = ManufacturersCompanion(
       id: Value(id),
+      name: name == null ? const Value.absent() : Value(name),
       depositAmountKobo: Value(depositKobo),
       lastUpdatedAt: Value(now),
     );
