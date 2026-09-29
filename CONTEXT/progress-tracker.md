@@ -18,6 +18,7 @@ Branch `feat/manufacturer-settings-295`, cut from `main` (`34c6a3c`). Worked in 
 - **Tests**: `test/inventory/manufacturer_settings_tab_test.dart` (impact maths, role gating, write boundary, backing out, snapshotted lines, 320x568 + 800x360). `crate_money_arrangement_test.dart` reader allow-list now names the tab file.
 - **Verified**: `flutter analyze` clean; full suite green apart from the two fixed above.
 - **Review notes left as-is**: hardcoded strings/`fontWeight`/28px sheet radius match sibling sheets (`buy_crates_sheet.dart`).
+- **CodeRabbit round 1 (PR #308)**: the tab's controllers were filled once in `initState`, so a crate value changed on another device left the box showing the old figure and a later Save wrote that stale figure back over it. `didUpdateWidget` now takes the new stored value **only where the box still shows the old one**, so an edit in progress survives. Also wrapped the `supplierCrateDebtCratesFor` read in the save's error path — it used to escape the callback and leave Save looking dead. Two tests added.
 
 176 sessions logged. Codebase is live and being verified on-device.
 

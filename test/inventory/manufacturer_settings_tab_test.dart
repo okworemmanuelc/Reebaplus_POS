@@ -328,6 +328,58 @@ void main() {
       await finish(tester);
     });
 
+    testWidgets('a value changed elsewhere is not written back by a rename',
+        (tester) async {
+      await openScreen(tester, grants: ceoGrants);
+      await openSettingsTab(tester);
+
+      // Another device raises the crate value while this tab sits open.
+      await env.db.update(env.db.manufacturers).write(
+            ManufacturersCompanion(
+              depositAmountKobo: const Value(150000),
+              lastUpdatedAt: Value(DateTime(2021)),
+            ),
+          );
+      await settle(tester);
+
+      await enterFields(tester, name: 'Guinness Plc');
+      await tapSave(tester);
+
+      // The box took the new figure, so this is a rename and nothing more.
+      expect(find.byKey(const ValueKey(kCrateValueChangeSheetKey)),
+          findsNothing);
+      final after = await reload();
+      expect(after.name, 'Guinness Plc');
+      expect(after.depositAmountKobo, 150000);
+      await finish(tester);
+    });
+
+    testWidgets('an edit in progress survives a value changed elsewhere',
+        (tester) async {
+      await openScreen(tester, grants: ceoGrants);
+      await openSettingsTab(tester);
+
+      await enterFields(tester, value: '2000');
+      // The owner is mid-edit when another device moves the stored value.
+      await env.db.update(env.db.manufacturers).write(
+            ManufacturersCompanion(
+              depositAmountKobo: const Value(150000),
+              lastUpdatedAt: Value(DateTime(2021)),
+            ),
+          );
+      await settle(tester);
+
+      await tapSave(tester);
+      await tester.tap(
+        find.byKey(const ValueKey(kCrateValueChangeConfirmKey)),
+      );
+      await settle(tester);
+
+      // What was typed wins; the figure arriving underneath does not.
+      expect((await reload()).depositAmountKobo, 200000);
+      await finish(tester);
+    });
+
     testWidgets('a change leaves past sales at their snapshotted rate',
         (tester) async {
       final db = env.db;

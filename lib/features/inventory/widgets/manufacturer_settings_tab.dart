@@ -67,6 +67,24 @@ class _ManufacturerSettingsSliversState
     );
   }
 
+  /// A sync pull can change the brand while this tab sits open. Take the new
+  /// stored figure only where the field still shows the old one, so a Save
+  /// cannot write a stale value back over it — and an edit already in progress
+  /// is left alone.
+  @override
+  void didUpdateWidget(covariant ManufacturerSettingsSlivers oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final was = oldWidget.manufacturer;
+    final now = widget.manufacturer;
+    if (was.name != now.name && _nameCtrl.text == was.name) {
+      _nameCtrl.text = now.name;
+    }
+    if (was.depositAmountKobo != now.depositAmountKobo &&
+        _valueCtrl.text == _plainNaira(was.depositAmountKobo)) {
+      _valueCtrl.text = _plainNaira(now.depositAmountKobo);
+    }
+  }
+
   /// The stored value as the plain number the field takes; blank when unset.
   static String _plainNaira(int kobo) {
     if (kobo <= 0) return '';
@@ -124,9 +142,20 @@ class _ManufacturerSettingsSliversState
 
     final db = ref.read(databaseProvider);
     if (valueChanged) {
-      final debtCrates = await db.cratePoolDao.supplierCrateDebtCratesFor(
-        mfr.id,
-      );
+      // The preview reads before it writes. A failed read must say so rather
+      // than escape this callback and leave the owner staring at a dead Save.
+      final int debtCrates;
+      try {
+        debtCrates = await db.cratePoolDao.supplierCrateDebtCratesFor(mfr.id);
+      } catch (_) {
+        if (mounted) {
+          AppNotification.showError(
+            context,
+            'Could not work out what this change affects. Please try again.',
+          );
+        }
+        return;
+      }
       if (!mounted) return;
       final confirmed = await CrateValueChangeSheet.show(
         context,
