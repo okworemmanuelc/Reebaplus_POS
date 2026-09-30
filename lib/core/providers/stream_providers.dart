@@ -10,6 +10,7 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_shortage.dart';
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -2229,6 +2230,16 @@ final crateShortagesByManufacturerProvider = businessScopedStream<Map<String, in
     return db.cratePoolDao.watchAllCrateShortages(storeId: storeId);
   },
   whenAbsent: const {},
+);
+
+/// Every brand's Crate Shortage for a store scope (#296, PRD #284 §7): the
+/// per-brand read Daily Reconciliation and the write-off sheets share with the
+/// manufacturer screen. `null` = every store.
+final crateShortageRollupProvider =
+    businessScopedStreamAutoDisposeFamily<CrateShortageRollup, String?>(
+  (ref, db, businessId, storeId) =>
+      db.cratePoolDao.watchCrateShortageRollup(storeId: storeId),
+  whenAbsent: CrateShortageRollup.empty,
 );
 
 /// The complete crate position for ONE manufacturer across its six statuses

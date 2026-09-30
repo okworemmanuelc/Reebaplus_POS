@@ -1,49 +1,28 @@
-/// The **Crate Shortfall** — the loss side of the supplier crate loop (#216,
-/// PRD #203, ADR 0023 rules 4 and 5).
+/// **Booked crate losses** — the rows of `crate_shortfall_writeoffs` and the
+/// money they put into profit (#216, #217, #296; ADR 0023 rule 5, PRD #284
+/// decision 7).
 ///
-/// A Shortfall is the gap between the crates we owe suppliers and the empties
-/// actually standing in the yard, valued at the manufacturer's rate. Two things
-/// about it are decisions, not implementation details, and both are enforced by
-/// the shapes in this file rather than by prose:
+/// A write-off is a persisted decision, dated by when it was taken and valued
+/// at the crate value SNAPSHOTTED on the row, so no later count or crate value
+/// change restates it (ADR 0021). A reversal is a compensating negative row
+/// booked on its own day.
 ///
-/// **1. It is BRAND-level and deliberately unattributed.** Crates are fungible.
-/// Hold 100 Coke crates from Depot A and 100 from Depot B, lose ten, and
-/// nothing on earth says whose they were. Guessing — oldest-first, pro-rata —
-/// manufactures a number the supplier will dispute, and a pro-rata split moves
-/// one supplier's balance whenever an unrelated supplier's count changes. So
-/// [CrateShortfall] carries a `manufacturerId` and **no `supplierId`**: there is
-/// no field for an attribution to be written into. Attribution happens exactly
-/// once, at settlement, when the business actually comes up short with a
-/// specific supplier.
+/// The warning a write-off answers is the count-based Crate Shortage
+/// (`crate_shortage.dart`). The depot-gap Crate Shortfall this file used to
+/// derive was retired by PRD #284; its `manual` rows stay booked in their
+/// periods.
 ///
-/// **2. It is a WARNING, not a booked loss.** Crates turn up behind the store, a
-/// driver returns late, a count was wrong. So a Shortfall never touches profit
-/// by itself, and it **shrinks by itself when crates reappear** — because it is
-/// derived from today's counts every time it is read, never stored as an
-/// absolute. What IS stored is the [CrateShortfallWriteOff]: the deliberate,
-/// dated, attributed act of accepting the loss. That is the same reasoning ADR
-/// 0019 used to make a van write-off a persisted decision rather than a screen
-/// calculation — a settlement outcome someone decided at a moment in time must
-/// not be re-derived later, or a subsequent count silently restates it.
-///
-/// **Nothing here writes off on a timer.** There is no age input, no staleness
-/// threshold and no expiry: an open shortfall of any age reads the same. Profit
-/// must never be reduced by a decision nobody made.
-///
-/// The arithmetic reads through [computeCrateDepositPosition] — the ONE seam
-/// (#212) — rather than subtracting counts itself, so the shortfall the card
-/// shows and the shortfall the supplier screen implies cannot fork into two
-/// disagreeing numbers. There is no `AppDatabase` in this file's imports and
-/// there never may be.
+/// Nothing here writes off on a timer. Profit is never reduced by a decision
+/// nobody made. There is no `AppDatabase` in this file's imports.
 library;
 
-import 'package:reebaplus_pos/core/crates/crate_deposit_position.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 
 // ── Where a write-off came from (#217) ───────────────────────────────────────
 
-/// Somebody stood in front of the Crate Shortfall card and accepted the loss.
-/// The #216 shape, and still the only one an owner takes by hand.
+/// Somebody stood in front of the depot-gap Crate Shortfall card and accepted
+/// the loss (#216). Retired by PRD #284: nothing writes these any more, and the
+/// rows already booked stay on their own days.
 const String kCrateWriteOffSourceManual = 'manual';
 
 /// The shortfall a **customer forfeit** raises automatically (#217).
@@ -126,6 +105,10 @@ CrateWriteOffSource crateWriteOffSourceOf(String? wire) {
 class CrateShortfallWriteOff {
   final String manufacturerId;
 
+  /// The store the decision was taken at. Scopes a `count_shortage` row, which
+  /// answers one store's count; older sources are business-wide.
+  final String? storeId;
+
   /// + = crates accepted as lost; − = a compensating reversal.
   final int crateCount;
 
@@ -146,6 +129,7 @@ class CrateShortfallWriteOff {
 
   const CrateShortfallWriteOff({
     required this.manufacturerId,
+    this.storeId,
     required this.crateCount,
     required this.ratePerCrateKobo,
     required this.writtenOffAt,
@@ -154,218 +138,6 @@ class CrateShortfallWriteOff {
 
   /// The money this decision books, at the snapshotted rate.
   int get valueKobo => crateCount * ratePerCrateKobo;
-}
-
-// ── The derived warning ──────────────────────────────────────────────────────
-
-/// One brand's crate shortfall at a moment in time — **across every supplier of
-/// that brand**, which is the only scope at which the question is honest.
-class CrateShortfall {
-  final String manufacturerId;
-  final String manufacturerName;
-
-  /// The brand's arrangement. `none` forces every figure here to 0 — see
-  /// [computeCrateShortfall].
-  final CrateMoneyArrangement arrangement;
-
-  /// `manufacturers.deposit_amount_kobo` (ADR 0023 rule 2).
-  final int ratePerCrateKobo;
-
-  /// Empties we owe EVERY supplier of this brand: `SUM(quantity_delta)` over
-  /// the whole brand's `supplier_crate_ledger`.
-  final int cratesOwed;
-
-  /// Empties physically in the yard for this brand, business-wide.
-  final int emptiesOnHand;
-
-  /// The raw gap, straight out of [computeCrateDepositPosition]:
-  /// `cratesOwed − emptiesOnHand`, floored at 0. **This is the figure that
-  /// shrinks by itself** — hand back crates and `cratesOwed` falls; find crates
-  /// and `emptiesOnHand` rises. Either way the gap closes with nobody deciding
-  /// anything.
-  final int rawShortfallCrates;
-
-  /// The net of every write-off decision ever taken on this brand (positive
-  /// write-offs minus any compensating reversals). A count, not money: the money
-  /// each decision booked was fixed at ITS OWN snapshotted rate on ITS OWN day,
-  /// and is not recoverable from a rate multiplied by this total.
-  final int writtenOffCrates;
-
-  /// **What is still open** — the warning an owner has not yet dealt with:
-  /// `rawShortfallCrates − writtenOffCrates`, floored at 0.
-  ///
-  /// Floored, because a brand whose crates reappear after a write-off does not
-  /// become owed a negative shortfall. The write-off already hit profit on its
-  /// own day and stays there (ADR 0021 — a settled day is never restated); the
-  /// reappearance is simply an open shortfall of zero from then on.
-  final int openShortfallCrates;
-
-  /// [openShortfallCrates] at [ratePerCrateKobo] — the warning in money.
-  final int openShortfallValueKobo;
-
-  /// When the most recent write-off on this brand was taken, and by whom. Null
-  /// until somebody accepts a loss. Carried so the card can answer "who wrote
-  /// off a shortage and when" without a second query.
-  final DateTime? lastWrittenOffAt;
-  final String? lastWrittenOffBy;
-
-  const CrateShortfall({
-    required this.manufacturerId,
-    required this.manufacturerName,
-    required this.arrangement,
-    required this.ratePerCrateKobo,
-    required this.cratesOwed,
-    required this.emptiesOnHand,
-    required this.rawShortfallCrates,
-    required this.writtenOffCrates,
-    required this.openShortfallCrates,
-    required this.openShortfallValueKobo,
-    this.lastWrittenOffAt,
-    this.lastWrittenOffBy,
-  });
-
-  /// True when there is still a gap nobody has dealt with.
-  bool get isOpen => openShortfallCrates > 0;
-
-  /// True when somebody has accepted a loss on this brand at some point.
-  bool get hasWriteOff => writtenOffCrates != 0;
-}
-
-/// Compute one brand's shortfall from plain data.
-///
-/// [cratesOwed] and [emptiesOnHand] **must both be summed over the same
-/// brand-level scope** — every supplier of the brand, and the business-wide
-/// yard. #212 made `emptiesOnHand` nullable on [computeCrateDepositPosition]
-/// precisely so that mixing a pair-keyed `cratesOwed` with a business-wide
-/// empties count is unrepresentable rather than merely discouraged; this
-/// function is the caller that legitimately has both at brand level, so it is
-/// the only place in the app that passes the argument at all.
-///
-/// **A `none` brand reads all zeros.** The short-circuit lives inside
-/// [computeCrateDepositPosition] (a shortfall is the money-at-risk warning of
-/// rules 4 and 5, and a swap-only brand has no money at risk), and the
-/// write-off total is suppressed here for the same reason: residue from a brand
-/// that was switched on, used, then switched back off must never move a figure
-/// for an owner who has said "this brand does not move money". The rows are not
-/// deleted and reappear intact the moment the brand is switched on again. That
-/// is the release gate for the whole of PRD #203, and it is why an all-`none`
-/// business reads byte-identical figures with this slice in place.
-///
-/// The physical crate counts a `none` brand does carry are unchanged and still
-/// read from the crate screens they always did.
-CrateShortfall computeCrateShortfall({
-  required String manufacturerId,
-  required String manufacturerName,
-  required CrateMoneyArrangement arrangement,
-  required int ratePerCrateKobo,
-  required int cratesOwed,
-  required int emptiesOnHand,
-  int writtenOffCrates = 0,
-  DateTime? lastWrittenOffAt,
-  String? lastWrittenOffBy,
-}) {
-  // THE seam. The gap is not subtracted here — it is asked of the one function
-  // every other crate-money figure is asked of, so the card, the supplier
-  // screen and this warning cannot drift (ADR 0023 finding #3).
-  final position = computeCrateDepositPosition(
-    arrangement: arrangement,
-    ratePerCrateKobo: ratePerCrateKobo,
-    cratesOwed: cratesOwed,
-    emptiesOnHand: emptiesOnHand,
-  );
-
-  final moves = arrangement.movesMoney;
-  final rawShortfallCrates = position.shortfallCrates;
-  final netWrittenOff = moves ? writtenOffCrates : 0;
-  final open = _max0(rawShortfallCrates - netWrittenOff);
-
-  return CrateShortfall(
-    manufacturerId: manufacturerId,
-    manufacturerName: manufacturerName,
-    arrangement: arrangement,
-    ratePerCrateKobo: position.ratePerCrateKobo,
-    cratesOwed: moves ? cratesOwed : 0,
-    emptiesOnHand: moves ? emptiesOnHand : 0,
-    rawShortfallCrates: rawShortfallCrates,
-    writtenOffCrates: netWrittenOff,
-    openShortfallCrates: open,
-    openShortfallValueKobo: open * position.ratePerCrateKobo,
-    lastWrittenOffAt: moves ? lastWrittenOffAt : null,
-    lastWrittenOffBy: moves ? lastWrittenOffBy : null,
-  );
-}
-
-// ── The business-wide roll-up ────────────────────────────────────────────────
-
-/// Every brand's open shortfall at once — the point-in-time warning the
-/// reconciliation card renders beside #215's Placed Deposit figures.
-///
-/// Business-wide with no store axis, exactly like [CrateDepositRollup] and for
-/// the same reason: supplier crate money is a company obligation, and splitting
-/// it per store would repeat the defect `CRATE_TRACKING_AUDIT` C4 names.
-class CrateShortfallRollup {
-  /// One entry per brand with an OPEN shortfall, biggest money first. A brand
-  /// that is square, or whose shortfall has been fully written off, is dropped
-  /// rather than listed at zero — a warning list of non-warnings trains an
-  /// owner to ignore it.
-  final List<CrateShortfall> brands;
-
-  /// Crates missing across every brand, still open.
-  final int openCrates;
-
-  /// [openCrates] valued at each brand's own rate.
-  final int openValueKobo;
-
-  const CrateShortfallRollup({
-    required this.brands,
-    required this.openCrates,
-    required this.openValueKobo,
-  });
-
-  /// What every business whose brands are all `none` reads — which is every
-  /// live tenant until an owner deliberately switches a brand on.
-  static const CrateShortfallRollup empty = CrateShortfallRollup(
-    brands: [],
-    openCrates: 0,
-    openValueKobo: 0,
-  );
-
-  /// True when anything is missing that nobody has dealt with.
-  bool get hasShortfall => openCrates > 0;
-}
-
-/// Roll [shortfalls] up into the business-wide warning.
-///
-/// Brands whose arrangement moves no money are dropped before anything else, so
-/// a swap-only business rolls up to [CrateShortfallRollup.empty] no matter what
-/// its crate counts say.
-CrateShortfallRollup rollUpCrateShortfalls(List<CrateShortfall> shortfalls) {
-  final open = shortfalls
-      .where((s) => s.arrangement.movesMoney && s.isOpen)
-      .toList();
-  if (open.isEmpty) return CrateShortfallRollup.empty;
-
-  var openCrates = 0;
-  var openValueKobo = 0;
-  for (final s in open) {
-    openCrates += s.openShortfallCrates;
-    openValueKobo += s.openShortfallValueKobo;
-  }
-
-  // Biggest loss first — the brand costing the owner the most is the one they
-  // will go looking behind the store for.
-  open.sort((a, b) {
-    final byMoney = b.openShortfallValueKobo.compareTo(a.openShortfallValueKobo);
-    return byMoney != 0
-        ? byMoney
-        : a.manufacturerName.compareTo(b.manufacturerName);
-  });
-
-  return CrateShortfallRollup(
-    brands: open,
-    openCrates: openCrates,
-    openValueKobo: openValueKobo,
-  );
 }
 
 // ── The booked loss ──────────────────────────────────────────────────────────
@@ -386,10 +158,11 @@ CrateShortfallRollup rollUpCrateShortfalls(List<CrateShortfall> shortfalls) {
 /// persisting the decision: the loss lands on the day somebody took
 /// responsibility for it, and no later count moves it (ADR 0021).
 ///
-/// A brand whose [arrangementByManufacturerId] entry does not move money
-/// contributes nothing — the same release gate as everywhere else. A brand
-/// missing from the map is treated as `none` (fail closed): an unreadable
-/// arrangement must never book a loss.
+/// A `manual` or `customer_forfeit` row on a brand whose
+/// [arrangementByManufacturerId] entry does not move money contributes nothing
+/// — the #203 release gate. A brand missing from the map is treated as `none`
+/// (fail closed). A `count_shortage` row books for every brand (PRD #284
+/// decision 7) and is kept only when [inScope] accepts its store.
 ///
 /// [onlySource] narrows the total to one origin (#217) — for DISCLOSURE ONLY.
 /// The P&L reads the unfiltered total; the reconciliation card uses the
@@ -401,13 +174,21 @@ int crateShortfallWriteOffKobo({
   DateTime? start,
   DateTime? endExclusive,
   CrateWriteOffSource? onlySource,
+  bool Function(String? storeId)? inScope,
 }) {
   var total = 0;
   for (final w in writeOffs) {
-    final arrangement =
-        arrangementByManufacturerId[w.manufacturerId] ??
-        CrateMoneyArrangement.none;
-    if (!arrangement.movesMoney) continue;
+    if (w.source == CrateWriteOffSource.countShortage) {
+      // A counted shortage is a crate the business owned and lost, whatever
+      // the brand's arrangement (PRD #284 decision 7), and it belongs to the
+      // store whose count found it.
+      if (inScope != null && !inScope(w.storeId)) continue;
+    } else {
+      final arrangement =
+          arrangementByManufacturerId[w.manufacturerId] ??
+          CrateMoneyArrangement.none;
+      if (!arrangement.movesMoney) continue;
+    }
     if (onlySource != null && w.source != onlySource) continue;
     if (start != null && w.writtenOffAt.isBefore(start)) continue;
     if (endExclusive != null && !w.writtenOffAt.isBefore(endExclusive)) continue;
@@ -451,5 +232,3 @@ int crateForfeitShortfallCrates({
   if (!arrangement.movesMoney) return 0;
   return keptCrates > 0 ? keptCrates : 0;
 }
-
-int _max0(int v) => v > 0 ? v : 0;

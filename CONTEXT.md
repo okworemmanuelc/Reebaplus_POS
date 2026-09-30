@@ -427,9 +427,14 @@ the gap; a count above expected closes open shortage first, and excess surplus i
 not banked (cannot offset future shortages). Opening counts set baseline and
 raise no shortage. Tracked for all brands regardless of Crate Money Arrangement.
 A warning valued at `open shortage × crate value`, not a loss, until written off (ADR 0028).
+A **write-off** (CEO/Manager) lowers it and books the loss that day at the crate
+value snapshotted on the row; a **reversal**, for written-off crates a later
+count found, books the gain back on its own day at the written-off value. Daily
+Reconciliation's "Crates missing" is this same figure.
 _Avoid_: calculating shortage from depot debt minus empties; allocating a
 shortage across stores or netting surplus in one store against another; banking
-count surplus to mask future losses.
+count surplus to mask future losses; netting the older `manual` or
+`customer_forfeit` write-offs against it.
 
 **Supplier Crate Debt**:
 The empty crates owed to one supplier for full crates they delivered —

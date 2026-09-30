@@ -31,6 +31,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_shortage.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -41,6 +42,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_detail_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/crate_shortage_write_off_sheet.dart';
 
 const _biz = 'biz-1';
 const _store = 'store-1';
@@ -168,6 +170,7 @@ void main() {
     String roleSlug = 'ceo',
     BusinessData? business,
     DailyClosingData? snapshot,
+    Set<String> grantedKeys = const {},
     List<Override> overrides = const [],
   }) async {
     // 375 logical px wide keeps `responsive.dart`'s `_scaleFactor` at 1.0 (it
@@ -197,7 +200,7 @@ void main() {
             // must track the slug or a test could pass for the wrong reason.
             gateContextProvider.overrideWithValue(
               GateContext(
-                grantedKeys: const {},
+                grantedKeys: grantedKeys,
                 roleRank: roleRank(roleSlug),
                 isReady: true,
               ),
@@ -548,6 +551,95 @@ void main() {
 
       expect(find.textContaining('Reviewed'), findsNothing);
       expect(find.textContaining('still match what was reviewed'), findsNothing);
+    });
+  });
+
+  group('Crates missing (#296)', () {
+    const shortage = CrateShortageRollup(
+      brands: [
+        CrateShortageBrand(
+          manufacturerId: 'mfr-1',
+          manufacturerName: 'Star Lager',
+          ratePerCrateKobo: 150000,
+          byStore: {
+            _store: CrateShortageState(
+              openCrates: 3,
+              reversibleCrates: 0,
+              outstandingWriteOffs: [],
+            ),
+          },
+        ),
+      ],
+    );
+
+    testWidgets('shows the count-based shortage and opens the shared write-off '
+        'sheet', (tester) async {
+      await pumpDetail(
+        tester,
+        start: _dayStart,
+        endExclusive: _dayEnd,
+        roleSlug: 'manager',
+        grantedKeys: const {'expenses.approve'},
+        business: _business(crates: true),
+        overrides: [
+          crateShortageRollupProvider.overrideWith(
+            (ref, storeId) => Stream.value(shortage),
+          ),
+        ],
+      );
+
+      expect(find.text('Star Lager — 3 crates missing'), findsOneWidget);
+      expect(find.text('Crates missing (now)'), findsOneWidget);
+      final button = find.byKey(const ValueKey(kReconCrateWriteOffButtonKey));
+      expect(button, findsOneWidget);
+
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(find.byType(CrateShortageWriteOffSheet), findsOneWidget);
+      // One brand with a shortage, so the brand picker lists just it.
+      expect(
+        find.byKey(const ValueKey(kCrateWriteOffBrandPickerKey)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('without the crate-money permission the shortage shows but the '
+        'button does not', (tester) async {
+      await pumpDetail(
+        tester,
+        start: _dayStart,
+        endExclusive: _dayEnd,
+        roleSlug: 'manager',
+        business: _business(crates: true),
+        overrides: [
+          crateShortageRollupProvider.overrideWith(
+            (ref, storeId) => Stream.value(shortage),
+          ),
+        ],
+      );
+      expect(find.text('Crates missing (now)'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey(kReconCrateWriteOffButtonKey)),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a business with no counted shortage shows no Crates missing '
+        'and no write-off button', (tester) async {
+      await pumpDetail(
+        tester,
+        start: _dayStart,
+        endExclusive: _dayEnd,
+        roleSlug: 'manager',
+        business: _business(crates: true),
+      );
+      expect(find.text('Crates missing (now)'), findsNothing);
+      expect(
+        find.byKey(const ValueKey(kReconCrateWriteOffButtonKey)),
+        findsNothing,
+      );
     });
   });
 }

@@ -93,6 +93,8 @@ cancels it out.
 
 *(Note: Under ADR 0028, a count-based Shortage is similarly treated as an operational warning valued at `open count × crate value`, rather than an immediate financial loss).*
 
+*(Amended 2026-09-30, #296: the depot-gap Shortfall is no longer write-off-able anywhere. The only hand-taken write-off is against the count-based Crate Shortage (ADR 0028 §7), source `count_shortage`. `manual` rows already booked stay in their periods; the #217 forfeit netting is unchanged.)*
+
 ### 6. Counts are physical, money is financial — and they are gated differently
 
 The crate count is typed on the Receive Stock screen, beside the empties box that

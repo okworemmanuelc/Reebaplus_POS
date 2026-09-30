@@ -277,29 +277,18 @@ void main() {
       expect(d.netCashMovementKobo, 0);
     });
 
-    test('the netted crates count against the derived shortfall, so nobody is '
-        'asked to accept the same missing crates twice', () async {
+    test('the netted crates never touch the count-based Crate Shortage '
+        '(#296)', () async {
       await switchOn();
       await forfeit(4);
 
-      final shortfall = computeCrateShortfall(
-        manufacturerId: starId,
-        manufacturerName: 'Star Lager',
-        arrangement: CrateMoneyArrangement.perDelivery,
-        ratePerCrateKobo: rate,
-        // Four crates owed to the depot that are not in the yard — the exact
-        // gap the four kept crates opened.
-        cratesOwed: 4,
-        emptiesOnHand: 0,
-        writtenOffCrates: (await writeOffs()).single.crateCount,
-      );
-      expect(shortfall.rawShortfallCrates, 4);
-      expect(shortfall.writtenOffCrates, 4);
+      final shortage = await db.cratePoolDao.watchCrateShortageRollup().first;
       expect(
-        shortfall.openShortfallCrates,
+        shortage.openCrates,
         0,
-        reason: 'already accepted — the card must not ask for it again',
+        reason: 'a forfeit netting is history, not a counted shortage',
       );
+      expect(shortage.brands, isEmpty);
     });
 
     test('two offline tills settling the same order book ONE loss, not two',
@@ -534,15 +523,26 @@ void main() {
       expect(payload, contains('rate_per_crate_kobo'));
     });
 
-    test('a manual write-off still reads `manual`, and stays the row the card '
-        'attributes', () async {
+    test('an old manual write-off still reads `manual` and still books, beside '
+        'the netting', () async {
       await switchOn();
       await forfeit(2);
-      await db.cratePoolDao.writeOffCrateShortfall(
-        manufacturerId: starId,
-        crateCount: 1,
-        performedBy: staffId,
-      );
+      final now = DateTime.now();
+      await db
+          .into(db.crateShortfallWriteoffs)
+          .insert(
+            CrateShortfallWriteoffsCompanion.insert(
+              id: const Value('wo-manual'),
+              businessId: businessId,
+              manufacturerId: starId,
+              crateCount: 1,
+              ratePerCrateKobo: const Value(rate),
+              source: const Value(kCrateWriteOffSourceManual),
+              performedBy: Value(staffId),
+              createdAt: Value(now),
+              lastUpdatedAt: Value(now),
+            ),
+          );
 
       final rows = await writeOffs();
       expect(rows, hasLength(2));
@@ -551,15 +551,10 @@ void main() {
         {kCrateWriteOffSourceManual, kCrateWriteOffSourceCustomerForfeit},
       );
 
-      // Both losses reach profit; only the manual one is attributed on the card.
+      // Both losses reach profit.
       final d = await recon();
       expect(d.crateShortfallWrittenOffKobo, 3 * rate);
       expect(d.crateForfeitNettedKobo, 2 * rate);
-
-      final rollup = await db.cratePoolDao.watchCrateShortfallRollup().first;
-      for (final brand in rollup.brands) {
-        expect(brand.lastWrittenOffBy, staffId);
-      }
     });
   });
 }

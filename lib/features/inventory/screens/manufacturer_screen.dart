@@ -17,6 +17,8 @@ import 'package:reebaplus_pos/features/inventory/widgets/count_manufacturer_empt
 import 'package:reebaplus_pos/features/inventory/widgets/manufacturer_settings_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/record_damaged_crates_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/crate_shortage_write_off_sheet.dart';
+import 'package:reebaplus_pos/shared/widgets/reverse_crate_write_off_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
 /// Read-only Manufacturer screen (#291, PRD #284 §5).
@@ -363,8 +365,21 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
   ) {
     final canCount = Gates.countCrates.allows(ref);
     // Buy crates moves money out, so it stays with managers (#294). Hidden,
-    // not disabled, for everyone else.
+    // not disabled, for everyone else. Write off and Reverse turn a count into
+    // profit, so they share the gate (#296).
     final canBuy = Gates.confirmCrateDeposit.allows(ref);
+    final reversible = canBuy
+        ? (ref
+                  .watch(
+                    crateShortageRollupProvider(
+                      ref.watch(lockedStoreProvider).value,
+                    ),
+                  )
+                  .valueOrNull
+                  ?.brand(mfr.id)
+                  ?.reversibleCrates ??
+              0)
+        : 0;
     return [
       if (canCount || canBuy)
         SliverToBoxAdapter(
@@ -484,6 +499,34 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           icon: FontAwesomeIcons.triangleExclamation.data,
           iconColor: AppColors.warning,
           countColor: pos.short.count > 0 ? AppColors.warning : null,
+          actions: [
+            if (canBuy && pos.short.count > 0)
+              AppButton(
+                key: const ValueKey(kManufacturerWriteOffButtonKey),
+                text: 'Write off',
+                icon: FontAwesomeIcons.circleMinus.data,
+                variant: AppButtonVariant.danger,
+                size: AppButtonSize.small,
+                isFullWidth: false,
+                onPressed: () => CrateShortageWriteOffSheet.show(
+                  context,
+                  manufacturerId: mfr.id,
+                ),
+              ),
+            if (canBuy && reversible > 0)
+              AppButton(
+                key: const ValueKey(kManufacturerReverseWriteOffButtonKey),
+                text: 'Reverse write-off',
+                icon: FontAwesomeIcons.rotateLeft.data,
+                variant: AppButtonVariant.outline,
+                size: AppButtonSize.small,
+                isFullWidth: false,
+                onPressed: () => ReverseCrateWriteOffSheet.show(
+                  context,
+                  manufacturerId: mfr.id,
+                ),
+              ),
+          ],
         ),
       ),
       SliverToBoxAdapter(
@@ -557,22 +600,9 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     required IconData icon,
     required Color iconColor,
     Color? countColor,
+    List<Widget> actions = const [],
   }) {
-    return Container(
-      key: ValueKey(kManufacturerStatusKeyPrefix + keySuffix),
-      margin: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(5),
-      ),
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.dividerColor.withValues(alpha: 0.12),
-        ),
-      ),
-      child: Row(
+    final row = Row(
         children: [
           Container(
             width: context.getRSize(40),
@@ -619,7 +649,36 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
             ),
           ),
         ],
+    );
+    return Container(
+      key: ValueKey(kManufacturerStatusKeyPrefix + keySuffix),
+      margin: EdgeInsets.symmetric(
+        horizontal: context.getRSize(16),
+        vertical: context.getRSize(5),
       ),
+      padding: EdgeInsets.all(context.getRSize(14)),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.12),
+        ),
+      ),
+      child: actions.isEmpty
+          ? row
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                row,
+                SizedBox(height: context.getRSize(10)),
+                // Wrap, not Row: two buttons can't fit side by side at 320dp.
+                Wrap(
+                  spacing: context.getRSize(8),
+                  runSpacing: context.getRSize(8),
+                  children: actions,
+                ),
+              ],
+            ),
     );
   }
 
