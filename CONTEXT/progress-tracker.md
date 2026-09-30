@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #313 follow-up — Logout no longer leaves a first-download marker behind (2026-09-30)
+Branch `fix/first-download-marker-logout-race`, cut from `main` after PR #314. Worked in `../drinkPosApp-wt-marker-race`.
+- **The race**: a wiping logout ran `clearAllData` (which clears the first-load markers) and only then signed the user out. A pull already in flight that completed in between wrote the marker back, so the next sign-in treated an empty phone as one that had finished its first download: first-time prompts could show during the download and the top bar did not.
+- **Fix** (`auth_service.dart`): `_clearFirstLoadMarkersAfterWipe` clears the markers again after `fullLogout` has signed the user out, on all six wiping paths (log out, discard-and-log-out, resign, discard-and-resign, delete business, business deleted remotely). `fullLogout` itself is unchanged, so the non-wiping logout keeps its markers.
+- **Still open**: a pull that is still running after the sign-out and then completes cleanly writes the sync engine's own marker (`markPullCompleted`) after this second clear. Closing that needs the engine to stop or ignore a pull across a logout, which is outside this fix.
+- **Test**: `test/auth/lock_screen_test.dart` (+1) writes both markers between the wipe and the sign-out and expects neither to survive. Not verified on a device.
+
 ### Issue #313 slice 3 — Remove the shimmer (2026-09-30)
 Built in `../drinkPosApp-wt-313-s3`, then merged onto `feat/first-run-waits-first-download-313` so all three slices ship in one PR.
 - **Deleted**: `lib/shared/widgets/skeletons/` (`Shimmer`, `SkeletonBox`, `SkeletonLine`, the four tab skeletons) and `firstLoadSkeletonActiveProvider`. `firstPullCompletedProvider` and `firstLoadStoreEmptyProvider` stay: the overlay controller still reads them. `firstLoadActiveProvider` lost its last reader when slice 2 deleted the error pill, and was removed when the slices were merged. There was never a `shimmer` package in `pubspec.yaml`, so nothing to remove there.

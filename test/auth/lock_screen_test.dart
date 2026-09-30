@@ -4,6 +4,8 @@
 // PIN screen, and a device is used by one user at a time. These guard:
 //   * lockApp keeps the device pointer, so the PIN screen shows the same user.
 //   * Log out wipes the device, even when another staff member has a PIN here.
+//   * Log out leaves no first-download marker behind, even when a pull finishes
+//     between the wipe and the sign-out (#313).
 //   * The PIN screen refuses a suspended member's PIN (the picker used to hide
 //     suspended staff).
 
@@ -19,6 +21,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
@@ -36,6 +39,10 @@ const _connectivityChannel = MethodChannel(
 
 class _FakeSecureStorageService extends SecureStorageService {
   String? userId;
+
+  /// Runs inside [clearAll] — after the logout wipe, before the user is
+  /// signed out. Stands in for a pull completing in that window.
+  Future<void> Function()? onClearAll;
 
   @override
   Future<String?> getDeviceUserId() async => userId;
@@ -56,6 +63,7 @@ class _FakeSecureStorageService extends SecureStorageService {
   @override
   Future<void> clearAll() async {
     userId = null;
+    await onClearAll?.call();
   }
 }
 
@@ -161,6 +169,24 @@ void main() {
     expect(await db.select(db.businesses).get(), isEmpty);
     expect(await auth.getDeviceUserId(), isNull);
     expect(auth.deviceUserIdNotifier.value, isNull);
+  });
+
+  test('log out leaves no first-download marker when a pull finishes between '
+      'the wipe and the sign-out', () async {
+    final alice = await addStaff('Alice');
+    await auth.saveDeviceUserId(alice.id);
+    auth.value = alice;
+    await FirstLoadMarkerService.markFirstDownloadFinished(biz);
+    await FirstLoadMarkerService.markPullCompleted(biz);
+    secure.onClearAll = () async {
+      await FirstLoadMarkerService.markFirstDownloadFinished(biz);
+      await FirstLoadMarkerService.markPullCompleted(biz);
+    };
+
+    await auth.logOutCurrentUser();
+
+    expect(await FirstLoadMarkerService.hasFinishedFirstDownload(biz), isFalse);
+    expect(await FirstLoadMarkerService.hasCompletedPull(biz), isFalse);
   });
 
   testWidgets('the PIN screen refuses a suspended member', (tester) async {
