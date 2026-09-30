@@ -1,5 +1,11 @@
 part of 'daos.dart';
 
+/// One brand's Crate Shortage events plus its latest write-off (#296).
+typedef _BrandShortageEvents = ({
+  List<CrateShortageEvent> events,
+  CrateShortfallWriteoffData? lastWriteOff,
+});
+
 @DriftAccessor(tables: [PendingCrateReturns])
 class PendingCrateReturnsDao extends DatabaseAccessor<AppDatabase>
     with _$PendingCrateReturnsDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -2774,63 +2780,108 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   }
 
   // ───────────────────────────────────────────────────────────────────────
-  // Crate Shortfall (#216, PRD #203, ADR 0023 rules 4 and 5)
+  // Crate write-offs (#216, #217, #296)
   //
-  // The loss side of the loop. Everything here obeys one split: the SHORTFALL
-  // is derived on every read (which is what lets it shrink by itself when
-  // crates turn up), and only the DECISION to accept it is persisted.
+  // `crate_shortfall_writeoffs` holds three kinds of booked crate loss. Since
+  // PRD #284 only `count_shortage` rows are written by hand, against the
+  // count-based Crate Shortage. `manual` (the retired depot-gap write-off) and
+  // `customer_forfeit` (#217) rows stay booked on their own days and never net
+  // against the shortage.
   // ───────────────────────────────────────────────────────────────────────
 
-  /// **Accept the loss** — the deliberate, dated write-off of [crateCount]
-  /// missing crates of [manufacturerId] (ADR 0023 rule 5).
+  /// **Write off** [crateCount] crates of [manufacturerId] found missing at
+  /// [storeId] (#296, PRD #284 decision 7).
   ///
-  /// This is the one write in PRD #203 that reaches profit. Everything else the
-  /// PRD books is a refundable Placed Deposit — an asset that changed shape,
-  /// never a cost. Here an owner says the crates are not coming back, so the
-  /// deposit value standing behind them is gone, and the loss lands **on the
-  /// day this is called** at the rate SNAPSHOTTED here (`ADR 0021` — a rate
-  /// edited next month must not restate a closed day's profit).
+  /// Books the loss on the day this is called, at the brand's crate value
+  /// SNAPSHOTTED onto the row, so a later crate value change never restates it
+  /// (ADR 0021). Works for every brand whatever its Crate Money Arrangement.
+  /// Moves no cash and no crates: the crates already left the warehouse at the
+  /// count that found them missing.
   ///
-  /// **No cash leg, deliberately.** [_postCrateDepositLegs] exists because a
-  /// Placed Deposit movement is money leaving or entering the drawer and the
-  /// asset must never exist without its cash half. A write-off moves no cash at
-  /// all: the money left (or never arrived) long ago, and this is only the
-  /// moment it stops being expected back. Writing a `crate_deposit_out` payment
-  /// row here would show cash moving that nobody handed over, which is exactly
-  /// the class of defect ADR 0023's spine forbids ("a book entry appears only
-  /// when money genuinely moved"). The loss reaches the report as a P&L line
-  /// read from these rows, the way `crateDamageDepositKobo` already does.
-  ///
-  /// **Nothing calls this on a timer.** There is no scheduler, no age
-  /// threshold, no "shortfalls older than N days" sweep anywhere in the app, and
-  /// the v80 migration deliberately backfills nothing. Profit is never reduced
-  /// by a decision nobody made — an owner who ignores the card keeps a silently
-  /// overstated profit, and ADR 0023 says so explicitly: the card exists to make
-  /// ignoring it a choice.
-  ///
-  /// **Unattributed.** No `supplierId` parameter, because crates are fungible
-  /// and there is no honest answer to whose went missing (rule 4). Attribution
-  /// happens once, at settlement.
-  ///
-  /// Returns the new row's id, or null when nothing was written — a
-  /// non-positive count, an unknown brand, or a brand whose Crate Money
-  /// Arrangement does not move money. That last one is the release gate: a
-  /// `none` brand has no shortfall to accept, so there is nothing to write off,
-  /// and a stray call cannot cut its profit.
-  Future<String?> writeOffCrateShortfall({
+  /// Capped at the store's open shortage, re-read inside the transaction, so the
+  /// same crates can't be written off twice from two screens. Returns the new
+  /// row's id, or null when nothing was written — a non-positive count, more
+  /// than is open, or an unknown brand.
+  Future<String?> writeOffCrateShortage({
     required String manufacturerId,
+    required String storeId,
     required int crateCount,
     required String performedBy,
-    String? storeId,
     String? note,
-  }) => _bookCrateShortfallLoss(
-    manufacturerId: manufacturerId,
-    crateCount: (_) => crateCount,
-    performedBy: performedBy,
-    storeId: storeId,
-    note: note,
-    source: CrateWriteOffSource.manual,
-  );
+  }) async {
+    if (crateCount <= 0) return null;
+    return transaction(() async {
+      final manufacturer = await _manufacturerById(manufacturerId);
+      if (manufacturer == null) return null;
+      final state = await _crateShortageStateAt(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+      );
+      if (crateCount > state.openCrates) return null;
+      return _insertCrateWriteOff(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        crateCount: crateCount,
+        ratePerCrateKobo: _max0Kobo(manufacturer.depositAmountKobo),
+        performedBy: performedBy,
+        note: note,
+        source: CrateWriteOffSource.countShortage,
+      );
+    });
+  }
+
+  /// **Reverse** a write-off: [crateCount] written-off crates of
+  /// [manufacturerId] turned up at [storeId] (#296, PRD #284 decision 7).
+  ///
+  /// Writes compensating NEGATIVE `count_shortage` rows, the newest write-offs
+  /// first, each at the rate that write-off was snapshotted at, so the gain
+  /// equals the loss it gives back. The gain lands on the day this is called,
+  /// never on the original write-off's day. The crates themselves already went
+  /// back into the warehouse at the count that found them.
+  ///
+  /// Capped at crates found after being written off
+  /// ([CrateShortageState.reversibleCrates]). Returns the new row ids, empty
+  /// when nothing was written.
+  Future<List<String>> reverseCrateWriteOff({
+    required String manufacturerId,
+    required String storeId,
+    required int crateCount,
+    required String performedBy,
+    String? note,
+  }) async {
+    if (crateCount <= 0) return const [];
+    return transaction(() async {
+      final manufacturer = await _manufacturerById(manufacturerId);
+      if (manufacturer == null) return const <String>[];
+      final state = await _crateShortageStateAt(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+      );
+      final plan = planCrateWriteOffReversal(state, crateCount);
+      final ids = <String>[];
+      for (final layer in plan) {
+        ids.add(
+          await _insertCrateWriteOff(
+            manufacturerId: manufacturerId,
+            storeId: storeId,
+            crateCount: -layer.crates,
+            ratePerCrateKobo: layer.ratePerCrateKobo,
+            performedBy: performedBy,
+            note: note,
+            source: CrateWriteOffSource.countShortage,
+          ),
+        );
+      }
+      return ids;
+    });
+  }
+
+  Future<ManufacturerData?> _manufacturerById(String manufacturerId) =>
+      (select(manufacturers)
+            ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
+          .getSingleOrNull();
+
+  static int _max0Kobo(int kobo) => kobo > 0 ? kobo : 0;
 
   /// **The forfeit netting** (#217, PRD #203 slice 8/8, ADR 0023 finding #4).
   ///
@@ -2903,10 +2954,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// The ONE writer of `crate_shortfall_writeoffs`. [crateCount] is a function
-  /// of the brand's arrangement rather than a plain number, so the release gate
-  /// and the amount are decided together, at the one moment the arrangement has
-  /// been read.
+  /// The #217 forfeit netting's gate: [crateCount] is a function of the brand's
+  /// arrangement rather than a plain number, so the release gate and the amount
+  /// are decided together, at the one moment the arrangement has been read.
   Future<String?> _bookCrateShortfallLoss({
     required String manufacturerId,
     required int Function(CrateMoneyArrangement) crateCount,
@@ -2917,207 +2967,69 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     String? id,
     DateTime? at,
   }) async {
-    final manufacturer =
-        await (select(manufacturers)..where(
-              (t) => t.id.equals(manufacturerId) & whereBusiness(t),
-            ))
-            .getSingleOrNull();
+    final manufacturer = await _manufacturerById(manufacturerId);
     if (manufacturer == null) return null;
     final arrangement = crateMoneyArrangementOf(
       manufacturer.crateMoneyArrangement,
     );
-    // A float brand CAN write off (#214 pinned that a float brand's losses raise
-    // a Shortfall), it just moves no money doing it — which is automatic here,
-    // because this verb moves no money for any brand.
     if (!arrangement.movesMoney) return null;
 
     final count = crateCount(arrangement);
     if (count <= 0) return null;
 
-    final rate = manufacturer.depositAmountKobo > 0
-        ? manufacturer.depositAmountKobo
-        : 0;
+    return transaction(
+      () => _insertCrateWriteOff(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        crateCount: count,
+        ratePerCrateKobo: _max0Kobo(manufacturer.depositAmountKobo),
+        performedBy: performedBy,
+        note: note,
+        source: source,
+        id: id,
+        at: at,
+      ),
+    );
+  }
+
+  /// The ONE writer of `crate_shortfall_writeoffs`. Call inside a transaction.
+  Future<String> _insertCrateWriteOff({
+    required String manufacturerId,
+    required String? storeId,
+    required int crateCount,
+    required int ratePerCrateKobo,
+    required String performedBy,
+    required CrateWriteOffSource source,
+    String? note,
+    String? id,
+    DateTime? at,
+  }) async {
     final now = at ?? DateTime.now();
     final rowId = id ?? UuidV7.generate();
-    await transaction(() async {
-      // Every defaulted column is set explicitly: a synced write that leaves one
-      // Absent lets the cloud mint a different value and the row diverges.
-      final row = CrateShortfallWriteoffsCompanion.insert(
-        id: Value(rowId),
-        businessId: requireBusinessId(),
-        manufacturerId: manufacturerId,
-        storeId: Value(storeId),
-        crateCount: count,
-        ratePerCrateKobo: Value(rate),
-        note: Value(note),
-        source: Value(source.wire),
-        performedBy: Value(performedBy),
-        createdAt: Value(now),
-        lastUpdatedAt: Value(now),
-      );
-      await into(crateShortfallWriteoffs).insert(
-        row,
-        // #217 — the deterministic-id path: the second offline device to settle
-        // the same order must be a no-op, not a duplicate booked loss and not a
-        // crash. Harmless for the random-id manual path.
-        mode: InsertMode.insertOrIgnore,
-      );
-      await db.syncDao.enqueueUpsert('crate_shortfall_writeoffs', row);
-    });
+    // Every defaulted column is set explicitly: a synced write that leaves one
+    // Absent lets the cloud mint a different value and the row diverges.
+    final row = CrateShortfallWriteoffsCompanion.insert(
+      id: Value(rowId),
+      businessId: requireBusinessId(),
+      manufacturerId: manufacturerId,
+      storeId: Value(storeId),
+      crateCount: crateCount,
+      ratePerCrateKobo: Value(ratePerCrateKobo),
+      note: Value(note),
+      source: Value(source.wire),
+      performedBy: Value(performedBy),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await into(crateShortfallWriteoffs).insert(
+      row,
+      // #217 — the deterministic-id path: the second offline device to settle
+      // the same order must be a no-op, not a duplicate booked loss and not a
+      // crash. Harmless for the random-id paths.
+      mode: InsertMode.insertOrIgnore,
+    );
+    await db.syncDao.enqueueUpsert('crate_shortfall_writeoffs', row);
     return rowId;
-  }
-
-  /// **The brand-level Crate Shortfall**, business-wide (#216).
-  ///
-  /// This is the read #215 could not offer. Its card carries `unbackedValueKobo`
-  /// as disclosure but deliberately no shortfall, because the pair-keyed roll-up
-  /// it had could not answer the question honestly: subtracting a business-wide
-  /// yard from ONE supplier's debt double-subtracts across two suppliers of the
-  /// same brand and reports both as square while the brand is genuinely short.
-  ///
-  /// So this stream is keyed by **manufacturer and nothing else**. Both inputs
-  /// are summed over the same brand-level scope — `cratesOwed` across EVERY
-  /// supplier of the brand, `emptiesOnHand` across every store — which is the
-  /// only scope at which `computeCrateDepositPosition` accepts an
-  /// `emptiesOnHand` argument at all (#212 made it nullable precisely to make
-  /// the mismatched call unrepresentable). Two suppliers of one brand therefore
-  /// contribute to ONE shortfall and neither is named in it.
-  ///
-  /// Business-wide with no `storeId` parameter, exactly like
-  /// [watchBusinessCrateDepositRollup]: a depot invoices the business, not the
-  /// branch, and a per-store split would repeat `CRATE_TRACKING_AUDIT` C4.
-  Stream<CrateShortfallRollup> watchCrateShortfallRollup() {
-    final brandRows =
-        (select(manufacturers)..where((t) => whereBusiness(t))).watch();
-
-    // Crates owed, per BRAND across every supplier — the roll-up of
-    // `watchSupplierCrateDebt`'s per-pair figure, grouped one level up. This is
-    // the axis that makes the shortfall unattributed by construction: the
-    // supplier column is not selected, so no attribution can leak out.
-    final owedSum = supplierCrateLedger.quantityDelta.sum();
-    final owedRows =
-        (selectOnly(supplierCrateLedger)
-              ..addColumns([supplierCrateLedger.manufacturerId, owedSum])
-              ..where(whereBusiness(supplierCrateLedger))
-              ..groupBy([supplierCrateLedger.manufacturerId]))
-            .watch();
-
-    // Empties physically on hand, per brand, business-wide — the same derived
-    // pool [watchEmptiesPoolByManufacturer] returns (ADR 0020: the ledger is the
-    // truth, never the `empty_crate_stock` scalar).
-    final emptiesRows = watchEmptiesPoolByManufacturer();
-
-    // The persisted decisions: net crates accepted as lost, plus who last
-    // accepted one and when (the "who wrote off a shortage and when" the card
-    // shows). A COUNT, never money — each decision booked its own money at its
-    // own snapshotted rate on its own day.
-    //
-    // The SUM counts every row whatever its origin, #217's forfeit netting
-    // included: those crates left with a customer and are as gone as any other,
-    // and leaving them out would ask the owner to accept the same missing
-    // crates a second time. The "last written off" PAIR is manual-only — see
-    // [_lastManualShortfallWriteOff].
-    final writtenOffSum = crateShortfallWriteoffs.crateCount.sum();
-    final writeOffRows =
-        (selectOnly(crateShortfallWriteoffs)
-              ..addColumns([
-                crateShortfallWriteoffs.manufacturerId,
-                writtenOffSum,
-              ])
-              ..where(whereBusiness(crateShortfallWriteoffs))
-              ..groupBy([crateShortfallWriteoffs.manufacturerId]))
-            .watch();
-
-    return Rx.combineLatest4<
-      List<ManufacturerData>,
-      List<TypedResult>,
-      Map<String, int>,
-      List<TypedResult>,
-      ({
-        List<ManufacturerData> brands,
-        List<TypedResult> owed,
-        Map<String, int> empties,
-        List<TypedResult> writeOffs,
-      })
-    >(
-      brandRows,
-      owedRows,
-      emptiesRows,
-      writeOffRows,
-      (brands, owed, empties, writeOffs) =>
-          (brands: brands, owed: owed, empties: empties, writeOffs: writeOffs),
-    ).asyncMap((input) async {
-      final owedBy = <String, int>{};
-      for (final r in input.owed) {
-        final id = r.read(supplierCrateLedger.manufacturerId);
-        if (id == null) continue;
-        owedBy[id] = r.read(owedSum) ?? 0;
-      }
-
-      final writtenOffBy = <String, int>{};
-      for (final r in input.writeOffs) {
-        final id = r.read(crateShortfallWriteoffs.manufacturerId);
-        if (id == null) continue;
-        writtenOffBy[id] = r.read(writtenOffSum) ?? 0;
-      }
-
-      final shortfalls = <CrateShortfall>[];
-      for (final brand in input.brands) {
-        final arrangement = crateMoneyArrangementOf(brand.crateMoneyArrangement);
-        // Skip the read entirely for a brand that moves no money — the seam
-        // would zero it anyway, and this keeps a `none` business from paying for
-        // a name lookup it can never render.
-        if (!arrangement.movesMoney) continue;
-        final lastManual = await _lastManualShortfallWriteOff(brand.id);
-        shortfalls.add(
-          computeCrateShortfall(
-            manufacturerId: brand.id,
-            manufacturerName: brand.name,
-            arrangement: arrangement,
-            ratePerCrateKobo: brand.depositAmountKobo,
-            cratesOwed: owedBy[brand.id] ?? 0,
-            emptiesOnHand: input.empties[brand.id] ?? 0,
-            writtenOffCrates: writtenOffBy[brand.id] ?? 0,
-            lastWrittenOffAt: lastManual?.createdAt,
-            lastWrittenOffBy: lastManual?.performedBy,
-          ),
-        );
-      }
-      return rollUpCrateShortfalls(shortfalls);
-    });
-  }
-
-  /// Who took the most recent write-off on [manufacturerId], and when. Read
-  /// separately from the grouped sum because SQLite's `MAX()` and a bare column
-  /// in the same aggregate is a bare-column trick this codebase does not rely
-  /// on.
-  ///
-  /// **MANUAL rows only** (#217). The card's "who accepted this loss and when"
-  /// is a question about a person taking responsibility, and the forfeit netting
-  /// is not one: no one chose it, it is the automatic second half of a customer
-  /// keeping their crates. Counting it here would replace the owner who last
-  /// stood in front of this card with whichever cashier last confirmed an order,
-  /// and would keep resetting the date to today on a brand nobody has looked at
-  /// in months. The netting still nets out of the shortfall COUNT above — it is
-  /// only the attribution that excludes it.
-  Future<CrateShortfallWriteoffData?> _lastManualShortfallWriteOff(
-    String manufacturerId,
-  ) async {
-    final row =
-        await (select(crateShortfallWriteoffs)
-              ..where(
-                (t) =>
-                    whereBusiness(t) &
-                    t.manufacturerId.equals(manufacturerId) &
-                    t.source.equals(kCrateWriteOffSourceManual),
-              )
-              ..orderBy([
-                (t) =>
-                    OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
-              ])
-              ..limit(1))
-            .getSingleOrNull();
-    return row;
   }
 
   /// Every write-off decision, newest first — the rows the reconciliation's P&L
@@ -3270,100 +3182,188 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
 
   /// Watches the open crate shortage for ONE brand (#293, PRD #284 §7).
   ///
-  /// Folded from count movements in chronological order. When [storeId] is set,
-  /// scopes to that store; when null, sums open shortages across all stores.
+  /// When [storeId] is set, scopes to that store; when null, sums open
+  /// shortages across all stores. Reads through [watchCrateShortageRollup]'s
+  /// fold, so it can't disagree with Daily Reconciliation.
   Stream<int> watchCrateShortageByManufacturer(
     String manufacturerId, {
     String? storeId,
   }) {
-    var query = select(crateLedger)
-      ..where(
-        (t) =>
-            whereBusiness(t) &
-            t.manufacturerId.equals(manufacturerId) &
-            // Same basis as the warehouse count: store-held, not a customer's.
-            t.storeId.isNotNull() &
-            t.customerId.isNull() &
-            t.movementType.isIn([
-              kCrateMovementOpeningCount,
-              kCrateMovementCount,
-            ]),
-      )
-      ..orderBy([
-        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
-        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc),
-      ]);
-
-    if (storeId != null) {
-      query = query..where((t) => t.storeId.equals(storeId));
-    }
-
-    return query.watch().map((rows) {
-      final movements = rows.map((r) => CrateCountMovement(
-        storeId: r.storeId,
-        movementType: r.movementType,
-        quantityDelta: r.quantityDelta,
-        createdAt: r.createdAt,
-      ));
-      if (storeId != null) {
-        return foldCrateShortageForStore(movements);
-      } else {
-        return foldTotalCrateShortage(movements);
-      }
-    });
+    return _crateShortageEventsQuery(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+    ).map(
+      (byBrand) =>
+          foldTotalCrateShortage(byBrand[manufacturerId]?.events ?? const []),
+    );
   }
 
-  /// Watches open crate shortages for ALL brands, mapped as manufacturerId -> shortageCount (#293).
+  /// Watches open crate shortages for ALL brands, mapped as
+  /// `manufacturerId → open crates`, brands with none left out (#293).
   ///
   /// When [storeId] is set, scopes to that store; when null, sums open shortages
   /// across all stores per brand.
   Stream<Map<String, int>> watchAllCrateShortages({String? storeId}) {
-    var query = select(crateLedger)
-      ..where(
-        (t) =>
-            whereBusiness(t) &
-            t.storeId.isNotNull() &
-            t.customerId.isNull() &
-            t.movementType.isIn([
-              kCrateMovementOpeningCount,
-              kCrateMovementCount,
-            ]),
-      )
-      ..orderBy([
-        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
-        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.asc),
-      ]);
-
-    if (storeId != null) {
-      query = query..where((t) => t.storeId.equals(storeId));
-    }
-
-    return query.watch().map((rows) {
-      final byManufacturer = <String, List<CrateCountMovement>>{};
-      for (final r in rows) {
-        final mfrId = r.manufacturerId;
-        if (mfrId == null) continue;
-        byManufacturer.putIfAbsent(mfrId, () => []).add(
-          CrateCountMovement(
-            storeId: r.storeId,
-            movementType: r.movementType,
-            quantityDelta: r.quantityDelta,
-            createdAt: r.createdAt,
-          ),
-        );
-      }
-
+    return _crateShortageEventsQuery(storeId: storeId).map((byBrand) {
       final result = <String, int>{};
-      for (final entry in byManufacturer.entries) {
-        final count = storeId != null
-            ? foldCrateShortageForStore(entry.value)
-            : foldTotalCrateShortage(entry.value);
-        if (count > 0) {
-          result[entry.key] = count;
-        }
+      for (final entry in byBrand.entries) {
+        final open = foldTotalCrateShortage(entry.value.events);
+        if (open > 0) result[entry.key] = open;
       }
       return result;
     });
+  }
+
+  /// **The per-brand Crate Shortage read** (#296, PRD #284 §5 and §7): every
+  /// brand with a count in scope, its per-store fold, and its crate value.
+  ///
+  /// The manufacturer screen, the Crates-tab badge and Daily Reconciliation's
+  /// "Crates missing" all fold the same events, so the three figures agree.
+  /// When [storeId] is set, scopes to that store; when null, every store.
+  Stream<CrateShortageRollup> watchCrateShortageRollup({String? storeId}) {
+    final brandRows =
+        (select(manufacturers)..where((t) => whereBusiness(t))).watch();
+    return Rx.combineLatest2(
+      brandRows,
+      _crateShortageEventsQuery(storeId: storeId),
+      (List<ManufacturerData> brands, Map<String, _BrandShortageEvents> byBrand) {
+        final result = <CrateShortageBrand>[];
+        for (final brand in brands) {
+          final events = byBrand[brand.id];
+          if (events == null) continue;
+          result.add(
+            CrateShortageBrand(
+              manufacturerId: brand.id,
+              manufacturerName: brand.name,
+              ratePerCrateKobo: _max0Kobo(brand.depositAmountKobo),
+              byStore: foldCrateShortageStatesPerStore(events.events),
+              lastWrittenOffAt: events.lastWriteOff?.createdAt,
+              lastWrittenOffBy: events.lastWriteOff?.performedBy,
+            ),
+          );
+        }
+        result.sort((a, b) => a.manufacturerName.compareTo(b.manufacturerName));
+        return CrateShortageRollup(brands: result);
+      },
+    );
+  }
+
+  /// The count rows and `count_shortage` write-offs the shortage folds, grouped
+  /// by brand. Store-held count rows only, the warehouse count's basis. The
+  /// older `manual` and `customer_forfeit` write-offs are never read here.
+  Stream<Map<String, _BrandShortageEvents>> _crateShortageEventsQuery({
+    String? manufacturerId,
+    String? storeId,
+  }) {
+    final counts = _crateCountRowsSelect(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+    ).watch();
+    final writeOffs = _crateShortageWriteOffsSelect(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+    ).watch();
+    return Rx.combineLatest2(counts, writeOffs, _groupCrateShortageEvents);
+  }
+
+  /// One-shot twin of [_crateShortageEventsQuery] for use inside a write
+  /// transaction, where a watch stream would read outside it.
+  Future<CrateShortageState> _crateShortageStateAt({
+    required String manufacturerId,
+    required String storeId,
+  }) async {
+    final counts = await _crateCountRowsSelect(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+    ).get();
+    final writeOffs = await _crateShortageWriteOffsSelect(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+    ).get();
+    final events =
+        _groupCrateShortageEvents(counts, writeOffs)[manufacturerId]?.events ??
+        const [];
+    return foldCrateShortageStatesPerStore(events)[storeId] ??
+        CrateShortageState.zero;
+  }
+
+  SimpleSelectStatement<$CrateLedgerTable, CrateLedgerData>
+  _crateCountRowsSelect({String? manufacturerId, String? storeId}) {
+    return select(crateLedger)
+      ..where((t) {
+        var pred =
+            whereBusiness(t) &
+            t.storeId.isNotNull() &
+            t.customerId.isNull() &
+            t.movementType.isIn(kCrateCountMovementTypes);
+        if (manufacturerId != null) {
+          pred = pred & t.manufacturerId.equals(manufacturerId);
+        }
+        if (storeId != null) pred = pred & t.storeId.equals(storeId);
+        return pred;
+      })
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt),
+        (t) => OrderingTerm(expression: t.id),
+      ]);
+  }
+
+  SimpleSelectStatement<$CrateShortfallWriteoffsTable, CrateShortfallWriteoffData>
+  _crateShortageWriteOffsSelect({String? manufacturerId, String? storeId}) {
+    return select(crateShortfallWriteoffs)
+      ..where((t) {
+        var pred =
+            whereBusiness(t) &
+            t.storeId.isNotNull() &
+            t.source.equals(kCrateWriteOffSourceCountShortage);
+        if (manufacturerId != null) {
+          pred = pred & t.manufacturerId.equals(manufacturerId);
+        }
+        if (storeId != null) pred = pred & t.storeId.equals(storeId);
+        return pred;
+      })
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt),
+        (t) => OrderingTerm(expression: t.id),
+      ]);
+  }
+
+  static Map<String, _BrandShortageEvents> _groupCrateShortageEvents(
+    List<CrateLedgerData> counts,
+    List<CrateShortfallWriteoffData> writeOffs,
+  ) {
+    final events = <String, List<CrateShortageEvent>>{};
+    final lastWriteOff = <String, CrateShortfallWriteoffData>{};
+    for (final r in counts) {
+      final mfrId = r.manufacturerId;
+      if (mfrId == null) continue;
+      events.putIfAbsent(mfrId, () => []).add(
+        CrateCountMovement(
+          id: r.id,
+          storeId: r.storeId,
+          movementType: r.movementType,
+          quantityDelta: r.quantityDelta,
+          createdAt: r.createdAt,
+        ),
+      );
+    }
+    for (final w in writeOffs) {
+      events.putIfAbsent(w.manufacturerId, () => []).add(
+        CrateShortageWriteOffEvent(
+          id: w.id,
+          storeId: w.storeId,
+          crateCount: w.crateCount,
+          ratePerCrateKobo: w.ratePerCrateKobo,
+          createdAt: w.createdAt,
+        ),
+      );
+      // Rows arrive oldest first, so the last positive one wins.
+      if (w.crateCount > 0) lastWriteOff[w.manufacturerId] = w;
+    }
+    return {
+      for (final e in events.entries)
+        e.key: (events: e.value, lastWriteOff: lastWriteOff[e.key]),
+    };
   }
 
   /// Attribution of business-wide Customer Held Deposit across brands (#291).

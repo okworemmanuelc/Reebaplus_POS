@@ -170,7 +170,12 @@ void main() {
   /// The reconciliation for `[start, endExclusive)`, built from the rows the
   /// database actually holds — so the DAO's write and the report's arithmetic
   /// are exercised as one chain.
-  Future<ReconData> recon({DateTime? start, DateTime? endExclusive}) async {
+  Future<ReconData> recon({
+    DateTime? start,
+    DateTime? endExclusive,
+    bool Function(String? storeId)? inScope,
+  }) async {
+    final scope = inScope;
     return reconDataFrom(
       ReconInputs(
         manufacturers: await db.select(db.manufacturers).get(),
@@ -183,6 +188,7 @@ void main() {
         isCeo: true,
         start: start,
         endExclusive: endExclusive,
+        inScope: scope ?? (_) => true,
       ),
     );
   }
@@ -277,29 +283,18 @@ void main() {
       expect(d.netCashMovementKobo, 0);
     });
 
-    test('the netted crates count against the derived shortfall, so nobody is '
-        'asked to accept the same missing crates twice', () async {
+    test('the netted crates never touch the count-based Crate Shortage '
+        '(#296)', () async {
       await switchOn();
       await forfeit(4);
 
-      final shortfall = computeCrateShortfall(
-        manufacturerId: starId,
-        manufacturerName: 'Star Lager',
-        arrangement: CrateMoneyArrangement.perDelivery,
-        ratePerCrateKobo: rate,
-        // Four crates owed to the depot that are not in the yard — the exact
-        // gap the four kept crates opened.
-        cratesOwed: 4,
-        emptiesOnHand: 0,
-        writtenOffCrates: (await writeOffs()).single.crateCount,
-      );
-      expect(shortfall.rawShortfallCrates, 4);
-      expect(shortfall.writtenOffCrates, 4);
+      final shortage = await db.cratePoolDao.watchCrateShortageRollup().first;
       expect(
-        shortfall.openShortfallCrates,
+        shortage.openCrates,
         0,
-        reason: 'already accepted — the card must not ask for it again',
+        reason: 'a forfeit netting is history, not a counted shortage',
       );
+      expect(shortage.brands, isEmpty);
     });
 
     test('two offline tills settling the same order book ONE loss, not two',
@@ -327,6 +322,21 @@ void main() {
       );
       expect(await writeOffs(), hasLength(1));
       expect((await recon()).crateForfeitNettedKobo, 2 * rate);
+    });
+
+    test('a store scope leaves the forfeit line and its split in step', () async {
+      await switchOn();
+      await forfeit(4);
+
+      // A forfeit write-off is business-wide, like the deposit it nets
+      // against, so a store scope narrows neither the line nor its split.
+      final scoped = await recon(inScope: (_) => false);
+      expect(scoped.crateShortfallWrittenOffKobo, 4 * rate);
+      expect(
+        scoped.crateForfeitNettedKobo,
+        scoped.crateShortfallWrittenOffKobo,
+        reason: 'the split can never exceed the line it breaks down',
+      );
     });
 
     test('a partial deposit still books the whole crate: the customer paid less '
@@ -534,15 +544,26 @@ void main() {
       expect(payload, contains('rate_per_crate_kobo'));
     });
 
-    test('a manual write-off still reads `manual`, and stays the row the card '
-        'attributes', () async {
+    test('an old manual write-off still reads `manual` and still books, beside '
+        'the netting', () async {
       await switchOn();
       await forfeit(2);
-      await db.cratePoolDao.writeOffCrateShortfall(
-        manufacturerId: starId,
-        crateCount: 1,
-        performedBy: staffId,
-      );
+      final now = DateTime.now();
+      await db
+          .into(db.crateShortfallWriteoffs)
+          .insert(
+            CrateShortfallWriteoffsCompanion.insert(
+              id: const Value('wo-manual'),
+              businessId: businessId,
+              manufacturerId: starId,
+              crateCount: 1,
+              ratePerCrateKobo: const Value(rate),
+              source: const Value(kCrateWriteOffSourceManual),
+              performedBy: Value(staffId),
+              createdAt: Value(now),
+              lastUpdatedAt: Value(now),
+            ),
+          );
 
       final rows = await writeOffs();
       expect(rows, hasLength(2));
@@ -551,15 +572,10 @@ void main() {
         {kCrateWriteOffSourceManual, kCrateWriteOffSourceCustomerForfeit},
       );
 
-      // Both losses reach profit; only the manual one is attributed on the card.
+      // Both losses reach profit.
       final d = await recon();
       expect(d.crateShortfallWrittenOffKobo, 3 * rate);
       expect(d.crateForfeitNettedKobo, 2 * rate);
-
-      final rollup = await db.cratePoolDao.watchCrateShortfallRollup().first;
-      for (final brand in rollup.brands) {
-        expect(brand.lastWrittenOffBy, staffId);
-      }
     });
   });
 }
