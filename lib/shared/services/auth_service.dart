@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
+import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 
@@ -1083,8 +1084,22 @@ class AuthService extends ValueNotifier<UserData?> {
         debugPrint('[AuthService] business-deleted clearAllData error: $e');
       }
       await fullLogout();
+      await _clearFirstLoadMarkersAfterWipe();
     } finally {
       _handlingBusinessDeleted = false;
+    }
+  }
+
+  /// Clears the first-load markers a second time, once the wiping logout has
+  /// signed the user out. `clearAllData` already cleared them, but a pull that
+  /// was in flight can finish between that wipe and the sign-out and write them
+  /// back — and the next sign-in would then treat an empty phone as one that
+  /// already finished its first download (#313). Best-effort: never throws.
+  Future<void> _clearFirstLoadMarkersAfterWipe() async {
+    try {
+      await FirstLoadMarkerService.clearAllMarkers();
+    } catch (e) {
+      debugPrint('[AuthService] post-wipe marker clear failed: $e');
     }
   }
 
@@ -1303,6 +1318,7 @@ class AuthService extends ValueNotifier<UserData?> {
       debugPrint('[AuthService] deleteBusiness clearAllData error: $e');
     }
     await fullLogout();
+    await _clearFirstLoadMarkersAfterWipe();
   }
 
   /// Maps a `delete_business` RPC error to plain English for the CEO.
@@ -1448,6 +1464,7 @@ class AuthService extends ValueNotifier<UserData?> {
       debugPrint('[AuthService] logOutCurrentUser clearAllData error: $e');
     }
     await fullLogout();
+    await _clearFirstLoadMarkersAfterWipe();
   }
 
   /// §3.1 wipe gate (E) / Invariant #12. Guards any device-wiping offboard (a
@@ -1522,6 +1539,7 @@ class AuthService extends ValueNotifier<UserData?> {
       debugPrint('[AuthService] discardUnsyncedAndLogout clearAllData error: $e');
     }
     await fullLogout();
+    await _clearFirstLoadMarkersAfterWipe();
   }
 
   /// Voluntary self-resign (#117 staff offboarding). A non-owner staff member
@@ -1588,6 +1606,7 @@ class AuthService extends ValueNotifier<UserData?> {
       debugPrint('[AuthService] resignOwnMembership clearAllData error: $e');
     }
     await fullLogout();
+    await _clearFirstLoadMarkersAfterWipe();
   }
 
   /// §3.1 "Resolve unsynced data" terminal for a self-resign (#117). Called by
@@ -1621,6 +1640,7 @@ class AuthService extends ValueNotifier<UserData?> {
       debugPrint('[AuthService] discardUnsyncedAndResign clearAllData error: $e');
     }
     await fullLogout();
+    await _clearFirstLoadMarkersAfterWipe();
   }
 
   /// Calls the `resign_own_membership` RPC directly (NOT via the §6 outbox), the
