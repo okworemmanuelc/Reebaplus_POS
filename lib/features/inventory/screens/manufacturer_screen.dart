@@ -368,18 +368,9 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     // not disabled, for everyone else. Write off and Reverse turn a count into
     // profit, so they share the gate (#296).
     final canBuy = Gates.confirmCrateDeposit.allows(ref);
-    final reversible = canBuy
-        ? (ref
-                  .watch(
-                    crateShortageRollupProvider(
-                      ref.watch(lockedStoreProvider).value,
-                    ),
-                  )
-                  .valueOrNull
-                  ?.brand(mfr.id)
-                  ?.reversibleCrates ??
-              0)
-        : 0;
+    final lockedStoreId = ref.watch(lockedStoreProvider).value;
+    final shortage = ref.watch(crateShortageRollupProvider(lockedStoreId));
+    final reversible = shortage.valueOrNull?.brand(mfr.id)?.reversibleCrates ?? 0;
     return [
       if (canCount || canBuy)
         SliverToBoxAdapter(

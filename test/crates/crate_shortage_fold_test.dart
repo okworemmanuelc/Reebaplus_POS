@@ -100,6 +100,19 @@ void main() {
         writeOff(5, 2),
       ]);
       expect(s.openCrates, 0);
+      expect(
+        s.writtenOffCrates,
+        5,
+        reason: 'the duplicate took nothing that was still open',
+      );
+      final found = foldCrateShortageStateForStore([
+        opening(0),
+        count(-5, 1),
+        writeOff(5, 2),
+        writeOff(5, 2),
+        count(10, 3),
+      ]);
+      expect(found.reversibleCrates, 5);
     });
 
     test('surplus before a shortage is still not banked', () {

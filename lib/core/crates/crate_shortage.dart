@@ -127,8 +127,9 @@ class CrateShortageState {
 ///   warehouse only — it is **not banked** against a later shortage — but
 ///   crates that had been written off may now be reversed, up to the number
 ///   written off.
-/// - A write-off reduces the open shortage (floored at 0, so two tills writing
-///   off the same crates offline can't make it negative).
+/// - A write-off reduces the open shortage, and only what was still open counts
+///   as written off — two tills writing off the same crates offline can't make
+///   the shortage negative or the crates reversible twice.
 /// - A reversal uses up reversible crates and the newest write-offs first.
 CrateShortageState foldCrateShortageStateForStore(
   Iterable<CrateShortageEvent> events,
@@ -158,13 +159,19 @@ CrateShortageState foldCrateShortageStateForStore(
         }
       case CrateShortageWriteOffEvent(:final crateCount, :final ratePerCrateKobo):
         if (crateCount > 0) {
-          open = _max0(open - crateCount);
-          layers.add(
-            CrateWriteOffLayer(
-              crates: crateCount,
-              ratePerCrateKobo: ratePerCrateKobo,
-            ),
-          );
+          // Only what was still open counts as written off: a second till's
+          // offline write-off of the same crates can't make them reversible
+          // twice.
+          final taken = crateCount < open ? crateCount : open;
+          open -= taken;
+          if (taken > 0) {
+            layers.add(
+              CrateWriteOffLayer(
+                crates: taken,
+                ratePerCrateKobo: ratePerCrateKobo,
+              ),
+            );
+          }
         } else if (crateCount < 0) {
           var left = -crateCount;
           reversible = _max0(reversible - left);
