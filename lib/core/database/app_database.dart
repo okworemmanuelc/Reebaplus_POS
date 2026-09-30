@@ -593,10 +593,10 @@ class CrateShortfallWriteoffs extends Table {
   /// The brand. The ONLY axis a shortfall has — see the class doc.
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
 
-  /// The store whose device took the decision, for the audit trail only.
-  /// Nullable, and it never scopes the figure: a shortfall is business-wide
-  /// (`CRATE_TRACKING_AUDIT` C4), so splitting the loss per branch would let two
-  /// stores each believe the same crates were theirs to lose.
+  /// The store the decision was taken at. On a `count_shortage` row (#296) it
+  /// is always set and scopes the row: the Crate Shortage is per store, so the
+  /// write-off belongs to the store whose count found the crates missing. On
+  /// the older `manual` and `customer_forfeit` rows it is an audit trail only.
   TextColumn get storeId => text().nullable().references(Stores, #id)();
 
   /// Crates accepted as lost. **Signed:** positive is a write-off, negative is

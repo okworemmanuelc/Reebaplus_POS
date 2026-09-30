@@ -7,13 +7,20 @@
 ///   2. Full crates in stock — stock of the brand's tracked-bottle products (count × crate value)
 ///   3. With customers, on deposit — unsettled money-track crate lines (deposit actually paid in)
 ///   4. With customers, no deposit — derived customer crate debt (count × crate value)
-///   5. Short — the Crate Shortage (open count × crate value; 0 until #293)
+///   5. Short — the Crate Shortage (open count × crate value)
 ///   6. Damaged — damage movements in current month (snapshotted loss or count × crate value)
 ///
 /// Like [computeCrateDepositPosition], this file has NO database imports, no
 /// Drift dependencies, and no provider container. It operates exclusively over
 /// plain values and returns immutable data structures.
 library;
+
+export 'package:reebaplus_pos/core/crates/crate_shortage.dart'
+    show
+        CrateCountMovement,
+        foldCrateShortageForStore,
+        foldCrateShortagePerStore,
+        foldTotalCrateShortage;
 
 /// The figure for one of the six crate statuses.
 class CrateStatusFigure {
@@ -233,86 +240,6 @@ ManufacturerCratePosition computeManufacturerCratePosition({
   );
 }
 
-/// A count movement input for the pure shortage fold function (#293, PRD #284 §7).
-class CrateCountMovement {
-  /// The store ID the count was performed at.
-  final String? storeId;
-
-  /// Movement type: `'count'` or `'opening_count'`.
-  final String movementType;
-
-  /// Quantity delta recorded on the movement (`counted - expected`).
-  final int quantityDelta;
-
-  /// When the count was performed.
-  final DateTime createdAt;
-
-  const CrateCountMovement({
-    this.storeId,
-    required this.movementType,
-    required this.quantityDelta,
-    required this.createdAt,
-  });
-}
-
-/// Folds count movements for a SINGLE store in chronological order to compute
-/// the open crate shortage (#293, PRD #284 §7).
-///
-/// Rules:
-/// - An Opening Count sets the number and raises no shortage (shortage = 0).
-/// - A count below expected (quantityDelta < 0) opens shortage by the gap:
-///   `shortage += -quantityDelta`.
-/// - A count above expected (quantityDelta > 0) closes open shortage first:
-///   `shortage = math.max(0, shortage - quantityDelta)`.
-///   Any excess only raises the warehouse and is NOT banked (cannot offset a later shortage).
-int foldCrateShortageForStore(Iterable<CrateCountMovement> movements) {
-  var shortage = 0;
-  for (final m in movements) {
-    if (m.movementType == 'opening_count') {
-      shortage = 0;
-    } else if (m.movementType == 'count') {
-      if (m.quantityDelta < 0) {
-        shortage += -m.quantityDelta;
-      } else if (m.quantityDelta > 0) {
-        final remaining = shortage - m.quantityDelta;
-        shortage = remaining > 0 ? remaining : 0;
-      }
-    }
-  }
-  return shortage;
-}
-
-/// Folds count movements per store, returning a map of `storeId -> openShortage`
-/// (#293, PRD #284 §7).
-Map<String, int> foldCrateShortagePerStore(Iterable<CrateCountMovement> movements) {
-  final byStore = <String, List<CrateCountMovement>>{};
-  for (final m in movements) {
-    byStore.putIfAbsent(m.storeId ?? '', () => []).add(m);
-  }
-  final result = <String, int>{};
-  for (final entry in byStore.entries) {
-    // List.sort is not stable, so tied timestamps fall back to incoming order
-    // (the DAO's createdAt-then-id order), matching the single-store fold.
-    final indexed = entry.value.indexed.toList()
-      ..sort((a, b) {
-        final byTime = a.$2.createdAt.compareTo(b.$2.createdAt);
-        return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
-      });
-    result[entry.key] = foldCrateShortageForStore(indexed.map((e) => e.$2));
-  }
-  return result;
-}
-
-/// Computes total shortage across stores by folding count movements per store
-/// and summing the store shortages (#293, PRD #284 §7).
-///
-/// In All Stores, the business total equals the sum of open store shortages.
-/// Surplus in one store does NOT offset shortage in another store.
-int foldTotalCrateShortage(Iterable<CrateCountMovement> movements) {
-  final perStore = foldCrateShortagePerStore(movements);
-  return perStore.values.fold(0, (a, b) => a + b);
-}
-
 /// Attribution of customer held deposits across brands and any unattributed
 /// remainder (#291, PRD #284 §5).
 ///
@@ -469,6 +396,9 @@ const String kManufacturerAttributionNoteKey = 'manufacturer_attribution_note';
 const String kManufacturerCountButtonKey = 'manufacturer_count_button';
 const String kManufacturerRecordDamagedButtonKey =
     'manufacturer_record_damaged_button';
+const String kManufacturerWriteOffButtonKey = 'manufacturer_write_off_button';
+const String kManufacturerReverseWriteOffButtonKey =
+    'manufacturer_reverse_write_off_button';
 
 /// Storage keys for tab scroll state persistence via [TabbedSliverScaffold].
 const String kManufacturerCratesStorageKey = 'manufacturer_crates_tab';
