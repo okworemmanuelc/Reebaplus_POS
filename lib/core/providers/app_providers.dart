@@ -632,10 +632,15 @@ final pullStatusProvider = mirrorNotifier<PullStatus>(
   (ref) => ref.watch(supabaseSyncServiceProvider).pullStatus,
 );
 
-/// True while a user-initiated pull-to-refresh is in flight. The
-/// `AppRefreshWrapper` orb is the sole animation for a manual pull, so
-/// `SyncPullBanner` suppresses its top progress bar while this is set (the
-/// banner's bar still drives automatic/background pulls, where there is no orb).
+/// The current pull stage, projected from [pullStatusProvider].
+final pullStageProvider = Provider<PullStage>((ref) {
+  return ref.watch(pullStatusProvider).value.stage;
+});
+
+/// True while the pull-to-refresh circle is on screen — at most 2 s, even if
+/// the refresh itself runs longer (#313). The `AppRefreshWrapper` circle is the
+/// sole animation for a manual pull, so `SyncPullBanner` suppresses its
+/// first-download progress bar while this is set.
 final manualPullActiveProvider = StateProvider<bool>((ref) => false);
 
 /// True once the local Drift database has at least one product row — used as

@@ -10,6 +10,8 @@
 //   3. `GetStartedDismissalNotifier` — the device-local latch persists across a
 //      simulated restart (a fresh container re-reads the stored flag).
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
+import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/dashboard/get_started_checklist.dart';
@@ -55,9 +58,9 @@ List<ActiveStaffEntry> _staff(int n) => List.generate(
 /// A dismissal notifier that skips SharedPreferences and reports a fixed value.
 class _StubDismissal extends GetStartedDismissalNotifier {
   _StubDismissal(this._value);
-  final bool _value;
+  final GetStartedDismissal _value;
   @override
-  bool build() => _value;
+  GetStartedDismissal build() => _value;
 }
 
 StoreData _store(String id) => StoreData(
@@ -80,6 +83,7 @@ Future<GetStartedChecklistState> _evaluate({
   int staffCount = 1,
   bool dismissed = false,
   bool tourActive = false,
+  bool firstDownloadInProgress = false,
   String? businessId = 'biz1',
 }) async {
   final container = ProviderContainer(
@@ -94,7 +98,13 @@ Future<GetStartedChecklistState> _evaluate({
       activeStaffProvider
           .overrideWith((ref, id) => Stream.value(_staff(staffCount))),
       getStartedChecklistDismissedProvider
-          .overrideWith(() => _StubDismissal(dismissed)),
+          .overrideWith(() => _StubDismissal(
+                dismissed
+                    ? GetStartedDismissal.dismissed
+                    : GetStartedDismissal.notDismissed,
+              )),
+      firstDownloadInProgressProvider
+          .overrideWithValue(firstDownloadInProgress),
       firstRunTourStopProvider
           .overrideWith((ref) => tourActive ? TourStop.createStore : TourStop.none),
     ],
@@ -282,6 +292,15 @@ void main() {
         overrides: [
           currentUserRoleProvider.overrideWith((ref) => _role('ceo')),
           allStoresProvider.overrideWith((ref) => const Stream.empty()),
+          // Every input is watched up front, so each needs a stand-in here.
+          currentBusinessIdProvider.overrideWith((ref) => 'biz1'),
+          firstDownloadInProgressProvider.overrideWithValue(false),
+          hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
+          hasAnyOrderProvider.overrideWith((ref) => Stream.value(false)),
+          activeStaffProvider.overrideWith((ref, id) => Stream.value(_staff(1))),
+          getStartedChecklistDismissedProvider.overrideWith(
+            () => _StubDismissal(GetStartedDismissal.notDismissed),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -289,6 +308,119 @@ void main() {
       final state = container.read(getStartedChecklistProvider);
       expect(state.visible, isFalse);
       expect(state.steps, isEmpty);
+    });
+
+    test('first download in progress → hidden, even with every input read',
+        () async {
+      // A full sign-in to a set-up business: the rows that would tick the
+      // steps have not downloaded yet, so "not done" is not known.
+      final s = await _evaluate(
+        roleSlug: 'ceo',
+        hasStores: true,
+        firstDownloadInProgress: true,
+      );
+      expect(s.visible, isFalse);
+    });
+
+    // A PIN unlock on a fully set-up store: each input is read from SQLite (or
+    // prefs) a few frames after Home builds. Until it has answered, the card
+    // must not treat "not read yet" as "not done".
+    for (final pending in [
+      'products',
+      'orders',
+      'staff',
+      'dismissal',
+    ]) {
+      test('$pending not read yet → hidden', () async {
+        final container = ProviderContainer(
+          overrides: [
+            currentUserRoleProvider.overrideWith((ref) => _role('ceo')),
+            currentBusinessIdProvider.overrideWith((ref) => 'biz1'),
+            firstDownloadInProgressProvider.overrideWithValue(false),
+            firstRunTourStopProvider.overrideWith((ref) => TourStop.none),
+            allStoresProvider
+                .overrideWith((ref) => Stream.value([_store('s1')])),
+            hasLocalProductsProvider.overrideWith(
+              (ref) => pending == 'products'
+                  ? const Stream.empty()
+                  : Stream.value(true),
+            ),
+            hasAnyOrderProvider.overrideWith(
+              (ref) => pending == 'orders'
+                  ? const Stream.empty()
+                  : Stream.value(true),
+            ),
+            activeStaffProvider.overrideWith(
+              (ref, id) => pending == 'staff'
+                  ? const Stream.empty()
+                  : Stream.value(_staff(1)),
+            ),
+            getStartedChecklistDismissedProvider.overrideWith(
+              () => _StubDismissal(
+                pending == 'dismissal'
+                    ? GetStartedDismissal.unresolved
+                    : GetStartedDismissal.notDismissed,
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        container.listen(getStartedChecklistProvider, (_, _) {});
+        await container.read(allStoresProvider.future);
+        await container.pump();
+
+        expect(container.read(getStartedChecklistProvider).visible, isFalse);
+      });
+    }
+
+    test('a fully set-up store never shows the card on any frame as its '
+        'inputs arrive one by one', () async {
+      final products = StreamController<bool>();
+      final orders = StreamController<bool>();
+      final staff = StreamController<List<ActiveStaffEntry>>();
+      final stores = StreamController<List<StoreData>>();
+      addTearDown(() async {
+        await products.close();
+        await orders.close();
+        await staff.close();
+        await stores.close();
+      });
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer(
+        overrides: [
+          currentUserRoleProvider.overrideWith((ref) => _role('ceo')),
+          currentBusinessIdProvider.overrideWith((ref) => 'biz1'),
+          firstDownloadInProgressProvider.overrideWithValue(false),
+          firstRunTourStopProvider.overrideWith((ref) => TourStop.none),
+          allStoresProvider.overrideWith((ref) => stores.stream),
+          hasLocalProductsProvider.overrideWith((ref) => products.stream),
+          hasAnyOrderProvider.overrideWith((ref) => orders.stream),
+          activeStaffProvider.overrideWith((ref, id) => staff.stream),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final seen = <bool>[];
+      container.listen(
+        getStartedChecklistProvider,
+        (_, next) => seen.add(next.visible),
+        fireImmediately: true,
+      );
+
+      // Deliberately the worst order: the step inputs that would tick the card
+      // off arrive last.
+      stores.add([_store('s1')]);
+      await container.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      staff.add(_staff(2));
+      await container.pump();
+      products.add(true);
+      await container.pump();
+      orders.add(true);
+      await container.pump();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen, everyElement(isFalse));
     });
 
     test('a fresh CEO with zero stores → visible, createStore unticked, downstream locked', () async {
@@ -375,19 +507,37 @@ void main() {
 
       final first = ProviderContainer();
       addTearDown(first.dispose);
-      expect(first.read(getStartedChecklistDismissedProvider), isFalse);
+      // Not read from prefs yet — distinct from "not dismissed".
+      expect(
+        first.read(getStartedChecklistDismissedProvider),
+        GetStartedDismissal.unresolved,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(
+        first.read(getStartedChecklistDismissedProvider),
+        GetStartedDismissal.notDismissed,
+      );
       await first
           .read(getStartedChecklistDismissedProvider.notifier)
           .dismiss();
-      expect(first.read(getStartedChecklistDismissedProvider), isTrue);
+      expect(
+        first.read(getStartedChecklistDismissedProvider),
+        GetStartedDismissal.dismissed,
+      );
 
       // Simulate an app restart: a brand-new container re-hydrates from prefs.
       final restarted = ProviderContainer();
       addTearDown(restarted.dispose);
       // Trigger build(), then let the async hydrate resolve.
-      expect(restarted.read(getStartedChecklistDismissedProvider), isFalse);
+      expect(
+        restarted.read(getStartedChecklistDismissedProvider),
+        GetStartedDismissal.unresolved,
+      );
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(restarted.read(getStartedChecklistDismissedProvider), isTrue);
+      expect(
+        restarted.read(getStartedChecklistDismissedProvider),
+        GetStartedDismissal.dismissed,
+      );
     });
   });
 }

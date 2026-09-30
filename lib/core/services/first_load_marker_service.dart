@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// from `clearAllData()` — see the documented clearAllData wipe trap pattern.
 class FirstLoadMarkerService {
   static const _prefix = 'first_pull_done_v1_';
+  static const _finishedPrefix = 'first_download_finished_v1_';
 
   /// Returns true if this business has ever completed a clean full pull on this
   /// device. Returning true suppresses the first-load overlay for this session.
@@ -25,13 +26,32 @@ class FirstLoadMarkerService {
     await prefs.setBool('$_prefix$businessId', true);
   }
 
-  /// Removes the marker for ONE business. Called from
+  /// Returns true once any pull for this business has reached `completed` on
+  /// this device — clean, or with tables deferred (#313). Wider than
+  /// [hasCompletedPull] on purpose: a first download that deferred a table is
+  /// still finished as far as first-time surfaces and the top loading bar are
+  /// concerned. A clean-pull marker implies it, which also covers devices that
+  /// were set up before this marker existed.
+  static Future<bool> hasFinishedFirstDownload(String businessId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getBool('$_finishedPrefix$businessId') ?? false) ||
+        (prefs.getBool('$_prefix$businessId') ?? false);
+  }
+
+  /// Marks this business's first download as finished on this device (#313).
+  static Future<void> markFirstDownloadFinished(String businessId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('$_finishedPrefix$businessId', true);
+  }
+
+  /// Removes the markers for ONE business. Called from
   /// `AppDatabase.clearBusinessData()` (#285 — an older business is cleared at
   /// sign-in while the business being signed in to keeps its own marker), so
   /// the cleared tenant re-shows the first-load overlay if it ever returns.
   static Future<void> clearMarkerForBusiness(String businessId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('$_prefix$businessId');
+    await prefs.remove('$_finishedPrefix$businessId');
   }
 
   /// Removes ALL per-business markers. Called from `AppDatabase.clearAllData()`
@@ -39,7 +59,10 @@ class FirstLoadMarkerService {
   /// re-shows the first-load overlay on its next pull.
   static Future<void> clearAllMarkers() async {
     final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys().where((k) => k.startsWith(_prefix)).toList();
+    final keys = prefs
+        .getKeys()
+        .where((k) => k.startsWith(_prefix) || k.startsWith(_finishedPrefix))
+        .toList();
     for (final k in keys) {
       await prefs.remove(k);
     }

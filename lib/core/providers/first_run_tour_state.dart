@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
 
 /// The stops along the first-run onboarding rail (PRD #229, Issue #233, ADR 0026).
 enum TourStop {
@@ -246,9 +246,9 @@ final tourFirstStoreNameProvider = Provider<String?>((ref) {
 /// Evaluates [computeTourStop] against live permissions, database presence streams,
 /// and failure controllers.
 final firstRunTourStopProvider = Provider<TourStop>((ref) {
-  // Invariant #11: Never show a tour while initial streaming / first-load skeleton is active.
-  final firstLoadInProgress = ref.watch(firstLoadSkeletonActiveProvider);
-  if (firstLoadInProgress) return TourStop.none;
+  // Invariant #11 / #313: never show a tour until the first download on this
+  // phone has finished. Until then "no products" only means "not downloaded".
+  if (ref.watch(firstDownloadInProgressProvider)) return TourStop.none;
 
   final userRole = ref.watch(currentUserRoleProvider);
   final isOwner = userRole?.slug == 'ceo';

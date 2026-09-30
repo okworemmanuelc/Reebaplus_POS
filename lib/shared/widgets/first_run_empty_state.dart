@@ -20,8 +20,9 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 ///   Fast-Add form (`AddProductScreen` in direct, non-receive mode — #30).
 /// - `neutralEmpty` → a no-button "a manager can add them" message, for users
 ///   who lack store/product creation permissions.
-/// - `skeleton` → nothing here (the tab shows its own first-load skeleton at a
-///   higher level; this only guards against a CTA flash — invariant #11).
+/// - `waitingForFirstDownload` → nothing: the first download on this phone has not
+///   finished, so the list area stays blank rather than claim the store is
+///   empty (invariant #11, #313).
 /// - `hasContent` → nothing (the catalogue has products; the grid renders).
 class FirstRunEmptyState extends ConsumerWidget {
   const FirstRunEmptyState({super.key});
@@ -36,9 +37,9 @@ class FirstRunEmptyState extends ConsumerWidget {
 
     switch (surface) {
       case FirstRunSurfaceState.hasContent:
-      case FirstRunSurfaceState.skeleton:
-        // The grid / the tab-level skeleton owns these; render nothing so no
-        // CTA ever flashes over a streaming catalogue.
+      case FirstRunSurfaceState.waitingForFirstDownload:
+        // The grid owns the first; the second leaves the list area blank so no
+        // CTA ever flashes over a catalogue that is still downloading.
         return const SizedBox.shrink();
 
       case FirstRunSurfaceState.createStoreCta:

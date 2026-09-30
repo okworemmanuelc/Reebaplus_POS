@@ -15,10 +15,8 @@ import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_li
 import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/stock_approvals_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/supplier_accounts_report_screen.dart';
-import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
-import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 const String kReportCardKeyPrefix = 'report-card-';
@@ -150,31 +148,6 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           ),
         ),
     ];
-
-    // First load: show the reports skeleton (brief §4.4) while data streams in.
-    if (ref.watch(firstLoadSkeletonActiveProvider)) {
-      return ColoredBox(
-        color: theme.scaffoldBackgroundColor,
-        child: Container(
-          decoration: AppDecorations.glassyBackground(context),
-          child: SharedScaffold(
-            activeRoute: 'dashboard',
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              title: Text(
-                'Business Reports',
-                style: context.h3.copyWith(fontWeight: FontWeight.bold),
-              ),
-              elevation: 0,
-              surfaceTintColor: Colors.transparent,
-              backgroundColor: Colors.transparent,
-              leading: BackButton(color: context.primaryColor),
-            ),
-            body: const SafeArea(child: ReportsSkeleton()),
-          ),
-        ),
-      );
-    }
 
     final textScaler = MediaQuery.textScalerOf(context);
     final cardHeight = math.max(154.0, context.getRSize(154.0)) +

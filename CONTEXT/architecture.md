@@ -225,7 +225,19 @@ After every push batch or pull page is processed, the sync service writes a row 
 - current table group being pulled (used during onboarding — see below)
 - timestamp
 
-A Riverpod provider watches the `sync_progress` table and exposes this state to the UI. Any screen that triggers a bulk operation — inventory import, first launch, post-offline catch-up — must display a progress indicator driven by this provider showing actual counts (e.g. "Syncing 340 of 1,200 changes…"), not a static spinner. On completion the indicator must resolve to an explicit success or error state; it must not silently disappear.
+A Riverpod provider watches the `sync_progress` table and exposes this state to the UI.
+
+**Syncing is silent (#313).** A pull or push the person did not ask for shows nothing while it runs and nothing when it ends, whether it succeeds or fails. That covers the 30 s periodic pull, a Broadcast or `postgres_changes` signal, reconnect, app resume and a PIN unlock. The app retries by itself; stuck uploads stay visible on the side-menu sync badge and the Sync Issues screen (invariant #12). There are exactly two exceptions, both rendered by `SyncPullBanner` (mounted once, in `MainLayout`) and `AppRefreshWrapper`:
+
+1. **The first download after a full sign-in.**
+   - A thin progress bar across the top of the shell, shown only while `firstDownloadInProgressProvider` is true **and** the pull stage is `background`. It stays until that download finishes — it has no time limit — and leaves no pill behind. It is row-weighted (`PullStatus.rowPercent`), falling back to the per-table count, then to indeterminate.
+   - The centred, non-interactive "Setting up ‹business›…" reassurance (at most 2 s) and the "Couldn't reach your store · Retry" card, both owned by `FirstLoadOverlayController`. The card appears only on a phone that is still empty: after the controller's silent retries are exhausted when online, and immediately when offline.
+2. **A pull-down refresh.**
+   - The `AppRefreshWrapper` circle shows for at least 550 ms and at most 2 s. At 2 s it settles and the refresh carries on with no indicator; a new pull-down is accepted as soon as the circle has settled. While the circle is on screen `manualPullActiveProvider` is set, so the top bar stands down and there is only ever one animation.
+   - A brief "Synced" pill (2 s) appears only when a pull **really completed** for that refresh, whenever that is. `pushThenPull` returns normally when another pull is already in flight, so "returned without throwing" is not the test: `pullReallyCompleted` (`lib/core/providers/manual_refresh.dart`) follows `pullStatus`, and if a pull is still running when the call returns it waits for that pull and reports how it ended.
+   - A failed refresh shows nothing. There is no "Sync failed" pill anywhere in the app.
+
+All of this is presentation. The sync engine — pull frequency, debounce, retries, the outbox and `PullStatus` — does not know which of its pulls are shown.
 
 ### Initial onboarding pull — new device (Fix 5)
 
@@ -234,6 +246,8 @@ A new device joining a mature store has no stored cursor. The absence of a curso
 **Resumability:** onboarding is a sequence of cursor-advancing pages, identical in mechanism to Fix 2. If the app is killed mid-onboarding, the next launch detects the partial cursor and resumes from the last successfully committed page — it does not restart from scratch.
 
 **No blocking onboarding gate (offline-first, 2026-06-24).** Onboarding entry is **never** gated behind a full-screen loading screen — that would contradict invariant #1. A fresh sign-in resolves its 4 render-critical tables (`profiles`, `businesses`, `stores`, `users`) **inline during the sign-in flow** via `syncMinimumLogin` (awaited on the sign-in/existing-account screen, behind that screen's own small inline spinner — not a post-login modal), so the user's business, stores, and role are known before PIN setup. After `setCurrentUser`, the device drops **straight into `MainLayout`** and the full pull (`pullChanges`) streams the catalogue and everything else in **live** — products, customers, suppliers, history appear reactively as their pages commit. The earlier blocking `FirstSyncScreen` / `_BackgroundPullLoading` ("Syncing Your Store") loaders were **removed**; a logged-in device — fresh or returning, online or offline — always reaches `MainLayout` immediately. Sync progress and failures surface **non-blockingly** (the online indicator and the Sync Issues screen), never as a screen that holds the user out.
+
+**First-time surfaces wait for the first download (#313).** Because the shell renders before the catalogue arrives, "no products" or "no orders" on a freshly signed-in phone means "not downloaded yet", not "not done". One provider, `firstDownloadInProgressProvider` (`lib/core/providers/first_download_state.dart`), is true from the moment a business is bound until a pull for it reaches `PullStage.completed` (deferred tables still count), and is remembered per business in SharedPreferences so a PIN unlock never re-enters it; a logout wipe clears it. The Get-started card, the empty-state prompts (`firstRunSurfaceStateProvider`) and the first-run rail (`firstRunTourStopProvider`) all stay hidden while it is true, and the card additionally waits for each of its own inputs to be read. If the first download fails they stay hidden until one succeeds. This is presentation state only: it is written by the provider that observes the pull stage, not by the sync engine.
 
 **Table group order:** the sync service pulls in priority order: (1) roles and permissions, (2) staff, (3) products and categories, (4) active customer profiles, (5) suppliers and wallets, (6) historical orders and expenses, (7) activity logs. Progress is written to `sync_progress` per group and reflected by the non-blocking sync indicators (it no longer drives a blocking onboarding screen).
 

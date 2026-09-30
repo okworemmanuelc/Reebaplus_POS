@@ -40,8 +40,7 @@ import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
-import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
-import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
+import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
@@ -253,9 +252,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       }
     });
 
-    // Defer all DB stream subscriptions until after the first frame so the
-    // shimmer skeleton renders immediately without competing with 8+ SQL
-    // queries on the Drift background isolate.
+    // Defer all DB stream subscriptions until after the first frame so that
+    // frame renders immediately without competing with 8+ SQL queries on the
+    // Drift background isolate.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final db = ref.read(databaseProvider);
@@ -385,17 +384,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   /// granted. Split out of [build] so the `Guarded.screen` guard above owns
   /// the permissions-ready / denial decision.
   Widget _buildInventory(BuildContext context) {
-    // First load: show the inventory skeleton (brief §4.4) while the store is
-    // empty and products are still streaming in, then resolve to the real list.
-    if (ref.watch(firstLoadSkeletonActiveProvider)) {
-      return SharedScaffold(
-        activeRoute: 'inventory',
-        backgroundColor: _bg,
-        appBar: _buildAppBar(context),
-        body: const SafeArea(child: InventorySkeleton()),
-      );
-    }
-
     // Resolve the visible tabs (role / permission / business-type guards).
     // Null = the gating data hasn't loaded yet → show a static loading state
     // and don't touch the TabController, so the tab bar reveals its final set
@@ -909,14 +897,18 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         ),
       ),
       if (suppliers.isEmpty)
+        // Blank while the first download is still running: an empty list says
+        // nothing about the business until it has finished (#313).
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(
-            child: Text(
-              'No suppliers added yet',
-              style: TextStyle(color: _subtext),
-            ),
-          ),
+          child: ref.watch(firstDownloadInProgressProvider)
+              ? const SizedBox.shrink()
+              : Center(
+                  child: Text(
+                    'No suppliers added yet',
+                    style: TextStyle(color: _subtext),
+                  ),
+                ),
         )
       else
         SliverPadding(
@@ -1548,7 +1540,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
             SizedBox(height: context.getRSize(12)),
 
-            if (_dbManufacturers.isEmpty)
+            // Same rule as the Suppliers tab: no "none yet" before the first
+            // download has finished (#313).
+            if (_dbManufacturers.isEmpty &&
+                ref.watch(firstDownloadInProgressProvider))
+              const SizedBox.shrink()
+            else if (_dbManufacturers.isEmpty)
               _buildEmptyCratesState(
                 context,
                 'No manufacturers to track',

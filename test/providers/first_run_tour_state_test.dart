@@ -7,7 +7,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
+import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 
 RoleData _role(String slug) => RoleData(
       id: 'r-$slug',
@@ -156,7 +156,7 @@ void main() {
           currentUserRoleProvider.overrideWithValue(_role('ceo')),
           allStoresProvider.overrideWith((ref) => Stream.value(<StoreData>[])),
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           tourSessionAbortedProvider.overrideWith(TourSessionAbortedNotifier.new),
           tourDeviceAbortCountProvider.overrideWith(TourDeviceAbortCountNotifier.new),
           tourRemoteOffSwitchProvider.overrideWithValue(false),
@@ -172,13 +172,13 @@ void main() {
       expect(stop, TourStop.createStore);
     });
 
-    test('initial firstLoadSkeletonActive in progress → none (Invariant #11)', () async {
+    test('first download in progress → none (Invariant #11)', () async {
       final container = ProviderContainer(
         overrides: [
           currentUserRoleProvider.overrideWithValue(_role('ceo')),
           allStoresProvider.overrideWith((ref) => Stream.value(<StoreData>[])),
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
-          firstLoadSkeletonActiveProvider.overrideWithValue(true),
+          firstDownloadInProgressProvider.overrideWithValue(true),
           tourSessionAbortedProvider.overrideWith(TourSessionAbortedNotifier.new),
           tourDeviceAbortCountProvider.overrideWith(TourDeviceAbortCountNotifier.new),
           tourRemoteOffSwitchProvider.overrideWithValue(false),
@@ -190,13 +190,54 @@ void main() {
       expect(stop, TourStop.none);
     });
 
+    test(
+        'full sign-in to an existing business: stores are local, products have '
+        'not downloaded yet → none, then still none once they arrive', () async {
+      // The gap #313 closes: minimum-login has delivered the stores, the full
+      // pull has not delivered products, and no pull stage says "streaming"
+      // yet. That used to read as "owner needs to add a first product".
+      final downloading = StateProvider<bool>((ref) => true);
+      final hasProducts = StateProvider<bool>((ref) => false);
+      final container = ProviderContainer(
+        overrides: [
+          currentUserRoleProvider.overrideWithValue(_role('ceo')),
+          allStoresProvider.overrideWith((ref) => Stream.value([_store('s1')])),
+          hasLocalProductsProvider
+              .overrideWith((ref) => Stream.value(ref.watch(hasProducts))),
+          firstDownloadInProgressProvider
+              .overrideWith((ref) => ref.watch(downloading)),
+          tourSessionAbortedProvider.overrideWith(TourSessionAbortedNotifier.new),
+          tourDeviceAbortCountProvider.overrideWith(TourDeviceAbortCountNotifier.new),
+          tourRemoteOffSwitchProvider.overrideWithValue(false),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final seen = <TourStop>[];
+      container.listen(
+        firstRunTourStopProvider,
+        (_, next) => seen.add(next),
+        fireImmediately: true,
+      );
+      await container.read(allStoresProvider.future);
+      await container.read(hasLocalProductsProvider.future);
+      await container.pump();
+
+      container.read(hasProducts.notifier).state = true;
+      await container.read(hasLocalProductsProvider.future);
+      container.read(downloading.notifier).state = false;
+      await container.pump();
+
+      expect(seen.toSet(), {TourStop.none});
+    });
+
     test('non-owner (cashier) with zero stores → none', () async {
       final container = ProviderContainer(
         overrides: [
           currentUserRoleProvider.overrideWithValue(_role('cashier')),
           allStoresProvider.overrideWith((ref) => Stream.value(<StoreData>[])),
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           tourSessionAbortedProvider.overrideWith(TourSessionAbortedNotifier.new),
           tourDeviceAbortCountProvider.overrideWith(TourDeviceAbortCountNotifier.new),
           tourRemoteOffSwitchProvider.overrideWithValue(false),
@@ -217,7 +258,7 @@ void main() {
           currentUserRoleProvider.overrideWithValue(_role('ceo')),
           allStoresProvider.overrideWith((ref) => Stream.value([_store('s1')])),
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           tourSessionAbortedProvider.overrideWith(TourSessionAbortedNotifier.new),
           tourDeviceAbortCountProvider.overrideWith(TourDeviceAbortCountNotifier.new),
           tourRemoteOffSwitchProvider.overrideWithValue(false),
@@ -238,7 +279,7 @@ void main() {
           currentUserRoleProvider.overrideWithValue(_role('ceo')),
           allStoresProvider.overrideWith((ref) => Stream.value(<StoreData>[])),
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           tourSessionAbortedProvider.overrideWith(TourSessionAbortedNotifier.new),
           tourDeviceAbortCountProvider.overrideWith(TourDeviceAbortCountNotifier.new),
           tourRemoteOffSwitchProvider.overrideWithValue(false),
@@ -263,7 +304,7 @@ void main() {
           currentUserRoleProvider.overrideWithValue(_role('ceo')),
           allStoresProvider.overrideWith((ref) => Stream.value(<StoreData>[])),
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           tourSessionAbortedProvider.overrideWith(TourSessionAbortedNotifier.new),
           tourDeviceAbortCountProvider.overrideWith(TourDeviceAbortCountNotifier.new),
           tourRemoteOffSwitchProvider.overrideWithValue(false),
@@ -285,7 +326,7 @@ void main() {
           currentUserRoleProvider.overrideWithValue(_role('ceo')),
           allStoresProvider.overrideWith((ref) => Stream.value(<StoreData>[])),
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           tourSessionAbortedProvider.overrideWith(TourSessionAbortedNotifier.new),
           tourDeviceAbortCountProvider.overrideWith(TourDeviceAbortCountNotifier.new),
           tourRemoteOffSwitchProvider.overrideWithValue(true),

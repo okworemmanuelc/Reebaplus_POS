@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/manual_refresh.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// App-wide pull-to-refresh with the **conventional overscroll model** and a
@@ -28,12 +29,20 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 /// the whole screen drag down — do not reintroduce it.
 ///
 /// **Indicator:** one [CircularProgressIndicator] that descends from the top edge
-/// and fills as you overpull, then spins while the sync runs. No background orb.
+/// and fills as you overpull, then spins once the pull is let go. No background
+/// orb.
 ///
-/// **Single animation:** while a manual pull runs, `manualPullActiveProvider` is
-/// set so [SyncPullBanner] suppresses its top progress bar. The banner still
-/// surfaces the brief "Synced ✓" / "Sync failed · Retry" pill on completion, and
-/// still owns automatic/background pulls (no spinner there).
+/// **The circle is brief (#313):** it shows for at least 550 ms, so a fast
+/// refresh doesn't flicker, and at most 2 s. On a slow connection it settles at
+/// 2 s and the refresh carries on silently; a new pull-down is accepted as soon
+/// as the circle has settled.
+///
+/// **Outcome:** [SyncPullBanner] shows its brief "Synced" pill only when a pull
+/// really completed for this refresh — straight away or long after the circle
+/// has gone. A failed refresh shows nothing.
+///
+/// **Single animation:** while the circle is on screen, `manualPullActiveProvider`
+/// is set so [SyncPullBanner] suppresses its first-download progress bar.
 ///
 /// Wrap each screen's body **as high as possible** so the spinner appears at the
 /// top of the screen; the gesture itself is taken from whatever scrollable the
@@ -52,8 +61,13 @@ class _AppRefreshWrapperState extends ConsumerState<AppRefreshWrapper> {
   /// Accumulated active-drag overscroll past the top, in logical px.
   double _pull = 0;
 
-  /// True from the moment a pull fires until the sync settles.
+  /// True while the circle spins: from the moment a pull fires until the
+  /// refresh ends or [_maxSpin] passes, whichever is first.
   bool _refreshing = false;
+
+  /// Ends the current spin. Set while [_refreshing]; [dispose] calls it.
+  VoidCallback? _endSpin;
+  Timer? _spinCap;
 
   /// Position-animation duration: zero while the finger drives the spinner
   /// (snappy tracking), 220 ms when it settles back / holds during a refresh.
@@ -64,6 +78,21 @@ class _AppRefreshWrapperState extends ConsumerState<AppRefreshWrapper> {
 
   /// Clamp so an aggressive fling can't throw the spinner off-screen.
   static const double _maxPull = 170;
+
+  /// Floor on the spin, so a fast/no-op refresh doesn't flicker.
+  static const Duration _minSpin = Duration(milliseconds: 550);
+
+  /// Ceiling on the spin. A refresh still running carries on silently.
+  static const Duration _maxSpin = Duration(seconds: 2);
+
+  @override
+  void dispose() {
+    // The circle goes with the widget. End the spin now rather than at the cap
+    // (whose timer must not outlive us) so the banner's bar is released.
+    _spinCap?.cancel();
+    _endSpin?.call();
+    super.dispose();
+  }
 
   bool _handleNotification(ScrollNotification n) {
     if (_refreshing) return false;
@@ -133,44 +162,59 @@ class _AppRefreshWrapperState extends ConsumerState<AppRefreshWrapper> {
       });
     }
     // Tell SyncPullBanner to stand down: the spinner is the sole animation now.
-    // Read up front so it can still be cleared if the widget is disposed
-    // mid-pull (the provider is app-scoped, so the controller outlives us).
+    // Read up front so they can still be used if the widget is disposed
+    // mid-refresh (both providers are app-scoped, so they outlive us).
     final manualPull = ref.read(manualPullActiveProvider.notifier);
+    final synced = ref.read(manualRefreshSyncedProvider.notifier);
     manualPull.state = true;
 
-    try {
-      // Floor the spin at ~550 ms so a fast/no-op refresh doesn't flicker.
-      await Future.wait([
-        _runRefresh(),
-        Future<void>.delayed(const Duration(milliseconds: 550)),
-      ]);
-    } catch (_) {
-      // SyncPullBanner already surfaces the failure + Retry.
-    } finally {
-      manualPull.state = false;
-      _animDuration = const Duration(milliseconds: 220);
-      if (mounted) {
-        setState(() {
-          _refreshing = false;
-          _pull = 0;
-        });
-      }
+    final refresh = _runRefresh();
+    final spin = Completer<void>();
+    void endSpin() {
+      if (!spin.isCompleted) spin.complete();
     }
+
+    _endSpin = endSpin;
+    _spinCap = Timer(_maxSpin, endSpin);
+    unawaited(
+      Future.wait<void>([
+        refresh,
+        Future<void>.delayed(_minSpin),
+      ]).then((_) => endSpin()),
+    );
+
+    await spin.future;
+    _spinCap?.cancel();
+    _endSpin = null;
+    if (manualPull.mounted) manualPull.state = false;
+    _animDuration = const Duration(milliseconds: 220);
+    if (mounted) {
+      setState(() {
+        _refreshing = false;
+        _pull = 0;
+      });
+    }
+
+    // The refresh may still be running. Only a pull that really completed is
+    // announced, whenever that turns out to be.
+    if (await refresh) synced.recordSynced();
   }
 
-  Future<void> _runRefresh() async {
-    // Screen-specific refresh (provider invalidation / local reload).
-    await widget.onRefresh?.call();
-
-    final user = ref.read(authProvider).currentUser;
-    if (user != null) {
-      // Awaited so the spinner keeps spinning for the real duration of the
-      // pull; SyncPullBanner independently reflects pullStatus → completed/failed.
+  /// Runs the refresh and answers whether a pull really completed for it.
+  /// Never throws: a failed refresh shows nothing (#313).
+  Future<bool> _runRefresh() async {
+    // Read before the first await: `ref` is gone once the widget is disposed.
+    final pull = ref.read(manualRefreshPullProvider);
+    try {
+      // Screen-specific refresh (provider invalidation / local reload).
+      await widget.onRefresh?.call();
       // §3.4 upload-before-download: pull-to-refresh drains the outbox first,
       // then pulls, so a manual refresh uploads pending work before downloading.
-      await ref
-          .read(supabaseSyncServiceProvider)
-          .pushThenPull(user.businessId);
+      return await pull();
+    } catch (e) {
+      // Silent by design. The app retries by itself on the next periodic pull.
+      debugPrint('[AppRefreshWrapper] refresh failed: $e');
+      return false;
     }
   }
 

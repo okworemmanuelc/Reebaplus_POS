@@ -3,10 +3,10 @@
 // Two layers, both asserting external behaviour (which surface a given set of
 // inputs resolves to), never widget internals:
 //   1. `computeFirstRunSurfaceState` — the pure derivation, exhaustive over the
-//      inputs and their precedence (hasContent > skeleton > createStoreCta > addProductCta > neutralEmpty).
+//      inputs and their precedence (hasContent > waitingForFirstDownload > createStoreCta > addProductCta > neutralEmpty).
 //   2. `firstRunSurfaceStateProvider` and `zeroStoresEmptySurfaceProvider` — the live wiring,
 //      driven purely through its input providers in a ProviderContainer (no widget tree, no database):
-//      the product-presence stream, the all-stores stream, the shared first-load skeleton signal,
+//      the product-presence stream, the all-stores stream, the shared first-download signal,
 //      and the permission gates (`Gates.addProduct`, `Gates.manageStores`).
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +17,7 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
+import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 
 /// A resolved [GateContext] that grants (or denies) `products.add` and `stores.manage`.
 GateContext _ctx({
@@ -59,7 +59,7 @@ Future<FirstRunSurfaceState> _evaluate({
       allStoresProvider.overrideWith(
         (ref) => Stream.value(hasStores ? [_store('s1')] : <StoreData>[]),
       ),
-      firstLoadSkeletonActiveProvider.overrideWithValue(firstLoadInProgress),
+      firstDownloadInProgressProvider.overrideWithValue(firstLoadInProgress),
       gateContextProvider.overrideWithValue(
         _ctx(canAddProduct: canAddProduct, canCreateStore: canCreateStore),
       ),
@@ -99,9 +99,9 @@ void main() {
       }
     });
 
-    test('first load in progress + zero products → skeleton, never CTA', () {
+    test('first load in progress + zero products → waiting, never CTA', () {
       // Even when the user could create store or add product, a still-streaming
-      // catalogue or store list must show the skeleton.
+      // catalogue or store list must stay blank.
       for (final hasStores in [false, true]) {
         for (final canCreateStore in [false, true]) {
           for (final canAdd in [false, true]) {
@@ -112,7 +112,7 @@ void main() {
               hasStores: hasStores,
               canCreateStore: canCreateStore,
             );
-            expect(s, FirstRunSurfaceState.skeleton);
+            expect(s, FirstRunSurfaceState.waitingForFirstDownload);
           }
         }
       }
@@ -164,14 +164,14 @@ void main() {
   });
 
   group('firstRunSurfaceStateProvider (input overrides)', () {
-    test('streaming in (pull not settled) → skeleton even with zero products', () async {
+    test('streaming in (pull not settled) → waiting even with zero products', () async {
       final s = await _evaluate(
         firstLoadInProgress: true,
         canAddProduct: true,
         canCreateStore: true,
         hasStores: false,
       );
-      expect(s, FirstRunSurfaceState.skeleton);
+      expect(s, FirstRunSurfaceState.waitingForFirstDownload);
     });
 
     test('settled + zero products + zero stores + stores.manage → createStoreCta', () async {
@@ -223,7 +223,7 @@ void main() {
         overrides: [
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
           allStoresProvider.overrideWith((ref) => Stream.value(<StoreData>[])),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           gateContextProvider.overrideWithValue(_ctx(canCreateStore: true)),
         ],
       );
@@ -239,7 +239,7 @@ void main() {
         overrides: [
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
           allStoresProvider.overrideWith((ref) => Stream.value([_store('s1')])),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           gateContextProvider.overrideWithValue(_ctx(canCreateStore: true)),
         ],
       );
@@ -255,7 +255,7 @@ void main() {
         overrides: [
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
           allStoresProvider.overrideWith((ref) => Stream.value(<StoreData>[])),
-          firstLoadSkeletonActiveProvider.overrideWithValue(true),
+          firstDownloadInProgressProvider.overrideWithValue(true),
           gateContextProvider.overrideWithValue(_ctx(canCreateStore: true)),
         ],
       );
@@ -266,12 +266,12 @@ void main() {
       expect(container.read(zeroStoresEmptySurfaceProvider), isFalse);
     });
 
-    test('returns false and skeleton when allStoresProvider emits an error', () async {
+    test('returns false and waiting when allStoresProvider emits an error', () async {
       final container = ProviderContainer(
         overrides: [
           hasLocalProductsProvider.overrideWith((ref) => Stream.value(false)),
           allStoresProvider.overrideWith((ref) => Stream<List<StoreData>>.error(Exception('db error'))),
-          firstLoadSkeletonActiveProvider.overrideWithValue(false),
+          firstDownloadInProgressProvider.overrideWithValue(false),
           gateContextProvider.overrideWithValue(_ctx(canCreateStore: true)),
         ],
       );
@@ -283,7 +283,7 @@ void main() {
         await container.read(allStoresProvider.future);
       } catch (_) {}
 
-      expect(container.read(firstRunSurfaceStateProvider), FirstRunSurfaceState.skeleton);
+      expect(container.read(firstRunSurfaceStateProvider), FirstRunSurfaceState.waitingForFirstDownload);
       expect(container.read(zeroStoresEmptySurfaceProvider), isFalse);
     });
   });

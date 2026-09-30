@@ -27,8 +27,6 @@ import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
-import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
-import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 
@@ -194,17 +192,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   /// out of [build] so the `Guarded.screen` guard above owns the
   /// permissions-ready / denial decision (no denial flash on fresh login).
   Widget _buildPos(BuildContext context) {
-    // First load: while the store is empty and the catalogue is still streaming
-    // in, show the POS skeleton (brief §4.4) instead of a blank grid / "pick a
-    // store" placeholder. It resolves to the real grid the moment products land.
-    if (ref.watch(firstLoadSkeletonActiveProvider)) {
-      return SharedScaffold(
-        activeRoute: 'pos',
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: const SafeArea(child: PosSkeleton()),
-      );
-    }
-
     // §12.1: POS always sells from one concrete store. Any user with more than
     // one store must explicitly pick the store they're selling from before POS
     // will sell — both an all-stores viewer on "All Stores" (active store null)
