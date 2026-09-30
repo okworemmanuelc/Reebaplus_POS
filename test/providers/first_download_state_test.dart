@@ -17,12 +17,18 @@ import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 final _stage = StateProvider<PullStage>((ref) => PullStage.idle);
 final _business = StateProvider<String?>((ref) => 'biz1');
 
+/// The business the pull behind the stage ran for.
+final _pullBusiness = StateProvider<String?>((ref) => 'biz1');
+
 /// A container whose signal is kept alive, as MainLayout keeps it in the app.
 ProviderContainer _container() {
   final container = ProviderContainer(
     overrides: [
       currentBusinessIdProvider.overrideWith((ref) => ref.watch(_business)),
       pullStageProvider.overrideWith((ref) => ref.watch(_stage)),
+      pullBusinessIdReaderProvider.overrideWith(
+        (ref) => () => ref.read(_pullBusiness),
+      ),
     ],
   );
   addTearDown(container.dispose);
@@ -167,6 +173,9 @@ void main() {
       overrides: [
         currentBusinessIdProvider.overrideWith((ref) => ref.watch(_business)),
         pullStageProvider.overrideWith((ref) => ref.watch(_stage)),
+      pullBusinessIdReaderProvider.overrideWith(
+        (ref) => () => ref.read(_pullBusiness),
+      ),
         _stage.overrideWith((ref) => PullStage.completed),
       ],
     );
@@ -199,6 +208,30 @@ void main() {
     await _settle(container);
 
     expect(container.read(firstDownloadInProgressProvider), isTrue);
+  });
+
+  test('a pull that completes for another business does not end it, and is '
+      'not remembered', () async {
+    final container = _container();
+    container.read(_pullBusiness.notifier).state = 'biz0';
+    await _settle(container);
+    container.read(_stage.notifier).state = PullStage.background;
+    await container.pump();
+    container.read(_stage.notifier).state = PullStage.completed;
+    await container.pump();
+
+    expect(container.read(firstDownloadInProgressProvider), isTrue);
+    expect(await FirstLoadMarkerService.hasFinishedFirstDownload('biz1'), isFalse);
+    expect(await FirstLoadMarkerService.hasFinishedFirstDownload('biz0'), isFalse);
+
+    // Its own pull then runs and completes.
+    container.read(_pullBusiness.notifier).state = 'biz1';
+    container.read(_stage.notifier).state = PullStage.background;
+    await container.pump();
+    container.read(_stage.notifier).state = PullStage.completed;
+    await container.pump();
+
+    expect(container.read(firstDownloadInProgressProvider), isFalse);
   });
 
   group('FirstLoadMarkerService — finished-download marker', () {

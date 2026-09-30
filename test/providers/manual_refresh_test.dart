@@ -94,6 +94,22 @@ void main() {
     expect(synced, isTrue);
   });
 
+  test('a pull in flight that never ends is given up on, and the listener '
+      'released', () async {
+    final counting = _CountingStatus()
+      ..value = const PullStatus(stage: PullStage.background);
+    addTearDown(counting.dispose);
+
+    final synced = await pullReallyCompleted(
+      status: counting,
+      pull: () async {},
+      waitLimit: const Duration(milliseconds: 20),
+    );
+
+    expect(synced, isFalse);
+    expect(counting.listeners, 0);
+  });
+
   test('stops listening once it has answered', () async {
     final counting = _CountingStatus();
     addTearDown(counting.dispose);

@@ -40,8 +40,9 @@ final firstDownloadMarkerProvider = FutureProvider<bool>((ref) async {
 /// Latches on when a pull for the bound business reaches
 /// [PullStage.completed] during this app session, and stores the marker so the
 /// next session knows too. Only the transition counts: a `completed` stage left
-/// over from before sign-in belongs to some other pull. Rebinding to another
-/// business starts the latch over.
+/// over from before sign-in belongs to some other pull, and so does a pull that
+/// ran for a different business. Rebinding to another business starts the latch
+/// over.
 class FirstDownloadFinishedNotifier extends Notifier<bool> {
   @override
   bool build() {
@@ -51,6 +52,7 @@ class FirstDownloadFinishedNotifier extends Notifier<bool> {
       if (next != PullStage.completed || previous == PullStage.completed) {
         return;
       }
+      if (ref.read(pullBusinessIdReaderProvider)() != businessId) return;
       state = true;
       unawaited(_remember(businessId));
     });

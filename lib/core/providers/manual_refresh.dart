@@ -18,12 +18,14 @@ import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 /// "[pull] returned without throwing" is not that answer: `pushThenPull`
 /// returns straight away when another pull is already in flight. So this
 /// follows [status] instead. If a pull is still running when [pull] returns,
-/// it waits for that one and reports how it ended.
+/// it waits for that one and reports how it ended — for at most [waitLimit],
+/// after which it answers false rather than wait on a pull that never ends.
 ///
 /// Rethrows whatever [pull] throws.
 Future<bool> pullReallyCompleted({
   required ValueListenable<PullStatus> status,
   required Future<void> Function() pull,
+  Duration waitLimit = const Duration(minutes: 2),
 }) async {
   var stage = status.value.stage;
   // How the latest pull seen since the pull-down ended; null while one runs or
@@ -53,9 +55,16 @@ Future<bool> pullReallyCompleted({
   status.addListener(onStatus);
   try {
     await pull();
+    final waited = Stopwatch()..start();
     while (stage == PullStage.background) {
+      final left = waitLimit - waited.elapsed;
+      if (left <= Duration.zero) return false;
       final changed = stageChanged = Completer<void>();
-      await changed.future;
+      try {
+        await changed.future.timeout(left);
+      } on TimeoutException {
+        return false;
+      }
     }
     return completed ?? false;
   } finally {
