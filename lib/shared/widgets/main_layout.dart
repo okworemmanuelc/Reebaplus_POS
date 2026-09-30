@@ -471,8 +471,8 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                 if (i != currentIndex) return tab;
                 return FadeTransition(opacity: _tabFadeAnimation, child: tab);
               }),
-              // Non-blocking sync pull status overlay — progress bar at
-              // top, error/success pill above the bottom nav.
+              // Non-blocking sync pull status overlay — first-download
+              // progress bar at top, "Synced" pill above the bottom nav.
               const Positioned.fill(
                 child: SyncPullBanner(),
               ),

@@ -2,17 +2,25 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/first_download_state.dart';
+import 'package:reebaplus_pos/core/providers/manual_refresh.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
 
 /// Non-blocking sync-pull status overlay for [MainLayout].
 ///
-/// Three visual states, all minimal and non-intrusive:
-///   - **Background pull**: Thin indeterminate [LinearProgressIndicator] pinned
-///     to the very top of the body (beneath the status bar). No text, no label.
-///   - **Failed**: Compact floating pill anchored above the bottom nav with
-///     "Sync failed" and a retry action. Dismissible.
-///   - **Completed**: Brief "Synced ✓" pill that auto-hides after 2 s.
+/// Syncing is silent (PRD #313). This shows only:
+///   - **First download**: a thin [LinearProgressIndicator] pinned to the very
+///     top of the body, from a full sign-in until that first download finishes.
+///     Never on a PIN unlock or any later background pull.
+///   - **Synced**: a brief pill that auto-hides after 2 s, only after a
+///     pull-down refresh whose pull really completed.
+///   - **First-load overlay / retry card**: the centred "Setting up…"
+///     reassurance and the "Couldn't reach your store" card, as the first-load
+///     controller says.
+///
+/// A failed pull shows nothing here: the app retries by itself, and stuck
+/// uploads stay visible on the side-menu badge and the Sync Issues screen.
 ///
 /// Mount inside a [Stack] as the last child so it paints above tab content.
 class SyncPullBanner extends ConsumerStatefulWidget {
@@ -24,11 +32,11 @@ class SyncPullBanner extends ConsumerStatefulWidget {
 
 class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
   Timer? _successTimer;
-  bool _errorDismissed = false;
   bool _retrying = false;
   PullStage? _lastStage;
 
-  // Whether the success pill should be visible (briefly, after a pull).
+  // Whether the success pill should be visible (briefly, after a pull-down
+  // refresh that synced).
   bool _showSuccess = false;
 
   @override
@@ -37,73 +45,42 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
     super.dispose();
   }
 
-  void _onStageChanged(PullStage stage) {
-    if (stage == _lastStage) return;
-    final prev = _lastStage;
-    _lastStage = stage;
-
-    switch (stage) {
-      case PullStage.background:
-        _errorDismissed = false;
-        _showSuccess = false;
-        _successTimer?.cancel();
-
-      case PullStage.completed:
-        if (prev == PullStage.background) {
-          _showSuccess = true;
-          _successTimer?.cancel();
-          _successTimer = Timer(const Duration(seconds: 2), () {
-            if (mounted) setState(() => _showSuccess = false);
-          });
-        }
-
-      case PullStage.failed:
-        _retrying = false;
-        _showSuccess = false;
-
-      case PullStage.idle:
-      case PullStage.minimum:
-        _showSuccess = false;
-    }
-  }
-
-  Future<void> _retry() async {
-    if (_retrying) return;
-    final sync = ref.read(supabaseSyncServiceProvider);
-    final businessId = ref.read(authProvider).currentUser?.businessId;
-    if (businessId == null) return;
-    setState(() {
-      _retrying = true;
-      _errorDismissed = false;
+  void _showSyncedPill() {
+    setState(() => _showSuccess = true);
+    _successTimer?.cancel();
+    _successTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _showSuccess = false);
     });
-    try {
-      await sync.pullChanges(businessId);
-    } catch (_) {
-      // pullChanges already set pullStatus → failed.
-    } finally {
-      if (mounted) setState(() => _retrying = false);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final statusNotifier = ref.watch(pullStatusProvider);
-    // While the user is pulling-to-refresh, the AppRefreshWrapper orb is the
-    // sole animation — suppress this banner's top progress bar so the two don't
-    // animate at once. The success / failure pill below still shows.
+    // The top bar belongs to the first download after a full sign-in, and to
+    // nothing else: a periodic, broadcast, reconnect, resume or PIN-unlock pull
+    // runs with no bar.
+    final firstDownload = ref.watch(firstDownloadInProgressProvider);
+    // While the pull-down circle is on screen it is the sole animation —
+    // suppress the top progress bar so the two don't animate at once.
     final manualPull = ref.watch(manualPullActiveProvider);
+    // "Synced" answers a pull-down refresh whose pull really completed; no
+    // other pull, however it ends, shows a pill.
+    ref.listen(manualRefreshSyncedProvider, (_, _) => _showSyncedPill());
 
     // The first-load overlay state machine is the SOLE source of truth for the
     // centered "Setting up…" reassurance and the prominent retry card. This
     // widget only renders it (brief §4.1).
     final overlayState = ref.watch(firstLoadOverlayProvider);
-    final firstLoadActive = ref.watch(firstLoadActiveProvider);
     final businessName = ref.watch(currentBusinessNameProvider);
 
     return ValueListenableBuilder<PullStatus>(
       valueListenable: statusNotifier,
       builder: (context, status, _) {
-        _onStageChanged(status.stage);
+        // A re-pull that fails frees the retry card's button straight away.
+        if (status.stage != _lastStage) {
+          _lastStage = status.stage;
+          if (status.stage == PullStage.failed) _retrying = false;
+        }
 
         // Live percentage — row-weighted (§4.5) so the bar advances in
         // proportion to data actually restored rather than jumping per table.
@@ -117,7 +94,7 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
 
         final children = <Widget>[];
 
-        // ── Top: thin progress bar while syncing ────────────────────────
+        // ── Top: thin progress bar during the first download ────────────
         children.add(
           Positioned(
             top: 0,
@@ -125,13 +102,16 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
             right: 0,
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
-              child: status.stage == PullStage.background && !manualPull
+              child:
+                  firstDownload &&
+                      status.stage == PullStage.background &&
+                      !manualPull
                   ? LinearProgressIndicator(
                       key: const ValueKey('progress'),
                       minHeight: 2.5,
                       // Determinate once the table count is known so the bar
-                      // fills in lock-step with the percentage pill; falls back
-                      // to indeterminate during the initial fetch window.
+                      // fills in lock-step with the overlay's percentage; falls
+                      // back to indeterminate during the initial fetch window.
                       value: percent != null ? percent / 100 : null,
                       backgroundColor: Theme.of(context)
                           .colorScheme
@@ -185,27 +165,7 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
           ),
         );
 
-        // ── Bottom: floating pill — error / success ─────────────────────
-        // During a genuine first load the prominent retry card / skeletons own
-        // the failure experience, so the compact error pill is suppressed; it
-        // (and the "Synced ✓" pill) keep their existing behaviour for
-        // already-populated devices (§4.7).
-        final Widget? bottomPill;
-        if (status.stage == PullStage.failed &&
-            !_errorDismissed &&
-            !firstLoadActive) {
-          bottomPill = _ErrorPill(
-            key: const ValueKey('error'),
-            retrying: _retrying,
-            onRetry: _retry,
-            onDismiss: () => setState(() => _errorDismissed = true),
-          );
-        } else if (_showSuccess) {
-          bottomPill = const _SuccessPill(key: ValueKey('success'));
-        } else {
-          bottomPill = null;
-        }
-
+        // ── Bottom: floating "Synced" pill ──────────────────────────────
         children.add(
           Positioned(
             bottom: 8,
@@ -222,7 +182,9 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
                 ).animate(anim),
                 child: FadeTransition(opacity: anim, child: child),
               ),
-              child: bottomPill ?? const SizedBox.shrink(key: ValueKey('none')),
+              child: _showSuccess
+                  ? const _SuccessPill(key: ValueKey('success'))
+                  : const SizedBox.shrink(key: ValueKey('none')),
             ),
           ),
         );
@@ -236,104 +198,6 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-widgets
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Compact floating error pill with retry.
-class _ErrorPill extends StatelessWidget {
-  const _ErrorPill({
-    super.key,
-    required this.retrying,
-    required this.onRetry,
-    required this.onDismiss,
-  });
-
-  final bool retrying;
-  final VoidCallback onRetry;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final errorColor = t.colorScheme.error;
-    final isDark = t.brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF2C1B1B) : const Color(0xFFFFF0F0);
-
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(
-            color: errorColor.withValues(alpha: 0.25),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 16, color: errorColor),
-            const SizedBox(width: 8),
-            Text(
-              'Sync failed',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: errorColor,
-              ),
-            ),
-            Container(
-              width: 1,
-              height: 16,
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              color: errorColor.withValues(alpha: 0.2),
-            ),
-            GestureDetector(
-              onTap: retrying ? null : onRetry,
-              behavior: HitTestBehavior.opaque,
-              child: retrying
-                  ? SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
-                        color: errorColor,
-                      ),
-                    )
-                  : Text(
-                      'Retry',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: errorColor,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: onDismiss,
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Icon(
-                  Icons.close_rounded,
-                  size: 14,
-                  color: errorColor.withValues(alpha: 0.5),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// Brief, non-interactive first-load reassurance. Centered in the empty
 /// MainLayout shell during the loading window (≤ ~2 s) while the background pull
@@ -396,8 +260,7 @@ class _LoadingOverlay extends StatelessWidget {
 
 /// Prominent, interactive "couldn't reach your store" card. Shown (centered)
 /// only after silent retries are exhausted (online) or immediately (offline),
-/// and only while the store is still empty — never the small bottom pill in that
-/// case (§4.7 / user stories 12–13).
+/// and only while the store is still empty (§4.7 / user stories 12–13).
 class _RetryCard extends StatelessWidget {
   const _RetryCard({super.key, required this.retrying, required this.onRetry});
 
@@ -489,7 +352,7 @@ class _RetryCard extends StatelessWidget {
   }
 }
 
-/// Brief success pill.
+/// Brief success pill, shown after a pull-down refresh that really synced.
 class _SuccessPill extends StatelessWidget {
   const _SuccessPill({super.key});
 

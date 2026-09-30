@@ -13,7 +13,7 @@ import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
+import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 
@@ -283,7 +283,7 @@ Future<BuildContext> pumpScreen(
         ),
       ),
       currencySymbolProvider.overrideWithValue('₦'),
-      firstLoadSkeletonActiveProvider.overrideWithValue(false),
+      firstDownloadInProgressProvider.overrideWithValue(false),
       selectableStoresProvider.overrideWithValue(
         selectableStores ?? [env.store],
       ),

@@ -734,7 +734,7 @@ Guarded.screen(gate: Gates.makeSale)      ← waits for permissions, then:
 **State:**
 - `_controller` — a `PosController` (a `ChangeNotifier`), created in `initState` via `Future.microtask`, **not** a provider.
 - Local: `_isListView`, `_gridColumns` (persisted in `SharedPreferences`), `_showPosHint`, `_hasAutoShownPicker`.
-- Watches: `firstLoadSkeletonActiveProvider`, `selectableStoresProvider`, `lockedStoreProvider`, `storeExplicitlyChosenProvider`, `industryLexiconProvider`, `currencySymbolProvider`.
+- Watches: `selectableStoresProvider`, `lockedStoreProvider`, `storeExplicitlyChosenProvider`, `industryLexiconProvider`, `currencySymbolProvider`.
 
 **Functions:**
 - `_loadViewPreferences()` / `_updateViewPreferences()` — grid vs list, column count.
@@ -1492,7 +1492,7 @@ Built from the reusable kit in [profile_ui.dart](../lib/features/profile/widgets
 |---|---|
 | [first_load_overlay_controller.dart](../lib/features/sync/controllers/first_load_overlay_controller.dart) (393) | Owns all timing/retry for the first-load overlay; derives state from five injected inputs and owns **no UI** — very testable |
 | [resolve_unsynced_data_dialog.dart](../lib/features/sync/widgets/resolve_unsynced_data_dialog.dart) (207) | Blocks logout when unsynced rows exist; `_export()`, `_discardAndLogout()` |
-| [sync_pull_banner.dart](../lib/shared/widgets/sync_pull_banner.dart) (536) | The only sync animation: thin top progress line, failure pill, brief success |
+| [sync_pull_banner.dart](../lib/shared/widgets/sync_pull_banner.dart) (399) | The only sync animation: thin top progress line during the first download, brief "Synced" after a pull-down refresh, first-load overlay and retry card |
 
 ### Subscription
 | File | Purpose |
@@ -1525,7 +1525,6 @@ Built from the reusable kit in [profile_ui.dart](../lib/features/profile/widgets
 | `PinDialog` | `PinDialog.show(context)` → returns the approving user, or null. Used to gate a protected action behind a manager's PIN |
 | `ErrorFallback` | The friendly crash screen; deliberately self-contained with fixed colours so it can render even when the theme is gone |
 | `ForceUpdateWrapper` / `AutoLockWrapper` | App-wide wrappers around `MaterialApp` |
-| `Skeleton` / `first_load_skeletons.dart` | First-load placeholders (the app avoids spinners) |
 | `FirstRunEmptyState` | Persona-aware empty state shared by POS and Inventory |
 | `ViewSelectorSheet` / `PrinterPicker` / `UserTipsModal` | Small shared sheets |
 | `OptimizedBackdropFilter` | Disables expensive blur during route animations |

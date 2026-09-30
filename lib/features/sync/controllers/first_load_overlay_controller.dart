@@ -11,7 +11,7 @@ import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 /// (brief: First-Load "Loading your store" Overlay Redesign, §4.1).
 ///
 /// - [hidden]: nothing shown (returning device, established store, or the brief
-///   loading window has handed off to skeletons + the thin top sync line).
+///   loading window has handed off to the real screens + the thin top sync line).
 /// - [loading]: the brief, non-interactive centered "Setting up ‹Business›…"
 ///   reassurance. Shown for a minimum anti-flicker floor and a maximum cap,
 ///   dismissing the moment the landing screen's data is ready or the pull
@@ -26,8 +26,7 @@ enum FirstLoadOverlayState { hidden, loading, retryNeeded }
 /// rebuilds. It derives its state purely from five injected inputs (pull stage,
 /// connectivity, store-empty, the per-business first-pull marker, and a
 /// landing-ready signal) pushed in via the `set*` methods. It owns NO UI —
-/// `SyncPullBanner` and the tab skeletons render this state; they never
-/// re-derive it.
+/// `SyncPullBanner` renders this state; it never re-derives it.
 class FirstLoadOverlayController extends StateNotifier<FirstLoadOverlayState> {
   FirstLoadOverlayController({
     this.minDisplay = const Duration(milliseconds: 400),
@@ -43,7 +42,7 @@ class FirstLoadOverlayController extends StateNotifier<FirstLoadOverlayState> {
   /// it appears, so a sub-second pull doesn't flash it on and off.
   final Duration minDisplay;
 
-  /// Upper bound: the loading overlay steps aside to skeletons after this even
+  /// Upper bound: the loading overlay steps aside to the screens after this even
   /// if not everything has arrived (§4.3 / user story 10).
   final Duration maxDisplay;
 
@@ -70,8 +69,8 @@ class FirstLoadOverlayController extends StateNotifier<FirstLoadOverlayState> {
   bool _maxElapsed = false;
   bool _episodeActive = false;
   // The centered overlay shows at most once per first-load episode; once it has
-  // handed off to skeletons (or a failure took over) it never re-opens — e.g. a
-  // silent retry's re-pull keeps the skeletons, it does not re-flash the overlay.
+  // handed off to the screens (or a failure took over) it never re-opens — e.g. a
+  // silent retry's re-pull leaves the screens up, it does not re-flash the overlay.
   bool _overlayDone = false;
   int _retryCount = 0;
   bool _disposed = false;
@@ -110,13 +109,13 @@ class FirstLoadOverlayController extends StateNotifier<FirstLoadOverlayState> {
   }
 
   /// Invoked by the prominent retry card. Clears the retry counter, optimistically
-  /// hides the card (the re-pull's skeletons + thin line carry it), and triggers
+  /// hides the card (the screens + thin line carry the re-pull), and triggers
   /// a fresh pull. The re-pull's `background → completed/failed` transitions then
   /// drive the state machine as usual.
   void manualRetry() {
     _retryCount = 0;
     _retryTimer?.cancel();
-    // Don't re-flash the centered overlay; a manual retry surfaces via skeletons.
+    // Don't re-flash the centered overlay; a manual retry runs behind the screens.
     _overlayDone = true;
     _set(FirstLoadOverlayState.hidden);
     unawaited(_safeRetry());
@@ -152,7 +151,7 @@ class FirstLoadOverlayController extends StateNotifier<FirstLoadOverlayState> {
   }
 
   void _onBackground() {
-    // The overlay already handed off (skeletons are up): keep it that way. A
+    // The overlay already handed off (the screens are up): keep it that way. A
     // manual retry from the card lands here too — just clear the card.
     if (_overlayDone) {
       if (state == FirstLoadOverlayState.retryNeeded) {
@@ -198,7 +197,7 @@ class FirstLoadOverlayController extends StateNotifier<FirstLoadOverlayState> {
   void _onFailed() {
     _episodeActive = false;
     _cancelLoadingTimers();
-    // Once a failure happens we never re-open the centered overlay; skeletons +
+    // Once a failure happens we never re-open the centered overlay; the screens +
     // the thin top line carry any silent re-pull quietly.
     _overlayDone = true;
     if (!_online) {
@@ -315,38 +314,6 @@ final firstPullCompletedProvider = FutureProvider<bool>((ref) async {
   final businessId = ref.watch(currentBusinessIdProvider);
   if (businessId == null) return false;
   return FirstLoadMarkerService.hasCompletedPull(businessId);
-});
-
-/// The current pull stage, projected from [pullStatusProvider].
-final pullStageProvider = Provider<PullStage>((ref) {
-  return ref.watch(pullStatusProvider).value.stage;
-});
-
-/// True while this is a genuine first load on this device — the store is empty
-/// and the business has no "first full pull completed" marker yet. Used to
-/// suppress the populated-device error pill (the prominent retry card / skeletons
-/// own the empty-store failure experience instead).
-final firstLoadActiveProvider = Provider<bool>((ref) {
-  if (!ref.watch(firstLoadStoreEmptyProvider)) return false;
-  final marker = ref.watch(firstPullCompletedProvider).valueOrNull ?? false;
-  return !marker;
-});
-
-/// True when the tab skeletons should render: a first-load pull is streaming
-/// (or briefly between silent-retry attempts), the store is still empty, and the
-/// centered overlay / retry card is NOT showing (those take visual precedence).
-/// The tab screens watch this to swap their empty body for a skeleton, resolving
-/// to real content the moment data streams in (store no longer empty).
-final firstLoadSkeletonActiveProvider = Provider<bool>((ref) {
-  // The loading overlay and the retry card own the screen when present.
-  if (ref.watch(firstLoadOverlayProvider) != FirstLoadOverlayState.hidden) {
-    return false;
-  }
-  if (!ref.watch(firstLoadStoreEmptyProvider)) return false;
-  final marker = ref.watch(firstPullCompletedProvider).valueOrNull ?? false;
-  if (marker) return false;
-  final stage = ref.watch(pullStageProvider);
-  return stage == PullStage.background || stage == PullStage.failed;
 });
 
 /// The sole source of truth for the first-load overlay state. Wires the live

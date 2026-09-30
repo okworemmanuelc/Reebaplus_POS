@@ -81,10 +81,10 @@ From the user's perspective:
    reassurance that names my business, so that I trust the right store is loading.
 2. As a store owner on a fast connection, I want that reassurance to disappear within
    about two seconds, so that the app never feels stuck.
-3. As a cashier landing on the POS screen during first sync, I want to see a skeleton
+3. **[Superseded by #313: no skeletons — the real screen shows at once, with a blank list area until the first download finishes.]** As a cashier landing on the POS screen during first sync, I want to see a skeleton
    of the product grid immediately, so that I understand products are on the way and
    the screen isn't broken.
-4. As a stock keeper landing on the Home/dashboard during first sync, I want a skeleton
+4. **[Superseded by #313: no skeletons — the real screen shows at once, with a blank list area until the first download finishes.]** As a stock keeper landing on the Home/dashboard during first sync, I want a skeleton
    of the dashboard, so that I know my data is loading.
 5. As any user during first sync, I want the bottom navigation and drawer to stay
    tappable while data loads, so that I can move around instead of waiting on a blocker.
@@ -95,7 +95,8 @@ From the user's perspective:
    straight on my data with no full-screen loader, so that re-opening the app is instant.
 8. As a returning user, I still want a thin, unobtrusive top sync line when a background
    catch-up is running, so that I know the app is staying up to date without it
-   interrupting me.
+   interrupting me. **[Superseded by #313: a background catch-up shows no top line. The
+   line shows only during the first download after a full sign-in.]**
 9. As a user watching first sync, I want the progress to advance smoothly in proportion
    to the data actually arriving, so that it never looks frozen on a big table.
 10. As a user whose first sync is taking a while, I want the overlay to step aside to
@@ -121,10 +122,11 @@ From the user's perspective:
     already loaded on the device.
 17. As a user pulling-to-refresh, I want the existing refresh animation to remain the
     sole indicator, so that I don't see two competing sync animations at once.
-18. As a user who navigates between tabs during first sync, I want each tab to show its
+18. **[Superseded by #313: no skeletons — the real screen shows at once, with a blank list area until the first download finishes.]** As a user who navigates between tabs during first sync, I want each tab to show its
     own skeleton until its data arrives, so that every screen feels consistent.
 19. As a user, I want a brief "Synced ✓" confirmation when the catch-up finishes, so
-    that I know the store is fully up to date.
+    that I know the store is fully up to date. **[Superseded by #313: "Synced" shows only
+    after a pull-down refresh whose pull really completed, never after a background pull.]**
 20. As a user on a large store, I want the restore step to be fast, so that "loading"
     reflects real progress and ends promptly rather than dragging.
 21. As a low-vision user, I want the loading text, progress, and retry control to honour
@@ -179,6 +181,13 @@ resolve, defaulting to products-present as a universal fallback. After dismiss, 
 thin top sync line continues until the pull completes.
 
 **4.4 Skeletons.**
+> **Superseded by #313 (slice 3, 2026-09-30).** The skeletons and the shimmer primitive
+> were removed (`lib/shared/widgets/skeletons/`, `firstLoadSkeletonActiveProvider`). After
+> the overlay, POS, Home, Inventory and Reports render their real layout straight away.
+> While `firstDownloadInProgressProvider` is true their list areas are blank: no "none
+> yet" message, no call to action. Wherever else this brief says the overlay "hands off
+> to skeletons", read "hands off to the real screens". The text below is kept as history.
+
 There is **no** shimmer/skeleton primitive today and **no** `shimmer` dependency. Build
 **one** reusable themed shimmer primitive (e.g. a skeleton box / line driven by an
 animation, coloured via the token system + glassy decorations), then compose lightweight
@@ -213,6 +222,9 @@ The `loading` element stays non-interactive (taps pass through to nav). The `ret
 element is a **prominent, interactive centered card** with a real Retry action — not the
 small bottom pill — whenever the store is still empty. The existing compact error pill
 and "Synced ✓" pill behaviour for already-populated devices is unchanged.
+**[The previous sentence is superseded by #313: the compact error pill is deleted — a failed
+pull shows nothing on a populated device — and "Synced" shows only after a pull-down refresh
+whose pull really completed. The silent retries and the retry card above are unchanged.]**
 
 **4.8 Invariants preserved.**
 Offline-first entry gate (app open is never gated on a network pull); `AppRefreshWrapper`

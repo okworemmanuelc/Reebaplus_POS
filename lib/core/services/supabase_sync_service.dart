@@ -2129,6 +2129,10 @@ class SupabaseSyncService {
   @visibleForTesting
   DateTime? get lastCatchUpAtForTesting => _lastCatchUpAt;
 
+  /// The business the latest pull ran for — what [pullStatus] is reporting on.
+  /// Null until a pull has run.
+  String? get pullBusinessId => _currentBusinessId;
+
   /// Test seam: bind the active business without running a login/pull, so
   /// [catchUpPull]'s guards can be exercised in isolation.
   @visibleForTesting
