@@ -120,9 +120,9 @@ class CrateShortageState {
 /// Folds ONE store's events, already in time order.
 ///
 /// - An Opening Count sets the number and raises no shortage.
-/// - A count below expected opens shortage by the gap. The gap also takes
-///   crates found earlier back out of reach of a reversal: they are missing
-///   again.
+/// - A count below expected first takes crates found earlier back out of reach
+///   of a reversal: they are missing again, and the write-off that was never
+///   reversed still covers them. Only the rest of the gap opens shortage.
 /// - A count above expected closes open shortage first. The rest raises the
 ///   warehouse only — it is **not banked** against a later shortage — but
 ///   crates that had been written off may now be reversed, up to the number
@@ -147,8 +147,11 @@ CrateShortageState foldCrateShortageStateForStore(
         } else if (movementType == kCrateMovementCount) {
           if (quantityDelta < 0) {
             final gap = -quantityDelta;
-            open += gap;
-            reversible = _max0(reversible - gap);
+            // Found-but-not-reversed crates are still covered by their
+            // write-off, so they go missing again without reopening anything.
+            final recovered = gap < reversible ? gap : reversible;
+            reversible -= recovered;
+            open += gap - recovered;
           } else if (quantityDelta > 0) {
             final closed = quantityDelta < open ? quantityDelta : open;
             open -= closed;

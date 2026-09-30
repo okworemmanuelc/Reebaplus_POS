@@ -80,27 +80,34 @@ void main() {
         countedEmpties: counted,
       );
 
-  /// 2 crates still missing, and 1 written-off crate found and reversible.
-  ///
-  /// Real gaps between the steps: the fold orders same-second rows by their
-  /// millisecond UUIDv7 ids, so each step needs its own millisecond.
-  Future<void> seedShortAndReversible(WidgetTester tester) async {
-    Future<void> gap() => tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 5)),
-        );
+  // Real gaps between the steps: the fold orders same-second rows by their
+  // millisecond UUIDv7 ids, so each step needs its own millisecond.
+  Future<void> gap(WidgetTester tester) => tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+
+  /// 2 crates missing and not written off.
+  Future<void> seedShort(WidgetTester tester) async {
     await count(30);
-    await gap();
+    await gap(tester);
+    await count(28);
+  }
+
+  /// 1 written-off crate found and reversible. A brand at one store is never
+  /// both short and reversible: found crates close what is open first, and a
+  /// new gap takes found crates back first.
+  Future<void> seedReversible(WidgetTester tester) async {
+    await count(30);
+    await gap(tester);
     await count(20);
-    await gap();
+    await gap(tester);
     await env.db.cratePoolDao.writeOffCrateShortage(
       manufacturerId: manufacturer.id,
       storeId: env.storeId,
       crateCount: 10,
       performedBy: userId,
     );
-    await gap();
-    await count(23);
-    await gap();
+    await gap(tester);
     await count(21);
   }
 
@@ -217,9 +224,9 @@ void main() {
 
     for (final role in roles) {
       testWidgets(
-          '${role.name} ${role.sees ? 'sees' : 'does not see'} Write off and '
-          'Reverse', (tester) async {
-        await seedShortAndReversible(tester);
+          '${role.name} ${role.sees ? 'sees' : 'does not see'} Write off',
+          (tester) async {
+        await seedShort(tester);
         await openScreen(
           tester,
           grantedKeys: role.grants,
@@ -237,6 +244,23 @@ void main() {
           findsOneWidget,
         );
         expect(writeOffButton(), role.sees ? findsOneWidget : findsNothing);
+        expect(reverseButton(), findsNothing);
+        await finish(tester);
+      });
+
+      testWidgets(
+          '${role.name} ${role.sees ? 'sees' : 'does not see'} Reverse',
+          (tester) async {
+        await seedReversible(tester);
+        await openScreen(
+          tester,
+          grantedKeys: role.grants,
+          roleSlug: role.slug,
+          roleName: role.name,
+          roleRank: role.rank,
+        );
+        expect(shortCard(), findsOneWidget);
+        expect(writeOffButton(), findsNothing);
         expect(reverseButton(), role.sees ? findsOneWidget : findsNothing);
         await finish(tester);
       });
@@ -319,7 +343,7 @@ void main() {
   group('Reverse write-off sheet', () {
     testWidgets('shows the gain, then writes a compensating row; Cancel writes '
         'nothing', (tester) async {
-      await seedShortAndReversible(tester);
+      await seedReversible(tester);
       final before = (await writeOffRows()).length;
       await openScreen(tester);
 
@@ -363,7 +387,7 @@ void main() {
       testWidgets(
           'both sheets scroll, clear the device bottom padding and save at '
           '${size.width.toInt()}x${size.height.toInt()}', (tester) async {
-        await seedShortAndReversible(tester);
+        await seedShort(tester);
         await openScreen(tester, size: size);
 
         await open(tester, writeOffButton(), CrateShortageWriteOffSheet);
@@ -384,6 +408,12 @@ void main() {
         expectNoOverflow(tester);
         expect(find.byType(CrateShortageWriteOffSheet), findsNothing);
         await tester.pump(const Duration(seconds: 5));
+
+        // A later count finds one of the written-off crates.
+        await gap(tester);
+        await tester.runAsync(() => count(29));
+        await settle(tester);
+        await tester.pumpAndSettle();
 
         await open(tester, reverseButton(), ReverseCrateWriteOffSheet);
         scroll = find.descendant(

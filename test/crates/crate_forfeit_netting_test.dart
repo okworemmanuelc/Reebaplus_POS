@@ -170,7 +170,12 @@ void main() {
   /// The reconciliation for `[start, endExclusive)`, built from the rows the
   /// database actually holds — so the DAO's write and the report's arithmetic
   /// are exercised as one chain.
-  Future<ReconData> recon({DateTime? start, DateTime? endExclusive}) async {
+  Future<ReconData> recon({
+    DateTime? start,
+    DateTime? endExclusive,
+    bool Function(String? storeId)? inScope,
+  }) async {
+    final scope = inScope;
     return reconDataFrom(
       ReconInputs(
         manufacturers: await db.select(db.manufacturers).get(),
@@ -183,6 +188,7 @@ void main() {
         isCeo: true,
         start: start,
         endExclusive: endExclusive,
+        inScope: scope ?? (_) => true,
       ),
     );
   }
@@ -316,6 +322,21 @@ void main() {
       );
       expect(await writeOffs(), hasLength(1));
       expect((await recon()).crateForfeitNettedKobo, 2 * rate);
+    });
+
+    test('a store scope leaves the forfeit line and its split in step', () async {
+      await switchOn();
+      await forfeit(4);
+
+      // A forfeit write-off is business-wide, like the deposit it nets
+      // against, so a store scope narrows neither the line nor its split.
+      final scoped = await recon(inScope: (_) => false);
+      expect(scoped.crateShortfallWrittenOffKobo, 4 * rate);
+      expect(
+        scoped.crateForfeitNettedKobo,
+        scoped.crateShortfallWrittenOffKobo,
+        reason: 'the split can never exceed the line it breaks down',
+      );
     });
 
     test('a partial deposit still books the whole crate: the customer paid less '

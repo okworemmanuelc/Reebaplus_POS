@@ -87,7 +87,23 @@ void main() {
         count(-3, 4),
       ]);
       expect(s.reversibleCrates, 1);
-      expect(s.openCrates, 3, reason: 'the new gap still opens a shortage');
+      expect(
+        s.openCrates,
+        0,
+        reason: 'the write-off that was never reversed still covers them',
+      );
+    });
+
+    test('a short count bigger than the found crates opens only the rest', () {
+      final s = foldCrateShortageStateForStore([
+        opening(0),
+        count(-10, 1),
+        writeOff(10, 2),
+        count(4, 3),
+        count(-6, 4),
+      ]);
+      expect(s.reversibleCrates, 0);
+      expect(s.openCrates, 2);
     });
 
     test('a write-off larger than the open shortage floors it at zero', () {

@@ -2334,6 +2334,7 @@ ReconData reconDataFrom(ReconInputs input) {
       start: input.start,
       endExclusive: endExclusive,
       onlySource: CrateWriteOffSource.customerForfeit,
+      inScope: input.inScope,
     );
   }
 
