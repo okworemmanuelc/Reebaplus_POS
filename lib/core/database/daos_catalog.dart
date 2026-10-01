@@ -529,6 +529,28 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         .getSingleOrNull();
   }
 
+  /// Every business-scoped, non-deleted product carrying [barcode] (#318). The
+  /// POS scan uses this so a soft-unique collision shows a "Which one?" list
+  /// instead of silently taking the first row ([findProductByBarcode] stays for
+  /// the add/edit collision warning). Ordered by name, then id, so the list is
+  /// stable. An empty [barcode] never matches.
+  Future<List<ProductData>> findProductsByBarcode(String barcode) {
+    final trimmed = barcode.trim();
+    if (trimmed.isEmpty) return Future.value(const <ProductData>[]);
+    return (select(products)
+          ..where(
+            (t) =>
+                t.barcode.equals(trimmed) &
+                whereBusiness(t) &
+                t.isDeleted.not(),
+          )
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.name),
+            (t) => OrderingTerm.asc(t.id),
+          ]))
+        .get();
+  }
+
   Future<void> softDeleteProduct(String productId) async {
     // Soft-delete: flip is_deleted and push it as an UPSERT, never a hard
     // tombstone. A `products:delete` makes the cloud run `DELETE FROM products`,

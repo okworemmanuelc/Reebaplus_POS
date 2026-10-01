@@ -7,6 +7,16 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #318 — Duplicate barcodes show a "Which one?" list (2026-10-01)
+Branch `feat/scan-which-one-list-318`, stacked on `feat/scan-opens-quantity-sheet-317` (PR #323, not merged yet). Worked in `../drinkPosApp-wt-318`. Second slice of PRD #316. **No schema change.**
+- **Lookup** (`daos_catalog.dart`): new `findProductsByBarcode(code)` returns every business-scoped (`whereBusiness`), non-deleted match, ordered by name then id; blank code → empty list. `findProductByBarcode` (first match) stays for the add/edit collision warning.
+- **Resolver**: `resolveBarcodeScan({code, matches, storeProducts, cartQtyOf, tier})`. 0 matches → `ScanUnknown`; 1 → exactly the #317 checks; 2+ → `ScanChooseAmong(choices)`, each `ScanChoice(product, unitPriceKobo at the tier, stock in the store, outcome)`. The single-product checks are now `resolveProduct({product, storeProducts, cartQty, tier})`, returning the new sealed sub-type `ScanMatchOutcome` (`ScanAddSheet` / `ScanOutOfStockHere` / `ScanAllInCart` / `ScanSwitchedOff`).
+- **List** (`lib/features/pos/widgets/scan_which_one_sheet.dart`, `ScanWhichOneSheet.show` → picked `ProductData?`): EditItemModal styling (32px top radius, drag handle, `getRSize`), whole sheet in a `SingleChildScrollView`, bottom padding `deviceBottomPadding`. Row = name (+ the grid tile's size/unit descriptor), price via `formatCurrency`, "N in stock here"; unsellable rows are dimmed with "Switched off for sale" / "Out of stock" / "All already in cart" but stay tappable. Dismiss returns null → nothing added.
+- **Scan button**: `ScanChooseAmong` → list → on a pick, `resolveProduct` is re-run with that product's own cart qty and stock → `_renderMatch` (quantity sheet or the #317 message). Single matches never see the list.
+- **Tests**: resolver 12 (+4), `barcode_scan_test` 21 (+7: pick opens the sheet at the picked product's price, own cart qty + 1, switched-off and out-of-stock picks show their messages, close/back add nothing, long list at 320x568 and 800x360 doesn't overflow), `product_barcode_lookup_test` 11 (+5: order, id tiebreak, other business excluded, deleted excluded, blank).
+- **Next slices**: #319 continuous scanner, #320 permission-aware unknown, #321 link to existing.
+- **Not verified on a device.**
+
 ### Issue #317 — Scan opens the quantity sheet; clear messages for unsellable scans (2026-10-01)
 Branch `feat/scan-opens-quantity-sheet-317`, cut from `main` (`c2d4d0d2`). Worked in `../drinkPosApp-wt-317`. First slice of PRD #316 (scan-to-cart loop). **No schema change.**
 - **Resolver** (`lib/features/pos/services/barcode_scan_resolver.dart`, pure): `resolveBarcodeScan({code, match, storeProducts, cartQty, tier})` → sealed `ScanOutcome` = `ScanAddSheet(product, stock, inCart, tier)` / `ScanOutOfStockHere` / `ScanAllInCart(stock)` / `ScanSwitchedOff` / `ScanUnknown(code)`. Order: unknown → switched off → stock ≤ 0 (or not stocked in this store) → cart ≥ stock → sheet. `isAvailable` is checked here, not in `findProductByBarcode`.

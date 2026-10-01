@@ -8,6 +8,8 @@
 //     above what's already in the cart, and Cancel / dismiss add nothing;
 //   - a found but unsellable product (out of stock here, all already in the
 //     cart, switched off) shows its message and no sheet;
+//   - two products sharing a barcode show the "Which one?" list (#318); a
+//     pick continues as a single match, and dismissing adds nothing;
 //   - an UNKNOWN barcode toasts and opens Add Product with the code pre-filled
 //     (unchanged in #317);
 //   - a dismissed scan (null) is a no-op.
@@ -30,16 +32,20 @@ import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scanner.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
+import 'package:reebaplus_pos/features/pos/widgets/scan_which_one_sheet.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+
+import '../helpers/viewports.dart';
 
 /// Test double for [BarcodeScanner]: returns a preset code without a camera and
 /// records how many times it was invoked (to prove the button is wired).
@@ -107,6 +113,8 @@ void main() {
     required String name,
     required String barcode,
     bool isAvailable = true,
+    int retailerKobo = _retailerKobo,
+    String? size,
   }) async {
     final id = UuidV7.generate();
     await db
@@ -117,9 +125,10 @@ void main() {
             businessId: businessId,
             name: name,
             barcode: Value(barcode),
-            retailerPriceKobo: const Value(_retailerKobo),
+            retailerPriceKobo: Value(retailerKobo),
             wholesalerPriceKobo: const Value(_wholesalerKobo),
             isAvailable: Value(isAvailable),
+            size: Value(size),
           ),
         );
     return (db.select(db.products)..where((t) => t.id.equals(id))).getSingle();
@@ -131,6 +140,7 @@ void main() {
     PriceTier tier = PriceTier.retailer,
     String? storeName = 'Main Store',
     void Function(BuildContext, String)? onUnknown,
+    List<ProductDataWithStock> Function()? readStoreProducts,
   }) {
     return ProviderScope(
       overrides: [
@@ -145,6 +155,7 @@ void main() {
             tier: tier,
             loadedProducts: loaded,
             storeName: storeName,
+            readStoreProducts: readStoreProducts,
             onUnknownBarcode: onUnknown,
           ),
         ),
@@ -447,6 +458,264 @@ void main() {
 
       await clearToast(tester);
     });
+  });
+
+  group('two products share a barcode — "Which one?" (#318)', () {
+    Finder choiceRow(ProductData p) =>
+        find.byKey(ValueKey<String>('$kScanChoiceKeyPrefix${p.id}'));
+
+    Future<void> pick(WidgetTester tester, ProductData p) async {
+      await tester.ensureVisible(choiceRow(p));
+      await tester.pumpAndSettle();
+      await tester.tap(choiceRow(p));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('lists both; picking one opens its sheet at its own price', (
+      tester,
+    ) async {
+      final extra = await seedProduct(
+        name: 'Panadol Extra',
+        barcode: 'BC-DUP',
+        size: 'big',
+      );
+      final junior = await seedProduct(
+        name: 'Panadol Junior',
+        barcode: 'BC-DUP',
+        retailerKobo: 50000,
+      );
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-DUP'),
+          loaded: [
+            ProductDataWithStock(product: extra, totalStock: 10),
+            ProductDataWithStock(product: junior, totalStock: 4),
+          ],
+        ),
+      );
+
+      await scan(tester);
+
+      // The list, not a sheet, and nothing added yet.
+      expect(find.byType(ScanWhichOneSheet), findsOneWidget);
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.text('Which one?'), findsOneWidget);
+      expect(find.text('Panadol Extra · big'), findsOneWidget);
+      expect(find.text('Panadol Junior'), findsOneWidget);
+      expect(find.text('10 in stock here'), findsOneWidget);
+      expect(find.text('4 in stock here'), findsOneWidget);
+      expect(find.text(formatCurrency(_retailerKobo / 100.0)), findsOneWidget);
+      expect(find.text(formatCurrency(50000 / 100.0)), findsOneWidget);
+
+      await pick(tester, junior);
+
+      expect(find.byType(ScanWhichOneSheet), findsNothing);
+      expect(find.byType(EditItemModal), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(EditItemModal),
+          matching: find.text('Panadol Junior'),
+        ),
+        findsOneWidget,
+      );
+      await tapSheetButton(tester, 'Add to Cart');
+
+      final line = cart.value.single;
+      expect(line['id'], junior.id);
+      expect(line['qty'], 1);
+      expect(line['unitPriceKobo'], 50000);
+      expect(find.text('Panadol Junior ×1 added'), findsOneWidget);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('the pick starts on its OWN cart qty + 1', (tester) async {
+      final extra = await seedProduct(name: 'Panadol Extra', barcode: 'BC-DUP');
+      final junior = await seedProduct(name: 'Panadol Junior', barcode: 'BC-DUP');
+      cart.addItem(junior, qty: 2, maxStock: 10, tier: PriceTier.retailer);
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-DUP'),
+          loaded: [
+            ProductDataWithStock(product: extra, totalStock: 10),
+            ProductDataWithStock(product: junior, totalStock: 10),
+          ],
+        ),
+      );
+
+      await scan(tester);
+      await pick(tester, junior);
+
+      expect(qtyText(tester), '3');
+      expect(find.text('2 already in cart'), findsOneWidget);
+    });
+
+    testWidgets('picking a switched-off row shows its message, not the sheet', (
+      tester,
+    ) async {
+      final off = await seedProduct(
+        name: 'Gulder',
+        barcode: 'BC-DUP',
+        isAvailable: false,
+      );
+      final ok = await seedProduct(name: 'Star Lager', barcode: 'BC-DUP');
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-DUP'),
+          loaded: [
+            ProductDataWithStock(product: off, totalStock: 10),
+            ProductDataWithStock(product: ok, totalStock: 10),
+          ],
+        ),
+      );
+
+      await scan(tester);
+      // Still listed, with its reason.
+      expect(
+        find.text('10 in stock here · Switched off for sale'),
+        findsOneWidget,
+      );
+      await pick(tester, off);
+
+      expect(find.byType(ScanWhichOneSheet), findsNothing);
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.text('Gulder is switched off for sale'), findsOneWidget);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('the pick is checked against the CURRENT catalogue, not the '
+        'one captured at scan time', (tester) async {
+      final extra = await seedProduct(name: 'Panadol Extra', barcode: 'BC-DUP');
+      final junior = await seedProduct(name: 'Panadol Junior', barcode: 'BC-DUP');
+      // What the grid held when the scan started: Junior has 4 here.
+      var current = [
+        ProductDataWithStock(product: extra, totalStock: 10),
+        ProductDataWithStock(product: junior, totalStock: 4),
+      ];
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-DUP'),
+          loaded: current,
+          readStoreProducts: () => current,
+        ),
+      );
+
+      await scan(tester);
+      expect(find.text('4 in stock here'), findsOneWidget);
+
+      // Another till sells the last Junior while the list is open.
+      current = [ProductDataWithStock(product: extra, totalStock: 10)];
+      await pick(tester, junior);
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(
+        find.text('Panadol Junior is out of stock at Main Store'),
+        findsOneWidget,
+      );
+
+      await clearToast(tester);
+    });
+
+    testWidgets('picking an out-of-stock row shows its message, not the sheet', (
+      tester,
+    ) async {
+      final empty = await seedProduct(name: 'Gulder', barcode: 'BC-DUP');
+      final ok = await seedProduct(name: 'Star Lager', barcode: 'BC-DUP');
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-DUP'),
+          // Gulder isn't stocked in this store at all.
+          loaded: [ProductDataWithStock(product: ok, totalStock: 10)],
+        ),
+      );
+
+      await scan(tester);
+      expect(find.text('0 in stock here · Out of stock'), findsOneWidget);
+      await pick(tester, empty);
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.text('Gulder is out of stock at Main Store'), findsOneWidget);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('closing or backing out of the list adds nothing', (
+      tester,
+    ) async {
+      final a = await seedProduct(name: 'Gulder', barcode: 'BC-DUP');
+      final b = await seedProduct(name: 'Star Lager', barcode: 'BC-DUP');
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-DUP'),
+          loaded: [
+            ProductDataWithStock(product: a, totalStock: 10),
+            ProductDataWithStock(product: b, totalStock: 10),
+          ],
+        ),
+      );
+
+      await scan(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ScanWhichOneSheet),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ScanWhichOneSheet), findsNothing);
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+
+      await scan(tester);
+      expect(find.byType(ScanWhichOneSheet), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(ScanWhichOneSheet), findsNothing);
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+    });
+
+    for (final size in const [phoneSe1Portrait, androidCompactLandscape]) {
+      testWidgets(
+        'a long list never overflows and the last row is reachable at '
+        '${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.reset);
+
+          final seeded = <ProductData>[
+            for (var i = 0; i < 8; i++)
+              await seedProduct(
+                name: 'Panadol variant $i with a long name',
+                barcode: 'BC-DUP',
+                size: 'big',
+              ),
+          ];
+          await tester.pumpWidget(
+            host(
+              _FakeBarcodeScanner('BC-DUP'),
+              loaded: [
+                for (final p in seeded)
+                  ProductDataWithStock(product: p, totalStock: 5),
+              ],
+            ),
+          );
+
+          await scan(tester);
+          expect(tester.takeException(), isNull);
+
+          await pick(tester, seeded.last);
+          expect(tester.takeException(), isNull);
+          expect(find.byType(EditItemModal), findsOneWidget);
+        },
+      );
+    }
   });
 
   testWidgets('unknown barcode toasts and opens Add Product pre-filled', (

@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
+import 'package:reebaplus_pos/features/pos/widgets/scan_which_one_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 /// The always-visible POS scan control (#118). Rendered as the bottom-right
@@ -25,6 +26,8 @@ import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 ///    the active price tier;
 ///  - found but not sellable (out of stock here, all already in the cart,
 ///    switched off) → a message and no sheet;
+///  - more than one product carries the code (#318) → the "Which one?" list;
+///    the picked product then goes through the two cases above;
 ///  - an unknown barcode toasts and opens Add Product with the code pre-filled
 ///    so the cashier can catalogue it on the spot.
 class PosBarcodeScanButton extends ConsumerWidget {
@@ -33,6 +36,7 @@ class PosBarcodeScanButton extends ConsumerWidget {
     required this.tier,
     required this.loadedProducts,
     this.storeName,
+    this.readStoreProducts,
     this.onUnknownBarcode,
   });
 
@@ -47,6 +51,13 @@ class PosBarcodeScanButton extends ConsumerWidget {
   /// The active store's name, for "out of stock at ‹store›" (#317). Null while
   /// it is still loading or when no single store is active.
   final String? storeName;
+
+  /// Reads the active store's catalogue as it is NOW (the POS controller's
+  /// latest `allProducts`). [loadedProducts] is the list captured when the scan
+  /// started, and the controller swaps in a new list on every stock change, so
+  /// the product picked from the "Which one?" list (#318) is re-checked against
+  /// this once the list closes. Null ⇒ [loadedProducts].
+  final List<ProductDataWithStock> Function()? readStoreProducts;
 
   /// Test seam: when a scanned barcode matches no product this is invoked with
   /// the code (instead of navigating). Production leaves it null and opens
@@ -75,20 +86,67 @@ class PosBarcodeScanButton extends ConsumerWidget {
     if (trimmed.isEmpty) return; // dismissed / nothing scanned — no-op.
     if (!context.mounted) return;
 
-    final match = await ref
+    // All matches, not just the first (#318): a soft-unique collision shows
+    // the "Which one?" list.
+    final matches = await ref
         .read(databaseProvider)
         .catalogDao
-        .findProductByBarcode(trimmed);
+        .findProductsByBarcode(trimmed);
     if (!context.mounted) return;
 
     final outcome = resolveBarcodeScan(
       code: trimmed,
-      match: match,
+      matches: matches,
       storeProducts: loadedProducts,
-      cartQty: match == null ? 0 : _cartQtyOf(ref, match.id),
+      cartQtyOf: (id) => _cartQtyOf(ref, id),
       tier: tier,
     );
 
+    switch (outcome) {
+      case ScanMatchOutcome():
+        await _renderMatch(context, ref, outcome);
+      case ScanChooseAmong(:final choices):
+        await _chooseAmong(context, ref, choices);
+      case ScanUnknown(:final code):
+        // Unchanged in #317; permission-aware routing is a later slice (#316).
+        AppNotification.showError(context, 'No product matches that barcode');
+        if (onUnknownBarcode != null) {
+          onUnknownBarcode!(context, code);
+        } else {
+          Navigator.of(
+            context,
+          ).push(slideDownRoute(AddProductScreen(prefilledBarcode: code)));
+        }
+    }
+  }
+
+  /// Shows the "Which one?" list (#318). A pick continues as a single match:
+  /// the single-product checks are re-run for that product with its own cart
+  /// qty and store stock. Dismissing adds nothing.
+  Future<void> _chooseAmong(
+    BuildContext context,
+    WidgetRef ref,
+    List<ScanChoice> choices,
+  ) async {
+    final picked = await ScanWhichOneSheet.show(context, choices: choices);
+    if (picked == null || !context.mounted) return;
+    // Stock may have moved while the list was open: use the current catalogue.
+    final outcome = resolveProduct(
+      product: picked,
+      storeProducts: readStoreProducts?.call() ?? loadedProducts,
+      cartQty: _cartQtyOf(ref, picked.id),
+      tier: tier,
+    );
+    await _renderMatch(context, ref, outcome);
+  }
+
+  /// Renders what one found product means: the quantity sheet when it can be
+  /// sold, otherwise its message (#317).
+  Future<void> _renderMatch(
+    BuildContext context,
+    WidgetRef ref,
+    ScanMatchOutcome outcome,
+  ) async {
     switch (outcome) {
       case ScanAddSheet():
         await _openAddSheet(context, ref, outcome);
@@ -107,16 +165,6 @@ class PosBarcodeScanButton extends ConsumerWidget {
           context,
           '${product.name} is switched off for sale',
         );
-      case ScanUnknown(:final code):
-        // Unchanged in #317; permission-aware routing is a later slice (#316).
-        AppNotification.showError(context, 'No product matches that barcode');
-        if (onUnknownBarcode != null) {
-          onUnknownBarcode!(context, code);
-        } else {
-          Navigator.of(
-            context,
-          ).push(slideDownRoute(AddProductScreen(prefilledBarcode: code)));
-        }
     }
   }
 
