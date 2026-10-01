@@ -7,6 +7,16 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #321 — Link a scanned unknown barcode to an existing product (2026-10-01)
+Branch `feat/scan-link-existing-product-321`, stacked on `feat/scan-unknown-barcode-routing-320` (PR #326 → #325 → #324 → #323, none merged yet). Worked in `../drinkPosApp-wt-321`. Fifth and last slice of PRD #316 — **the PRD is complete pending those merges**; the shared barcode catalogue across businesses (#322) stays **parked**. **No schema change.**
+- **Gate**: `_onUnknown` now lets in anyone holding `Gates.addProduct` OR `Gates.editProductPrice`; the "Ask a manager to add it." message only when NEITHER is held.
+- **Choice** (`lib/features/pos/widgets/scan_unknown_choice_sheet.dart`, `ScanUnknownChoiceSheet.show` → `ScanUnknownChoice?`): shows the scanned code; "Add as new product" only with `Gates.addProduct`, "Link to an existing product" only with `Gates.editProductPrice`; with one gate it still shows (one option). Dismiss → nothing, back to scanning. Add as new = the #320 flow (`_addAsNew`; the `onUnknownBarcode` seam now sits behind this choice).
+- **Link** (`lib/features/pos/widgets/scan_link_product_sheet.dart`, `ScanLinkProductSheet.show` → `ProductData?`): name search via new `catalogDao.searchProductsByName` (business-scoped, non-deleted, case-insensitive contains, by name, max 50; blank lists the first 50; switched-off products included). No existing picker fit — Add Product's `_productSuggestions` reads a raw, NOT business-scoped `db.select(db.products)`. A product with a DIFFERENT barcode asks "This replaces barcode ‹old› on ‹name›. Continue?" — Cancel keeps the search open, saves nothing. The sheet saves nothing itself; the button does.
+- **DAO** (`daos_catalog.dart`): `setProductBarcode(productId, barcode)` next to `setProductImageUrl` — writes ONLY `barcode` (trimmed) + `lastUpdatedAt`, business-scoped `where`, then `_enqueueFullProduct`; returns the re-read row (null for another business's id). `updateProductDetails` is deliberately NOT reused (it always writes manufacturer + category, so a barcode-only call would clear them). A product already carrying the code is not re-written.
+- **After linking** → `_renderSaved` (store stock read directly) → quantity sheet, or "Saved. ‹name› has no stock at ‹store› yet…" / the #317 messages.
+- **Tests**: `set_product_barcode_test` (new, 7: full row before/after incl. version bump + stock untouched, replace, full-row queue payload, other business untouched, search ×3); `barcode_scan_test` +11 (gate matrix ×4, dismiss choice, link no-barcode → sheet → added → rescan finds it, replace warning Cancel/Continue, close search, linked with no stock, 320x568 + 800x360 no overflow); the #320 tests and `scan_unknown_barcode_test` now tap "Add as new product" first.
+- **Not verified on a device.**
+
 ### Issue #320 — Unknown barcodes respect permissions; a product added from a scan goes into the cart (2026-10-01)
 Branch `feat/scan-unknown-barcode-routing-320`, stacked on `feat/scanner-stays-open-319` (PR #325 → #324 → #323, none merged yet). Worked in `../drinkPosApp-wt-320`. Fourth slice of PRD #316. **No schema change.**
 - **Gate**: `PosBarcodeScanButton._onUnknown` reads `Gates.addProduct.allowsNow(ref)`. Without it: "No product has this barcode. Ask a manager to add it." — no navigation, scanning carries on (closes the hole where anyone at the till could open Add Product). The old "No product matches that barcode" toast is gone.
@@ -15,7 +25,7 @@ Branch `feat/scan-unknown-barcode-routing-320`, stacked on `feat/scanner-stays-o
 - **Seam**: `onUnknownBarcode` is now `Future<ProductData?> Function(context, code)` — returns the saved product or null for "backed out". Only reached when the gate allows.
 - **Add Product barcode wipe fixed** (`_selectProduct`): a non-empty Barcode field is kept when an existing product is picked by name (and saved onto it by the existing-product path, which already writes the field); an empty field still takes the product's barcode. The collision warning is re-run for the kept code. Applies everywhere Add Product is used. (`_clearExistingProduct` still clears the field — unchanged.)
 - **Tests**: `barcode_scan_test` +5 (Cashier message / no push, Manager saved-with-stock → sheet → confirm adds, 0 stock message, "this store", back out); `scan_unknown_barcode_test` (new, 2, the REAL Add Product over the scanner: fill + save → sheet for the new product → added; back out → nothing); `add_product_barcode_keep_test` (new, 3: scanned code kept and saved onto the existing product, typed code kept, empty field takes the product's barcode).
-- **Next slice**: #321 "Add as new / Link to existing" choice — slots into `_onUnknown` before the push.
+- **Next slice**: #321 "Add as new / Link to existing" choice — slots into `_onUnknown` before the push (done, see above).
 - **Not verified on a device.**
 
 ### Issue #319 — Scanner stays open: scan, pick quantity, keep scanning (2026-10-01)

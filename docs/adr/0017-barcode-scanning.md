@@ -79,8 +79,15 @@ permission for scanning itself) stands.
   gate (e.g. a Cashier) gets "No product has this barcode. Ask a manager to add
   it." Otherwise the choice offers **Add as new product** (`Gates.addProduct`)
   and/or **Link to an existing product** (`Gates.editProductPrice`, which
-  saves only the barcode). Since #320 the gate on Add Product is live (no
-  `Gates.addProduct` ⇒ the message; with it Add Product opens pre-filled and
-  the saved product goes straight to the quantity sheet when this store has
-  stock); the Link choice follows in #321.
+  saves only the barcode). Each option shows only with its gate; with just
+  one gate the choice still shows with that single option. Add as new (#320)
+  opens Add Product pre-filled; Link (#321) searches the business's products
+  by name, asks "This replaces barcode ‹old› on ‹name›. Continue?" before
+  overwriting a different barcode, and writes through a dedicated
+  barcode-only DAO write (`setProductBarcode`, full-row enqueue) — never the
+  general product update, which would clear the manufacturer and category.
+  Either way the product then goes straight to the quantity sheet when this
+  store has stock. Linking a code that another product also carries is
+  allowed (soft uniqueness); the "Which one?" list handles it on the next
+  scan.
 - **Scanning is for all business types**, not only Pharmacy and Supermarket.
