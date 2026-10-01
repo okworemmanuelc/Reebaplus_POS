@@ -275,6 +275,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                   loadedProducts: _controller!.allProducts,
                   storeName: _controller!.currentStoreName,
                   storeId: _controller!.activeStoreId,
+                  readStoreProducts: () => _controller!.allProducts,
                 ),
           // The top bar lives inside the scroll view, so this SafeArea owns the
           // status-bar inset the Scaffold's AppBar used to absorb.
