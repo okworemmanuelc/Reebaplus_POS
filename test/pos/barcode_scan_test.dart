@@ -1,11 +1,15 @@
 // barcode_scan_test.dart
 //
-// #118 — POS barcode scanning. Drives the scan flow through a FAKE scanner (no
-// camera can run headless), exercising the whole always-visible scan button:
-//   - a FOUND barcode adds the product to the cart via the normal add path, so
-//     stock + tier rules apply (priced at the active tier; a 0-stock line is
-//     rejected rather than oversold);
-//   - an UNKNOWN barcode toasts and opens Add Product with the code pre-filled;
+// #118 / #317 — POS barcode scanning. Drives the scan flow through a FAKE
+// scanner (no camera can run headless), exercising the whole always-visible
+// scan button:
+//   - a FOUND, sellable barcode opens the tap-and-hold "Add to Cart" sheet
+//     (#317) at the active store's stock cap and the active tier; it starts one
+//     above what's already in the cart, and Cancel / dismiss add nothing;
+//   - a found but unsellable product (out of stock here, all already in the
+//     cart, switched off) shows its message and no sheet;
+//   - an UNKNOWN barcode toasts and opens Add Product with the code pre-filled
+//     (unchanged in #317);
 //   - a dismissed scan (null) is a no-op.
 //
 // The button is placed in a bare Scaffold's FAB slot (its real home, ADR 0017)
@@ -24,15 +28,18 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scanner.dart';
+import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
 /// Test double for [BarcodeScanner]: returns a preset code without a camera and
 /// records how many times it was invoked (to prove the button is wired).
@@ -99,6 +106,7 @@ void main() {
   Future<ProductData> seedProduct({
     required String name,
     required String barcode,
+    bool isAvailable = true,
   }) async {
     final id = UuidV7.generate();
     await db
@@ -111,6 +119,7 @@ void main() {
             barcode: Value(barcode),
             retailerPriceKobo: const Value(_retailerKobo),
             wholesalerPriceKobo: const Value(_wholesalerKobo),
+            isAvailable: Value(isAvailable),
           ),
         );
     return (db.select(db.products)..where((t) => t.id.equals(id))).getSingle();
@@ -120,6 +129,7 @@ void main() {
     BarcodeScanner scanner, {
     required List<ProductDataWithStock> loaded,
     PriceTier tier = PriceTier.retailer,
+    String? storeName = 'Main Store',
     void Function(BuildContext, String)? onUnknown,
   }) {
     return ProviderScope(
@@ -129,15 +139,46 @@ void main() {
         barcodeScannerProvider.overrideWithValue(scanner),
       ],
       child: MaterialApp(
+        theme: AppTheme.dark(),
         home: Scaffold(
           floatingActionButton: PosBarcodeScanButton(
             tier: tier,
             loadedProducts: loaded,
+            storeName: storeName,
             onUnknownBarcode: onUnknown,
           ),
         ),
       ),
     );
+  }
+
+  /// The quantity field of the open "Add to Cart" sheet (its first input).
+  Finder qtyField() => find
+      .descendant(
+        of: find.byType(EditItemModal),
+        matching: find.byType(TextField),
+      )
+      .first;
+
+  String qtyText(WidgetTester tester) =>
+      tester.widget<TextField>(qtyField()).controller!.text;
+
+  Future<void> scan(WidgetTester tester) async {
+    await tester.tap(find.byType(PosBarcodeScanButton));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> tapSheetButton(WidgetTester tester, String label) async {
+    final button = find.widgetWithText(AppButton, label);
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> clearToast(WidgetTester tester) async {
+    AppNotification.hide();
+    await tester.pumpAndSettle();
   }
 
   testWidgets('scan button is always visible (not gated on the cart) and textless', (
@@ -151,77 +192,261 @@ void main() {
     expect(cart.value, isEmpty);
   });
 
-  testWidgets('found barcode adds the product to the cart at the active tier', (
-    tester,
-  ) async {
-    final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
-    final scanner = _FakeBarcodeScanner('BC-1');
-    await tester.pumpWidget(
-      host(
-        scanner,
-        loaded: [ProductDataWithStock(product: product, totalStock: 10)],
-      ),
-    );
+  group('found and sellable — opens the Add to Cart sheet (#317)', () {
+    testWidgets('confirming 3 puts 3 in the cart at the active tier', (
+      tester,
+    ) async {
+      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+      final scanner = _FakeBarcodeScanner('BC-1');
+      await tester.pumpWidget(
+        host(
+          scanner,
+          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+        ),
+      );
 
-    await tester.tap(find.byType(PosBarcodeScanButton));
-    await tester.pumpAndSettle();
+      await scan(tester);
 
-    expect(scanner.scanCount, 1);
-    expect(cart.value, hasLength(1));
-    final line = cart.value.single;
-    expect(line['id'], product.id);
-    expect(line['name'], 'Star Lager');
-    // Priced at the active (retailer) tier — the normal add path's tier rule.
-    expect(line['unitPriceKobo'], _retailerKobo);
-    expect(line['priceTier'], 'retailer');
-    expect(find.text('Star Lager added to cart'), findsOneWidget);
+      expect(scanner.scanCount, 1);
+      // Nothing is added until the sheet is confirmed.
+      expect(cart.value, isEmpty);
+      expect(find.byType(EditItemModal), findsOneWidget);
+      // Not in the cart yet → starts on 1, with no "already in cart" line.
+      expect(qtyText(tester), '1');
+      expect(find.textContaining('already in cart'), findsNothing);
 
-    AppNotification.hide();
-    await tester.pumpAndSettle();
+      await tester.enterText(qtyField(), '3');
+      await tester.pump();
+      await tapSheetButton(tester, 'Add to Cart');
+
+      expect(find.byType(EditItemModal), findsNothing);
+      final line = cart.value.single;
+      expect(line['id'], product.id);
+      expect(line['qty'], 3);
+      // Priced at the active (retailer) tier — the normal add path's tier rule.
+      expect(line['unitPriceKobo'], _retailerKobo);
+      expect(line['priceTier'], 'retailer');
+      expect(find.text('Star Lager ×3 added'), findsOneWidget);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('wholesaler tier prices the scanned line at wholesale', (
+      tester,
+    ) async {
+      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-1'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+          tier: PriceTier.wholesaler,
+        ),
+      );
+
+      await scan(tester);
+      await tapSheetButton(tester, 'Add to Cart');
+
+      expect(cart.value.single['qty'], 1);
+      expect(cart.value.single['unitPriceKobo'], _wholesalerKobo);
+      expect(cart.value.single['priceTier'], 'wholesaler');
+      expect(find.text('Star Lager ×1 added'), findsOneWidget);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('already ×2 in the cart → starts on 3 with "2 already in cart"', (
+      tester,
+    ) async {
+      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+      cart.addItem(product, qty: 2, maxStock: 10, tier: PriceTier.retailer);
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-1'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+        ),
+      );
+
+      await scan(tester);
+
+      expect(qtyText(tester), '3');
+      expect(find.text('2 already in cart'), findsOneWidget);
+
+      // The field is the cart TOTAL: confirming 3 leaves one line of 3.
+      await tapSheetButton(tester, 'Add to Cart');
+      expect(cart.value.single['qty'], 3);
+      expect(find.text('Star Lager ×3 added'), findsOneWidget);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('the start value never passes the store stock', (tester) async {
+      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+      cart.addItem(product, qty: 4.5, maxStock: 5, tier: PriceTier.retailer);
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-1'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 5)],
+        ),
+      );
+
+      await scan(tester);
+
+      expect(qtyText(tester), '5');
+      expect(find.text('4.5 already in cart'), findsOneWidget);
+    });
+
+    testWidgets('Cancel adds nothing', (tester) async {
+      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-1'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+        ),
+      );
+
+      await scan(tester);
+      await tester.enterText(qtyField(), '3');
+      await tester.pump();
+      await tapSheetButton(tester, 'Cancel');
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.textContaining('added'), findsNothing);
+    });
+
+    testWidgets('the close button adds nothing', (tester) async {
+      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-1'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+        ),
+      );
+
+      await scan(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(EditItemModal),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.textContaining('added'), findsNothing);
+    });
+
+    testWidgets('back (dismiss) adds nothing, and leaves an existing line alone', (
+      tester,
+    ) async {
+      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+      cart.addItem(product, qty: 2, maxStock: 10, tier: PriceTier.retailer);
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-1'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+        ),
+      );
+
+      await scan(tester);
+      expect(find.byType(EditItemModal), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value.single['qty'], 2);
+      expect(find.textContaining('added'), findsNothing);
+    });
   });
 
-  testWidgets('wholesaler tier prices the scanned line at wholesale', (
-    tester,
-  ) async {
-    final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
-    await tester.pumpWidget(
-      host(
-        _FakeBarcodeScanner('BC-1'),
-        loaded: [ProductDataWithStock(product: product, totalStock: 10)],
-        tier: PriceTier.wholesaler,
-      ),
-    );
+  group('found but not sellable — a message and no sheet (#317)', () {
+    testWidgets('0 stock in this store → out of stock at the store', (
+      tester,
+    ) async {
+      final product = await seedProduct(name: 'Gulder', barcode: 'BC-2');
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-2'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 0)],
+        ),
+      );
 
-    await tester.tap(find.byType(PosBarcodeScanButton));
-    await tester.pumpAndSettle();
+      await scan(tester);
 
-    expect(cart.value.single['unitPriceKobo'], _wholesalerKobo);
-    expect(cart.value.single['priceTier'], 'wholesaler');
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.text('Gulder is out of stock at Main Store'), findsOneWidget);
+      // The old scan-path toast is gone.
+      expect(find.textContaining('Stock limit reached'), findsNothing);
 
-    AppNotification.hide();
-    await tester.pumpAndSettle();
-  });
+      await clearToast(tester);
+    });
 
-  testWidgets('found barcode with 0 store stock is rejected (stock rule)', (
-    tester,
-  ) async {
-    final product = await seedProduct(name: 'Gulder', barcode: 'BC-2');
-    await tester.pumpWidget(
-      host(
-        _FakeBarcodeScanner('BC-2'),
-        // Zero stock in this store → the normal add path rejects, never oversells.
-        loaded: [ProductDataWithStock(product: product, totalStock: 0)],
-      ),
-    );
+    testWidgets('not stocked in this store → out of stock (no store name yet)', (
+      tester,
+    ) async {
+      await seedProduct(name: 'Gulder', barcode: 'BC-2');
+      await tester.pumpWidget(
+        host(_FakeBarcodeScanner('BC-2'), loaded: const [], storeName: null),
+      );
 
-    await tester.tap(find.byType(PosBarcodeScanButton));
-    await tester.pumpAndSettle();
+      await scan(tester);
 
-    expect(cart.value, isEmpty);
-    expect(find.text('Stock limit reached for Gulder'), findsOneWidget);
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.text('Gulder is out of stock at this store'), findsOneWidget);
 
-    AppNotification.hide();
-    await tester.pumpAndSettle();
+      await clearToast(tester);
+    });
+
+    testWidgets('cart already holds all the stock → all in cart', (
+      tester,
+    ) async {
+      final product = await seedProduct(name: 'Gulder', barcode: 'BC-2');
+      cart.addItem(product, qty: 5, maxStock: 5, tier: PriceTier.retailer);
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-2'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 5)],
+        ),
+      );
+
+      await scan(tester);
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value.single['qty'], 5);
+      expect(
+        find.text('All 5 Gulder in stock are already in the cart'),
+        findsOneWidget,
+      );
+
+      await clearToast(tester);
+    });
+
+    testWidgets('switched off for sale can no longer be added by scanning', (
+      tester,
+    ) async {
+      final product = await seedProduct(
+        name: 'Gulder',
+        barcode: 'BC-2',
+        isAvailable: false,
+      );
+      await tester.pumpWidget(
+        host(
+          _FakeBarcodeScanner('BC-2'),
+          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+        ),
+      );
+
+      await scan(tester);
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.text('Gulder is switched off for sale'), findsOneWidget);
+
+      await clearToast(tester);
+    });
   });
 
   testWidgets('unknown barcode toasts and opens Add Product pre-filled', (
@@ -237,26 +462,25 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byType(PosBarcodeScanButton));
-    await tester.pumpAndSettle();
+    await scan(tester);
 
+    expect(find.byType(EditItemModal), findsNothing);
     expect(cart.value, isEmpty);
     expect(find.text('No product matches that barcode'), findsOneWidget);
     // Add Product is opened with the scanned code pre-filled.
     expect(openedWith, 'NOPE-999');
 
-    AppNotification.hide();
-    await tester.pumpAndSettle();
+    await clearToast(tester);
   });
 
   testWidgets('dismissed scan (null) is a no-op', (tester) async {
     final scanner = _FakeBarcodeScanner(null);
     await tester.pumpWidget(host(scanner, loaded: const []));
 
-    await tester.tap(find.byType(PosBarcodeScanButton));
-    await tester.pumpAndSettle();
+    await scan(tester);
 
     expect(scanner.scanCount, 1);
+    expect(find.byType(EditItemModal), findsNothing);
     expect(cart.value, isEmpty);
   });
 }
