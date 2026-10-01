@@ -70,11 +70,13 @@ permission for scanning itself) stands.
   message instead of a sheet when the product can't be sold here (out of stock
   at this store, all of it already in the cart, or switched off for sale — the
   lookup ignores `isAvailable`, so the resolver checks it).
-- **Duplicates show "Which one?" instead of taking the first match.** Barcodes
-  stay softly unique, but when more than one product carries the scanned code
-  the cashier picks from a short list (name, price at the active tier, stock in
-  this store). The single-match `findProductByBarcode` stays for the add/edit
-  collision warning.
+- **Duplicates will show "Which one?" instead of taking the first match
+  (planned, #318).** Barcodes stay softly unique, but when more than one product
+  carries the scanned code the cashier will pick from a short list (name, price
+  at the active tier, stock in this store). Until that slice ships, POS lookup
+  still uses the single-match `findProductByBarcode`, which returns the first
+  business-scoped, non-deleted match; it also backs the add/edit collision
+  warning, and stays for that afterwards.
 - **Unknown-barcode routing is permission-aware.** Someone holding neither
   gate (e.g. a Cashier) gets "No product has this barcode. Ask a manager to add
   it." Otherwise the choice offers **Add as new product** (`Gates.addProduct`)
