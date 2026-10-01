@@ -11,8 +11,11 @@
 //     cart, switched off) shows its message and no sheet;
 //   - two products sharing a barcode show the "Which one?" list (#318); a
 //     pick continues as a single match, and dismissing adds nothing;
-//   - an UNKNOWN barcode toasts and opens Add Product with the code pre-filled
-//     (unchanged in #317);
+//   - an UNKNOWN barcode (#320): without products.add a message and no Add
+//     Product; with it Add Product (via the test seam), and a product saved
+//     there goes to the quantity sheet if this store has stock, else a
+//     message; backing out adds nothing (the real Add Product screen is
+//     driven end to end in scan_unknown_barcode_test.dart);
 //   - the scanner stays open (#319): each read freezes the camera, shows its
 //     outcome over the scanner, then resumes; the same code is ignored for the
 //     debounce window; the running count follows the cart; ✕ / back close it
@@ -31,7 +34,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -134,7 +139,10 @@ void main() {
     required List<ProductDataWithStock> loaded,
     PriceTier tier = PriceTier.retailer,
     String? storeName = 'Main Store',
-    void Function(BuildContext, String)? onUnknown,
+    String? storeId,
+    // A Manager by default (#320); a Cashier passes {} (no products.add).
+    Set<String> grantedKeys = const {'products.add'},
+    Future<ProductData?> Function(BuildContext, String)? onUnknown,
   }) {
     scanner = fake;
     return ProviderScope(
@@ -143,6 +151,9 @@ void main() {
         authProvider.overrideWith((ref) => auth),
         cartProvider.overrideWith((ref) => cart),
         barcodeScannerProvider.overrideWithValue(fake),
+        gateContextProvider.overrideWithValue(
+          GateContext(grantedKeys: grantedKeys, roleRank: null, isReady: true),
+        ),
       ],
       child: MaterialApp(
         theme: AppTheme.dark(),
@@ -151,6 +162,7 @@ void main() {
             tier: tier,
             loadedProducts: loaded,
             storeName: storeName,
+            storeId: storeId,
             onUnknownBarcode: onUnknown,
           ),
         ),
@@ -686,28 +698,179 @@ void main() {
     }
   });
 
-  testWidgets('unknown barcode toasts and opens Add Product pre-filled', (
-    tester,
-  ) async {
-    await seedProduct(name: 'Star Lager', barcode: 'BC-1');
-    String? openedWith;
-    await tester.pumpWidget(
-      host(
-        FakeBarcodeScanner('NOPE-999'),
-        loaded: const [],
-        onUnknown: (_, code) => openedWith = code,
-      ),
-    );
+  group('unknown barcode (#320)', () {
+    const storeId = 'store-main';
 
-    await scan(tester);
+    Future<void> seedStore() => db
+        .into(db.stores)
+        .insert(
+          StoresCompanion.insert(
+            id: const Value(storeId),
+            businessId: businessId,
+            name: 'Main Store',
+          ),
+        );
 
-    expect(find.byType(EditItemModal), findsNothing);
-    expect(cart.value, isEmpty);
-    expect(find.text('No product matches that barcode'), findsOneWidget);
-    // Add Product is opened with the scanned code pre-filled.
-    expect(openedWith, 'NOPE-999');
+    Future<void> stockIn(ProductData p, int qty) => db
+        .into(db.inventory)
+        .insert(
+          InventoryCompanion.insert(
+            businessId: businessId,
+            productId: p.id,
+            storeId: storeId,
+            quantity: Value(qty),
+          ),
+        );
 
-    await clearToast(tester);
+    testWidgets('a Cashier without products.add gets the message and Add '
+        'Product is never opened', (tester) async {
+      await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+      var opened = 0;
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner('NOPE-999'),
+          loaded: const [],
+          grantedKeys: const {'sales.make'},
+          onUnknown: (_, _) async {
+            opened++;
+            return null;
+          },
+        ),
+      );
+
+      await scan(tester);
+
+      expect(opened, 0);
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(
+        find.text('No product has this barcode. Ask a manager to add it.'),
+        findsOneWidget,
+      );
+      // Still scanning.
+      expect(find.byType(BarcodeScanPage), findsOneWidget);
+      expect(scanner.camera!.isRunning, isTrue);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('a Manager gets Add Product with the code; a product saved '
+        'with stock here opens its sheet, and confirming adds it', (
+      tester,
+    ) async {
+      await seedStore();
+      String? openedWith;
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner('NEW-123'),
+          // The grid's stream hasn't caught up with the new product.
+          loaded: const [],
+          storeId: storeId,
+          onUnknown: (_, code) async {
+            openedWith = code;
+            final p = await seedProduct(name: 'Fanta', barcode: code);
+            await stockIn(p, 6);
+            return p;
+          },
+        ),
+      );
+
+      await scan(tester);
+
+      expect(openedWith, 'NEW-123');
+      // The old generic toast is gone.
+      expect(find.text('No product matches that barcode'), findsNothing);
+      expect(find.byType(EditItemModal), findsOneWidget);
+      expect(qtyText(tester), '1');
+      expect(cart.value, isEmpty);
+
+      await tapSheetButton(tester, 'Add to Cart');
+
+      final line = cart.value.single;
+      expect(line['name'], 'Fanta');
+      expect(line['qty'], 1);
+      expect(find.text('Fanta ×1 added'), findsOneWidget);
+      expect(find.byType(BarcodeScanPage), findsOneWidget);
+      expect(scanner.camera!.isRunning, isTrue);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('saved with no stock in this store → the no-stock message, '
+        'back to scanning', (tester) async {
+      await seedStore();
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner('NEW-123'),
+          loaded: const [],
+          storeId: storeId,
+          onUnknown: (_, code) async =>
+              seedProduct(name: 'Fanta', barcode: code),
+        ),
+      );
+
+      await scan(tester);
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(
+        find.text(
+          "Saved. Fanta has no stock at Main Store yet, so it can't be added "
+          'to the cart.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(BarcodeScanPage), findsOneWidget);
+      expect(scanner.camera!.isRunning, isTrue);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('no store name yet → "this store"', (tester) async {
+      await seedStore();
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner('NEW-123'),
+          loaded: const [],
+          storeName: null,
+          storeId: storeId,
+          onUnknown: (_, code) async =>
+              seedProduct(name: 'Fanta', barcode: code),
+        ),
+      );
+
+      await scan(tester);
+
+      expect(
+        find.text(
+          "Saved. Fanta has no stock at this store yet, so it can't be added "
+          'to the cart.',
+        ),
+        findsOneWidget,
+      );
+
+      await clearToast(tester);
+    });
+
+    testWidgets('backing out of Add Product adds nothing and keeps scanning', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner('NEW-123'),
+          loaded: const [],
+          storeId: storeId,
+          onUnknown: (_, _) async => null,
+        ),
+      );
+
+      await scan(tester);
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(find.byType(BarcodeScanPage), findsOneWidget);
+      expect(scanner.camera!.isRunning, isTrue);
+    });
   });
 
   group('the scanner stays open (#319)', () {
