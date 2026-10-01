@@ -93,7 +93,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 - All authentication and onboarding flows: Welcome, CEO sign-up, staff sign-up via invite code, login, Forgot PIN, and the lock screen.
 - Data-driven roles and permissions with CEO toggles and per-staff overrides.
 - Point of Sale, Cart, Checkout, and Receipt, including cash/transfer/credit payment, role discount caps, and thermal-printer receipts.
-- One-shot barcode scanning at the POS (scan a product's barcode to add it to the cart), an optional per-product barcode, and a camera-based scanner; continuous/rapid scanning is a later upgrade (ADR 0017).
+- Barcode scanning at the POS for every business type, with an optional per-product barcode and a camera-based scanner: a scanned product opens the "Add to Cart" quantity sheet (or a clear message when it can't be sold here), and continuous scanning — the camera stays open across many items until the cashier closes it — is in scope (ADR 0017 amendment, PRD #316; the quantity sheet shipped in #317, the open-camera loop follows in #319).
 - Inventory and Product Details and Daily Stock Count.
 - Customers with credit balances, debt limits, Add Credit, and cash/crate refunds.
 - Orders (Pending / Completed / Cancelled) with Manager/CEO refunds.
@@ -109,7 +109,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 - Multi-business support: each email is tied to exactly one business; the multi-business picker UI and the multi-membership data model are not built.
 - Six of the seven business types are disabled at registration in this phase: Restaurant, Supermarket, Bar, Pharmacy, Building Materials, and Boutique appear in the business type picker as greyed-out "coming soon" options and cannot be selected; their type-specific interfaces are not built.
-- Continuous / rapid barcode scanning (camera stays open, scanning many items in a row) — deferred; the first cut is one-shot (scan one item, it adds to the cart, camera closes). Deeper per-industry IMEI / serial capture also remains deferred (ADR 0015). Basic one-shot barcode scanning is now **in scope** (ADR 0017) — see In Scope.
+- Deeper per-industry IMEI / serial capture (ADR 0015), hardware (Bluetooth / USB) barcode scanners, more than one barcode per product, a barcode catalogue shared across businesses, and scanning outside the POS (Receive Stock, Stock Count). Continuous barcode scanning is now **in scope** (PRD #316) — see In Scope.
 - Per-store report filters and full multi-store reporting.
 - CEO-created custom roles beyond the four defaults, custom permission groups, and per-card Home visibility toggles per role.
 - Custom notification settings and tunable limits beyond discount, expense, and the price-change toggle.

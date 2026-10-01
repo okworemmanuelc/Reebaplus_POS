@@ -880,9 +880,9 @@ Scaffold
 ---
 
 ### Barcode scanning
-**Files:** [barcode_scanner.dart](../lib/features/pos/services/barcode_scanner.dart) (abstract) · [mobile_scanner_barcode_scanner.dart](../lib/features/pos/services/mobile_scanner_barcode_scanner.dart) · [pos_barcode_scan_button.dart](../lib/features/pos/widgets/pos_barcode_scan_button.dart)
+**Files:** [barcode_scanner.dart](../lib/features/pos/services/barcode_scanner.dart) (abstract) · [mobile_scanner_barcode_scanner.dart](../lib/features/pos/services/mobile_scanner_barcode_scanner.dart) · [barcode_scan_resolver.dart](../lib/features/pos/services/barcode_scan_resolver.dart) · [pos_barcode_scan_button.dart](../lib/features/pos/widgets/pos_barcode_scan_button.dart)
 
-An `abstract class BarcodeScanner` with one method, `scanOnce(context)`, and a camera-backed implementation. `PosBarcodeScanButton._scan()` adds a matched product through the *same* path a tap uses; an unknown barcode toasts and opens Add Product pre-filled.
+An `abstract class BarcodeScanner` with one method, `scanOnce(context)`, and a camera-backed implementation. `resolveBarcodeScan` (pure) turns a scan into a sealed `ScanOutcome` (#317) and `PosBarcodeScanButton._scan()` renders it: a sellable match opens the tap-and-hold "Add to Cart" sheet (`EditItemModal.showForProduct`, starting on cart total + 1); out of stock here / all already in the cart / switched off show a message; an unknown barcode toasts and opens Add Product pre-filled.
 
 **Notes:** The interface/implementation split is deliberate — it lets tests inject a fake scanner. This is the cleanest example of dependency inversion in the codebase.
 

@@ -23,12 +23,18 @@ class EditItemModal extends ConsumerStatefulWidget {
   final int maxStock;
   final PriceTier tier;
 
+  /// Add mode only: start the quantity field on the cart total + 1 (capped at
+  /// [maxStock]) instead of on the cart total. A barcode scan means "one more"
+  /// (#317); tap-and-hold keeps starting on what's already in the cart.
+  final bool shouldStartOnNextUnit;
+
   const EditItemModal({
     super.key,
     required this.item,
     this.newProduct,
     this.maxStock = 1 << 30,
     this.tier = PriceTier.retailer,
+    this.shouldStartOnNextUnit = false,
   });
 
   bool get isNew => newProduct != null;
@@ -53,11 +59,13 @@ class EditItemModal extends ConsumerStatefulWidget {
   /// Opens the modal in "add to cart" mode for a product on the POS grid.
   /// Returns true if the requested qty was fully accepted, false if it was
   /// clamped / rejected by stock, or null if the user dismissed without adding.
+  /// The barcode scan path (#317) passes [shouldStartOnNextUnit].
   static Future<bool?> showForProduct(
     BuildContext context, {
     required ProductData product,
     required int maxStock,
     required PriceTier tier,
+    bool shouldStartOnNextUnit = false,
   }) {
     final unitPriceKobo = tier == PriceTier.wholesaler
         ? product.wholesalerPriceKobo
@@ -84,6 +92,7 @@ class EditItemModal extends ConsumerStatefulWidget {
         newProduct: product,
         maxStock: maxStock,
         tier: tier,
+        shouldStartOnNextUnit: shouldStartOnNextUnit,
       ),
     );
   }
@@ -97,10 +106,14 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
   late TextEditingController _customPriceCtrl;
   // 'percent' (default) | 'naira' — §13.2.
   late String _discountKind;
+  // Add mode: how many of the product the cart held when the sheet opened.
+  // Drives the start value and the "N already in cart" line (#317).
+  late final double _inCartAtOpen;
 
   @override
   void initState() {
     super.initState();
+    _inCartAtOpen = widget.isNew ? _cartQtyOf(widget.newProduct!.id) : 0;
     _qtyCtrl = TextEditingController(text: _initialQtyText());
 
     final existingValue = (widget.item['discountValue'] as num?) ?? 0;
@@ -142,18 +155,25 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
       ? widget.maxStock.toDouble()
       : (((widget.item['maxStock'] as int?) ?? (1 << 30)).toDouble());
 
+  /// Total quantity of [productId] across the cart's lines.
+  double _cartQtyOf(String productId) => ref
+      .read(cartProvider)
+      .value
+      .where((i) => i['id'] == productId)
+      .fold<double>(0, (s, i) => s + (i['qty'] as num).toDouble());
+
   /// Initial quantity text. Add mode shows the product's current cart quantity
   /// (so the field is the new total, capped at stock) or 1 if it isn't in the
-  /// cart yet; edit mode shows the existing line quantity.
+  /// cart yet; edit mode shows the existing line quantity. A scan
+  /// ([EditItemModal.shouldStartOnNextUnit], #317) starts one above the cart
+  /// total instead, still capped at stock — the field keeps meaning "total".
   String _initialQtyText() {
     if (!widget.isNew) return widget.item['qty'].toString();
-    final id = widget.newProduct!.id;
-    final inCart = ref
-        .read(cartProvider)
-        .value
-        .where((i) => i['id'] == id)
-        .fold<double>(0, (s, i) => s + (i['qty'] as num).toDouble());
-    return _trimNum(inCart > 0 ? inCart : 1.0);
+    if (widget.shouldStartOnNextUnit) {
+      final next = _inCartAtOpen + 1;
+      return _trimNum(next > _maxQty ? _maxQty : next);
+    }
+    return _trimNum(_inCartAtOpen > 0 ? _inCartAtOpen : 1.0);
   }
 
   @override
@@ -461,6 +481,19 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                   SizedBox(width: context.getRSize(12)),
                   _microAdjustChip('+0.5', () => _updateQty(0.5)),
                 ],
+              ),
+            ],
+            // What the cart already holds — add mode only, so the field reads
+            // as the new total rather than an amount to add (#317).
+            if (widget.isNew && _inCartAtOpen > 0) ...[
+              SizedBox(height: context.getRSize(10)),
+              Text(
+                '${_trimNum(_inCartAtOpen)} already in cart',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(12),
+                  fontWeight: FontWeight.w700,
+                  color: primary,
+                ),
               ),
             ],
             // Available-stock cap hint — only in add mode (§16).
