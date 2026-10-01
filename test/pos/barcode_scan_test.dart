@@ -135,6 +135,7 @@ void main() {
     PriceTier tier = PriceTier.retailer,
     String? storeName = 'Main Store',
     void Function(BuildContext, String)? onUnknown,
+    List<ProductDataWithStock> Function()? readStoreProducts,
   }) {
     scanner = fake;
     return ProviderScope(
@@ -151,6 +152,7 @@ void main() {
             tier: tier,
             loadedProducts: loaded,
             storeName: storeName,
+            readStoreProducts: readStoreProducts,
             onUnknownBarcode: onUnknown,
           ),
         ),
@@ -584,6 +586,40 @@ void main() {
       expect(find.byType(EditItemModal), findsNothing);
       expect(cart.value, isEmpty);
       expect(find.text('Gulder is switched off for sale'), findsOneWidget);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('the pick is checked against the CURRENT catalogue, not the '
+        'one captured at scan time', (tester) async {
+      final extra = await seedProduct(name: 'Panadol Extra', barcode: 'BC-DUP');
+      final junior = await seedProduct(name: 'Panadol Junior', barcode: 'BC-DUP');
+      // What the grid held when the scan started: Junior has 4 here.
+      var current = [
+        ProductDataWithStock(product: extra, totalStock: 10),
+        ProductDataWithStock(product: junior, totalStock: 4),
+      ];
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner('BC-DUP'),
+          loaded: current,
+          readStoreProducts: () => current,
+        ),
+      );
+
+      await scan(tester);
+      expect(find.text('4 in stock here'), findsOneWidget);
+
+      // Another till sells the last Junior while the list is open.
+      current = [ProductDataWithStock(product: extra, totalStock: 10)];
+      await pick(tester, junior);
+
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(cart.value, isEmpty);
+      expect(
+        find.text('Panadol Junior is out of stock at Main Store'),
+        findsOneWidget,
+      );
 
       await clearToast(tester);
     });
