@@ -53,3 +53,32 @@ Decisions locked (grilled 2026-07-11):
   to anyone who can use the POS; assigning a barcode rides the existing
   product-edit gate. Rejected: a dedicated scan permission (nothing to protect
   beyond what POS/product-edit already gate).
+
+## Amendment (2026-10-01, PRD #316)
+
+The scan-to-cart loop (PRD #316, slices #317–#321) revisits four decisions
+above. The rest of this ADR (the optional synced `products.barcode`, soft
+uniqueness with no `UNIQUE (business_id, barcode)`, `mobile_scanner`, no new
+permission for scanning itself) stands.
+
+- **Continuous scanning is no longer deferred.** The scanner stays open until
+  the cashier closes it. Each read freezes the camera and opens the tap-and-hold
+  "Add to Cart" quantity sheet over it; confirming or cancelling resumes the
+  camera, and the same code is ignored for about 1.5 s after resuming. The
+  first slice (#317) keeps the one-shot camera but already routes every found
+  product through the quantity sheet instead of adding 1, and gives a clear
+  message instead of a sheet when the product can't be sold here (out of stock
+  at this store, all of it already in the cart, or switched off for sale — the
+  lookup ignores `isAvailable`, so the resolver checks it).
+- **Duplicates show "Which one?" instead of taking the first match.** Barcodes
+  stay softly unique, but when more than one product carries the scanned code
+  the cashier picks from a short list (name, price at the active tier, stock in
+  this store). The single-match `findProductByBarcode` stays for the add/edit
+  collision warning.
+- **Unknown-barcode routing is permission-aware.** Someone holding neither
+  gate (e.g. a Cashier) gets "No product has this barcode. Ask a manager to add
+  it." Otherwise the choice offers **Add as new product** (`Gates.addProduct`)
+  and/or **Link to an existing product** (`Gates.editProductPrice`, which
+  saves only the barcode). Until that slice ships, an unknown code still toasts
+  and opens Add Product pre-filled.
+- **Scanning is for all business types**, not only Pharmacy and Supermarket.

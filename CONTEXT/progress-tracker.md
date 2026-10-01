@@ -7,6 +7,17 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #317 — Scan opens the quantity sheet; clear messages for unsellable scans (2026-10-01)
+Branch `feat/scan-opens-quantity-sheet-317`, cut from `main` (`c2d4d0d2`). Worked in `../drinkPosApp-wt-317`. First slice of PRD #316 (scan-to-cart loop). **No schema change.**
+- **Resolver** (`lib/features/pos/services/barcode_scan_resolver.dart`, pure): `resolveBarcodeScan({code, match, storeProducts, cartQty, tier})` → sealed `ScanOutcome` = `ScanAddSheet(product, stock, inCart, tier)` / `ScanOutOfStockHere` / `ScanAllInCart(stock)` / `ScanSwitchedOff` / `ScanUnknown(code)`. Order: unknown → switched off → stock ≤ 0 (or not stocked in this store) → cart ≥ stock → sheet. `isAvailable` is checked here, not in `findProductByBarcode`.
+- **Scan button** (`pos_barcode_scan_button.dart`) only renders outcomes. Found and sellable → `EditItemModal.showForProduct(..., shouldStartOnNextUnit: true)` at the store stock + active tier; confirm toasts "‹name› ×‹qty› added" (qty = the line's total after confirming). Not sellable → "‹name› is out of stock at ‹store›" (falls back to "this store"), "All ‹N› ‹name› in stock are already in the cart", "‹name› is switched off for sale". The scan path no longer shows "Stock limit reached". Unknown unchanged. `PosHomeScreen` passes `storeName: currentStoreName`.
+- **Sheet** (`edit_item_modal.dart`): add mode shows "N already in cart" when N > 0 (tap-and-hold and scan). A scan starts on cart total + 1 capped at stock; tap-and-hold still starts on the cart total (or 1).
+- **Closed leak**: scanning used to sell a switched-off product.
+- **Docs**: ADR 0017 amendment; project-overview In/Out of Scope; the "scanning scoped to Pharmacy and Supermarket" note below corrected.
+- **Tests**: `test/pos/barcode_scan_resolver_test.dart` (new, 8); `test/pos/barcode_scan_test.dart` rewritten (14); `test/pos/scan_and_hold_sheet_start_test.dart` (new, 3, real POS screen: hold opens on 2, scan on 3, both "2 already in cart"; store name in the message).
+- **Next slices**: #318 "Which one?" for duplicate barcodes, #319 continuous scanner, #320 permission-aware unknown, #321 link to existing.
+- **Not verified on a device.**
+
 ### #313 follow-up — Logout no longer leaves a first-download marker behind (2026-09-30)
 Branch `fix/first-download-marker-logout-race`, cut from `main` after PR #314. Worked in `../drinkPosApp-wt-marker-race`.
 - **The race**: a wiping logout ran `clearAllData` (which clears the first-load markers) and only then signed the user out. A pull already in flight that completed in between wrote the marker back, so the next sign-in treated an empty phone as one that had finished its first download: first-time prompts could show during the download and the top bar did not.
@@ -6353,9 +6364,11 @@ the reason here.
 - **Three product prices only: Buying, Retailer, Wholesaler.** Four legacy price
   columns dropped in the pivot. (Session 1 / §16.5.)
 
-- **Barcode scanning scoped to Pharmacy and Supermarket only.** Hidden for all
-  other business types. `barcode_widget` package stays in pubspec.yaml.
-  (Session 1 / §16.11.)
+- **Barcode scanning is for all business types.** The POS scan button shows
+  for every business type (drinks, pharmacy, supermarket). This replaces the
+  Session 1 / §16.11 note that scoped it to Pharmacy and Supermarket only,
+  which the code no longer followed. (PRD #316, decision 10; ADR 0017
+  amendment.) `barcode_widget` stays in pubspec.yaml.
 
 - **Per-store scoping pattern.** Expenses (§20.8), Supplier Accounts (§21.11),
   and Daily Reconciliation (§25.9) all follow the §12.1 active-store picker.
