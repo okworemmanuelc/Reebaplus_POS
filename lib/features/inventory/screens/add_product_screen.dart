@@ -342,7 +342,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ? (product.emptyCrateValueKobo / 100).toStringAsFixed(2)
         : '';
     _lowStockCtrl.text = product.lowStockThreshold.toString();
-    _barcodeCtrl.text = product.barcode ?? '';
+    // #320: a barcode already in the field (scanned or typed) is kept, so
+    // picking the product it belongs to saves that code onto it. Only an empty
+    // field takes the product's own barcode.
+    final keepTypedBarcode = _barcodeCtrl.text.trim().isNotEmpty;
+    if (!keepTypedBarcode) _barcodeCtrl.text = product.barcode ?? '';
 
     setState(() {
       _selectedExistingProduct = product;
@@ -377,6 +381,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       }
       _productSuggestions = [];
     });
+    // The kept code may belong to a third product: re-run the soft warning
+    // against the newly picked one.
+    if (keepTypedBarcode) _onBarcodeChanged(_barcodeCtrl.text);
   }
 
   void _clearExistingProduct() {
