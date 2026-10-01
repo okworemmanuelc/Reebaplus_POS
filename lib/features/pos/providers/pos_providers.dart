@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
+
 import 'package:reebaplus_pos/features/pos/services/barcode_scanner.dart';
 import 'package:reebaplus_pos/features/pos/services/mobile_scanner_barcode_scanner.dart';
 
@@ -9,3 +11,15 @@ import 'package:reebaplus_pos/features/pos/services/mobile_scanner_barcode_scann
 final barcodeScannerProvider = Provider<BarcodeScanner>(
   (_) => const MobileScannerBarcodeScanner(),
 );
+
+/// Units in the active cart — the sum of every line's qty, not the number of
+/// lines and not money (#319). Drives the scanner's running "‹N› items in
+/// cart" so the cashier sees each confirmed scan land without leaving the
+/// camera.
+final cartUnitCountProvider = Provider<double>((ref) {
+  final cart = ref.watch(cartProvider);
+  return cart.value.fold<double>(
+    0,
+    (sum, line) => sum + (line['qty'] as num).toDouble(),
+  );
+});
