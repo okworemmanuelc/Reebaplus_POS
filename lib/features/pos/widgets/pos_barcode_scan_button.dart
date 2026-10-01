@@ -136,8 +136,17 @@ class PosBarcodeScanButton extends ConsumerWidget {
       shouldStartOnNextUnit: true,
     );
     if (result == null || !context.mounted) return;
+    // false = the sheet's add was clamped or rejected by stock: say so, as the
+    // tap-and-hold path does, rather than reporting a success.
+    if (!result) {
+      AppNotification.showError(
+        context,
+        'Stock limit reached for ${product.name}',
+      );
+      return;
+    }
     // Report what the cart now holds for the line (the sheet's field is the
-    // total), so a clamped confirm still names the real quantity.
+    // total).
     final qty = _cartQtyOf(ref, product.id);
     if (qty <= 0) return;
     AppNotification.showSuccess(
