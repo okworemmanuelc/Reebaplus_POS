@@ -3,6 +3,8 @@
 // #317 — the pure scan resolver. Every outcome a scanned code can have, without
 // a camera, a widget or a database: sellable, stock 0 in this store, not stocked
 // in this store, cart == stock, switched off, unknown.
+// #318 — two or more matches → "Which one?" (ScanChooseAmong), and the
+// single-product checks (resolveProduct) re-run for the picked row.
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,6 +16,8 @@ ProductData _product({
   String id = 'p-1',
   String name = 'Panadol',
   bool isAvailable = true,
+  int retailerPriceKobo = 100000,
+  int wholesalerPriceKobo = 80000,
 }) {
   final now = DateTime(2026, 10, 1);
   return ProductData(
@@ -21,8 +25,8 @@ ProductData _product({
     businessId: 'biz-1',
     name: name,
     unit: 'Bottle',
-    retailerPriceKobo: 100000,
-    wholesalerPriceKobo: 80000,
+    retailerPriceKobo: retailerPriceKobo,
+    wholesalerPriceKobo: wholesalerPriceKobo,
     buyingPriceKobo: 0,
     lowStockThreshold: 5,
     avgDailySales: 0,
@@ -50,9 +54,9 @@ void main() {
   }) {
     return resolveBarcodeScan(
       code: 'BC-1',
-      match: match,
+      matches: match == null ? const [] : [match],
       storeProducts: store,
-      cartQty: cartQty,
+      cartQtyOf: (_) => cartQty,
       tier: tier,
     );
   }
@@ -140,5 +144,125 @@ void main() {
 
     expect(outcome, isA<ScanUnknown>());
     expect((outcome as ScanUnknown).code, 'BC-1');
+  });
+
+  group('more than one match — "Which one?" (#318)', () {
+    test('two matches → choose among both, in lookup order', () {
+      final a = _product(id: 'p-a', name: 'Panadol Extra');
+      final b = _product(
+        id: 'p-b',
+        name: 'Panadol Junior',
+        retailerPriceKobo: 50000,
+        wholesalerPriceKobo: 40000,
+      );
+      final outcome = resolveBarcodeScan(
+        code: 'BC-1',
+        matches: [a, b],
+        storeProducts: [
+          ProductDataWithStock(product: a, totalStock: 10),
+          ProductDataWithStock(product: b, totalStock: 3),
+        ],
+        cartQtyOf: (_) => 0,
+        tier: PriceTier.wholesaler,
+      );
+
+      expect(outcome, isA<ScanChooseAmong>());
+      final choices = (outcome as ScanChooseAmong).choices;
+      expect(choices.map((c) => c.product.id), ['p-a', 'p-b']);
+      // Price at the active tier, stock in the active store.
+      expect(choices.map((c) => c.unitPriceKobo), [80000, 40000]);
+      expect(choices.map((c) => c.stock), [10, 3]);
+      expect(choices.every((c) => c.isSellable), isTrue);
+    });
+
+    test('unsellable matches are still listed, each with its own reason', () {
+      final off = _product(id: 'p-off', name: 'A', isAvailable: false);
+      final none = _product(id: 'p-none', name: 'B');
+      final full = _product(id: 'p-full', name: 'C');
+      final ok = _product(id: 'p-ok', name: 'D');
+      final outcome = resolveBarcodeScan(
+        code: 'BC-1',
+        matches: [off, none, full, ok],
+        storeProducts: [
+          ProductDataWithStock(product: off, totalStock: 10),
+          ProductDataWithStock(product: full, totalStock: 2),
+          ProductDataWithStock(product: ok, totalStock: 4),
+        ],
+        // Each product's OWN cart qty.
+        cartQtyOf: (id) => id == 'p-full' ? 2 : 1,
+        tier: PriceTier.retailer,
+      );
+
+      final choices = (outcome as ScanChooseAmong).choices;
+      expect(choices, hasLength(4));
+      expect(choices[0].outcome, isA<ScanSwitchedOff>());
+      expect(choices[1].outcome, isA<ScanOutOfStockHere>());
+      expect(choices[1].stock, 0);
+      expect(choices[2].outcome, isA<ScanAllInCart>());
+      expect(choices[3].outcome, isA<ScanAddSheet>());
+      expect((choices[3].outcome as ScanAddSheet).inCart, 1);
+      expect(choices.map((c) => c.isSellable), [false, false, false, true]);
+    });
+
+    test('a single match never asks "Which one?"', () {
+      final p = _product();
+      final outcome = resolve(
+        match: p,
+        store: [ProductDataWithStock(product: p, totalStock: 10)],
+      );
+
+      expect(outcome, isNot(isA<ScanChooseAmong>()));
+      expect(outcome, isA<ScanAddSheet>());
+    });
+
+    test('resolveProduct re-runs the single checks for the picked product', () {
+      final picked = _product(id: 'p-b', name: 'Panadol Junior');
+      final other = _product(id: 'p-a', name: 'Panadol Extra');
+      final store = [
+        ProductDataWithStock(product: other, totalStock: 50),
+        ProductDataWithStock(product: picked, totalStock: 3),
+      ];
+
+      final sellable = resolveProduct(
+        product: picked,
+        storeProducts: store,
+        cartQty: 1,
+        tier: PriceTier.retailer,
+      );
+      expect(sellable, isA<ScanAddSheet>());
+      final sheet = sellable as ScanAddSheet;
+      // Its own stock and cart qty, not the other match's.
+      expect(sheet.product.id, 'p-b');
+      expect(sheet.stock, 3);
+      expect(sheet.inCart, 1);
+
+      expect(
+        resolveProduct(
+          product: picked,
+          storeProducts: store,
+          cartQty: 3,
+          tier: PriceTier.retailer,
+        ),
+        isA<ScanAllInCart>(),
+      );
+      expect(
+        resolveProduct(
+          product: _product(id: 'p-b', isAvailable: false),
+          storeProducts: store,
+          cartQty: 0,
+          tier: PriceTier.retailer,
+        ),
+        isA<ScanSwitchedOff>(),
+      );
+      expect(
+        resolveProduct(
+          product: _product(id: 'p-c'),
+          storeProducts: store,
+          cartQty: 0,
+          tier: PriceTier.retailer,
+        ),
+        isA<ScanOutOfStockHere>(),
+      );
+    });
   });
 }
