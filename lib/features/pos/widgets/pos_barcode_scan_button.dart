@@ -43,6 +43,7 @@ class PosBarcodeScanButton extends ConsumerStatefulWidget {
     required this.loadedProducts,
     this.storeName,
     this.storeId,
+    this.readStoreProducts,
     this.onUnknownBarcode,
   });
 
@@ -63,6 +64,13 @@ class PosBarcodeScanButton extends ConsumerStatefulWidget {
   /// (#320) has its stock read here, directly, because [loadedProducts] may not
   /// have caught up with the new row yet. Null ⇒ treated as no stock.
   final String? storeId;
+
+  /// Reads the active store's catalogue as it is NOW (the POS controller's
+  /// latest `allProducts`). [loadedProducts] is the list captured when the scan
+  /// started, and the controller swaps in a new list on every stock change, so
+  /// the product picked from the "Which one?" list (#318) is re-checked against
+  /// this once the list closes. Null ⇒ [loadedProducts].
+  final List<ProductDataWithStock> Function()? readStoreProducts;
 
   /// Test seam: when a permitted user scans a barcode that matches no product
   /// this is invoked with the code instead of navigating, and returns what
@@ -212,9 +220,11 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
   ) async {
     final picked = await ScanWhichOneSheet.show(context, choices: choices);
     if (picked == null || !context.mounted || !mounted) return;
+    // Stock may have moved while the list was open: use the current catalogue.
     final outcome = resolveProduct(
       product: picked,
-      storeProducts: widget.loadedProducts,
+      storeProducts:
+          widget.readStoreProducts?.call() ?? widget.loadedProducts,
       cartQty: _cartQtyOf(picked.id),
       tier: widget.tier,
     );
