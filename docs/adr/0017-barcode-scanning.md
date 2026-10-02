@@ -80,6 +80,8 @@ permission for scanning itself) stands.
   gate (e.g. a Cashier) gets "No product has this barcode. Ask a manager to add
   it." Otherwise the choice offers **Add as new product** (`Gates.addProduct`)
   and/or **Link to an existing product** (`Gates.editProductPrice`, which
-  saves only the barcode). Until that slice ships, an unknown code still toasts
-  and opens Add Product pre-filled.
+  saves only the barcode). Since #320 the gate on Add Product is live (no
+  `Gates.addProduct` ⇒ the message; with it Add Product opens pre-filled and
+  the saved product goes straight to the quantity sheet when this store has
+  stock); the Link choice follows in #321.
 - **Scanning is for all business types**, not only Pharmacy and Supermarket.

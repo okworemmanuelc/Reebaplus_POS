@@ -7,6 +7,17 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #320 — Unknown barcodes respect permissions; a product added from a scan goes into the cart (2026-10-01)
+Branch `feat/scan-unknown-barcode-routing-320`, stacked on `feat/scanner-stays-open-319` (PR #325 → #324 → #323, none merged yet). Worked in `../drinkPosApp-wt-320`. Fourth slice of PRD #316. **No schema change.**
+- **Gate**: `PosBarcodeScanButton._onUnknown` reads `Gates.addProduct.allowsNow(ref)`. Without it: "No product has this barcode. Ask a manager to add it." — no navigation, scanning carries on (closes the hole where anyone at the till could open Add Product). The old "No product matches that barcode" toast is gone.
+- **With it**: `AddProductScreen(prefilledBarcode:, onProductAdded:)` is pushed over the scanner and awaited; the saved product is captured from `onProductAdded` (Add Product pops first, then calls it, so it's set when the push completes). Back over the scanner, `_renderSaved` reads the product's stock in the active store directly (`stockLedgerDao.getCurrentStock(productId, storeId)`, business-scoped) — NOT `loadedProducts`, which may not have the new row yet — builds a one-element `storeProducts` list and runs `resolveProduct` → `_renderMatch` (quantity sheet starting at 1). Out of stock here → "Saved. ‹name› has no stock at ‹store› yet, so it can't be added to the cart." (fallback "this store"). Backing out adds nothing.
+- **Store id**: new `PosController.activeStoreId` (`lockedStoreId ?? fallbackStoreId`, also used by the grid subscription) is passed as the button's new `storeId`.
+- **Seam**: `onUnknownBarcode` is now `Future<ProductData?> Function(context, code)` — returns the saved product or null for "backed out". Only reached when the gate allows.
+- **Add Product barcode wipe fixed** (`_selectProduct`): a non-empty Barcode field is kept when an existing product is picked by name (and saved onto it by the existing-product path, which already writes the field); an empty field still takes the product's barcode. The collision warning is re-run for the kept code. Applies everywhere Add Product is used. (`_clearExistingProduct` still clears the field — unchanged.)
+- **Tests**: `barcode_scan_test` +5 (Cashier message / no push, Manager saved-with-stock → sheet → confirm adds, 0 stock message, "this store", back out); `scan_unknown_barcode_test` (new, 2, the REAL Add Product over the scanner: fill + save → sheet for the new product → added; back out → nothing); `add_product_barcode_keep_test` (new, 3: scanned code kept and saved onto the existing product, typed code kept, empty field takes the product's barcode).
+- **Next slice**: #321 "Add as new / Link to existing" choice — slots into `_onUnknown` before the push.
+- **Not verified on a device.**
+
 ### Issue #319 — Scanner stays open: scan, pick quantity, keep scanning (2026-10-01)
 Branch `feat/scanner-stays-open-319`, stacked on `feat/scan-which-one-list-318` (PR #324 → PR #323, neither merged yet). Worked in `../drinkPosApp-wt-319`. Third slice of PRD #316. **No schema change.**
 - **Seam**: `BarcodeScanner.scanOnce` is gone; `scanSession(context, onCode:)` completes when the scanner closes, and `onCode(scannerContext, code)` runs per read. The camera is behind a new `ScanCamera` interface (`MobileScannerScanCamera` in production), so tests run the REAL `BarcodeScanPage` over `FakeScanCamera` (`test/helpers/fake_barcode_scanner.dart`).

@@ -26,6 +26,12 @@ class PosController extends ChangeNotifier {
   /// real store for the grid + checkout even when the view filter is "All".
   String? fallbackStoreId;
 
+  /// The store POS is selling from right now: the global active store, else
+  /// the "All Stores" fallback. The grid's stock and a scanned new product's
+  /// stock (#320) are both read for this store.
+  String? get activeStoreId =>
+      _navigationService.lockedStoreId.value ?? fallbackStoreId;
+
   bool isLoading = true;
   bool _disposed = false;
   StreamSubscription? _productsSub;
@@ -103,7 +109,7 @@ class PosController extends ChangeNotifier {
       return;
     }
 
-    final storeId = _navigationService.lockedStoreId.value ?? fallbackStoreId;
+    final storeId = activeStoreId;
 
     if (storeId != null) {
       // Fetch store name

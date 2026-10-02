@@ -43,11 +43,18 @@ class AddProductScreen extends ConsumerStatefulWidget {
   /// screen is opened from a POS scan of an unknown barcode, so the cashier can
   /// catalogue the just-scanned product without retyping the code.
   final String? prefilledBarcode;
+
+  /// Optional store to start the Store field on (#320). Set when this screen
+  /// is opened from a POS scan, so the opening stock lands in the store the
+  /// POS is selling from rather than the first store. Ignored when the id is
+  /// not among the active stores (falls back to the first store).
+  final String? initialStoreId;
   const AddProductScreen({
     super.key,
     this.onProductAdded,
     this.receiveMode = false,
     this.prefilledBarcode,
+    this.initialStoreId,
   });
 
   @override
@@ -180,7 +187,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         }.toList()..sort();
         _dynamicUnits = mergedUnits;
 
-        if (whs.isNotEmpty) _selectedStore = whs.first;
+        // #320: start on the caller's store (the POS active store) when it is
+        // one of the active stores; otherwise the first store, as before.
+        if (whs.isNotEmpty) {
+          _selectedStore = whs.firstWhere(
+            (w) => w.id == widget.initialStoreId,
+            orElse: () => whs.first,
+          );
+        }
       });
     }
   }
@@ -342,7 +356,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ? (product.emptyCrateValueKobo / 100).toStringAsFixed(2)
         : '';
     _lowStockCtrl.text = product.lowStockThreshold.toString();
-    _barcodeCtrl.text = product.barcode ?? '';
+    // #320: a barcode already in the field (scanned or typed) is kept, so
+    // picking the product it belongs to saves that code onto it. Only an empty
+    // field takes the product's own barcode.
+    final keepTypedBarcode = _barcodeCtrl.text.trim().isNotEmpty;
+    if (!keepTypedBarcode) _barcodeCtrl.text = product.barcode ?? '';
 
     setState(() {
       _selectedExistingProduct = product;
@@ -377,6 +395,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       }
       _productSuggestions = [];
     });
+    // The kept code may belong to a third product: re-run the soft warning
+    // against the newly picked one.
+    if (keepTypedBarcode) _onBarcodeChanged(_barcodeCtrl.text);
   }
 
   void _clearExistingProduct() {

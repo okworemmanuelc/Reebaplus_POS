@@ -274,6 +274,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                   tier: _controller!.selectedGroup,
                   loadedProducts: _controller!.allProducts,
                   storeName: _controller!.currentStoreName,
+                  storeId: _controller!.activeStoreId,
                   readStoreProducts: () => _controller!.allProducts,
                 ),
           // The top bar lives inside the scroll view, so this SafeArea owns the
