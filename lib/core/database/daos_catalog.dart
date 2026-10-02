@@ -700,19 +700,23 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   Future<ProductData?> setProductBarcode(
     String productId,
     String barcode,
-  ) async {
-    await (update(products)
-          ..where((t) => t.id.equals(productId) & whereBusiness(t)))
-        .write(
-      ProductsCompanion(
-        barcode: Value(barcode.trim()),
-        lastUpdatedAt: Value(DateTime.now()),
-      ),
-    );
-    await _enqueueFullProduct(productId);
-    return (select(products)
-          ..where((t) => t.id.equals(productId) & whereBusiness(t)))
-        .getSingleOrNull();
+  ) {
+    // One transaction: a pull landing between the write and the full-row
+    // re-read could otherwise enqueue a payload without the barcode.
+    return transaction(() async {
+      await (update(products)
+            ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+          .write(
+        ProductsCompanion(
+          barcode: Value(barcode.trim()),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _enqueueFullProduct(productId);
+      return (select(products)
+            ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+          .getSingleOrNull();
+    });
   }
 
   /// This business's non-deleted products whose name contains [query]
@@ -725,7 +729,13 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     String query, {
     int limit = 50,
   }) {
-    final q = query.trim().toLowerCase();
+    // `%`, `_` and the escape char itself are matched literally. SQLite LIKE
+    // is ASCII case-insensitive, so no lower() is needed.
+    final q = query
+        .trim()
+        .replaceAll(r'\', r'\\')
+        .replaceAll('%', r'\%')
+        .replaceAll('_', r'\_');
     final stmt = select(products)
       ..where((t) => whereBusiness(t) & t.isDeleted.not())
       ..orderBy([
@@ -734,7 +744,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       ])
       ..limit(limit);
     if (q.isNotEmpty) {
-      stmt.where((t) => t.name.lower().contains(q));
+      stmt.where((t) => t.name.like('%$q%', escapeChar: r'\'));
     }
     return stmt.get();
   }

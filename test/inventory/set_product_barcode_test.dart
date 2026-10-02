@@ -256,5 +256,28 @@ void main() {
       final hits = await db.catalogDao.searchProductsByName('star');
       expect(hits.map((p) => p.id), [kept]);
     });
+
+    test('% is matched literally, not as a wildcard', () async {
+      final juice = await insertProduct('Juice 100% Orange');
+      await insertProduct('Juice 100 Apple');
+      await insertProduct('Malta');
+
+      final hits = await db.catalogDao.searchProductsByName('100%');
+      expect(hits.map((p) => p.id), [juice]);
+      expect(await db.catalogDao.searchProductsByName('%'), hasLength(1));
+    });
+
+    test('_ and \\ are matched literally', () async {
+      await insertProduct('Gin 50cl');
+      final underscored = await insertProduct('Gin 5_cl');
+      final slashed = await insertProduct(r'Rum 1\2');
+
+      final hits = await db.catalogDao.searchProductsByName('5_cl');
+      expect(hits.map((p) => p.id), [underscored]);
+      expect(
+        (await db.catalogDao.searchProductsByName(r'1\2')).map((p) => p.id),
+        [slashed],
+      );
+    });
   });
 }
