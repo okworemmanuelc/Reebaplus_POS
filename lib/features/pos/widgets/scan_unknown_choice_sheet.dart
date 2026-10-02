@@ -173,7 +173,7 @@ class ScanUnknownChoiceSheet extends StatelessWidget {
             if (canAdd) ...[
               _ScanUnknownOption(
                 key: kScanUnknownAddNewKey,
-                icon: Icons.add_box_outlined,
+                icon: FontAwesomeIcons.squarePlus.data,
                 title: 'Add as new product',
                 subtitle: 'Create a product with this barcode',
                 onTap: () => Navigator.pop(context, ScanUnknownChoice.addNew),
@@ -183,7 +183,7 @@ class ScanUnknownChoiceSheet extends StatelessWidget {
             if (canLink)
               _ScanUnknownOption(
                 key: kScanUnknownLinkKey,
-                icon: Icons.link,
+                icon: FontAwesomeIcons.link.data,
                 title: 'Link to an existing product',
                 subtitle: 'Save this barcode on a product you already have',
                 onTap: () =>
@@ -255,8 +255,8 @@ class _ScanUnknownOption extends StatelessWidget {
                 ),
               ),
               Icon(
-                Icons.chevron_right,
-                size: context.getRSize(20),
+                FontAwesomeIcons.chevronRight.data,
+                size: context.getRSize(13),
                 color: text.withValues(alpha: 0.4),
               ),
             ],

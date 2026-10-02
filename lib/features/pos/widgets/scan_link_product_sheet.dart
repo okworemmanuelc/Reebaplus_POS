@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -188,7 +189,7 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: Icon(
-                            Icons.link,
+                            FontAwesomeIcons.link.data,
                             size: context.getRSize(20),
                             color: primary,
                           ),
@@ -238,7 +239,10 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
                     AppInput(
                       controller: _searchCtrl,
                       hintText: 'Search products by name',
-                      prefixIcon: const Icon(Icons.search),
+                      prefixIcon: Icon(
+                        FontAwesomeIcons.magnifyingGlass.data,
+                        size: context.getRSize(16),
+                      ),
                       textInputAction: TextInputAction.search,
                       onChanged: _search,
                     ),

@@ -204,7 +204,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     }
     final product = saved;
     if (product == null || !context.mounted || !mounted) return;
-    await _renderSaved(context, product);
+    await _renderSaved(context, product, isNewProduct: true);
   }
 
   /// "Link to an existing product" (#321): the picked product gets ONLY the
@@ -216,22 +216,28 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
   Future<void> _linkToExisting(BuildContext context, String code) async {
     final picked = await ScanLinkProductSheet.show(context, code: code);
     if (picked == null || !context.mounted || !mounted) return;
-    final linked = picked.barcode?.trim() == code
+    final linked = picked.barcode == code
         ? picked
         : await ref
               .read(databaseProvider)
               .catalogDao
               .setProductBarcode(picked.id, code);
     if (linked == null || !context.mounted || !mounted) return;
-    await _renderSaved(context, linked);
+    await _renderSaved(context, linked, isNewProduct: false);
   }
 
   /// Renders a product just saved from Add Product (#320) or just linked to
-  /// the code (#321) like a found scan.
+  /// the code (#321) like a found scan. Out of stock here, a new product
+  /// ([isNewProduct]) gets the "Saved…" message; a linked one gets the found
+  /// scan's own message (#317).
   /// Its stock is read from the active store directly (a business-scoped DAO
   /// read) rather than from [PosBarcodeScanButton.loadedProducts], which may
   /// not include a row saved a moment ago.
-  Future<void> _renderSaved(BuildContext context, ProductData product) async {
+  Future<void> _renderSaved(
+    BuildContext context,
+    ProductData product, {
+    required bool isNewProduct,
+  }) async {
     final storeId = widget.storeId;
     final stock = storeId == null
         ? 0
@@ -247,7 +253,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
       cartQty: _cartQtyOf(product.id),
       tier: widget.tier,
     );
-    if (outcome is ScanOutOfStockHere) {
+    if (isNewProduct && outcome is ScanOutOfStockHere) {
       final store = widget.storeName ?? 'this store';
       AppNotification.showError(
         context,

@@ -1212,7 +1212,8 @@ void main() {
       expect(scanner.camera!.isRunning, isTrue);
     });
 
-    testWidgets('a linked product with no stock here → the no-stock message', (
+    testWidgets('a linked product with no stock here → the found-scan '
+        'out-of-stock message', (
       tester,
     ) async {
       await seedStore();
@@ -1233,12 +1234,10 @@ void main() {
       expect((await reload(malta)).barcode, code);
       expect(find.byType(EditItemModal), findsNothing);
       expect(
-        find.text(
-          "Saved. Malta has no stock at Main Store yet, so it can't be added "
-          'to the cart.',
-        ),
+        find.text('Malta is out of stock at Main Store'),
         findsOneWidget,
       );
+      expect(find.textContaining('Saved.'), findsNothing);
       expect(scanner.camera!.isRunning, isTrue);
       await clearToast(tester);
     });
