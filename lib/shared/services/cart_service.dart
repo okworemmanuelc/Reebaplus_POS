@@ -495,7 +495,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   }
 
   double get totalItems =>
-      value.fold(0, (sum, item) => sum + (item['qty'] as double));
+      value.fold(0, (sum, item) => sum + (item['qty'] as num).toDouble());
 
   int get itemCount => value.length;
 

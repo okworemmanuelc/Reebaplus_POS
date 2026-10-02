@@ -1,17 +1,28 @@
 import 'package:flutter/widgets.dart';
 
+/// Handles one scanned barcode inside a scan session (#319). [scannerContext]
+/// is the scanner page's own context, so anything the handler shows (the
+/// quantity sheet, the "Which one?" list, messages, Add Product) appears OVER
+/// the camera and closing it lands back on the live scanner. The session keeps
+/// the camera frozen until the returned future completes.
+typedef ScanCodeHandler =
+    Future<void> Function(BuildContext scannerContext, String code);
+
 /// A thin seam over the device camera barcode scanner (#118).
 ///
-/// One-shot by contract: [scanOnce] opens the camera, returns the FIRST decoded
-/// barcode, then closes the scanner. A `null` result means the user dismissed
-/// the scanner (or camera permission was denied) without a scan — callers treat
-/// it as "cancelled" and do nothing.
+/// Continuous by contract (#319, ADR 0017 amendment): [scanSession] opens the
+/// scanner and keeps it open until the cashier closes it (✕ or system back).
+/// Every read is handed to `onCode` — trimmed and non-empty — with the camera
+/// frozen while the handler runs; the session then carries on scanning.
 ///
 /// The camera lives behind this interface so widget/unit tests inject a fake
-/// (returning a canned code) instead of driving a real camera, which cannot run
-/// headless. The production implementation is [MobileScannerBarcodeScanner].
+/// instead of driving a real camera, which cannot run headless. The production
+/// implementation is [MobileScannerBarcodeScanner].
 abstract class BarcodeScanner {
-  /// Presents a one-shot camera scanner and completes with the first scanned
-  /// barcode's raw value (trimmed, non-empty), or `null` if nothing was scanned.
-  Future<String?> scanOnce(BuildContext context);
+  /// Presents the scanner and completes when it closes. Each scanned code is
+  /// passed to [onCode] with the scanner page's context.
+  Future<void> scanSession(
+    BuildContext context, {
+    required ScanCodeHandler onCode,
+  });
 }

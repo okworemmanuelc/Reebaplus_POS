@@ -3,7 +3,7 @@
 // #317 — the two ways into the POS "Add to Cart" sheet, side by side on the
 // real POS screen, for a product already in the cart ×2:
 //   - tap-and-hold on the tile opens on 2 (the cart total, unchanged);
-//   - a barcode scan opens on 3 (one more);
+//   - a barcode scan opens on 3 (one more), over the scanner page (#319);
 // and both show "2 already in cart". The scan also names the real store in its
 // out-of-stock message, wired from the POS controller.
 
@@ -19,21 +19,12 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
-import 'package:reebaplus_pos/features/pos/services/barcode_scanner.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/product_grid.dart';
 
+import '../helpers/fake_barcode_scanner.dart';
 import '../helpers/pos_home_harness.dart';
 import '../helpers/viewports.dart';
-
-/// Returns a preset code without a camera.
-class _FakeBarcodeScanner implements BarcodeScanner {
-  _FakeBarcodeScanner(this.code);
-  final String code;
-
-  @override
-  Future<String?> scanOnce(BuildContext context) async => code;
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -76,6 +67,7 @@ void main() {
       '"2 already in cart"', (tester) async {
     final product = env.products.first;
     await setBarcode(product.id, 'BC-1');
+    final scanner = FakeBarcodeScanner();
 
     final harness = await pumpPosHome(
       tester,
@@ -85,7 +77,7 @@ void main() {
         firstRunSurfaceStateProvider.overrideWithValue(
           FirstRunSurfaceState.hasContent,
         ),
-        barcodeScannerProvider.overrideWithValue(_FakeBarcodeScanner('BC-1')),
+        barcodeScannerProvider.overrideWithValue(scanner),
       ],
     );
     final cart = ProviderScope.containerOf(harness.context).read(cartProvider);
@@ -102,6 +94,8 @@ void main() {
 
     // Scan: starts one above the cart total.
     await tester.tap(find.byKey(kPosScannerKey));
+    await tester.pumpAndSettle();
+    scanner.camera!.read('BC-1');
     await tester.pumpAndSettle();
     expect(find.byType(EditItemModal), findsOneWidget);
     expect(qtyText(tester), '3');
@@ -145,6 +139,7 @@ void main() {
     await (env.db.update(env.db.inventory)
           ..where((t) => t.productId.equals(product.id)))
         .write(const InventoryCompanion(quantity: Value(0)));
+    final scanner = FakeBarcodeScanner();
 
     await pumpPosHome(
       tester,
@@ -154,11 +149,13 @@ void main() {
         firstRunSurfaceStateProvider.overrideWithValue(
           FirstRunSurfaceState.hasContent,
         ),
-        barcodeScannerProvider.overrideWithValue(_FakeBarcodeScanner('BC-1')),
+        barcodeScannerProvider.overrideWithValue(scanner),
       ],
     );
 
     await tester.tap(find.byKey(kPosScannerKey));
+    await tester.pumpAndSettle();
+    scanner.camera!.read('BC-1');
     await tester.pumpAndSettle();
 
     expect(find.byType(EditItemModal), findsNothing);

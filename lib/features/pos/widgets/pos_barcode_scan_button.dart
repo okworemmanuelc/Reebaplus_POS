@@ -11,28 +11,34 @@ import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
+import 'package:reebaplus_pos/features/pos/widgets/scan_which_one_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 /// The always-visible POS scan control (#118). Rendered as the bottom-right
 /// [AppFAB] that replaces the removed cart FAB (ADR 0017); it is never gated on
-/// a non-empty cart — tapping it opens the camera one-shot (via
-/// [barcodeScannerProvider]).
+/// a non-empty cart — tapping it opens a scan session (via
+/// [barcodeScannerProvider]) that stays open until the cashier closes it
+/// (#319).
 ///
 /// What a scanned code means is decided by [resolveBarcodeScan] (#317); this
-/// widget only renders the outcome:
+/// widget only renders the outcome, over the scanner page (#319) so closing any
+/// of it lands back on the live camera:
 ///  - found and sellable → the tap-and-hold "Add to Cart" sheet, starting one
 ///    above what's already in the cart, at the active store's stock cap and
 ///    the active price tier;
 ///  - found but not sellable (out of stock here, all already in the cart,
 ///    switched off) → a message and no sheet;
+///  - more than one product carries the code (#318) → the "Which one?" list;
+///    the picked product then goes through the two cases above;
 ///  - an unknown barcode toasts and opens Add Product with the code pre-filled
 ///    so the cashier can catalogue it on the spot.
-class PosBarcodeScanButton extends ConsumerWidget {
+class PosBarcodeScanButton extends ConsumerStatefulWidget {
   const PosBarcodeScanButton({
     super.key,
     required this.tier,
     required this.loadedProducts,
     this.storeName,
+    this.readStoreProducts,
     this.onUnknownBarcode,
   });
 
@@ -48,54 +54,125 @@ class PosBarcodeScanButton extends ConsumerWidget {
   /// it is still loading or when no single store is active.
   final String? storeName;
 
+  /// Reads the active store's catalogue as it is NOW (the POS controller's
+  /// latest `allProducts`). [loadedProducts] is the list captured when the scan
+  /// started, and the controller swaps in a new list on every stock change, so
+  /// the product picked from the "Which one?" list (#318) is re-checked against
+  /// this once the list closes. Null ⇒ [loadedProducts].
+  final List<ProductDataWithStock> Function()? readStoreProducts;
+
   /// Test seam: when a scanned barcode matches no product this is invoked with
   /// the code (instead of navigating). Production leaves it null and opens
   /// [AddProductScreen] with the barcode pre-filled.
   final void Function(BuildContext context, String barcode)? onUnknownBarcode;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PosBarcodeScanButton> createState() =>
+      _PosBarcodeScanButtonState();
+}
+
+// Stateful (#319) so a long scan session reads the LATEST tier, catalogue and
+// store name through `widget` on every code, not the ones captured at the tap.
+class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
+  @override
+  Widget build(BuildContext context) {
     // Rendered as a FAB in the POS scaffold's FAB slot — the spot the old cart
     // FAB used before #118 removed it (owner request). Still always visible: a
-    // one-shot scan is never gated on the cart. reserveBottomInset:false because
-    // the POS is a bottom-nav tab root whose visible bar already lifts the FAB
-    // clear of the system nav (see AppFAB).
+    // scan is never gated on the cart. reserveBottomInset:false because the POS
+    // is a bottom-nav tab root whose visible bar already lifts the FAB clear of
+    // the system nav (see AppFAB).
     return AppFAB(
       icon: FontAwesomeIcons.barcode.data,
       tooltip: 'Scan barcode',
-      onPressed: () => _scan(context, ref),
+      onPressed: _scan,
       reserveBottomInset: false,
     );
   }
 
-  Future<void> _scan(BuildContext context, WidgetRef ref) async {
-    final scanner = ref.read(barcodeScannerProvider);
-    final code = await scanner.scanOnce(context);
-    final trimmed = code?.trim() ?? '';
-    if (trimmed.isEmpty) return; // dismissed / nothing scanned — no-op.
-    if (!context.mounted) return;
+  /// Opens a scan session (#319); it ends when the cashier closes the scanner.
+  Future<void> _scan() async {
+    await ref
+        .read(barcodeScannerProvider)
+        .scanSession(context, onCode: _onCode);
+  }
 
-    final match = await ref
+  /// One scanned code, shown over the scanner page ([context] is the scanner's,
+  /// #319). The scanner keeps the camera frozen until this completes.
+  Future<void> _onCode(BuildContext context, String code) async {
+    final trimmed = code.trim();
+    if (trimmed.isEmpty || !mounted) return;
+
+    // All matches, not just the first (#318): a soft-unique collision shows
+    // the "Which one?" list.
+    final matches = await ref
         .read(databaseProvider)
         .catalogDao
-        .findProductByBarcode(trimmed);
-    if (!context.mounted) return;
+        .findProductsByBarcode(trimmed);
+    if (!context.mounted || !mounted) return;
 
     final outcome = resolveBarcodeScan(
       code: trimmed,
-      match: match,
-      storeProducts: loadedProducts,
-      cartQty: match == null ? 0 : _cartQtyOf(ref, match.id),
-      tier: tier,
+      matches: matches,
+      storeProducts: widget.loadedProducts,
+      cartQtyOf: _cartQtyOf,
+      tier: widget.tier,
     );
 
     switch (outcome) {
+      case ScanMatchOutcome():
+        await _renderMatch(context, outcome);
+      case ScanChooseAmong(:final choices):
+        await _chooseAmong(context, choices);
+      case ScanUnknown(:final code):
+        // Unchanged in #317; permission-aware routing is a later slice (#316).
+        AppNotification.showError(context, 'No product matches that barcode');
+        final onUnknown = widget.onUnknownBarcode;
+        if (onUnknown != null) {
+          onUnknown(context, code);
+        } else {
+          // Awaited (#319) so the camera stays frozen while Add Product is
+          // open over the scanner; closing it resumes scanning.
+          await Navigator.of(
+            context,
+          ).push(slideDownRoute(AddProductScreen(prefilledBarcode: code)));
+        }
+    }
+  }
+
+  /// Shows the "Which one?" list (#318). A pick continues as a single match:
+  /// the single-product checks are re-run for that product with its own cart
+  /// qty and store stock. Dismissing adds nothing.
+  Future<void> _chooseAmong(
+    BuildContext context,
+    List<ScanChoice> choices,
+  ) async {
+    final picked = await ScanWhichOneSheet.show(context, choices: choices);
+    if (picked == null || !context.mounted || !mounted) return;
+    // Stock may have moved while the list was open: use the current catalogue.
+    final outcome = resolveProduct(
+      product: picked,
+      storeProducts:
+          widget.readStoreProducts?.call() ?? widget.loadedProducts,
+      cartQty: _cartQtyOf(picked.id),
+      tier: widget.tier,
+    );
+    await _renderMatch(context, outcome);
+  }
+
+  /// Renders what one found product means: the quantity sheet when it can be
+  /// sold, otherwise its message (#317).
+  Future<void> _renderMatch(
+    BuildContext context,
+    ScanMatchOutcome outcome,
+  ) async {
+    switch (outcome) {
       case ScanAddSheet():
-        await _openAddSheet(context, ref, outcome);
+        await _openAddSheet(context, outcome);
       case ScanOutOfStockHere(:final product):
+        final store = widget.storeName ?? 'this store';
         AppNotification.showError(
           context,
-          '${product.name} is out of stock at ${storeName ?? 'this store'}',
+          '${product.name} is out of stock at $store',
         );
       case ScanAllInCart(:final product, :final stock):
         AppNotification.showError(
@@ -107,16 +184,6 @@ class PosBarcodeScanButton extends ConsumerWidget {
           context,
           '${product.name} is switched off for sale',
         );
-      case ScanUnknown(:final code):
-        // Unchanged in #317; permission-aware routing is a later slice (#316).
-        AppNotification.showError(context, 'No product matches that barcode');
-        if (onUnknownBarcode != null) {
-          onUnknownBarcode!(context, code);
-        } else {
-          Navigator.of(
-            context,
-          ).push(slideDownRoute(AddProductScreen(prefilledBarcode: code)));
-        }
     }
   }
 
@@ -124,7 +191,6 @@ class PosBarcodeScanButton extends ConsumerWidget {
   /// sets the line to the chosen total itself; Cancel / dismiss add nothing.
   Future<void> _openAddSheet(
     BuildContext context,
-    WidgetRef ref,
     ScanAddSheet outcome,
   ) async {
     final product = outcome.product;
@@ -135,7 +201,7 @@ class PosBarcodeScanButton extends ConsumerWidget {
       tier: outcome.tier,
       shouldStartOnNextUnit: true,
     );
-    if (result == null || !context.mounted) return;
+    if (result == null || !context.mounted || !mounted) return;
     // false = the sheet's add was clamped or rejected by stock: say so, as the
     // tap-and-hold path does, rather than reporting a success.
     if (!result) {
@@ -147,7 +213,7 @@ class PosBarcodeScanButton extends ConsumerWidget {
     }
     // Report what the cart now holds for the line (the sheet's field is the
     // total).
-    final qty = _cartQtyOf(ref, product.id);
+    final qty = _cartQtyOf(product.id);
     if (qty <= 0) return;
     AppNotification.showSuccess(
       context,
@@ -156,7 +222,7 @@ class PosBarcodeScanButton extends ConsumerWidget {
   }
 
   /// Total quantity of [productId] across the cart's lines.
-  static double _cartQtyOf(WidgetRef ref, String productId) => ref
+  double _cartQtyOf(String productId) => ref
       .read(cartProvider)
       .value
       .where((i) => i['id'] == productId)

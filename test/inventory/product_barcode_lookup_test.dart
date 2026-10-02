@@ -8,6 +8,9 @@
 //   - it ignores soft-deleted products
 //   - a collision resolves to a DIFFERENT product (the id the form compares
 //     against to decide whether to warn)
+//   - findProductsByBarcode (#318) returns EVERY match for the POS "Which
+//     one?" list: business-scoped (another business's product with the same
+//     code never appears), soft-deleted rows excluded, ordered by name then id
 //   - the barcode rides the push payload (products is a pass-through push
 //     table), on both create and edit, so it converges cross-device once the
 //     cloud column exists (migration 0150).
@@ -15,6 +18,7 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 
 import '../helpers/dispatch_test_utils.dart';
 
@@ -75,6 +79,64 @@ void main() {
     expect(match, isNotNull);
     expect(match!.id, existingId);
     expect(match.id == editingId, isFalse);
+  });
+
+  group('findProductsByBarcode (#318)', () {
+    test('returns every match, ordered by name', () async {
+      final zId = await insertProduct('Zobo Drink', barcode: 'BC-DUP');
+      final aId = await insertProduct('Apple Juice', barcode: 'BC-DUP');
+      await insertProduct('Malta', barcode: 'BC-OTHER');
+
+      final matches = await db.catalogDao.findProductsByBarcode(' BC-DUP ');
+      expect(matches.map((p) => p.id), [aId, zId]);
+    });
+
+    test('same name orders by id, so the list is stable', () async {
+      final first = await insertProduct('Panadol', barcode: 'BC-DUP');
+      final second = await insertProduct('Panadol', barcode: 'BC-DUP');
+      final ids = [first, second]..sort();
+
+      final matches = await db.catalogDao.findProductsByBarcode('BC-DUP');
+      expect(matches.map((p) => p.id), ids);
+    });
+
+    test('another business\'s product with the same code never appears', () async {
+      final ownId = await insertProduct('Star Lager', barcode: 'BC-DUP');
+      final otherBusinessId = UuidV7.generate();
+      await db.into(db.businesses).insert(
+            BusinessesCompanion.insert(
+              id: Value(otherBusinessId),
+              name: 'Other Biz',
+            ),
+          );
+      await db.into(db.products).insert(
+            ProductsCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: otherBusinessId,
+              name: 'Their Lager',
+              barcode: const Value('BC-DUP'),
+            ),
+          );
+
+      final matches = await db.catalogDao.findProductsByBarcode('BC-DUP');
+      expect(matches.map((p) => p.id), [ownId]);
+    });
+
+    test('soft-deleted products are excluded', () async {
+      final keptId = await insertProduct('Star Lager', barcode: 'BC-DUP');
+      final goneId = await insertProduct('Gulder', barcode: 'BC-DUP');
+      await db.catalogDao.softDeleteProduct(goneId);
+
+      final matches = await db.catalogDao.findProductsByBarcode('BC-DUP');
+      expect(matches.map((p) => p.id), [keptId]);
+    });
+
+    test('a blank code or no match returns an empty list', () async {
+      await insertProduct('Star Lager', barcode: 'BC-001');
+
+      expect(await db.catalogDao.findProductsByBarcode('   '), isEmpty);
+      expect(await db.catalogDao.findProductsByBarcode('NOPE-999'), isEmpty);
+    });
   });
 
   test('insertProduct enqueues the barcode in the push payload', () async {
