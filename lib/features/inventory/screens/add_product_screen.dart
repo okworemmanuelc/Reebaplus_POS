@@ -43,11 +43,18 @@ class AddProductScreen extends ConsumerStatefulWidget {
   /// screen is opened from a POS scan of an unknown barcode, so the cashier can
   /// catalogue the just-scanned product without retyping the code.
   final String? prefilledBarcode;
+
+  /// Optional store to start the Store field on (#320). Set when this screen
+  /// is opened from a POS scan, so the opening stock lands in the store the
+  /// POS is selling from rather than the first store. Ignored when the id is
+  /// not among the active stores (falls back to the first store).
+  final String? initialStoreId;
   const AddProductScreen({
     super.key,
     this.onProductAdded,
     this.receiveMode = false,
     this.prefilledBarcode,
+    this.initialStoreId,
   });
 
   @override
@@ -180,7 +187,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         }.toList()..sort();
         _dynamicUnits = mergedUnits;
 
-        if (whs.isNotEmpty) _selectedStore = whs.first;
+        // #320: start on the caller's store (the POS active store) when it is
+        // one of the active stores; otherwise the first store, as before.
+        if (whs.isNotEmpty) {
+          _selectedStore = whs.firstWhere(
+            (w) => w.id == widget.initialStoreId,
+            orElse: () => whs.first,
+          );
+        }
       });
     }
   }
