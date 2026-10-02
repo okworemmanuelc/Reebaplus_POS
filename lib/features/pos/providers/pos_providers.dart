@@ -16,10 +16,6 @@ final barcodeScannerProvider = Provider<BarcodeScanner>(
 /// lines and not money (#319). Drives the scanner's running "‹N› items in
 /// cart" so the cashier sees each confirmed scan land without leaving the
 /// camera.
-final cartUnitCountProvider = Provider<double>((ref) {
-  final cart = ref.watch(cartProvider);
-  return cart.value.fold<double>(
-    0,
-    (sum, line) => sum + (line['qty'] as num).toDouble(),
-  );
-});
+final cartUnitCountProvider = Provider<double>(
+  (ref) => ref.watch(cartProvider).totalItems,
+);

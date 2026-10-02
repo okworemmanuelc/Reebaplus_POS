@@ -104,6 +104,22 @@ void main() {
     await db.close();
   });
 
+  /// Signs a cashier in (most tests run with nobody signed in, which the
+  /// scanner treats as a locked app when the app comes back to the front).
+  void signIn() {
+    auth.value = UserData(
+      id: 'scan-user',
+      businessId: businessId,
+      name: 'Cashier',
+      pin: '1234',
+      createdAt: DateTime.now(),
+      lastUpdatedAt: DateTime.now(),
+      avatarColor: '#3B82F6',
+      biometricEnabled: false,
+    );
+    db.businessIdResolver = () => businessId;
+  }
+
   Future<ProductData> seedProduct({
     required String name,
     required String barcode,
@@ -942,6 +958,7 @@ void main() {
     testWidgets('backgrounding stops the camera; coming back restarts it, '
         'but not while a sheet is open', (tester) async {
       final a = await seedProduct(name: 'Star Lager', barcode: 'BC-A');
+      signIn();
       await tester.pumpWidget(
         host(
           FakeBarcodeScanner('BC-A'),
@@ -980,23 +997,46 @@ void main() {
       // Supabase restarts its token auto-refresh timer on resume; stop it so
       // no timer outlives the test.
       Supabase.instance.client.auth.stopAutoRefresh();
+
+      // Unmount inside the test so the providers' drift streams close here,
+      // not after the test's timer check.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('coming back to a locked app does not restart the camera', (
+      tester,
+    ) async {
+      // Nobody signed in = the app is locked.
+      await tester.pumpWidget(host(FakeBarcodeScanner(), loaded: const []));
+      await openScanner(tester);
+      final camera = scanner.camera!;
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      expect(camera.isRunning, isFalse);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(camera.isRunning, isFalse);
+
+      Supabase.instance.client.auth.stopAutoRefresh();
+
+      // Unmount inside the test so the providers' drift streams close here,
+      // not after the test's timer check.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 1));
     });
 
     testWidgets('the app locking closes the scanner and stops the camera', (
       tester,
     ) async {
       final a = await seedProduct(name: 'Star Lager', barcode: 'BC-A');
-      auth.value = UserData(
-        id: 'scan-user',
-        businessId: businessId,
-        name: 'Cashier',
-        pin: '1234',
-        createdAt: DateTime.now(),
-        lastUpdatedAt: DateTime.now(),
-        avatarColor: '#3B82F6',
-        biometricEnabled: false,
-      );
-      db.businessIdResolver = () => businessId;
+      signIn();
       await tester.pumpWidget(
         host(
           FakeBarcodeScanner('BC-A'),
