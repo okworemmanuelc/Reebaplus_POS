@@ -11,11 +11,16 @@
 //     cart, switched off) shows its message and no sheet;
 //   - two products sharing a barcode show the "Which one?" list (#318); a
 //     pick continues as a single match, and dismissing adds nothing;
-//   - an UNKNOWN barcode (#320): without products.add a message and no Add
-//     Product; with it Add Product (via the test seam), and a product saved
-//     there goes to the quantity sheet if this store has stock, else a
-//     message; backing out adds nothing (the real Add Product screen is
-//     driven end to end in scan_unknown_barcode_test.dart);
+//   - an UNKNOWN barcode (#320): holding neither products.add nor
+//     products.edit_price a message and no Add Product; "Add as new" opens
+//     Add Product (via the test seam), and a product saved there goes to the
+//     quantity sheet if this store has stock, else a message; backing out
+//     adds nothing (the real Add Product screen is driven end to end in
+//     scan_unknown_barcode_test.dart);
+//   - the unknown-barcode choice (#321): each option shows only with its gate;
+//     "Link to an existing product" saves only the barcode on the picked
+//     product (asking before replacing a different one), then the quantity
+//     sheet opens and the next scan of the code finds it;
 //   - the scanner stays open (#319): each read freezes the camera, shows its
 //     outcome over the scanner, then resumes; the same code is ignored for the
 //     debounce window; the running count follows the cart; ✕ / back close it
@@ -48,6 +53,8 @@ import 'package:reebaplus_pos/features/pos/widgets/barcode_scan_page.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_cart_count.dart';
+import 'package:reebaplus_pos/features/pos/widgets/scan_link_product_sheet.dart';
+import 'package:reebaplus_pos/features/pos/widgets/scan_unknown_choice_sheet.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_which_one_sheet.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
@@ -127,7 +134,7 @@ void main() {
 
   Future<ProductData> seedProduct({
     required String name,
-    required String barcode,
+    required String? barcode,
     bool isAvailable = true,
     int retailerKobo = _retailerKobo,
     String? size,
@@ -156,7 +163,9 @@ void main() {
     PriceTier tier = PriceTier.retailer,
     String? storeName = 'Main Store',
     String? storeId,
-    // A Manager by default (#320); a Cashier passes {} (no products.add).
+    // products.add by default (#320) — "Add as new" is then the only option on
+    // the unknown-barcode choice (#321); a Cashier passes a set with neither
+    // products.add nor products.edit_price.
     Set<String> grantedKeys = const {'products.add'},
     Future<ProductData?> Function(BuildContext, String)? onUnknown,
     List<ProductDataWithStock> Function()? readStoreProducts,
@@ -222,6 +231,38 @@ void main() {
 
   Future<void> clearToast(WidgetTester tester) async {
     AppNotification.hide();
+    await tester.pumpAndSettle();
+  }
+
+  // The active store for the unknown-barcode cases (#320/#321): a saved or
+  // linked product's stock is read from here.
+  const storeId = 'store-main';
+
+  Future<void> seedStore() => db
+      .into(db.stores)
+      .insert(
+        StoresCompanion.insert(
+          id: const Value(storeId),
+          businessId: businessId,
+          name: 'Main Store',
+        ),
+      );
+
+  Future<void> stockIn(ProductData p, int qty) => db
+      .into(db.inventory)
+      .insert(
+        InventoryCompanion.insert(
+          businessId: businessId,
+          productId: p.id,
+          storeId: storeId,
+          quantity: Value(qty),
+        ),
+      );
+
+  /// Picks "Add as new product" on the unknown-barcode choice (#321).
+  Future<void> chooseAddNew(WidgetTester tester) async {
+    expect(find.byType(ScanUnknownChoiceSheet), findsOneWidget);
+    await tester.tap(find.byKey(kScanUnknownAddNewKey));
     await tester.pumpAndSettle();
   }
 
@@ -751,31 +792,10 @@ void main() {
   });
 
   group('unknown barcode (#320)', () {
-    const storeId = 'store-main';
-
-    Future<void> seedStore() => db
-        .into(db.stores)
-        .insert(
-          StoresCompanion.insert(
-            id: const Value(storeId),
-            businessId: businessId,
-            name: 'Main Store',
-          ),
-        );
-
-    Future<void> stockIn(ProductData p, int qty) => db
-        .into(db.inventory)
-        .insert(
-          InventoryCompanion.insert(
-            businessId: businessId,
-            productId: p.id,
-            storeId: storeId,
-            quantity: Value(qty),
-          ),
-        );
-
-    testWidgets('a Cashier without products.add gets the message and Add '
-        'Product is never opened', (tester) async {
+    testWidgets('a Cashier (neither products.add nor products.edit_price) '
+        'gets the message; no choice and Add Product is never opened', (
+      tester,
+    ) async {
       await seedProduct(name: 'Star Lager', barcode: 'BC-1');
       var opened = 0;
       await tester.pumpWidget(
@@ -793,6 +813,7 @@ void main() {
       await scan(tester);
 
       expect(opened, 0);
+      expect(find.byType(ScanUnknownChoiceSheet), findsNothing);
       expect(find.byType(EditItemModal), findsNothing);
       expect(cart.value, isEmpty);
       expect(
@@ -806,7 +827,7 @@ void main() {
       await clearToast(tester);
     });
 
-    testWidgets('a Manager gets Add Product with the code; a product saved '
+    testWidgets('"Add as new" opens Add Product with the code; a product saved '
         'with stock here opens its sheet, and confirming adds it', (
       tester,
     ) async {
@@ -828,6 +849,7 @@ void main() {
       );
 
       await scan(tester);
+      await chooseAddNew(tester);
 
       expect(openedWith, 'NEW-123');
       // The old generic toast is gone.
@@ -862,6 +884,7 @@ void main() {
       );
 
       await scan(tester);
+      await chooseAddNew(tester);
 
       expect(find.byType(EditItemModal), findsNothing);
       expect(cart.value, isEmpty);
@@ -892,6 +915,7 @@ void main() {
       );
 
       await scan(tester);
+      await chooseAddNew(tester);
 
       expect(
         find.text(
@@ -917,12 +941,361 @@ void main() {
       );
 
       await scan(tester);
+      await chooseAddNew(tester);
 
       expect(find.byType(EditItemModal), findsNothing);
       expect(cart.value, isEmpty);
       expect(find.byType(BarcodeScanPage), findsOneWidget);
       expect(scanner.camera!.isRunning, isTrue);
     });
+  });
+
+  group('unknown barcode — add new or link to existing (#321)', () {
+    const both = {'products.add', 'products.edit_price'};
+    const code = 'NEW-321';
+
+    Future<ProductData> reload(ProductData p) =>
+        (db.select(db.products)..where((t) => t.id.equals(p.id))).getSingle();
+
+    /// Picks "Link to an existing product" on the choice.
+    Future<void> chooseLink(WidgetTester tester) async {
+      expect(find.byType(ScanUnknownChoiceSheet), findsOneWidget);
+      await tester.tap(find.byKey(kScanUnknownLinkKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(ScanLinkProductSheet), findsOneWidget);
+    }
+
+    Finder linkRow(ProductData p) =>
+        find.byKey(ValueKey<String>('$kScanLinkRowKeyPrefix${p.id}'));
+
+    Future<void> tapLinkRow(WidgetTester tester, ProductData p) async {
+      await tester.ensureVisible(linkRow(p));
+      await tester.pumpAndSettle();
+      await tester.tap(linkRow(p));
+      await tester.pumpAndSettle();
+    }
+
+    final gateCases = <(String, Set<String>, bool, bool)>[
+      ('both gates → both options', both, true, true),
+      ('only products.add → only Add new', {'products.add'}, true, false),
+      (
+        'only products.edit_price → only Link',
+        {'products.edit_price'},
+        false,
+        true,
+      ),
+    ];
+    for (final (label, keys, canAdd, canLink) in gateCases) {
+      testWidgets(label, (tester) async {
+        await tester.pumpWidget(
+          host(
+            FakeBarcodeScanner(code),
+            loaded: const [],
+            grantedKeys: keys,
+            onUnknown: (_, _) async => null,
+          ),
+        );
+
+        await scan(tester);
+
+        expect(find.byType(ScanUnknownChoiceSheet), findsOneWidget);
+        // The scanned code is shown on the choice.
+        expect(
+          find.descendant(
+            of: find.byType(ScanUnknownChoiceSheet),
+            matching: find.text(code),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(kScanUnknownAddNewKey),
+          canAdd ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byKey(kScanUnknownLinkKey),
+          canLink ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.text('No product has this barcode. Ask a manager to add it.'),
+          findsNothing,
+        );
+      });
+    }
+
+    testWidgets('neither gate → the message and no choice', (tester) async {
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner(code),
+          loaded: const [],
+          grantedKeys: const {'sales.make', 'products.edit_buying_price'},
+        ),
+      );
+
+      await scan(tester);
+
+      expect(find.byType(ScanUnknownChoiceSheet), findsNothing);
+      expect(
+        find.text('No product has this barcode. Ask a manager to add it.'),
+        findsOneWidget,
+      );
+      expect(scanner.camera!.isRunning, isTrue);
+
+      await clearToast(tester);
+    });
+
+    testWidgets('closing or backing out of the choice does nothing and keeps '
+        'scanning', (tester) async {
+      var opened = 0;
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner(code),
+          loaded: const [],
+          grantedKeys: both,
+          onUnknown: (_, _) async {
+            opened++;
+            return null;
+          },
+        ),
+      );
+
+      await scan(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ScanUnknownChoiceSheet),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ScanUnknownChoiceSheet), findsNothing);
+      expect(find.byType(BarcodeScanPage), findsOneWidget);
+      expect(scanner.camera!.isRunning, isTrue);
+
+      await scan(tester);
+      expect(find.byType(ScanUnknownChoiceSheet), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(ScanUnknownChoiceSheet), findsNothing);
+      expect(find.byType(BarcodeScanPage), findsOneWidget);
+
+      expect(opened, 0);
+      expect(cart.value, isEmpty);
+      expect(await db.catalogDao.findProductByBarcode(code), isNull);
+    });
+
+    testWidgets('linking a product with no barcode saves the code, opens the '
+        'quantity sheet, and the next scan finds it', (tester) async {
+      await seedStore();
+      final malta = await seedProduct(name: 'Malta', barcode: null);
+      final star = await seedProduct(name: 'Star Lager', barcode: null);
+      await stockIn(malta, 5);
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner(code),
+          loaded: [
+            ProductDataWithStock(product: malta, totalStock: 5),
+            ProductDataWithStock(product: star, totalStock: 0),
+          ],
+          grantedKeys: both,
+          storeId: storeId,
+        ),
+      );
+
+      await scan(tester);
+      await chooseLink(tester);
+      // The search lists the business's products; typing narrows it by name.
+      expect(linkRow(malta), findsOneWidget);
+      expect(linkRow(star), findsOneWidget);
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(ScanLinkProductSheet),
+          matching: find.byType(TextField),
+        ),
+        'mal',
+      );
+      await tester.pumpAndSettle();
+      expect(linkRow(malta), findsOneWidget);
+      expect(linkRow(star), findsNothing);
+
+      await tapLinkRow(tester, malta);
+
+      // Only the barcode was saved, and the quantity sheet opened for it.
+      expect(find.byType(ScanLinkProductSheet), findsNothing);
+      expect((await reload(malta)).barcode, code);
+      expect(find.byType(EditItemModal), findsOneWidget);
+      expect(qtyText(tester), '1');
+      expect(cart.value, isEmpty);
+
+      await tapSheetButton(tester, 'Add to Cart');
+      expect(cart.value.single['id'], malta.id);
+      expect(cart.value.single['qty'], 1);
+      expect(find.text('Malta ×1 added'), findsOneWidget);
+      expect(scanner.camera!.isRunning, isTrue);
+      await clearToast(tester);
+
+      // Scanning the same code again (past the debounce) now finds it.
+      await scan(tester, code);
+      expect(find.byType(ScanUnknownChoiceSheet), findsNothing);
+      expect(find.byType(EditItemModal), findsOneWidget);
+      expect(qtyText(tester), '2');
+    });
+
+    testWidgets('a product with a different barcode asks first; Cancel saves '
+        'nothing and keeps the search, Continue replaces it', (tester) async {
+      await seedStore();
+      final gulder = await seedProduct(name: 'Gulder', barcode: 'OLD-1');
+      await stockIn(gulder, 4);
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner(code),
+          loaded: const [],
+          grantedKeys: both,
+          storeId: storeId,
+        ),
+      );
+
+      await scan(tester);
+      await chooseLink(tester);
+      expect(
+        find.descendant(of: linkRow(gulder), matching: find.text('Barcode OLD-1')),
+        findsOneWidget,
+      );
+      await tapLinkRow(tester, gulder);
+
+      const warning = 'This replaces barcode OLD-1 on Gulder. Continue?';
+      expect(find.text(warning), findsOneWidget);
+      await tester.tap(find.widgetWithText(AppButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(warning), findsNothing);
+      expect(find.byType(ScanLinkProductSheet), findsOneWidget);
+      expect((await reload(gulder)).barcode, 'OLD-1');
+      expect(find.byType(EditItemModal), findsNothing);
+
+      await tapLinkRow(tester, gulder);
+      await tester.tap(find.widgetWithText(AppButton, 'Continue'));
+      await tester.pumpAndSettle();
+
+      expect((await reload(gulder)).barcode, code);
+      expect(find.byType(EditItemModal), findsOneWidget);
+      await tapSheetButton(tester, 'Add to Cart');
+      expect(cart.value.single['id'], gulder.id);
+      await clearToast(tester);
+    });
+
+    testWidgets('closing the search saves nothing and keeps scanning', (
+      tester,
+    ) async {
+      final malta = await seedProduct(name: 'Malta', barcode: null);
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner(code),
+          loaded: const [],
+          grantedKeys: both,
+          storeId: storeId,
+        ),
+      );
+
+      await scan(tester);
+      await chooseLink(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ScanLinkProductSheet),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ScanLinkProductSheet), findsNothing);
+      expect(find.byType(EditItemModal), findsNothing);
+      expect((await reload(malta)).barcode, isNull);
+      expect(find.byType(BarcodeScanPage), findsOneWidget);
+      expect(scanner.camera!.isRunning, isTrue);
+    });
+
+    testWidgets('a linked product with no stock here → the found-scan '
+        'out-of-stock message', (
+      tester,
+    ) async {
+      await seedStore();
+      final malta = await seedProduct(name: 'Malta', barcode: null);
+      await tester.pumpWidget(
+        host(
+          FakeBarcodeScanner(code),
+          loaded: const [],
+          grantedKeys: const {'products.edit_price'},
+          storeId: storeId,
+        ),
+      );
+
+      await scan(tester);
+      await chooseLink(tester);
+      await tapLinkRow(tester, malta);
+
+      expect((await reload(malta)).barcode, code);
+      expect(find.byType(EditItemModal), findsNothing);
+      expect(
+        find.text('Malta is out of stock at Main Store'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Saved.'), findsNothing);
+      expect(scanner.camera!.isRunning, isTrue);
+      await clearToast(tester);
+    });
+
+    for (final size in const [phoneSe1Portrait, androidCompactLandscape]) {
+      testWidgets(
+        'the choice and a long search never overflow and the last row is '
+        'reachable at ${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.reset);
+
+          await seedStore();
+          final seeded = <ProductData>[
+            for (var i = 0; i < 30; i++)
+              await seedProduct(
+                name: 'Product ${i.toString().padLeft(2, '0')} with a long name',
+                barcode: null,
+                size: 'big',
+              ),
+          ];
+          await tester.pumpWidget(
+            host(
+              FakeBarcodeScanner(code),
+              loaded: const [],
+              grantedKeys: both,
+              storeId: storeId,
+            ),
+          );
+
+          await scan(tester);
+          expect(tester.takeException(), isNull);
+          await tester.ensureVisible(find.byKey(kScanUnknownLinkKey));
+          await tester.pumpAndSettle();
+          await chooseLink(tester);
+          expect(tester.takeException(), isNull);
+
+          await tester.scrollUntilVisible(
+            linkRow(seeded.last),
+            200,
+            scrollable: find
+                .descendant(
+                  of: find.byType(ScanLinkProductSheet),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(linkRow(seeded.last));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect((await reload(seeded.last)).barcode, code);
+
+          await clearToast(tester);
+        },
+      );
+    }
   });
 
   group('the scanner stays open (#319)', () {

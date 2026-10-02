@@ -688,6 +688,67 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await _enqueueFullProduct(productId);
   }
 
+  /// Links a scanned [barcode] (trimmed) to an existing product (#321). Writes
+  /// ONLY `barcode` + `lastUpdatedAt` — unlike [updateProductDetails], which
+  /// always writes the manufacturer and category (so a barcode-only call would
+  /// clear them) and requires the name and every price. Business-scoped, so
+  /// another business's product id is never touched.
+  ///
+  /// Enqueues the FULL row (via [_enqueueFullProduct]): a partial products
+  /// upsert omits the NOT NULL name (23502). Returns the updated product, or
+  /// null when [productId] isn't one of this business's products.
+  Future<ProductData?> setProductBarcode(
+    String productId,
+    String barcode,
+  ) {
+    // One transaction: a pull landing between the write and the full-row
+    // re-read could otherwise enqueue a payload without the barcode.
+    return transaction(() async {
+      await (update(products)
+            ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+          .write(
+        ProductsCompanion(
+          barcode: Value(barcode.trim()),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _enqueueFullProduct(productId);
+      return (select(products)
+            ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+          .getSingleOrNull();
+    });
+  }
+
+  /// This business's non-deleted products whose name contains [query]
+  /// (case-insensitive), ordered by name, at most [limit] rows (#321 — the
+  /// "Link to an existing product" search). A blank [query] returns the first
+  /// [limit] products, so a short catalogue can be picked without typing.
+  /// Switched-off products are included: a barcode can be linked to them, and
+  /// the scan then says they're switched off.
+  Future<List<ProductData>> searchProductsByName(
+    String query, {
+    int limit = 50,
+  }) {
+    // `%`, `_` and the escape char itself are matched literally. SQLite LIKE
+    // is ASCII case-insensitive, so no lower() is needed.
+    final q = query
+        .trim()
+        .replaceAll(r'\', r'\\')
+        .replaceAll('%', r'\%')
+        .replaceAll('_', r'\_');
+    final stmt = select(products)
+      ..where((t) => whereBusiness(t) & t.isDeleted.not())
+      ..orderBy([
+        (t) => OrderingTerm.asc(t.name),
+        (t) => OrderingTerm.asc(t.id),
+      ])
+      ..limit(limit);
+    if (q.isNotEmpty) {
+      stmt.where((t) => t.name.like('%$q%', escapeChar: r'\'));
+    }
+    return stmt.get();
+  }
+
   Future<void> updateProductPrices(
     String productId, {
     required int buyingPriceKobo,

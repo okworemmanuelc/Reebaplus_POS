@@ -13,6 +13,8 @@ import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
+import 'package:reebaplus_pos/features/pos/widgets/scan_link_product_sheet.dart';
+import 'package:reebaplus_pos/features/pos/widgets/scan_unknown_choice_sheet.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_which_one_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -32,10 +34,13 @@ import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 ///    switched off) → a message and no sheet;
 ///  - more than one product carries the code (#318) → the "Which one?" list;
 ///    the picked product then goes through the two cases above;
-///  - an unknown barcode (#320) depends on [Gates.addProduct]: without it the
-///    cashier is told to ask a manager; with it Add Product opens with the code
-///    pre-filled, and a product saved there goes through the found cases above
-///    (its stock is read fresh from the active store, not the grid's stream).
+///  - an unknown barcode (#320/#321) depends on [Gates.addProduct] and
+///    [Gates.editProductPrice]: holding neither, the cashier is told to ask a
+///    manager; otherwise a choice offers "Add as new product" (Add Product
+///    opens with the code pre-filled) and/or "Link to an existing product"
+///    (only the barcode is saved onto the picked product). Either way the
+///    product then goes through the found cases above (its stock is read
+///    fresh from the active store, not the grid's stream).
 class PosBarcodeScanButton extends ConsumerStatefulWidget {
   const PosBarcodeScanButton({
     super.key,
@@ -72,11 +77,12 @@ class PosBarcodeScanButton extends ConsumerStatefulWidget {
   /// this once the list closes. Null ⇒ [loadedProducts].
   final List<ProductDataWithStock> Function()? readStoreProducts;
 
-  /// Test seam: when a permitted user scans a barcode that matches no product
-  /// this is invoked with the code instead of navigating, and returns what
-  /// Add Product would have handed back — the saved product, or null when the
-  /// user backed out (#320). Production leaves it null and opens
-  /// [AddProductScreen] with the barcode pre-filled.
+  /// Test seam: when a permitted user picks "Add as new product" for a barcode
+  /// that matches no product, this is invoked with the code instead of
+  /// navigating, and returns what Add Product would have handed back — the
+  /// saved product, or null when the user backed out (#320). Production leaves
+  /// it null and opens [AddProductScreen] with the barcode pre-filled. ("Link
+  /// to an existing product" (#321) has no seam: its search runs on the DB.)
   final Future<ProductData?> Function(BuildContext context, String barcode)?
   onUnknownBarcode;
 
@@ -142,14 +148,16 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     }
   }
 
-  /// An unknown barcode (#320). Without [Gates.addProduct] (e.g. a Cashier)
-  /// it is only a message — no navigation, scanning carries on. With it, Add
-  /// Product opens pre-filled over the scanner; a product saved there goes
-  /// straight on to the quantity sheet (or its message). Backing out adds
-  /// nothing. (#321 puts the "Add as new / Link to existing" choice here.)
+  /// An unknown barcode (#320, #321). Holding neither [Gates.addProduct] nor
+  /// [Gates.editProductPrice] (e.g. a Cashier) it is only a message — no
+  /// navigation, scanning carries on. Otherwise the "Add as new / Link to
+  /// existing" choice shows (each option only with its gate, even when it is
+  /// the only one); dismissing it does nothing.
   Future<void> _onUnknown(BuildContext context, String code) async {
-    // allowsNow: a one-shot read inside a callback, not a build.
-    if (!Gates.addProduct.allowsNow(ref)) {
+    // allowsNow: one-shot reads inside a callback, not a build.
+    final canAdd = Gates.addProduct.allowsNow(ref);
+    final canLink = Gates.editProductPrice.allowsNow(ref);
+    if (!canAdd && !canLink) {
       AppNotification.showError(
         context,
         'No product has this barcode. Ask a manager to add it.',
@@ -157,6 +165,25 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
       return;
     }
 
+    final choice = await ScanUnknownChoiceSheet.show(
+      context,
+      code: code,
+      canAdd: canAdd,
+      canLink: canLink,
+    );
+    if (choice == null || !context.mounted || !mounted) return;
+    switch (choice) {
+      case ScanUnknownChoice.addNew:
+        await _addAsNew(context, code);
+      case ScanUnknownChoice.linkExisting:
+        await _linkToExisting(context, code);
+    }
+  }
+
+  /// "Add as new product" (#320): Add Product opens pre-filled over the
+  /// scanner; a product saved there goes straight on to the quantity sheet (or
+  /// its message). Backing out adds nothing.
+  Future<void> _addAsNew(BuildContext context, String code) async {
     ProductData? saved;
     final onUnknown = widget.onUnknownBarcode;
     if (onUnknown != null) {
@@ -177,14 +204,40 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     }
     final product = saved;
     if (product == null || !context.mounted || !mounted) return;
-    await _renderSaved(context, product);
+    await _renderSaved(context, product, isNewProduct: true);
   }
 
-  /// Renders a product just saved from Add Product (#320) like a found scan.
+  /// "Link to an existing product" (#321): the picked product gets ONLY the
+  /// barcode ([CatalogDao.setProductBarcode] — no prices, no stock, the
+  /// manufacturer and category untouched), then goes on like a found scan.
+  /// The search asks before replacing a different barcode; dismissing it saves
+  /// nothing. A product that somehow already carries this code is not
+  /// re-written.
+  Future<void> _linkToExisting(BuildContext context, String code) async {
+    final picked = await ScanLinkProductSheet.show(context, code: code);
+    if (picked == null || !context.mounted || !mounted) return;
+    final linked = picked.barcode == code
+        ? picked
+        : await ref
+              .read(databaseProvider)
+              .catalogDao
+              .setProductBarcode(picked.id, code);
+    if (linked == null || !context.mounted || !mounted) return;
+    await _renderSaved(context, linked, isNewProduct: false);
+  }
+
+  /// Renders a product just saved from Add Product (#320) or just linked to
+  /// the code (#321) like a found scan. Out of stock here, a new product
+  /// ([isNewProduct]) gets the "Saved…" message; a linked one gets the found
+  /// scan's own message (#317).
   /// Its stock is read from the active store directly (a business-scoped DAO
   /// read) rather than from [PosBarcodeScanButton.loadedProducts], which may
   /// not include a row saved a moment ago.
-  Future<void> _renderSaved(BuildContext context, ProductData product) async {
+  Future<void> _renderSaved(
+    BuildContext context,
+    ProductData product, {
+    required bool isNewProduct,
+  }) async {
     final storeId = widget.storeId;
     final stock = storeId == null
         ? 0
@@ -200,7 +253,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
       cartQty: _cartQtyOf(product.id),
       tier: widget.tier,
     );
-    if (outcome is ScanOutOfStockHere) {
+    if (isNewProduct && outcome is ScanOutOfStockHere) {
       final store = widget.storeName ?? 'this store';
       AppNotification.showError(
         context,

@@ -2,7 +2,7 @@
 //
 // #320 — an unknown barcode scanned by someone who may add products opens the
 // REAL Add Product screen over the scanner (no test seam), pre-filled with the
-// code. Saving it with stock in the active store goes straight on to the
+// code, once "Add as new product" is picked on the choice (#321). Saving it with stock in the active store goes straight on to the
 // quantity sheet for the new product; backing out returns to scanning with
 // nothing added. The seam-driven cases (Cashier message, 0 stock, "this
 // store") live in barcode_scan_test.dart.
@@ -25,6 +25,7 @@ import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
 import 'package:reebaplus_pos/features/pos/widgets/barcode_scan_page.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
+import 'package:reebaplus_pos/features/pos/widgets/scan_unknown_choice_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -126,10 +127,13 @@ void main() {
     return container;
   }
 
+  /// Scans the unknown code and picks "Add as new product" (#321).
   Future<void> scan(WidgetTester tester) async {
     await tester.tap(find.byType(PosBarcodeScanButton));
     await tester.pumpAndSettle();
     scanner.camera!.read(scanner.code!);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(kScanUnknownAddNewKey));
     await tester.pumpAndSettle();
   }
 
