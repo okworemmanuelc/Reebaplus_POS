@@ -76,6 +76,9 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     switch (state) {
       case AppLifecycleState.resumed:
         _isAppActive = true;
+        // Coming back to a locked app: the camera stays off — the lock screen
+        // is about to cover this page.
+        if (ref.read(authProvider).currentUser == null) return;
         _maybeResume();
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
