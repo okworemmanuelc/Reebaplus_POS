@@ -84,8 +84,13 @@ void main() {
 
   tearDown(() => db.close());
 
-  /// A Manager (holds products.add) at the till, store "Main Store" active.
-  Future<ProviderContainer> pumpTill(WidgetTester tester) async {
+  /// A Manager (holds products.add) at the till, store "Main Store" active
+  /// unless [activeStoreId] / [activeStoreName] name another.
+  Future<ProviderContainer> pumpTill(
+    WidgetTester tester, {
+    String activeStoreId = storeId,
+    String activeStoreName = 'Main Store',
+  }) async {
     scanner = FakeBarcodeScanner('NEW-555');
     final container = ProviderContainer(
       overrides: [
@@ -106,14 +111,14 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
+        child: MaterialApp(
           home: Scaffold(
             floatingActionButton: PosBarcodeScanButton(
               tier: PriceTier.retailer,
               // The grid's stream doesn't know the new product yet.
-              loadedProducts: [],
-              storeName: 'Main Store',
-              storeId: storeId,
+              loadedProducts: const [],
+              storeName: activeStoreName,
+              storeId: activeStoreId,
             ),
           ),
         ),
@@ -198,6 +203,59 @@ void main() {
     expect(saved?.id, cart.single['id']);
     expect(find.byType(BarcodeScanPage), findsOneWidget);
     expect(scanner.camera!.isRunning, isTrue);
+
+    await dispose(tester, container);
+  });
+
+  testWidgets('two stores, selling from the second → the opening stock lands '
+      'in the POS store and the quantity sheet opens', (tester) async {
+    // "Main Store" sorts first, so Add Product would default to it; the POS
+    // is selling from "Store B".
+    await db
+        .into(db.stores)
+        .insert(
+          StoresCompanion.insert(
+            id: const Value('store-B'),
+            businessId: businessId,
+            name: 'Store B',
+          ),
+        );
+    final container = await pumpTill(
+      tester,
+      activeStoreId: 'store-B',
+      activeStoreName: 'Store B',
+    );
+
+    await scan(tester);
+    expect(find.byType(AddProductScreen), findsOneWidget);
+    expect(
+      tester.widget<AddProductScreen>(find.byType(AddProductScreen))
+          .initialStoreId,
+      'store-B',
+    );
+
+    await tester.enterText(fieldFor('Product Name'), 'Malta Guinness');
+    await tester.enterText(fieldFor('Selling Price'), '500');
+    await tester.enterText(fieldFor('Quantity'), '12');
+    await tester.pumpAndSettle();
+    await tapButton(tester, 'Add Product');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    final saved = await db.catalogDao.findProductByBarcode('NEW-555');
+    expect(saved, isNotNull);
+    expect(await db.stockLedgerDao.getCurrentStock(saved!.id, 'store-B'), 12);
+    expect(await db.stockLedgerDao.getCurrentStock(saved.id, storeId), 0);
+
+    // Not "no stock at Store B yet" — straight on to the quantity sheet.
+    expect(find.byType(EditItemModal), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(EditItemModal),
+        matching: find.text('Malta Guinness'),
+      ),
+      findsOneWidget,
+    );
 
     await dispose(tester, container);
   });

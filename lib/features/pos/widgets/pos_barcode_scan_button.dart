@@ -196,6 +196,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
         slideDownRoute(
           AddProductScreen(
             prefilledBarcode: code,
+            initialStoreId: widget.storeId,
             onProductAdded: (product) => saved = product,
           ),
         ),
