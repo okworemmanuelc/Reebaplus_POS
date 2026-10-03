@@ -318,6 +318,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ref,
           pendingCount: e.pendingCount,
           orphanCount: e.orphanCount,
+          photoCount: e.photoCount,
           isResign: true,
         );
       }

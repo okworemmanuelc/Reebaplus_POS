@@ -421,6 +421,14 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
   }
 
+  /// True when [productId] is one of this business's products and has not been
+  /// deleted — the test for whether a photo saved offline for it is still
+  /// worth uploading (#343).
+  Future<bool> productIsLive(String productId) async {
+    final row = await findById(productId);
+    return row != null && !row.isDeleted;
+  }
+
   /// Live crate configuration for the given cart lines, keyed by product id.
   ///
   /// A cart line snapshots its crate fields when the product is tapped into the

@@ -10,6 +10,8 @@
 // added later and forgotten by the routine fails this test instead of quietly
 // leaking a dead tenant's rows onto the next sign-in.
 
+import 'dart:io';
+
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/services/local_photo_files.dart';
 
 void main() {
   late AppDatabase db;
@@ -134,6 +137,52 @@ void main() {
     expect(prefs.getBool('first_pull_done_v1_$bizB'), isTrue);
   });
 
+  test('removes the cleared business\'s photo copies, logo and pending '
+      'photo entries — and only those (#343)', () async {
+    final docs = Directory.systemTemp.createTempSync('clear_biz_photos');
+    addTearDown(() => docs.deleteSync(recursive: true));
+    final products = Directory('${docs.path}/product_images')..createSync();
+    final logos = Directory('${docs.path}/business_logos')..createSync();
+    db.photoDocumentsForTesting = docs;
+
+    final oldProduct = await _seedProduct(db, bizA);
+    final curProduct = await _seedProduct(db, bizB);
+    File photoFile(String id) => File('${products.path}/$id.png');
+    File urlFile(String id) => File('${products.path}/$id.url');
+    for (final id in [oldProduct, curProduct]) {
+      photoFile(id).writeAsBytesSync([1]);
+      urlFile(id).writeAsStringSync('u');
+    }
+    final oldLogo = File('${logos.path}/$bizA.png')..writeAsBytesSync([2]);
+    final curLogo = File('${logos.path}/$bizB.png')..writeAsBytesSync([3]);
+    SharedPreferences.setMockInitialValues({
+      LocalPhotoFiles.pendingProductUploadsKey: [
+        '$bizA|$oldProduct',
+        '$bizB|$curProduct',
+      ],
+    });
+
+    await db.clearBusinessData(bizA);
+    // The photo clean-up is fire-and-forget; give it a moment to land.
+    for (var i = 0; i < 100 && oldLogo.existsSync(); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(photoFile(oldProduct).existsSync(), isFalse);
+    expect(urlFile(oldProduct).existsSync(), isFalse);
+    expect(oldLogo.existsSync(), isFalse);
+
+    expect(photoFile(curProduct).existsSync(), isTrue);
+    expect(urlFile(curProduct).existsSync(), isTrue);
+    expect(curLogo.existsSync(), isTrue);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getStringList(LocalPhotoFiles.pendingProductUploadsKey),
+      ['$bizB|$curProduct'],
+    );
+  });
+
   test('survives the append-only ledger delete guards', () async {
     // `crate_ledger` carries a BEFORE DELETE trigger that RAISE(ABORT)s. If
     // clearBusinessData did not suspend the guards, this clear would throw and
@@ -190,6 +239,18 @@ Future<List<String>> _tablesWithBusinessId(AppDatabase db) async {
     }
   }
   return scoped;
+}
+
+Future<String> _seedProduct(AppDatabase db, String businessId) async {
+  final id = UuidV7.generate();
+  await db.into(db.products).insert(
+        ProductsCompanion.insert(
+          id: Value(id),
+          businessId: businessId,
+          name: 'Product of $businessId',
+        ),
+      );
+  return id;
 }
 
 /// Seeds one business with a representative row in a parent table, a child

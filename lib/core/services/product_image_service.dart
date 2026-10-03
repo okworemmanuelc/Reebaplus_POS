@@ -163,10 +163,15 @@ class ProductImageService {
   /// A photo saved offline before #340 is still PNG on disk: it is re-encoded
   /// to JPEG here so it uploads like any new photo (and fits the 1 MB bucket
   /// limit).
+  ///
+  /// [isLiveProduct], when given, drops an entry whose product no longer
+  /// exists (deleted since the photo was saved) instead of uploading a photo
+  /// nobody will see — the same rule the logout gate counts by (#343).
   Future<void> flushPending(
     String businessId,
-    Future<void> Function(String productId, String url) onUploaded,
-  ) async {
+    Future<void> Function(String productId, String url) onUploaded, {
+    Future<bool> Function(String productId)? isLiveProduct,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final entries = prefs.getStringList(_pendingKey) ?? const <String>[];
     if (entries.isEmpty) return;
@@ -184,6 +189,9 @@ class ProductImageService {
       final file = File(await _cache.pathFor(productId));
       if (!file.existsSync()) continue; // copy gone → nothing to upload, drop
       try {
+        if (isLiveProduct != null && !await isLiveProduct(productId)) {
+          continue; // product deleted → nothing to show it on, drop
+        }
         final bytes = jpegForUpload(await file.readAsBytes(), _maxDimension);
         final url = await _upload(entryBiz, productId, bytes);
         await _cache.recordUrl(productId, url);
