@@ -5,16 +5,20 @@
 // against Supabase Storage + tables in index.ts.
 //
 // Rule: the first photo saved for a factory barcode is COPIED to
-// barcode-catalogue-photos/<gtin14>.png and stays. A blocked hash is never
-// shared. Candidates are tried in the order given (the caller passes them
-// oldest first); the first one that can be shared wins.
+// barcode-catalogue-photos/<gtin14>.<ext> and stays, where <ext> follows the
+// photo's real type (jpg, png, webp, heic, heif; owner amendment on #331).
+// The row's object_path records that name. A blocked hash is never shared.
+// Candidates are tried in the order given (the caller passes them oldest
+// first); the first one that can be shared wins.
 //
 // Races: the upload never overwrites (upsert: false) and the row insert is
-// ON CONFLICT DO NOTHING, so when two shops race the first upload wins. An
-// object found with no row (a crash between upload and insert, or a winner
-// whose insert hasn't landed yet) is adopted: its own hash goes on the row,
-// unless that hash is blocked, in which case the object is removed and this
-// candidate is uploaded in its place.
+// ON CONFLICT DO NOTHING, so the first row wins. Two shops racing with the
+// same type collide on the object name: the first upload wins, and an object
+// found with no row (a crash between upload and insert, or a winner whose
+// insert hasn't landed yet) is adopted: its own hash goes on the row, unless
+// that hash is blocked, in which case the object is removed and this
+// candidate is uploaded in its place. Two shops racing with different types
+// both upload; the one whose row didn't land removes its own object.
 
 export const SOURCE_BUCKET = "product-images";
 export const SHARED_BUCKET = "barcode-catalogue-photos";
@@ -51,8 +55,8 @@ export interface SharedRow {
 }
 
 export interface SharePorts {
-  /** True when barcode_catalogue_photos already has a row for the GTIN. */
-  sharedPhotoExists(gtin14: string): Promise<boolean>;
+  /** The object_path of the GTIN's barcode_catalogue_photos row, or null. */
+  sharedPhotoPath(gtin14: string): Promise<string | null>;
   /** True when the hash is in barcode_catalogue_photo_blocks. */
   isBlocked(sha256: string): Promise<boolean>;
   /** The product-images object, or null when it doesn't exist. */
@@ -73,6 +77,7 @@ export type SkipReason =
   | "invalid_source"
   | "source_missing"
   | "too_large"
+  | "unsupported_type"
   | "blocked";
 
 export interface Skip {
@@ -91,8 +96,24 @@ export interface ShareOutcome {
   skipped: Skip[];
 }
 
-export function sharedObjectPath(gtin14: string): string {
-  return `${gtin14}.png`;
+// File extension per stored content type. Every ALLOWED_CONTENT_TYPES entry
+// has one.
+const EXTENSIONS: Readonly<Record<string, string>> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+};
+
+/** `<gtin14>.<ext>`, the extension following the photo's content type. */
+export function sharedObjectPath(gtin14: string, contentType: string): string {
+  const ext = EXTENSIONS[contentType];
+  if (ext === undefined) {
+    throw new Error(`no shared file extension for ${contentType}`);
+  }
+  return `${gtin14}.${ext}`;
 }
 
 const SOURCE_PATH_PREFIX = `/storage/v1/object/public/${SOURCE_BUCKET}/`;
@@ -139,9 +160,38 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
     .join("");
 }
 
-function storedContentType(contentType: string): string {
-  const type = contentType.split(";")[0].trim().toLowerCase();
-  return ALLOWED_CONTENT_TYPES.includes(type) ? type : "image/png";
+function startsWith(bytes: Uint8Array, at: number, sig: number[]): boolean {
+  if (bytes.byteLength < at + sig.length) return false;
+  return sig.every((b, i) => bytes[at + i] === b);
+}
+
+/** JPEG, PNG or WebP told apart by their leading bytes, else null. */
+function sniffContentType(bytes: Uint8Array): string | null {
+  if (startsWith(bytes, 0, [0xff, 0xd8, 0xff])) return "image/jpeg";
+  if (startsWith(bytes, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+    return "image/png";
+  }
+  if (
+    startsWith(bytes, 0, [0x52, 0x49, 0x46, 0x46]) && // "RIFF"
+    startsWith(bytes, 8, [0x57, 0x45, 0x42, 0x50]) // "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+/**
+ * The photo's real type: what its bytes say (JPEG, PNG, WebP), else the
+ * stored content type when it is an allowed image type (HEIC/HEIF), else
+ * null (not a photo the shared bucket takes). `image/jpg` is normalised to
+ * `image/jpeg`.
+ */
+export function photoContentType(photo: Photo): string | null {
+  const sniffed = sniffContentType(photo.bytes);
+  if (sniffed !== null) return sniffed;
+  const declared = photo.contentType.split(";")[0].trim().toLowerCase();
+  if (!ALLOWED_CONTENT_TYPES.includes(declared)) return null;
+  return declared === "image/jpg" ? "image/jpeg" : declared;
 }
 
 /**
@@ -154,11 +204,9 @@ export async function shareFirstUnblocked(
   candidates: readonly Candidate[],
 ): Promise<ShareOutcome> {
   const skipped: Skip[] = [];
-  if (await ports.sharedPhotoExists(gtin14)) {
+  if ((await ports.sharedPhotoPath(gtin14)) !== null) {
     return { status: "already_shared", gtin14, skipped };
   }
-
-  const objectPath = sharedObjectPath(gtin14);
 
   for (const c of candidates) {
     const sourcePath = sourceObjectPath(c.imageUrl, c.businessId);
@@ -175,19 +223,22 @@ export async function shareFirstUnblocked(
       skipped.push({ productId: c.productId, reason: "too_large" });
       continue;
     }
+    const contentType = photoContentType(source);
+    if (contentType === null) {
+      skipped.push({ productId: c.productId, reason: "unsupported_type" });
+      continue;
+    }
     const sha256 = await sha256Hex(source.bytes);
     if (await ports.isBlocked(sha256)) {
       skipped.push({ productId: c.productId, reason: "blocked" });
       continue;
     }
 
-    const photo: Photo = {
-      bytes: source.bytes,
-      contentType: storedContentType(source.contentType),
-    };
+    const objectPath = sharedObjectPath(gtin14, contentType);
+    const photo: Photo = { bytes: source.bytes, contentType };
 
     if ((await ports.uploadShared(objectPath, photo)) === "exists") {
-      if (await ports.sharedPhotoExists(gtin14)) {
+      if ((await ports.sharedPhotoPath(gtin14)) !== null) {
         return { status: "already_shared", gtin14, skipped };
       }
       const orphan = await ports.downloadShared(objectPath);
@@ -215,6 +266,11 @@ export async function shareFirstUnblocked(
     }
 
     await ports.insertSharedRow({ gtin14, objectPath, sha256 });
+    if ((await ports.sharedPhotoPath(gtin14)) !== objectPath) {
+      // Another type's upload got its row in first: ours is a stray copy.
+      await ports.removeShared(objectPath);
+      return { status: "already_shared", gtin14, skipped };
+    }
     return {
       status: "shared",
       gtin14,

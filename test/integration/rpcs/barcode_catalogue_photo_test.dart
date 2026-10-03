@@ -23,6 +23,10 @@ import '../../helpers/supabase_test_env.dart';
 /// `barcode_catalogue_photos` row. Needs migration 0182, the deployed function
 /// and both hook secrets; the pipeline is asynchronous, so tests poll.
 ///
+/// The shared object is named by the photo's real type (owner amendment on
+/// #331): `<gtin14>.jpg` for a JPEG, `<gtin14>.png` for a PNG; the row's
+/// `object_path` records the real name.
+///
 /// Every test uses fresh random GTINs under GS1 prefix 19 (unassigned by GS1,
 /// so never a real product's code) and its own throwaway businesses, and
 /// cleans up its rows and objects.
@@ -44,10 +48,26 @@ final Uint8List _png1x1 = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
 );
 
+/// A tiny JPEG (starts with the FF D8 FF marker the function reads the type
+/// from); bytes after it make each hash distinct, as for [_png1x1].
+final Uint8List _jpeg1x1 = base64Decode(
+  '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP////////////////////////////////////////'
+  '//////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAA'
+  'AAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
+);
+
+/// Every extension the function can name a shared object with.
+const _sharedExtensions = ['jpg', 'png', 'webp', 'heic', 'heif'];
+
 final _random = Random.secure();
 
-Uint8List _photo(String tag) =>
-    Uint8List.fromList([..._png1x1, ...utf8.encode('$tag-${_random.nextInt(1 << 32)}')]);
+/// A test photo: PNG by default, JPEG with [jpeg].
+Uint8List _photo(String tag, {bool jpeg = false}) => Uint8List.fromList([
+      ...(jpeg ? _jpeg1x1 : _png1x1),
+      ...utf8.encode('$tag-${_random.nextInt(1 << 32)}'),
+    ]);
+
+bool _isJpeg(Uint8List bytes) => bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff;
 
 String _sha256(Uint8List bytes) => sha256.convert(bytes).toString();
 
@@ -110,7 +130,10 @@ void main() {
       );
       await attempt(
         'shared objects',
-        () => admin.storage.from(_sharedBucket).remove([for (final g in gtins) '$g.png']),
+        () => admin.storage.from(_sharedBucket).remove([
+          for (final g in gtins)
+            for (final ext in _sharedExtensions) '$g.$ext',
+        ]),
       );
     }
     if (paths.isNotEmpty) {
@@ -142,13 +165,15 @@ void main() {
   }
 
   /// Uploads [bytes] as the business's own product photo and returns its
-  /// public URL, exactly as ProductImageService does.
+  /// public URL, exactly as ProductImageService does (`.jpg` / image/jpeg for
+  /// a JPEG, `.png` / image/png otherwise).
   Future<String> uploadSource(String businessId, String productId, Uint8List bytes) async {
-    final path = '$businessId/$productId.png';
+    final jpeg = _isJpeg(bytes);
+    final path = '$businessId/$productId.${jpeg ? 'jpg' : 'png'}';
     await clients.adminClient.storage.from(_sourceBucket).uploadBinary(
           path,
           bytes,
-          fileOptions: const FileOptions(upsert: true, contentType: 'image/png'),
+          fileOptions: FileOptions(upsert: true, contentType: jpeg ? 'image/jpeg' : 'image/png'),
         );
     sourcePaths.add(path);
     return clients.adminClient.storage.from(_sourceBucket).getPublicUrl(path);
@@ -192,23 +217,34 @@ void main() {
         'share-barcode-photo deployed and are both hook secrets set?');
   }
 
-  Future<Uint8List?> sharedObject(String gtin14) async {
+  /// The shared object at [objectPath] (e.g. `<gtin14>.jpg`), or null.
+  Future<Uint8List?> sharedObject(String objectPath) async {
     try {
-      return await clients.adminClient.storage.from(_sharedBucket).download('$gtin14.png');
+      return await clients.adminClient.storage.from(_sharedBucket).download(objectPath);
     } on StorageException {
       return null;
     }
   }
 
-  String publicUrl(String gtin14) =>
-      '${clients.env.url}/storage/v1/object/public/$_sharedBucket/$gtin14.png';
+  /// The shared objects for [gtin14] under any extension.
+  Future<List<String>> sharedObjectNames(String gtin14) async {
+    final names = <String>[];
+    for (final ext in _sharedExtensions) {
+      if (await sharedObject('$gtin14.$ext') != null) names.add('$gtin14.$ext');
+    }
+    return names;
+  }
 
-  Future<(int, Uint8List)> httpGet(String url) async {
+  String publicUrl(String objectPath) =>
+      '${clients.env.url}/storage/v1/object/public/$_sharedBucket/$objectPath';
+
+  /// Status, body and Content-Type of a GET.
+  Future<(int, Uint8List, String?)> httpGet(String url) async {
     final http = HttpClient();
     try {
       final res = await (await http.getUrl(Uri.parse(url))).close();
       final bytes = await res.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
-      return (res.statusCode, Uint8List.fromList(bytes));
+      return (res.statusCode, Uint8List.fromList(bytes), res.headers.contentType?.mimeType);
     } finally {
       http.close();
     }
@@ -218,41 +254,44 @@ void main() {
 
   group('share-barcode-photo pipeline (Tier 2)', () {
     test(
-      'the first photo is copied to <gtin14>.png, barcode_suggestion returns '
-      'its public URL, and it survives the source shop deleting its photo and product',
+      'the first photo (a JPEG) is copied to <gtin14>.jpg as image/jpeg, '
+      'barcode_suggestion returns its public URL, and it survives the source '
+      'shop deleting its photo and product',
       () async {
         final code = _randomGtin13();
         final g = gtin14Of(code);
         final bizA = await createBusiness('Photo Biz A');
-        final photoA = _photo('a');
+        final photoA = _photo('a', jpeg: true);
         final productA = await insertProduct(businessId: bizA, barcode: code, photo: photoA);
 
         final row = await waitForSharedRow(g);
-        expect(row['object_path'], '$g.png');
+        expect(row['object_path'], '$g.jpg');
         expect(row['sha256'], _sha256(photoA));
-        expect(await sharedObject(g), photoA);
+        expect(await sharedObject('$g.jpg'), photoA);
+        expect(await sharedObjectNames(g), ['$g.jpg']);
 
         final suggestion = await clients.userClient.rpc(
           'barcode_suggestion',
           params: {'p_barcode': code},
         ) as List<dynamic>;
         expect(suggestion, hasLength(1));
-        expect((suggestion.single as Map)['photo_url'], publicUrl(g));
+        expect((suggestion.single as Map)['photo_url'], publicUrl('$g.jpg'));
 
-        final (status, bytes) = await httpGet(publicUrl(g));
+        final (status, bytes, contentType) = await httpGet(publicUrl('$g.jpg'));
         expect(status, 200);
         expect(bytes, photoA);
+        expect(contentType, 'image/jpeg');
 
         // The source shop removes its photo, then its product.
-        await clients.adminClient.storage.from(_sourceBucket).remove(['$bizA/$productA.png']);
+        await clients.adminClient.storage.from(_sourceBucket).remove(['$bizA/$productA.jpg']);
         await clients.adminClient
             .from('products')
             .update({'image_url': null, 'is_deleted': true}).eq('id', productA);
         await clients.adminClient.from('products').delete().eq('id', productA);
 
-        expect(await sharedObject(g), photoA);
+        expect(await sharedObject('$g.jpg'), photoA);
         expect((await sharedRow(g))!['sha256'], _sha256(photoA));
-        final (statusAfter, _) = await httpGet(publicUrl(g));
+        final (statusAfter, _, _) = await httpGet(publicUrl('$g.jpg'));
         expect(statusAfter, 200);
       },
       skip: _skipReason,
@@ -260,7 +299,8 @@ void main() {
     );
 
     test(
-      "a second shop's photo for the same code does not replace the first",
+      "a second shop's photo for the same code does not replace the first, "
+      'even when it is another type (an older PNG stays <gtin14>.png)',
       () async {
         final code = _randomGtin13();
         final g = gtin14Of(code);
@@ -268,18 +308,22 @@ void main() {
         final bizB = await createBusiness('Photo Biz B');
         final photoA = _photo('a');
         await insertProduct(businessId: bizA, barcode: code, photo: photoA);
-        await waitForSharedRow(g);
+        expect((await waitForSharedRow(g))['object_path'], '$g.png');
 
-        // Second shop saves its own photo for the same code, alongside a
+        // Second shop saves its own JPEG for the same code, alongside a
         // control product whose share proves the pipeline ran meanwhile.
         final controlCode = _randomGtin13();
         final controlG = gtin14Of(controlCode);
-        await insertProduct(businessId: bizB, barcode: code, photo: _photo('b'));
+        await insertProduct(businessId: bizB, barcode: code, photo: _photo('b', jpeg: true));
         await insertProduct(businessId: bizB, barcode: controlCode, photo: _photo('c'));
         await waitForSharedRow(controlG);
 
-        expect((await sharedRow(g))!['sha256'], _sha256(photoA));
-        expect(await sharedObject(g), photoA);
+        final row = (await sharedRow(g))!;
+        expect(row['sha256'], _sha256(photoA));
+        expect(row['object_path'], '$g.png');
+        expect(await sharedObject('$g.png'), photoA);
+        // No stray JPEG copy next to it.
+        expect(await sharedObjectNames(g), ['$g.png']);
       },
       skip: _skipReason,
       timeout: const Timeout(Duration(minutes: 3)),
@@ -327,7 +371,7 @@ void main() {
         for (final code in [badCheckDigit, inStore]) {
           final g = gtin14Of(code);
           expect(await sharedRow(g), isNull, reason: code);
-          expect(await sharedObject(g), isNull, reason: code);
+          expect(await sharedObjectNames(g), isEmpty, reason: code);
         }
       },
       skip: _skipReason,
@@ -341,7 +385,13 @@ void main() {
         final admin = clients.adminClient;
         final code = _randomGtin13();
         final g = gtin14Of(code);
-        final photos = [for (final t in ['w', 'x', 'y', 'z']) _photo(t)];
+        // X is a PNG and Y a JPEG, so the promoted photo gets a new name.
+        final photos = [
+          _photo('w'),
+          _photo('x'),
+          _photo('y', jpeg: true),
+          _photo('z'),
+        ];
         final [blockedFromStart, firstShared, nextOldest, newest] = photos;
 
         await admin.from('barcode_catalogue_photo_blocks').insert({
@@ -365,13 +415,20 @@ void main() {
         }
         expect((await sharedRow(g))!['sha256'], _sha256(firstShared));
 
-        // Runbook: block X, delete its row and object, request {gtin14}.
+        // Runbook: block X, delete its row (noting object_path) and the object
+        // it names, request {gtin14}.
         await admin.from('barcode_catalogue_photo_blocks').insert({
           'sha256': _sha256(firstShared),
           'gtin14': g,
         });
-        await admin.from('barcode_catalogue_photos').delete().eq('gtin14', g);
-        await admin.storage.from(_sharedBucket).remove(['$g.png']);
+        final deleted = await admin
+            .from('barcode_catalogue_photos')
+            .delete()
+            .eq('gtin14', g)
+            .select('object_path')
+            .single();
+        expect(deleted['object_path'], '$g.png');
+        await admin.storage.from(_sharedBucket).remove([deleted['object_path'] as String]);
         final requestId = await admin.rpc(
           'barcode_catalogue_request_share',
           params: {
@@ -382,7 +439,9 @@ void main() {
 
         final row = await waitForSharedRow(g);
         expect(row['sha256'], _sha256(nextOldest));
-        expect(await sharedObject(g), nextOldest);
+        expect(row['object_path'], '$g.jpg');
+        expect(await sharedObject('$g.jpg'), nextOldest);
+        expect(await sharedObjectNames(g), ['$g.jpg']);
         expect(row['sha256'], isNot(_sha256(newest)));
       },
       skip: _skipReason,
@@ -427,8 +486,8 @@ void main() {
         } on StorageException {
           // also acceptable
         }
-        expect(await sharedObject(g), original);
-        expect(await sharedObject(other), isNull);
+        expect(await sharedObject('$g.png'), original);
+        expect(await sharedObjectNames(other), isEmpty);
 
         final anon = SupabaseClient(clients.env.url, clients.env.anonKey);
         try {

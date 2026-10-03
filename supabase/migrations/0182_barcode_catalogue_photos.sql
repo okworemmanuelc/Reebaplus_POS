@@ -9,7 +9,8 @@
 --
 -- What this adds:
 --   1. The public-read bucket `barcode-catalogue-photos` (object path
---      '<gtin14>.png'), with NO storage.objects policies at all.
+--      '<gtin14>.<ext>', the extension following the photo's real type: jpg,
+--      png, webp, heic, heif), with NO storage.objects policies at all.
 --   2. The photo block list: public.barcode_catalogue_photo_blocks.
 --   3. public.barcode_catalogue_photo_candidates(...): the products whose photo
 --      may be shared, oldest first. Service role only; read by the Edge
@@ -48,7 +49,7 @@ create extension if not exists pg_net with schema extensions;
 -- 1. Bucket (ADR 0029 §5). Same size and type limits as product-images (0144).
 --
 -- Public read comes from `public = true`: anyone can GET
--- /storage/v1/object/public/barcode-catalogue-photos/<gtin14>.png, which is
+-- /storage/v1/object/public/barcode-catalogue-photos/<gtin14>.<ext>, which is
 -- how barcode_suggestion's photo_url renders. No storage.objects policy names
 -- this bucket, so authenticated and anon clients can't insert, update, delete
 -- or list in it. Every existing storage.objects policy is scoped to its own

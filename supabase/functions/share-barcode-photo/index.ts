@@ -115,14 +115,15 @@ async function download(
 
 function supabasePorts(service: SupabaseClient): SharePorts {
   return {
-    async sharedPhotoExists(gtin14: string): Promise<boolean> {
+    async sharedPhotoPath(gtin14: string): Promise<string | null> {
       const { data, error } = await service
         .from("barcode_catalogue_photos")
-        .select("gtin14")
+        .select("object_path")
         .eq("gtin14", gtin14)
         .maybeSingle();
       if (error) throw new Error(`photo row lookup: ${error.message}`);
-      return data !== null;
+      const path = (data as { object_path?: unknown } | null)?.object_path;
+      return typeof path === "string" ? path : null;
     },
 
     async isBlocked(sha256: string): Promise<boolean> {

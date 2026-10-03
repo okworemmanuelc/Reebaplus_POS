@@ -101,8 +101,17 @@ Photos can't be voted on, so the **first photo saved for a barcode becomes the
 shared photo and stays**. A later shop's photo never replaces it.
 
 - **Shared copy.** It is a *copy*, held in a new public-read bucket
-  `barcode-catalogue-photos` at `<gtin14>.png`, recorded in
+  `barcode-catalogue-photos` at `<gtin14>.<ext>`, recorded in
   `public.barcode_catalogue_photos (gtin14 pk, object_path, sha256, created_at)`.
+  The extension follows the photo's real type (owner amendment on #331,
+  2026-10-03): `.jpg` for JPEG, `.png` for PNG, `.webp` for WebP, `.heic` /
+  `.heif` for HEIC / HEIF. The type is read from the file's own bytes (JPEG,
+  PNG, WebP), else the stored content type when it is one of those image
+  types; anything else is not shared. The upload carries that content type and
+  `object_path` records the real name, so readers always go through
+  `object_path`, never a guessed name. Product photos move to JPEG in #340, so
+  new shared photos will be `.jpg`; older PNG photos picked up by the backfill
+  keep `.png`.
   The source shop changing or deleting its own photo never breaks it.
   The bucket and table have **no client write policies**; only the service role
   writes.
@@ -113,7 +122,9 @@ shared photo and stays**. A later shop's photo never replaces it.
   `send-push` (it does nothing when the project is unconfigured). The function
   re-checks, downloads the source image from its public URL, hashes it, skips a
   blocked hash (§6), uploads with `upsert: false`, and inserts the row
-  `ON CONFLICT DO NOTHING`. So when two shops race, the first one wins.
+  `ON CONFLICT DO NOTHING`. So when two shops race, the first row wins. When
+  the racing photos have different types (two different object names), the
+  shop whose row didn't land removes its own copy.
 - **One code path for seeding.** The same function also accepts `{gtin14}` and
   walks that GTIN's candidate products **oldest first**, skipping blocked hashes.
   The one-time photo backfill runs it over every GTIN that has a photo, and the
@@ -187,14 +198,17 @@ the fix:
   INSERT INTO public.barcode_catalogue_photo_blocks (sha256, gtin14)
   SELECT sha256, gtin14 FROM public.barcode_catalogue_photos
    WHERE gtin14 = public.gtin14('<barcode>');
-  -- 2. Delete the row.
+  -- 2. Delete the row. Note the object_path it returns (e.g.
+  --    06150001234561.jpg): the extension follows the photo's type, so don't
+  --    guess it.
   DELETE FROM public.barcode_catalogue_photos
-   WHERE gtin14 = public.gtin14('<barcode>');
+   WHERE gtin14 = public.gtin14('<barcode>')
+  RETURNING object_path;
   ```
-  3. Delete the object `barcode-catalogue-photos/<gtin14>.png` in the Storage
-     dashboard (SQL can't delete Storage objects). Don't skip this: the URL is
-     guessable and stays public while the object exists. The CDN can keep
-     serving a cached copy for up to an hour.
+  3. Delete the object `barcode-catalogue-photos/<object_path>` (the name step 2
+     returned) in the Storage dashboard (SQL can't delete Storage objects).
+     Don't skip this: the URL is guessable and stays public while the object
+     exists. The CDN can keep serving a cached copy for up to an hour.
   ```sql
   -- 4. Promote the next-oldest unblocked photo (returns a pg_net request id;
   --    NULL means the Vault secret is missing). Check the outcome in
@@ -204,7 +218,9 @@ the fix:
   ```
   If no other shop has an unblocked photo, the code simply has no shared
   photo until one is saved. If step 3 was forgotten, the function removes the
-  blocked object itself the next time it shares a photo for that code.
+  blocked object itself only when the next photo it shares for that code has
+  the same type (the same object name); a photo of another type gets its own
+  name and the blocked object stays public. So never skip step 3.
 
 Then mark the report `resolved` (or `dismissed`) with `resolved_at`. Both block
 tables have RLS on and no policies (service role only). A review page in the
