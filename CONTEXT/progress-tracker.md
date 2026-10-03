@@ -7,6 +7,23 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #331: Shared barcode catalogue 2/4 — first photo copied to a shared bucket + backfill (2026-10-03)
+Branch `feat/barcode-catalogue-photo-331` (PR #339), rebased onto `main` after #330 (PR #338) merged; worked in `../drinkPosApp-wt-331`. **No Drift schema change, no client code.**
+- **Owner amendment (2026-10-03): the shared object is named by its real type.** `<gtin14>.jpg` for JPEG, `.png` for PNG, `.webp` for WebP (`.heic`/`.heif` for HEIC/HEIF). The type comes from the file's bytes (JPEG/PNG/WebP), else the stored content type when it is an allowed image type; anything else is skipped (`unsupported_type`). The upload uses that content type and `object_path` records the real name. Different-type races produce different names, so after its insert the function re-reads the row's `object_path` and removes its own copy if another row landed first. Runbook now deletes the row `RETURNING object_path` and removes that object. No SQL change (`barcode_suggestion` already builds the URL from `object_path`); 0182 header comments only. Function redeployed (v3). Deno 19/19; tier-2 photo test 6/6 live (JPEG source → `<gtin14>.jpg`, served as `image/jpeg`); 0 leftovers.
+- **Migration `0182_barcode_catalogue_photos.sql`** (DEPLOYED via `supabase db push`; dev and prod are the same project, `ewwyofbvfjyqqirrcaou`):
+  - Bucket `barcode-catalogue-photos`: public read, 5 MB, same types as `product-images`, **no storage.objects policies** (service role only; no listing).
+  - `public.barcode_catalogue_photo_blocks (sha256 pk lower-hex, gtin14, blocked_at)`, RLS on, no policies.
+  - `public.barcode_catalogue_photo_candidates(p_product_id | p_gtin14)`: qualifying products (factory GTIN, not deleted, has photo), oldest `created_at` first. Service role only. The Edge Function uses it, so the factory rule still lives only in SQL + Dart.
+  - `public.barcode_catalogue_request_share(jsonb)`: pg_net POST to the function, reading Vault `project_url` + `barcode_catalogue_hook_secret`; NULL when unconfigured. Service role only. Used by trigger, backfill, runbook.
+  - Trigger `trg_share_barcode_photo` AFTER INSERT OR UPDATE OF image_url, barcode ON products, WHEN image_url not null AND factory GTIN; skips deleted rows and GTINs already shared; errors downgraded to a warning so a product push can never be rejected.
+- **Edge Function `share-barcode-photo`** (DEPLOYED, verify_jwt off, secret header `x-barcode-catalogue-hook-secret`): `{record}` re-reads the product by id; `{gtin14}` walks candidates oldest first. Pure logic in `share.ts` (source path must be the product's own `product-images/<businessId>/...` object; sha256; blocked skipped; upload `upsert:false`; row `ON CONFLICT DO NOTHING`; an object without a row is adopted, or removed if its hash is blocked). Deno unit tests in `share_test.ts` (19 after the amendment) (no CI Deno tier).
+- **Backfill**: `supabase/scripts/backfill_barcode_catalogue_photos.sql`. Prod today has 4 factory-GTIN products and **0 with a photo**, so the backfill will queue 0 requests.
+- **Runbook**: ADR 0029 §6 Photo bullet now carries the exact SQL + Storage steps.
+- **Hook secret** set with owner permission (Vault `barcode_catalogue_hook_secret` + Edge `BARCODE_CATALOGUE_HOOK_SECRET`, same value).
+- **Tests**: Tier-2 `test/integration/rpcs/barcode_catalogue_photo_test.dart`: 6/6 pass live (random GTINs under unassigned GS1 prefix 19; cleanup verified, 0 leftovers). #330's `barcode_suggestion_test` still 10/10 with the trigger live.
+- **Backfill run on prod**: 0 GTINs with a photo, 0 requests queued, 0 shared photos.
+- **Fixed here**: #330's `barcode_suggestion_test.dart` now passes `skip: _skipReason` on every test, so a plain `flutter test` without the TEST_SUPABASE_* env skips its 10 tests (verified), and still 10/10 live.
+
 ### Issue #330: Shared barcode catalogue 1/4 — factory barcode rule, lookup RPC, kill switch (2026-10-03)
 Branch `feat/barcode-catalogue-rpc-330`, cut from `main`. **No Drift schema change.**
 - **Factory-barcode rule (ADR 0029 §2)**:

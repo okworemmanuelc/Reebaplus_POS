@@ -119,7 +119,7 @@ void main() {
         expect(FactoryBarcode.isFactoryGtin(code), expectedFactory);
         expect(FactoryBarcode.padToGtin14(code), expectedGtin14);
       }
-    });
+    }, skip: _skipReason);
   });
 
   group('public.barcode_suggestion RPC (Tier 2)', () {
@@ -176,7 +176,7 @@ void main() {
         params: {'p_barcode': '5000112637922'},
       );
       expect(resUnknown, isEmpty);
-    });
+    }, skip: _skipReason);
 
     test(
       'voting across 3 businesses: majority wins, case/spacing variants group, duplicate product votes once',
@@ -239,6 +239,7 @@ void main() {
         expect(row['name']!.toString().toLowerCase(), 'coca-cola 50cl');
         expect(row['unit'], 'Bottle');
       },
+      skip: _skipReason,
     );
 
     test('tie-break goes to the most recent last_updated_at', () async {
@@ -274,7 +275,7 @@ void main() {
       final row = list.first as Map<String, dynamic>;
       expect(row['name'], 'Brand Beta');
       expect(row['unit'], 'Can');
-    });
+    }, skip: _skipReason);
 
     test('deleted product does not vote', () async {
       final b1 = await createTestBusiness('Del Biz 1');
@@ -308,7 +309,7 @@ void main() {
       final row = list.first as Map<String, dynamic>;
       expect(row['name'], 'Active Product');
       expect(row['unit'], 'Piece');
-    });
+    }, skip: _skipReason);
 
     test('blocked name is skipped and falls to the next candidate', () async {
       final b1 = await createTestBusiness('Block Biz 1');
@@ -355,7 +356,7 @@ void main() {
             .eq('gtin14', testGtin14)
             .eq('normalised_name', 'profane name');
       }
-    });
+    }, skip: _skipReason);
 
     test('unit vote ignores null units', () async {
       final b1 = await createTestBusiness('Unit Biz 1');
@@ -387,7 +388,7 @@ void main() {
       final row = list.first as Map<String, dynamic>;
       expect(row['name'], 'No Unit Drink');
       expect(row['unit'], 'Crate');
-    });
+    }, skip: _skipReason);
 
     test('kill switch off returns zero rows', () async {
       final b1 = await createTestBusiness('Switch Biz');
@@ -416,7 +417,7 @@ void main() {
         params: {'p_barcode': testBarcode},
       );
       expect(after, isEmpty);
-    });
+    }, skip: _skipReason);
   });
 
   group('Permissions & RLS safety', () {
@@ -433,7 +434,7 @@ void main() {
         throwsA(isA<PostgrestException>()),
       );
       await anonClient.dispose();
-    });
+    }, skip: _skipReason);
 
     test(
       'authenticated client cannot select another business products rows (RLS unchanged)',
@@ -461,6 +462,7 @@ void main() {
             .eq('id', foreignProductId);
         expect(rows, isEmpty);
       },
+      skip: _skipReason,
     );
   });
 }
