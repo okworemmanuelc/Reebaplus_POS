@@ -169,9 +169,16 @@ Not a synced table and not in Drift. The client writes through
 the fix:
 
 - **Name:** insert `(gtin14, normalised_name)` into
-  `public.barcode_catalogue_name_blocks`. The lookup ignores that name for that
-  GTIN, so the shop that sent it can't bring it back by saving again. The vote
-  falls to the next name.
+  `public.barcode_catalogue_name_blocks`:
+  ```sql
+  INSERT INTO public.barcode_catalogue_name_blocks (gtin14, normalised_name)
+  VALUES (
+    public.gtin14('<barcode>'),
+    public.barcode_catalogue_normalise_name('<bad name>')
+  );
+  ```
+  The lookup ignores that name for that GTIN, so the shop that sent it can't
+  bring it back by saving again. The vote falls to the next name.
 - **Photo:** insert its `sha256` into `public.barcode_catalogue_photo_blocks`,
   delete the row and the object, then call `share-barcode-photo` with
   `{gtin14}` to promote the next-oldest unblocked photo.
