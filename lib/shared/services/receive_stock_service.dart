@@ -4,7 +4,7 @@ import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
 
 /// Atomic "Receive Stock" commit (Receive Stock spec, Section 9). One run =
-/// one supplier. On confirm, ALL of the following happen inside a single Drift
+/// one supplier, or none (see "No supplier" below). On confirm, ALL of the following happen inside a single Drift
 /// transaction so the receipt is all-or-nothing (a mid-write failure rolls the
 /// whole thing back — no orphaned invoice without a stock increase):
 ///
@@ -43,6 +43,13 @@ import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
 ///
 /// This slice is **counting only** — no deposit money moves here (#212 owns the
 /// money leg), so both crate calls are made at the seam's default 0 kobo.
+///
+/// **No supplier.** A receipt may name no supplier — a cash purchase from the
+/// market or a cash-and-carry. Stock, prices and the Cost Batch still post
+/// (cost of goods never depends on the supplier), but there is no invoice, no
+/// payment, and no crate movement: every one of those rows needs a supplier.
+/// So a supplier-less receipt may not carry a line that [ReceiveCartLine.movesCrates]
+/// (crate debt must have an owner, else #210's drift returns) nor a payment.
 class ReceiveStockService {
   final AppDatabase _db;
   final SupplierAccountService _supplierAccounts;
@@ -67,8 +74,8 @@ class ReceiveStockService {
   /// count, so a crate figure can never be derived from `line.qty` — it is
   /// always typed by whoever took the delivery (ADR 0023).
   Future<void> confirmReceipt({
-    required String supplierId,
-    required String supplierName,
+    required String? supplierId,
+    required String? supplierName,
     required String storeId,
     required DateTime dateReceived,
     required String staffId,
@@ -82,6 +89,14 @@ class ReceiveStockService {
     if (lines.isEmpty) {
       throw ArgumentError('Cannot receive stock with an empty cart');
     }
+    if (supplierId == null) {
+      if (lines.any((l) => l.movesCrates)) {
+        throw ArgumentError('A receipt with crate products needs a supplier');
+      }
+      if (amountPaidKobo != null && amountPaidKobo > 0) {
+        throw ArgumentError('A payment needs a supplier to record it against');
+      }
+    }
 
     final invoiceTotalKobo = lines.fold<int>(
       0,
@@ -91,7 +106,8 @@ class ReceiveStockService {
 
     await _db.transaction(() async {
       // 1. Supplier invoice (skip a zero-value invoice — stock/crates still post).
-      if (invoiceTotalKobo > 0) {
+      //    No supplier → a cash purchase: nothing is owed, so no invoice.
+      if (supplierId != null && invoiceTotalKobo > 0) {
         await _supplierAccounts.recordInvoice(
           supplierId: supplierId,
           amountKobo: invoiceTotalKobo,
@@ -102,7 +118,7 @@ class ReceiveStockService {
         );
       }
 
-      if (amountPaidKobo != null && amountPaidKobo > 0) {
+      if (supplierId != null && amountPaidKobo != null && amountPaidKobo > 0) {
         await _supplierAccounts.recordPayment(
           supplierId: supplierId,
           amountKobo: amountPaidKobo,
@@ -158,10 +174,10 @@ class ReceiveStockService {
       //    by both directions: only a manufacturer carried by a bottle +
       //    trackEmpties line on this receipt is consulted, so PET / Can / any
       //    non-crate packaging can never reach a crate table.
+      //    Empty when there is no supplier (guarded above).
       final eligibleManufacturerIds = <String>{
         for (final line in lines)
-          if (line.trackEmpties && line.manufacturerId != null)
-            line.manufacturerId!,
+          if (line.movesCrates) line.manufacturerId!,
       };
       var totalCratesReceived = 0;
       var totalEmptiesReturned = 0;
@@ -174,7 +190,7 @@ class ReceiveStockService {
         final cratesReceived = fullCratesReceivedByManufacturer[manufacturerId] ?? 0;
         if (cratesReceived > 0) {
           await _db.cratePoolDao.recordReceiveFromSupplier(
-            supplierId: supplierId,
+            supplierId: supplierId!,
             manufacturerId: manufacturerId,
             quantity: cratesReceived,
             performedBy: staffId,
@@ -205,7 +221,7 @@ class ReceiveStockService {
             storeId: storeId,
           );
           await _db.cratePoolDao.recordReturnToSupplier(
-            supplierId: supplierId,
+            supplierId: supplierId!,
             manufacturerId: manufacturerId,
             quantity: emptiesReturned,
             performedBy: staffId,
@@ -224,13 +240,14 @@ class ReceiveStockService {
       await _db.activityLogDao.logActivity(
         action: 'stock.received',
         description:
-            'Received ${lines.length} product(s), $totalUnits unit(s) from '
-            '$supplierName — invoice ${formatCurrency(invoiceTotalKobo / 100)}'
+            'Received ${lines.length} product(s), $totalUnits unit(s) '
+            '${supplierId == null ? '(no supplier) — cost' : 'from $supplierName — invoice'} '
+            '${formatCurrency(invoiceTotalKobo / 100)}'
             '${amountPaidKobo != null && amountPaidKobo > 0 ? ' (Paid: ${formatCurrency(amountPaidKobo / 100)})' : ''}'
             '$crateSummary',
         staffId: staffId,
         storeId: storeId,
-        entityType: 'supplier',
+        entityType: supplierId == null ? null : 'supplier',
         entityId: supplierId,
       );
     });

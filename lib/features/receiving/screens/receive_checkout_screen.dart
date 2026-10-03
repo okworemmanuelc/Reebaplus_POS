@@ -20,7 +20,9 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 
 /// Invoice / checkout screen for the Receive Stock flow (spec Sections 7–9).
-/// Picks ONE supplier, shows a read-only Invoice Total, captures the receipt
+/// Picks ONE supplier (optional unless a line moves crates — no supplier is a
+/// cash purchase: stock + cost only, no invoice / payment / crates), shows a
+/// read-only Invoice Total, captures the receipt
 /// date + an optional note + the crates moved with the delivery (full crates in
 /// and empty crates back, per manufacturer — #210), then commits atomically via
 /// [receiveStockServiceProvider]. Optionally captures an
@@ -113,7 +115,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     // The same gate the commit uses, so PET / Can lines never get a crate box.
     for (final line in ref.read(receiveCartProvider)) {
       final mfrId = line.manufacturerId;
-      if (line.trackEmpties &&
+      if (line.movesCrates &&
           mfrId != null &&
           !_emptiesControllers.containsKey(mfrId)) {
         final fullCratesCtrl = TextEditingController(text: '0');
@@ -178,14 +180,15 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
 
   Future<void> _confirm() async {
     final supplier = _selectedSupplier;
-    if (supplier == null) {
-      AppNotification.showError(context, 'Please select a supplier');
-      return;
-    }
-
     final cart = ref.read(receiveCartProvider);
     if (cart.isEmpty) {
       AppNotification.showError(context, 'Cart is empty');
+      return;
+    }
+    // Crate debt needs an owner (#210), so crate products keep the supplier
+    // required. Anything else may be a supplier-less cash purchase.
+    if (supplier == null && cart.any((l) => l.movesCrates)) {
+      AppNotification.showError(context, 'Please select a supplier');
       return;
     }
 
@@ -206,14 +209,13 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     // cannot carry a stale crate figure into the dialog.
     final eligibleManufacturerIds = <String>{
       for (final line in cart)
-        if (line.trackEmpties && line.manufacturerId != null)
-          line.manufacturerId!,
+        if (line.movesCrates) line.manufacturerId!,
     };
     int crateTotal(Map<String, int> byManufacturer) => eligibleManufacturerIds
         .fold(0, (sum, id) => sum + (byManufacturer[id] ?? 0));
 
     final confirmed = await _showConfirmationDialog(
-      supplierName: supplier.name,
+      supplierName: supplier?.name,
       productCount: cart.length,
       totalUnits: totalUnits,
       invoiceTotalKobo: invoiceTotalKobo,
@@ -229,15 +231,18 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final note = _noteCtrl.text.trim();
 
     try {
-      final canManageSuppliers = Gates.manageSuppliers.allowsNow(ref);
+      // A payment is posted to the supplier's account, so there is none to
+      // record without a supplier (the section is hidden then).
+      final canManageSuppliers =
+          supplier != null && Gates.manageSuppliers.allowsNow(ref);
       final amountPaid = (canManageSuppliers && _amountPaidCtrl.text.isNotEmpty)
           ? (double.tryParse(_amountPaidCtrl.text.replaceAll(',', '')) ?? 0)
           : 0;
       final amountPaidKobo = (amountPaid * 100).round();
 
       await ref.read(receiveStockServiceProvider).confirmReceipt(
-            supplierId: supplier.id,
-            supplierName: supplier.name,
+            supplierId: supplier?.id,
+            supplierName: supplier?.name,
             storeId: _flowStoreId!,
             dateReceived: _dateReceived,
             staffId: staffId,
@@ -255,7 +260,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       ref.read(receiveCartProvider.notifier).clear();
       AppNotification.showSuccess(
         context,
-        'Stock received from ${supplier.name}',
+        supplier == null
+            ? 'Stock received'
+            : 'Stock received from ${supplier.name}',
       );
       Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e, st) {
@@ -272,7 +279,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   }
 
   Future<bool?> _showConfirmationDialog({
-    required String supplierName,
+    required String? supplierName,
     required int productCount,
     required int totalUnits,
     required int invoiceTotalKobo,
@@ -295,7 +302,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _dialogRow('Supplier', supplierName),
+            _dialogRow('Supplier', supplierName ?? 'None (cash purchase)'),
             _dialogRow('Items', '$productCount product(s), $totalUnits unit(s)'),
             _dialogRow('Stocking', storeName),
             _dialogRow(
@@ -308,8 +315,12 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
               _dialogRow('Crates', crateParts.join(', ')),
             SizedBox(height: context.getRSize(12)),
             Text(
-              'This posts ${formatCurrency(invoiceTotalKobo / 100)} to '
-              "$supplierName's account and increases stock at $storeName.",
+              supplierName == null
+                  ? 'This increases stock at $storeName. With no supplier, '
+                      'nothing is recorded as owed or paid.'
+                  : 'This posts ${formatCurrency(invoiceTotalKobo / 100)} to '
+                      "$supplierName's account and increases stock at "
+                      '$storeName.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -391,6 +402,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final subtext = theme.textTheme.bodySmall?.color;
 
     final totalValueStr = formatCurrency(notifier.invoiceTotalKobo / 100);
+    final supplierRequired = cart.any((l) => l.movesCrates);
     final uncostedLineCount = notifier.uncostedLineCount;
 
     // Crates are grouped by manufacturer: one row per manufacturer carrying a
@@ -407,10 +419,10 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final seenManufacturers = <String>{};
     for (final l in cart) {
       final mfrId = l.manufacturerId;
-      if (!l.trackEmpties || mfrId == null) continue;
+      if (!l.movesCrates || mfrId == null) continue;
       if (!seenManufacturers.add(mfrId)) continue;
       final unitsDelivered = cart
-          .where((x) => x.trackEmpties && x.manufacturerId == mfrId)
+          .where((x) => x.movesCrates && x.manufacturerId == mfrId)
           .fold<int>(0, (sum, x) => sum + x.qty);
       crateGroups.add((
         manufacturerId: mfrId,
@@ -512,15 +524,36 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                   ),
                   SizedBox(height: context.getRSize(24)),
 
-                  // Supplier (required, searchable)
-                  _fieldLabel('SUPPLIER *', subtext),
+                  // Supplier (searchable). Required only when a line moves
+                  // crates; otherwise none = a cash purchase.
+                  _fieldLabel(
+                    supplierRequired ? 'SUPPLIER *' : 'SUPPLIER (optional)',
+                    subtext,
+                  ),
                   SizedBox(height: context.getRSize(8)),
                   _TapField(
                     icon: FontAwesomeIcons.truckField.data,
                     text: _selectedSupplier?.name ?? 'Select supplier',
                     isPlaceholder: _selectedSupplier == null,
                     onTap: _pickSupplier,
+                    onClear: _selectedSupplier == null
+                        ? null
+                        : () => setState(() => _selectedSupplier = null),
                   ),
+                  if (_selectedSupplier == null) ...[
+                    SizedBox(height: context.getRSize(6)),
+                    Text(
+                      supplierRequired
+                          ? 'Needed for drinks with crates, so the crates are '
+                              'recorded against someone.'
+                          : 'No supplier? It is saved as a cash purchase: '
+                              'stock goes up, nothing is recorded as owed.',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(12),
+                        color: subtext,
+                      ),
+                    ),
+                  ],
                   SizedBox(height: context.getRSize(16)),
 
                   // Date received (default today, backdate allowed)
@@ -542,7 +575,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                   ),
                   SizedBox(height: context.getRSize(24)),
 
-                  if (Gates.manageSuppliers.allows(ref)) ...[
+                  if (_selectedSupplier != null &&
+                      Gates.manageSuppliers.allows(ref)) ...[
                     // Payment (optional)
                     _fieldLabel('PAYMENT', subtext),
                     SizedBox(height: context.getRSize(8)),
@@ -675,7 +709,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
               child: AppButton(
                 text: 'Confirm Receipt',
                 onPressed:
-                    _selectedSupplier == null || _flowStoreId == null || _isSaving
+                    (supplierRequired && _selectedSupplier == null) ||
+                            _flowStoreId == null ||
+                            _isSaving
                         ? null
                         : _confirm,
                 isLoading: _isSaving,
@@ -793,11 +829,15 @@ class _TapField extends StatelessWidget {
   final bool isPlaceholder;
   final VoidCallback onTap;
 
+  /// When set, a clear (×) button replaces the chevron.
+  final VoidCallback? onClear;
+
   const _TapField({
     required this.icon,
     required this.text,
     required this.isPlaceholder,
     required this.onTap,
+    this.onClear,
   });
 
   @override
@@ -837,8 +877,19 @@ class _TapField extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(FontAwesomeIcons.chevronDown.data,
-                  size: context.getRSize(14), color: subtext),
+              if (onClear != null)
+                InkWell(
+                  onTap: onClear,
+                  customBorder: const CircleBorder(),
+                  child: Padding(
+                    padding: EdgeInsets.all(context.getRSize(4)),
+                    child: Icon(FontAwesomeIcons.xmark.data,
+                        size: context.getRSize(14), color: subtext),
+                  ),
+                )
+              else
+                Icon(FontAwesomeIcons.chevronDown.data,
+                    size: context.getRSize(14), color: subtext),
             ],
           ),
         ),

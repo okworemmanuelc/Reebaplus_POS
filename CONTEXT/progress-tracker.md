@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Receive Stock: supplier optional unless crates move (2026-10-03)
+Branch `feat/receive-supplier-optional`, cut from `main`. Worked in `../drinkPosApp-wt-supplieropt`. **No schema change.**
+- **Rule**: on the Invoice screen the supplier is optional, **unless** a cart line moves crates (`ReceiveCartLine.movesCrates` = `trackEmpties && manufacturerId != null`, the one gate now shared by the crate inputs, the commit and this rule). Crate debt must have an owner, else #210's drift returns.
+- **No supplier = a cash purchase**: stock, prices and the FIFO Cost Batch still post (cost of goods never depends on the supplier). There is **no invoice, no payment, no crate movement** (every one of those rows has `supplier_id NOT NULL`). Activity log reads "(no supplier) — cost …" with no entity link.
+- **Service** (`receive_stock_service.dart`): `supplierId`/`supplierName` are now `String?`; throws `ArgumentError` for a supplier-less receipt carrying a crate line or a payment (before any write).
+- **Screen** (`receive_checkout_screen.dart`): label `SUPPLIER (optional)` / `SUPPLIER *`, hint text under the field, × to clear a picked supplier, payment section only shown once a supplier is picked, Confirm enabled without a supplier when no line moves crates, dialog shows "None (cash purchase)".
+- **Known gap (accepted)**: a supplier-less purchase leaves no money record anywhere (cash tracking was dropped; the invoice was the only money record of a purchase).
+- **Tests**: `receive_stock_test.dart` +4 (no-supplier group); new `receive_supplier_optional_test.dart` (3 widget tests). `flutter analyze` clean; full suite 2681 pass / 271 skipped / 0 fail.
+
 ### Issue #322: Shared barcode catalogue, decided and parked (2026-10-03)
 Branch `docs/shared-barcode-catalogue-322`, worked in `../drinkPosApp-wt-322`. **Docs only: no code, no schema, no migration.**
 - Owner grilling settled all of #322's open questions. Decisions are in **ADR 0029** (`docs/adr/0029-shared-barcode-catalogue.md`), and #322 has been rewritten as the PRD. Slices: #330 (GTIN rule + lookup RPC + kill switch), #331 (shared photo + backfill, blocked by #330), #332 (Add Product fill-in, blocked by #330).
