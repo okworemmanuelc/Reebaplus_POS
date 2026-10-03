@@ -49,7 +49,12 @@ class BarcodeCatalogueService {
 
   /// The suggestion for [code], or null when there is none or anything fails.
   /// A code that is not a factory GTIN returns null without a network call.
-  Future<BarcodeSuggestion?> lookup(String code) async {
+  /// [includePhoto] false skips the photo download (saves phone data when the
+  /// caller can't use it).
+  Future<BarcodeSuggestion?> lookup(
+    String code, {
+    bool includePhoto = true,
+  }) async {
     if (FactoryBarcode.tryParse(code) == null) return null;
 
     final BarcodeSuggestionRow? row;
@@ -61,7 +66,7 @@ class BarcodeCatalogueService {
     }
     if (row == null) return null;
 
-    final photoBytes = await _photo(row.photoUrl);
+    final photoBytes = includePhoto ? await _photo(row.photoUrl) : null;
     final suggestion = BarcodeSuggestion(
       name: _clean(row.name),
       unit: _clean(row.unit),

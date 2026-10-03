@@ -39,6 +39,9 @@ const _otherGtin = '5000112637922';
 /// (a late answer the test completes by hand).
 class _FakeCatalogue implements BarcodeCatalogueService {
   final calls = <String>[];
+
+  /// The includePhoto flag of each call, in order.
+  final photoAsked = <bool>[];
   BarcodeSuggestion? answer;
   Completer<BarcodeSuggestion?>? pending;
 
@@ -46,8 +49,9 @@ class _FakeCatalogue implements BarcodeCatalogueService {
   Duration get timeout => BarcodeCatalogueService.defaultTimeout;
 
   @override
-  Future<BarcodeSuggestion?> lookup(String code) {
+  Future<BarcodeSuggestion?> lookup(String code, {bool includePhoto = true}) {
     calls.add(code);
+    photoAsked.add(includePhoto);
     return pending?.future ?? Future.value(answer);
   }
 }
@@ -258,6 +262,7 @@ void main() {
       await pumpScreen(tester, prefilledBarcode: _gtin);
 
       expect(catalogue.calls, [_gtin]);
+      expect(catalogue.photoAsked, [true]);
       expect(textOf(tester, 'Product Name'), 'Peak Milk 400g');
       // 'Tin' is not a supermarket starter unit: it is added and selected.
       expect(unitDropdown(tester).currentValue, 'Tin');
@@ -293,6 +298,33 @@ void main() {
       expect(unitDropdown(tester).currentValue, 'Tin');
       expect(pendingPhoto(tester), isNotNull);
       expect(notes(), findsNWidgets(3));
+
+      await unmount(tester);
+    });
+
+    testWidgets('a photo is only fetched while none is held', (tester) async {
+      catalogue.answer = withPhoto(fullSuggestion);
+      await pumpScreen(tester, prefilledBarcode: _gtin);
+      await openMoreDetails(tester);
+      expect(pendingPhoto(tester), isNotNull);
+
+      // A photo is now held: the next lookup must not download one.
+      await typeBarcode(tester, _otherGtin);
+      expect(catalogue.calls, [_gtin, _otherGtin]);
+      expect(catalogue.photoAsked, [true, false]);
+
+      await unmount(tester);
+    });
+
+    testWidgets('Receive Stock (no photo box) never fetches the photo', (
+      tester,
+    ) async {
+      catalogue.answer = fullSuggestion;
+      await pumpScreen(tester, prefilledBarcode: _gtin, receiveMode: true);
+
+      expect(catalogue.calls, [_gtin]);
+      expect(catalogue.photoAsked, [false]);
+      expect(textOf(tester, 'Product Name'), 'Peak Milk 400g');
 
       await unmount(tester);
     });

@@ -99,6 +99,18 @@ void main() {
     expect(b.photoBytes, isNull);
   });
 
+  test('includePhoto false never downloads the photo', () async {
+    final s = service(
+      row: (_) async => (name: 'A', unit: 'Tin', photoUrl: 'https://x.test/a'),
+      photo: (_) async => Uint8List.fromList([1]),
+    );
+    final got = await s.lookup(_gtin, includePhoto: false);
+    expect(got!.name, 'A');
+    expect(got.unit, 'Tin');
+    expect(got.photoBytes, isNull);
+    expect(photoCalls, isEmpty);
+  });
+
   test('no photo URL skips the download; an all-empty row gives null',
       () async {
     final s = service(

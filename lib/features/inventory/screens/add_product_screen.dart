@@ -308,7 +308,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       return;
     }
     final service = ref.read(barcodeCatalogueServiceProvider);
-    final suggestion = await service.lookup(code);
+    // Only download the photo when it could be used (saves phone data);
+    // _applyCatalogueSuggestion re-checks before using the bytes.
+    final suggestion = await service.lookup(
+      code,
+      includePhoto: _showsPhotoField && _pendingImageBytes == null,
+    );
     if (suggestion == null || !mounted) return;
     if (_barcodeCtrl.text.trim() != code || !_canSuggestFromCatalogue) return;
     _applyCatalogueSuggestion(suggestion);
