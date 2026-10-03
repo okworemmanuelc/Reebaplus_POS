@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class SlideLeftPageTransitionsBuilder extends PageTransitionsBuilder {
   const SlideLeftPageTransitionsBuilder();
@@ -1816,4 +1818,31 @@ class AppTheme {
       ),
     );
   }
+}
+
+/// Text styles the Material `TextTheme` has no slot for (PRD #346 decision 2,
+/// #349). Both come from fonts bundled in `assets/google_fonts/`
+/// (`DMSans-ExtraBold.ttf`, `RobotoMono-Regular.ttf`); runtime fetching is off
+/// (`GoogleFonts.config.allowRuntimeFetching = false` in `main.dart`). Sizes are
+/// base px scaled with `getRFontSize`. Colour is left unset so the text
+/// inherits it from its surroundings (app bar foreground, `DefaultTextStyle`).
+extension AppTextStyles on BuildContext {
+  /// Base size of [screenTitleStyle].
+  static const double screenTitleBaseSize = 18;
+
+  /// Base size of [monoStyle].
+  static const double monoBaseSize = 13;
+
+  /// Screen titles, the business name and the "POS" label under the raised
+  /// button: DM Sans ExtraBold (800) at base 18.
+  TextStyle get screenTitleStyle => GoogleFonts.dmSans(
+    fontSize: getRFontSize(screenTitleBaseSize),
+    fontWeight: FontWeight.w800,
+  );
+
+  /// Codes and IDs only (e.g. "Terminal 01"): Roboto Mono Regular at base 13.
+  TextStyle get monoStyle => GoogleFonts.robotoMono(
+    fontSize: getRFontSize(monoBaseSize),
+    fontWeight: FontWeight.w400,
+  );
 }
