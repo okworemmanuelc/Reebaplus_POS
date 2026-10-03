@@ -176,6 +176,28 @@ links are set to null.
 Not a synced table and not in Drift. The client writes through
 `BarcodeCatalogueService`, the same sanctioned exception as the lookup.
 
+**Reading reports** (built in #335, migrations 0183 + 0184). In the SQL
+editor (service role), oldest open report first:
+
+```sql
+SELECT r.id, r.created_at, r.gtin14, r.reasons, r.note,
+       r.shown_name, r.shown_unit, r.shown_photo_url,
+       b.name AS shop, u.name AS reporter, u.email, u.phone
+  FROM public.barcode_catalogue_reports r
+  LEFT JOIN public.businesses b ON b.id = r.business_id
+  LEFT JOIN public.users u ON u.id = r.reported_by
+ WHERE r.status = 'open'
+ ORDER BY r.created_at;
+```
+
+Compare `shown_*` (what the shop saw) with what is shared now:
+`SELECT * FROM public.barcode_suggestion('<gtin14>');` (run as service role it
+works the same; the kill switch still applies). `gtin14` is the padded key;
+the RPC accepts it as-is. A report whose shop was deleted has a NULL shop and
+reporter and is handled like any other. A repeat report from the same shop
+updates its open row (reasons, note, shown values) and keeps `created_at` and
+the first reporter.
+
 **Removal.** A developer reads open reports with the service role and applies
 the fix:
 
@@ -222,7 +244,20 @@ the fix:
   the same type (the same object name); a photo of another type gets its own
   name and the blocked object stays public. So never skip step 3.
 
-Then mark the report `resolved` (or `dismissed`) with `resolved_at`. Both block
+Then mark the report `resolved` (fixed) or `dismissed` (nothing wrong), with
+`resolved_at`. Close every open report for that GTIN the fix covers, from any
+shop:
+
+```sql
+UPDATE public.barcode_catalogue_reports
+   SET status = 'resolved',      -- or 'dismissed'
+       resolved_at = now()
+ WHERE gtin14 = public.gtin14('<barcode>')
+   AND status = 'open';
+```
+
+Once a shop's report is closed, its next report for that code opens a new
+row. Both block
 tables have RLS on and no policies (service role only). A review page in the
 Admin Hub that reads `barcode_catalogue_reports` is a separate, later piece of
 work.
