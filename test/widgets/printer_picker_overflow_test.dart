@@ -15,9 +15,8 @@
 //      device-list branch was `Flexible`.
 //
 // A sheet's chrome does not compress with the viewport — the refresh
-// `IconButton` and the paper-size `SegmentedButton` are both pinned at the 48dp
-// tap-target minimum — so the fix is both: `sheetMaxHeight` floors a short
-// viewport's cap at 90%, and every branch of the picker is now Flexible +
+// `IconButton` is pinned at the 48dp tap-target minimum — so the fix is both:
+// `sheetMaxHeight` floors a short viewport's cap at 90%, and every branch of the picker is now Flexible +
 // scrollable so it can never overflow whatever cap it is given.
 //
 // The `tightCap` cases below are the important ones: they pin the picker at the
@@ -33,7 +32,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
 
@@ -52,16 +50,10 @@ class _FakePrinterService extends PrinterService {
 
   @override
   Future<List<BluetoothInfo>> getPairedDevices() async => devices;
-
-  @override
-  Future<ReceiptPaperSize> getPaperSize() async => ReceiptPaperSize.mm58;
-
-  @override
-  Future<void> savePaperSize(ReceiptPaperSize size) async {}
 }
 
 /// Pumps [PrinterPicker] inside the same `BoxConstraints` the four production
-/// call sites impose, at [size], and settles the two async loads in `initState`.
+/// call sites impose, at [size], and settles the async load in `initState`.
 ///
 /// [maxHeight] defaults to what `sheetMaxHeight(0.5)` resolves to at [size];
 /// pass a value to pin a specific ceiling.
@@ -107,7 +99,7 @@ Future<void> _pumpPicker(
       ),
     ),
   );
-  // initState kicks off _loadPaperSize + _loadDevices; settle both.
+  // initState kicks off _loadDevices; let it settle.
   await tester.pumpAndSettle();
 }
 
@@ -154,7 +146,6 @@ void main() {
         await _pumpPicker(tester, size: size);
 
         expect(find.text('Select Receipt Printer'), findsOneWidget);
-        expect(find.text('Paper size'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
 

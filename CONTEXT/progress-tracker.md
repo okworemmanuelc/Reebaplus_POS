@@ -7,6 +7,19 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Receipt paper size remembered per printer, asked once (2026-10-03)
+Branch `feat/paper-size-per-printer`, cut from `main`. Worked in `../drinkPosApp-wt-paper-per-printer`. **No schema change, no dependency change** (device-local SharedPreferences only).
+- **Owner report**: after the 80mm top-missing fix, 80mm receipts still came out in the 58mm layout.
+- **Cause**: the only 58/80 switch lived inside `PrinterPicker`, which opens only when a print *fails*. Once auto-connect worked, nobody ever saw it, so every till stayed on the 58mm default.
+- **Auto-detect ruled out**: ESC/POS has no standard paper-width query, and `print_bluetooth_thermal` is write-only (no Android input stream, no iOS notify), so the app cannot hear a reply. Bluetooth names are shared across widths. Not attempted.
+- **Fix**:
+  1. `PrinterService` stores the size **per printer** (`printer_paper_size:<mac>`): `paperSizeFor` (null = never set up), `savePaperSizeFor`, `lastConnectedMac`. `connect()` now records the printer in use on success. The old device-wide `printer_paper_size` value moves once onto the last-used printer (before that can be overwritten), then is deleted.
+  2. New `prepareReceiptPrinter` (`lib/shared/widgets/receipt_paper_size_prompt.dart`): connects (live link or auto-connect), returns that printer's size, and asks **once** with a non-dismissible 58mm/80mm dialog for a reachable printer it has not seen. Unreachable printers are not asked about.
+  3. All four print paths (checkout, Orders reprint, customer detail, van receipt) build bytes through a `buildBytes(size)` closure. If no printer connects they go straight to the picker (no double auto-connect), and after a picked printer connects they re-resolve its size and rebuild if it differs.
+  4. Paper-size row **removed** from `PrinterPicker`. New Settings page **Receipt printer** (`lib/core/settings/receipt_printer_settings_screen.dart`) in both CEO Settings and Staff Settings: each paired printer with a 58/80 choice, last-used first.
+- **Tests**: `printer_service_test.dart` (+6: per-printer storage, connect records/doesn't record, legacy migration both ways); new `receipt_paper_size_prompt_test.dart` (5); new `receipt_printer_settings_screen_test.dart` (3); picker overflow test drops the paper-size expectations. Full suite: 2673 pass / 271 skipped / 0 fail; `flutter analyze` clean.
+- **Needs owner hardware QA** on the real 80mm printer.
+
 ### Scanner keeps the camera running between scans (2026-10-03)
 Branch `fix/scanner-keeps-camera-running`, cut from `main`. Worked in `../drinkPosApp-wt-scanrestart`. **No schema change, no dependency change.**
 - **Bug (owner, Samsung SM-A566B)**: after the first scan the scanner showed "Camera unavailable". On Android, `mobile_scanner` 7.2.0 can't `start()` after `pause()`: its native start clears the paused flag before the "already started" check. Fixed upstream in 7.2.1.

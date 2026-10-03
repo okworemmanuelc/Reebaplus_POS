@@ -7,7 +7,11 @@ import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 
 class PrinterService {
   static const _lastMacKey = 'last_printer_mac';
-  static const _paperSizeKey = 'printer_paper_size';
+  // Pre-per-printer (#116) single paper size for the whole device. Read once
+  // by [_migrateLegacyPaperSize], then deleted.
+  static const _legacyPaperSizeKey = 'printer_paper_size';
+  // Per-printer paper size: `printer_paper_size:<mac>`.
+  static const _paperSizeKeyPrefix = 'printer_paper_size:';
 
   // Settle window for Android Bluetooth SPP link before commands can be processed.
   static const _androidConnectSettle = Duration(milliseconds: 1000);
@@ -119,6 +123,9 @@ class PrinterService {
       } else {
         await _wait(const Duration(milliseconds: 1500));
       }
+      // Every successful connect (auto or picked) records which printer is in
+      // use, so its paper size can be looked up before the receipt is built.
+      await saveLastConnectedMac(macAddress);
       return true;
     } catch (e) {
       AppLogger.error('Error connecting to printer: $e');
@@ -126,24 +133,54 @@ class PrinterService {
     }
   }
 
-  /// Persists the MAC of the printer the user last successfully connected to
-  /// via [PrinterPicker]. Read by [autoConnect] on next launch.
+  /// Persists the MAC of the printer the app last connected to successfully.
+  /// Read by [autoConnect] on next launch and by [lastConnectedMac].
   Future<void> saveLastConnectedMac(String mac) async {
     final prefs = await SharedPreferences.getInstance();
+    await _migrateLegacyPaperSize(prefs);
     await prefs.setString(_lastMacKey, mac);
   }
 
-  /// Persists the receipt paper width chosen near [PrinterPicker] (#116).
-  /// Device-local, never synced — a hardware setting per till.
-  Future<void> savePaperSize(ReceiptPaperSize size) async {
+  /// The printer the app last connected to, or null if it never has.
+  Future<String?> lastConnectedMac() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_paperSizeKey, size.name);
+    final mac = prefs.getString(_lastMacKey);
+    return (mac == null || mac.isEmpty) ? null : mac;
   }
 
-  /// Reads the saved receipt paper width, defaulting to 58mm when unset.
-  Future<ReceiptPaperSize> getPaperSize() async {
+  /// The paper width saved for the printer at [mac], or null when this
+  /// printer has never been set up. Printers cannot report their paper width
+  /// (ESC/POS has no standard query, and the Bluetooth plugin is write-only),
+  /// so the width is asked once per printer and remembered here.
+  /// Device-local, never synced — a hardware setting per till.
+  Future<ReceiptPaperSize?> paperSizeFor(String mac) async {
     final prefs = await SharedPreferences.getInstance();
-    return ReceiptPaperSize.fromStorage(prefs.getString(_paperSizeKey));
+    await _migrateLegacyPaperSize(prefs);
+    final stored = prefs.getString('$_paperSizeKeyPrefix$mac');
+    return stored == null ? null : ReceiptPaperSize.fromStorage(stored);
+  }
+
+  /// Saves the paper width for the printer at [mac].
+  Future<void> savePaperSizeFor(String mac, ReceiptPaperSize size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await _migrateLegacyPaperSize(prefs);
+    await prefs.setString('$_paperSizeKeyPrefix$mac', size.name);
+  }
+
+  /// One-time move of the old device-wide paper size onto the printer that
+  /// was in use when it was chosen. Runs before the last-used printer can be
+  /// overwritten, so the old choice lands on the right printer. Without a
+  /// last-used printer there is nothing to attach it to, so it is dropped and
+  /// the next print asks.
+  Future<void> _migrateLegacyPaperSize(SharedPreferences prefs) async {
+    final legacy = prefs.getString(_legacyPaperSizeKey);
+    if (legacy == null) return;
+    final mac = prefs.getString(_lastMacKey);
+    final key = '$_paperSizeKeyPrefix$mac';
+    if (mac != null && mac.isNotEmpty && !prefs.containsKey(key)) {
+      await prefs.setString(key, ReceiptPaperSize.fromStorage(legacy).name);
+    }
+    await prefs.remove(_legacyPaperSizeKey);
   }
 
   Future<bool> autoConnect() async {

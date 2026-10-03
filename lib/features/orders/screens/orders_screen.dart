@@ -44,6 +44,8 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 
 /// Test seam for finding order rows laid out on [OrdersScreen].
 const String kOrderRowKeyPrefix = 'order-card-';
@@ -1268,7 +1270,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       final mfrList = await db.inventoryDao.watchAllManufacturers().first;
       final manufacturerNames = {for (final m in mfrList) m.id: m.name};
 
-      final paperSize = await printer.getPaperSize();
       // #176 — real goods/deposit split on the thermal reprint (see the
       // on-screen reprint above): goods = grand total − deposit, deposit on its
       // own line, grand total = goods net + deposit. The old
@@ -1280,42 +1281,50 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         crateDepositPaidKobo: order.crateDepositPaidKobo,
         discountKobo: order.discountKobo,
       );
-      final bytes = await ThermalReceiptService.buildReceipt(
-        orderId: order.orderNumber,
-        cart: receiptMapping,
-        subtotal: totals.subtotalKobo / 100.0,
-        discount: totals.discountKobo / 100.0,
-        crateDeposit: totals.depositKobo / 100.0,
-        total: totals.totalKobo / 100.0,
-        paymentMethod: order.paymentType,
-        customerName: richOrder.customer?.name ?? 'Walk-in Customer',
-        customerAddress: richOrder.customer?.addressText ?? 'N/A',
-        cashReceived: order.paymentType == 'Wallet Payment'
-            ? order.netAmountKobo / 100.0
-            : order.amountPaidKobo / 100.0,
-        walletBalance: walletBalance,
-        reprintDate: DateTime.now(),
-        riderName: order.riderName,
-        deliveryRef: deliveryReceipt?.referenceNumber,
-        orderStatus: order.status,
-        refundAmount: order.amountPaidKobo / 100.0,
-        storeAddress: finalStoreAddress,
-        businessName: ref.read(currentBusinessNameProvider),
-        manufacturerNames: manufacturerNames,
-        paperSize: paperSize,
-      );
-
-      if (!context.mounted) return;
+      // Built per paper width: the picker fallback below may land on a
+      // different printer with a different roll, and rebuilds for it.
+      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
+          ThermalReceiptService.buildReceipt(
+            orderId: order.orderNumber,
+            cart: receiptMapping,
+            subtotal: totals.subtotalKobo / 100.0,
+            discount: totals.discountKobo / 100.0,
+            crateDeposit: totals.depositKobo / 100.0,
+            total: totals.totalKobo / 100.0,
+            paymentMethod: order.paymentType,
+            customerName: richOrder.customer?.name ?? 'Walk-in Customer',
+            customerAddress: richOrder.customer?.addressText ?? 'N/A',
+            cashReceived: order.paymentType == 'Wallet Payment'
+                ? order.netAmountKobo / 100.0
+                : order.amountPaidKobo / 100.0,
+            walletBalance: walletBalance,
+            reprintDate: DateTime.now(),
+            riderName: order.riderName,
+            deliveryRef: deliveryReceipt?.referenceNumber,
+            orderStatus: order.status,
+            refundAmount: order.amountPaidKobo / 100.0,
+            storeAddress: finalStoreAddress,
+            businessName: ref.read(currentBusinessNameProvider),
+            manufacturerNames: manufacturerNames,
+            paperSize: paperSize,
+          );
 
       // Auto-print: reuse the live connection, otherwise auto-connect to the
-      // last-used / paired printer — printBytes() handles both. Only when that
-      // fails do we fall through to the picker below.
-      final printed = await printer.printBytes(bytes);
+      // last-used / paired printer, asking once for a new printer's paper
+      // width. Only when no printer connects do we fall through to the picker.
       if (!context.mounted) return;
-      if (printed) {
-        AppNotification.showSuccess(context, 'Print successful');
-        _logReprint(order.id.toString());
-        return;
+      final target = await prepareReceiptPrinter(context, printer);
+      if (!context.mounted) return;
+      final bytes = await buildBytes(target.paperSize);
+      if (!context.mounted) return;
+      if (target.connected) {
+        final printed = await printer.printBytes(bytes);
+        if (!context.mounted) return;
+        if (printed) {
+          AppNotification.showSuccess(context, 'Print successful');
+          _logReprint(order.id.toString());
+          return;
+        }
       }
 
       if (context.mounted) {
@@ -1344,8 +1353,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           if (!context.mounted) return;
 
           if (connected) {
-            await printer.saveLastConnectedMac(selectedDevice.macAdress);
-            final printOk = await printer.printBytesDirectly(bytes);
+            // The picked printer may be new (asks once) or use a different
+            // roll than the one the bytes were laid out for.
+            final picked = await prepareReceiptPrinter(context, printer);
+            if (!context.mounted) return;
+            final pickedBytes = picked.paperSize == target.paperSize
+                ? bytes
+                : await buildBytes(picked.paperSize);
+            final printOk = await printer.printBytesDirectly(pickedBytes);
             if (!context.mounted) return;
             if (printOk) {
               AppNotification.showSuccess(context, 'Print successful');

@@ -15,6 +15,8 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 
 /// One road sale's receipt, and the two things anybody can do with it: print it
@@ -192,31 +194,40 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
         AppNotification.showError(context, 'Bluetooth permissions denied');
         return;
       }
-      final paperSize = await printer.getPaperSize();
-      final bytes = await ThermalReceiptService.buildReceipt(
-        orderId: widget.orderNumber,
-        cart: widget.cart,
-        subtotal: widget.totalKobo / 100.0,
-        // No deposit on the road — swap-only (spec §11).
-        crateDeposit: 0,
-        total: widget.totalKobo / 100.0,
-        paymentMethod: 'Cash',
-        cashReceived: widget.cashReceivedKobo / 100.0,
-        showWalletInfo: false,
-        orderStatus: widget.orderStatus,
-        reprintDate: _reprintAt,
-        riderName: 'Van Sale',
-        businessName: ref.read(currentBusinessNameProvider),
-        paperSize: paperSize,
-      );
+      // Built per paper width: the picker fallback below may land on a
+      // different printer with a different roll, and rebuilds for it.
+      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
+          ThermalReceiptService.buildReceipt(
+            orderId: widget.orderNumber,
+            cart: widget.cart,
+            subtotal: widget.totalKobo / 100.0,
+            // No deposit on the road — swap-only (spec §11).
+            crateDeposit: 0,
+            total: widget.totalKobo / 100.0,
+            paymentMethod: 'Cash',
+            cashReceived: widget.cashReceivedKobo / 100.0,
+            showWalletInfo: false,
+            orderStatus: widget.orderStatus,
+            reprintDate: _reprintAt,
+            riderName: 'Van Sale',
+            businessName: ref.read(currentBusinessNameProvider),
+            paperSize: paperSize,
+          );
+      // Auto-print, asking once for a new printer's paper width; the picker
+      // is the fallback when no printer connects.
+      final target = await prepareReceiptPrinter(context, printer);
       if (!mounted) return;
-      final printed = await printer.printBytes(bytes);
+      final bytes = await buildBytes(target.paperSize);
       if (!mounted) return;
-      if (printed) {
-        AppNotification.showSuccess(context, 'Print successful');
-        return;
+      if (target.connected) {
+        final printed = await printer.printBytes(bytes);
+        if (!mounted) return;
+        if (printed) {
+          AppNotification.showSuccess(context, 'Print successful');
+          return;
+        }
       }
-      _showPrinterPicker(printer, bytes);
+      _showPrinterPicker(printer, target.paperSize, bytes, buildBytes);
     } catch (e) {
       if (mounted) AppNotification.showError(context, 'Print error: $e');
     } finally {
@@ -226,7 +237,12 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
 
   /// The manual fallback when auto-connect could not find the printer — the
   /// same sheet the shop till falls back to.
-  void _showPrinterPicker(PrinterService printer, List<int> receiptBytes) {
+  void _showPrinterPicker(
+    PrinterService printer,
+    ReceiptPaperSize builtFor,
+    List<int> receiptBytes,
+    Future<List<int>> Function(ReceiptPaperSize) buildBytes,
+  ) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -248,8 +264,14 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             final connected = await printer.connect(device.macAdress);
             if (!mounted) return;
             if (connected) {
-              await printer.saveLastConnectedMac(device.macAdress);
-              await printer.printBytesDirectly(receiptBytes);
+              // The picked printer may be new (asks once) or use a different
+              // roll than the one the bytes were laid out for.
+              final target = await prepareReceiptPrinter(context, printer);
+              if (!mounted) return;
+              final bytes = target.paperSize == builtFor
+                  ? receiptBytes
+                  : await buildBytes(target.paperSize);
+              await printer.printBytesDirectly(bytes);
               if (!mounted) return;
               AppNotification.showSuccess(context, 'Print successful');
             } else {

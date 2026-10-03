@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 
 class PrinterPicker extends ConsumerStatefulWidget {
   final Function(BluetoothInfo) onSelected;
@@ -19,24 +18,11 @@ class PrinterPicker extends ConsumerStatefulWidget {
 class _PrinterPickerState extends ConsumerState<PrinterPicker> {
   bool _isLoading = true;
   List<BluetoothInfo> _devices = [];
-  ReceiptPaperSize _paperSize = ReceiptPaperSize.mm58;
 
   @override
   void initState() {
     super.initState();
-    _loadPaperSize();
     _loadDevices();
-  }
-
-  Future<void> _loadPaperSize() async {
-    final size = await ref.read(printerServiceProvider).getPaperSize();
-    if (mounted) setState(() => _paperSize = size);
-  }
-
-  void _onPaperSizeChanged(ReceiptPaperSize size) {
-    setState(() => _paperSize = size);
-    // Device-local, set-once hardware setting — applies to the next receipt.
-    ref.read(printerServiceProvider).savePaperSize(size);
   }
 
   Future<void> _loadDevices() async {
@@ -100,51 +86,10 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
             ),
           ),
           Divider(height: 1, color: border),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(16),
-              vertical: context.getRSize(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Paper size',
-                  style: TextStyle(
-                    color: text,
-                    fontSize: context.getRFontSize(14),
-                  ),
-                ),
-                SegmentedButton<ReceiptPaperSize>(
-                  showSelectedIcon: false,
-                  segments: [
-                    ButtonSegment(
-                      value: ReceiptPaperSize.mm58,
-                      label: Text(
-                        '58mm',
-                        style: TextStyle(fontSize: context.getRFontSize(13)),
-                      ),
-                    ),
-                    ButtonSegment(
-                      value: ReceiptPaperSize.mm80,
-                      label: Text(
-                        '80mm',
-                        style: TextStyle(fontSize: context.getRFontSize(13)),
-                      ),
-                    ),
-                  ],
-                  selected: {_paperSize},
-                  onSelectionChanged: (selection) =>
-                      _onPaperSizeChanged(selection.first),
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: border),
           // Every branch below is Flexible + scrollable so the sheet can
           // never overflow its cap. A landscape phone gives the sheet ~370dp
-          // (see `sheetMaxHeight`), of which the header + paper-size rows take
-          // a fixed ~137dp that does not compress — the remainder scrolls
+          // (see `sheetMaxHeight`), of which the header row takes a fixed
+          // height that does not compress — the remainder scrolls
           // rather than painting the yellow-and-black stripes.
           if (_isLoading)
             Flexible(

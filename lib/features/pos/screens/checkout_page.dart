@@ -30,6 +30,9 @@ import 'package:reebaplus_pos/core/utils/store_address.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/shared/services/printer_service.dart';
+import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 
@@ -1570,43 +1573,49 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         return;
       }
 
-      final paperSize = await printer.getPaperSize();
-      final List<int> receiptBytes = await ThermalReceiptService.buildReceipt(
-        orderId: _currentOrderId,
-        cart: widget.cart,
-        subtotal: widget.subtotal,
-        discount: _discountTotalKobo / 100.0,
-        crateDeposit: _depositTotalKobo / 100.0,
-        total: _totalKobo / 100.0,
-        paymentMethod: _receiptPaymentLabel,
-        customerName: _customerDisplayName,
-        customerAddress: widget.customer?.addressText,
-        customerPhone: widget.customer?.phone,
-        cashReceived: _amountPaid,
-        // Use the post-sale snapshot (set at confirm) — the live provider has
-        // already updated, so recomputing here would double-count the legs.
-        walletBalance: _receiptCreditBalance,
-        showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
-        riderName: 'Pick-up Order',
-        storeAddress: _storeAddress,
-        businessName: ref.read(currentBusinessNameProvider),
-        manufacturerNames: _manufacturerNames,
-        paperSize: paperSize,
-      );
-
-      if (!mounted) return;
+      // Built per paper width: the picker fallback below may land on a
+      // different printer with a different roll, and rebuilds for it.
+      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
+          ThermalReceiptService.buildReceipt(
+            orderId: _currentOrderId,
+            cart: widget.cart,
+            subtotal: widget.subtotal,
+            discount: _discountTotalKobo / 100.0,
+            crateDeposit: _depositTotalKobo / 100.0,
+            total: _totalKobo / 100.0,
+            paymentMethod: _receiptPaymentLabel,
+            customerName: _customerDisplayName,
+            customerAddress: widget.customer?.addressText,
+            customerPhone: widget.customer?.phone,
+            cashReceived: _amountPaid,
+            // Use the post-sale snapshot (set at confirm) — the live provider has
+            // already updated, so recomputing here would double-count the legs.
+            walletBalance: _receiptCreditBalance,
+            showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
+            riderName: 'Pick-up Order',
+            storeAddress: _storeAddress,
+            businessName: ref.read(currentBusinessNameProvider),
+            manufacturerNames: _manufacturerNames,
+            paperSize: paperSize,
+          );
 
       // Auto-print: reuse the live connection, otherwise auto-connect to the
-      // last-used / paired printer — printBytes() handles both. Only when that
-      // fails do we pull up the picker so the user can choose the right one.
-      final printed = await printer.printBytes(receiptBytes);
+      // last-used / paired printer, asking once for a new printer's paper
+      // width. Only when no printer connects do we pull up the picker.
+      final target = await prepareReceiptPrinter(context, printer);
       if (!mounted) return;
-      if (printed) {
-        AppNotification.showSuccess(context, 'Print successful');
-        return;
+      final receiptBytes = await buildBytes(target.paperSize);
+      if (!mounted) return;
+      if (target.connected) {
+        final printed = await printer.printBytes(receiptBytes);
+        if (!mounted) return;
+        if (printed) {
+          AppNotification.showSuccess(context, 'Print successful');
+          return;
+        }
       }
 
-      _showPrinterPicker(printer, receiptBytes);
+      _showPrinterPicker(printer, target.paperSize, receiptBytes, buildBytes);
     } catch (e) {
       if (mounted) {
         AppNotification.showError(context, 'Print error: $e');
@@ -1616,7 +1625,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
   }
 
-  void _showPrinterPicker(dynamic printer, List<int> receiptBytes) {
+  void _showPrinterPicker(
+    PrinterService printer,
+    ReceiptPaperSize builtFor,
+    List<int> receiptBytes,
+    Future<List<int>> Function(ReceiptPaperSize) buildBytes,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1647,8 +1661,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             if (!mounted) return;
 
             if (connected) {
-              await printer.saveLastConnectedMac(device.macAdress);
-              final success = await printer.printBytesDirectly(receiptBytes);
+              // The picked printer may be new (asks once) or use a different
+              // roll than the one the bytes were laid out for.
+              final target = await prepareReceiptPrinter(context, printer);
+              if (!mounted) return;
+              final bytes = target.paperSize == builtFor
+                  ? receiptBytes
+                  : await buildBytes(target.paperSize);
+              final success = await printer.printBytesDirectly(bytes);
               if (!mounted) return;
               if (success) {
                 AppNotification.showSuccess(context, 'Print successful');

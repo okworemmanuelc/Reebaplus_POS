@@ -35,6 +35,8 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
@@ -1252,7 +1254,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         return;
       }
 
-      final paperSize = await ref.read(printerServiceProvider).getPaperSize();
+      final printer = ref.read(printerServiceProvider);
       // #200 / US 33 — same shared derivation as the on-screen reprint, so the
       // paper copy carries the identical Subtotal / Discount / Total.
       final totals = receiptTotalsFromOrder(
@@ -1260,34 +1262,45 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         crateDepositPaidKobo: order.crateDepositPaidKobo,
         discountKobo: order.discountKobo,
       );
-      final bytes = await ThermalReceiptService.buildReceipt(
-        orderId: order.orderNumber,
-        cart: items,
-        subtotal: totals.subtotalKobo / 100.0,
-        discount: totals.discountKobo / 100.0,
-        crateDeposit: totals.depositKobo / 100.0,
-        total: totals.totalKobo / 100.0,
-        paymentMethod: paymentMethodLabel(order.paymentType),
-        customerName: _name,
-        customerAddress: _address,
-        cashReceived: order.amountPaidKobo / 100.0,
-        reprintDate: DateTime.now(),
-        riderName: order.riderName,
-        orderStatus: order.status,
-        refundAmount: order.amountPaidKobo / 100.0,
-        storeAddress: storeAddress,
-        businessName: ref.read(currentBusinessNameProvider),
-        manufacturerNames: manufacturerNames,
-        paperSize: paperSize,
-      );
+      // Built per paper width: the picker fallback below may land on a
+      // different printer with a different roll, and rebuilds for it.
+      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
+          ThermalReceiptService.buildReceipt(
+            orderId: order.orderNumber,
+            cart: items,
+            subtotal: totals.subtotalKobo / 100.0,
+            discount: totals.discountKobo / 100.0,
+            crateDeposit: totals.depositKobo / 100.0,
+            total: totals.totalKobo / 100.0,
+            paymentMethod: paymentMethodLabel(order.paymentType),
+            customerName: _name,
+            customerAddress: _address,
+            cashReceived: order.amountPaidKobo / 100.0,
+            reprintDate: DateTime.now(),
+            riderName: order.riderName,
+            orderStatus: order.status,
+            refundAmount: order.amountPaidKobo / 100.0,
+            storeAddress: storeAddress,
+            businessName: ref.read(currentBusinessNameProvider),
+            manufacturerNames: manufacturerNames,
+            paperSize: paperSize,
+          );
 
+      // Auto-print: reuse the live connection, otherwise auto-connect to the
+      // last-used / paired printer, asking once for a new printer's paper
+      // width. Only when no printer connects do we fall through to the picker.
       if (!ctx.mounted) return;
-
-      final success = await ref.read(printerServiceProvider).printBytes(bytes);
-      if (success) {
-        if (!ctx.mounted) return;
-        AppNotification.showSuccess(ctx, 'Print successful');
-        return;
+      final target = await prepareReceiptPrinter(ctx, printer);
+      if (!ctx.mounted) return;
+      final bytes = await buildBytes(target.paperSize);
+      if (!ctx.mounted) return;
+      if (target.connected) {
+        final success = await printer.printBytes(bytes);
+        if (success) {
+          if (!ctx.mounted) return;
+          AppNotification.showSuccess(ctx, 'Print successful');
+          return;
+        }
       }
 
       if (ctx.mounted) {
@@ -1310,15 +1323,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 ctx,
                 'Connecting to ${device.name}...',
               );
-              final connected = await ref
-                  .read(printerServiceProvider)
-                  .connect(device.macAdress);
+              final connected = await printer.connect(device.macAdress);
               if (!mounted) return;
               if (connected) {
-                await ref
-                    .read(printerServiceProvider)
-                    .saveLastConnectedMac(device.macAdress);
-                await ref.read(printerServiceProvider).printBytes(bytes);
+                if (!ctx.mounted) return;
+                // The picked printer may be new (asks once) or use a different
+                // roll than the one the bytes were laid out for.
+                final picked = await prepareReceiptPrinter(ctx, printer);
+                final pickedBytes = picked.paperSize == target.paperSize
+                    ? bytes
+                    : await buildBytes(picked.paperSize);
+                await printer.printBytes(pickedBytes);
                 if (!ctx.mounted) return;
                 AppNotification.showSuccess(ctx, 'Print successful');
               } else {

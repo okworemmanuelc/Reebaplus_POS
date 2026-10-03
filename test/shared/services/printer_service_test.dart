@@ -1,4 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 
 class _FakePrinterService extends PrinterService {
@@ -17,6 +20,8 @@ class _FakePrinterService extends PrinterService {
 }
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   group('PrinterService', () {
     test(
       '1. Android printBytesDirectly(body): writes [1B 40], then wait(500ms), then body unsplit',
@@ -158,5 +163,76 @@ void main() {
         expect(written[1], body);
       },
     );
+  });
+
+  group('per-printer paper size', () {
+    const printerA = '00:11:22:33:44:55';
+    const printerB = '66:77:88:99:AA:BB';
+
+    test('a printer that was never set up has no paper size', () async {
+      expect(await PrinterService().paperSizeFor(printerA), isNull);
+    });
+
+    test('each printer keeps its own paper size', () async {
+      final service = PrinterService();
+      await service.savePaperSizeFor(printerA, ReceiptPaperSize.mm80);
+      await service.savePaperSizeFor(printerB, ReceiptPaperSize.mm58);
+
+      expect(await service.paperSizeFor(printerA), ReceiptPaperSize.mm80);
+      expect(await service.paperSizeFor(printerB), ReceiptPaperSize.mm58);
+    });
+
+    test('a successful connect records the printer in use', () async {
+      final service = _FakePrinterService(
+        connectToPrinter: (mac) async => true,
+        wait: (_) async {},
+      );
+      expect(await service.lastConnectedMac(), isNull);
+
+      await service.connect(printerB);
+
+      expect(await service.lastConnectedMac(), printerB);
+    });
+
+    test('a failed connect does not change the printer in use', () async {
+      SharedPreferences.setMockInitialValues({'last_printer_mac': printerA});
+      final service = _FakePrinterService(
+        connectToPrinter: (mac) async => false,
+        wait: (_) async {},
+      );
+
+      await service.connect(printerB);
+
+      expect(await service.lastConnectedMac(), printerA);
+    });
+
+    test('the old device-wide size moves onto the printer used with it',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'last_printer_mac': printerA,
+        'printer_paper_size': 'mm80',
+      });
+      final service = _FakePrinterService(
+        connectToPrinter: (mac) async => true,
+        wait: (_) async {},
+      );
+
+      // Connecting to a different printer must not steal the old answer.
+      await service.connect(printerB);
+
+      expect(await service.paperSizeFor(printerA), ReceiptPaperSize.mm80);
+      expect(await service.paperSizeFor(printerB), isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('printer_paper_size'), isFalse);
+    });
+
+    test('the old size is dropped when no printer was ever used', () async {
+      SharedPreferences.setMockInitialValues({'printer_paper_size': 'mm80'});
+      final service = PrinterService();
+
+      expect(await service.paperSizeFor(printerA), isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('printer_paper_size'), isFalse);
+    });
   });
 }

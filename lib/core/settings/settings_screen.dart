@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/appearance_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/business_info_screen.dart';
 import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
+import 'package:reebaplus_pos/core/settings/receipt_printer_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -82,6 +83,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       title: 'Sync Issues access',
       subtitle: 'Which roles can open Sync Issues',
       screen: SyncIssuesAccessScreen(),
+    ),
+    (
+      icon: Icons.print_rounded,
+      title: 'Receipt printer',
+      subtitle: 'Paper size for each printer (58mm or 80mm)',
+      screen: ReceiptPrinterSettingsScreen(),
     ),
     (
       icon: Icons.palette_rounded,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/settings/receipt_printer_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -87,6 +88,18 @@ class StaffSettingsScreen extends ConsumerWidget {
             trailing: _chevron(context),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => CreatePinScreen(user: user)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SettingsTile(
+            icon: Icons.print_rounded,
+            title: 'Receipt printer',
+            subtitle: 'Paper size for each printer (58mm or 80mm)',
+            trailing: _chevron(context),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const ReceiptPrinterSettingsScreen(),
+              ),
             ),
           ),
           const SizedBox(height: 16),

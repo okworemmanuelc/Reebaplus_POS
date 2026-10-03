@@ -1,7 +1,8 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
-/// Physical width of the thermal receipt paper, chosen once per device near the
-/// printer picker (#116). This is the app's own source of truth — deliberately
+/// Physical width of the thermal receipt paper, remembered per printer (asked
+/// once the first time the app prints to it; editable in Settings > Receipt
+/// printer). This is the app's own source of truth — deliberately
 /// decoupled from the print library's [PaperSize] enum and from the persisted
 /// string so a library change or a stray stored value can't reshape a receipt.
 ///
