@@ -1,0 +1,120 @@
+"""Generates test/fixtures/gtin_vectors.json for #330.
+
+Run: python3 test/fixtures/gen_gtin_vectors.py > test/fixtures/gtin_vectors.json
+
+Check digits are computed here (GS1 mod-10) so no vector is hand-typed wrong.
+The expected `factory` verdict is written explicitly per vector (not computed
+by a re-implementation of the rule), so the fixture is an independent oracle.
+"""
+import json
+import sys
+
+
+def check_digit(body: str) -> str:
+    total = 0
+    for i, ch in enumerate(reversed(body)):
+        total += int(ch) * (3 if i % 2 == 0 else 1)
+    return str((10 - total % 10) % 10)
+
+
+def g(body: str) -> str:
+    return body + check_digit(body)
+
+
+def bad(body: str) -> str:
+    good = int(check_digit(body))
+    return body + str((good + 1) % 10)
+
+
+def pad(code: str):
+    if code.isascii() and code.isdigit() and len(code) in (8, 12, 13, 14):
+        return code.rjust(14, "0")
+    return None
+
+
+V = []
+
+
+def add(code, factory, note):
+    V.append({"code": code, "factory": factory, "gtin14": pad(code), "note": note})
+
+
+# --- valid factory GTINs -------------------------------------------------
+add(g("500011263792"), True, "EAN-13, UK prefix 50")
+add(g("615000123456"), True, "EAN-13, Nigeria prefix 615")
+add(g("590123412345"), True, "EAN-13, GS1 example prefix 590")
+add(g("97802013796"), True, "UPC-A (12), number system 9")
+add(g("04900005010"), True, "UPC-A (12), number system 0")
+add("0" + g("04900005010"), True, "same UPC-A read as EAN-13 with a leading 0")
+add("00" + g("04900005010"), True, "same UPC-A as GTIN-14")
+add(g("03600029145"), True, "UPC-A (12), number system 0 (second item)")
+add(g("12345678901"), True, "UPC-A (12), number system 1")
+add(g("9638507"), True, "GTIN-8 starting 9")
+add(g("5012345"), True, "GTIN-8 starting 5")
+add(g("1001234567890"), True, "GTIN-14 indicator 1, inner GTIN-13 starts 0")
+add(g("1590123412345"), True, "GTIN-14 indicator 1, inner GTIN-13 starts 5")
+add("0" + g("590123412345"), True, "GTIN-14 indicator 0 = padded EAN-13")
+add(g("978030640615"), True, "EAN-13 ISBN (978)")
+
+# --- shape / check digit failures ---------------------------------------
+add("", False, "empty")
+add("001", False, "too short (shop-made)")
+add("A12", False, "letters")
+add("A" + g("50001126379")[1:], False, "letter inside 12 chars")
+add(g("5000112637")[:11], False, "11 digits")
+add(g("50001126379220"), False, "15 digits")
+add(g("1234567890123456"), False, "17 digits")
+add(bad("500011263792"), False, "EAN-13 wrong check digit")
+add(bad("04900005010"), False, "UPC-A wrong check digit")
+add(bad("9638507"), False, "GTIN-8 wrong check digit")
+add(bad("1001234567890"), False, "GTIN-14 wrong check digit")
+add(" " + g("500011263792"), False, "leading space (strict, digits only)")
+add(g("500011263792") + " ", False, "trailing space (strict, digits only)")
+add("5000-11263792" + check_digit("500011263792"), False, "hyphen")
+add("\u0665\u0660\u0660\u0660\u0661\u0661\u0662\u0666\u0663\u0667\u0669\u0662"
+    + "\u0662", False, "Arabic-Indic digits")
+add("00000000", False, "all zeros, 8")
+add("000000000000", False, "all zeros, 12")
+add("0000000000000", False, "all zeros, 13")
+add("00000000000000", False, "all zeros, 14")
+
+# --- restricted circulation ---------------------------------------------
+add(g("200000000001"), False, "EAN-13 prefix 20 (in-store)")
+add(g("290123456789"), False, "EAN-13 prefix 29 (scale label)")
+add(g("021234567890"), False, "EAN-13 prefix 02 (UPC-A number system 2)")
+add(g("041234567890"), False, "EAN-13 prefix 04 (UPC-A number system 4)")
+add(g("21234567890"), False, "UPC-A number system 2 (random weight)")
+add(g("41234567890"), False, "UPC-A number system 4 (in-store)")
+add("0" + g("21234567890"), False, "UPC-A ns 2 read as EAN-13 (02)")
+add(g("0123456"), False, "GTIN-8 starting 0 (velocity code)")
+add(g("2123456"), False, "GTIN-8 starting 2 (restricted)")
+add(g("1200000000001"), False, "GTIN-14 inner GTIN-13 prefix 2")
+add(g("1021234567890"), False, "GTIN-14 inner GTIN-13 prefix 02")
+add(g("1041234567890"), False, "GTIN-14 inner GTIN-13 prefix 04")
+add("00" + g("21234567890"), False, "UPC-A ns 2 as GTIN-14")
+
+# sanity: every 'True' vector must at least have a valid check digit
+for v in V:
+    c = v["code"]
+    if v["factory"]:
+        assert c.isascii() and c.isdigit() and len(c) in (8, 12, 13, 14), v
+        assert check_digit(c[:-1]) == c[-1], v
+
+# The UPC-A / EAN-13 / GTIN-14 trio must share one gtin14.
+trio = [v["gtin14"] for v in V if "04900005010" in v["code"] and v["factory"]]
+assert len(trio) == 3 and len(set(trio)) == 1, trio
+
+out = {
+    "_comment": (
+        "Shared factory-barcode vectors (#330, ADR 0029 section 2). Read by "
+        "test/utils/factory_barcode_test.dart (Dart parser) and "
+        "test/integration/rpcs/barcode_suggestion_test.dart (SQL "
+        "is_factory_gtin / gtin14). Both must agree on every vector. "
+        "gtin14 is the left-padded form for any 8/12/13/14-digit string, "
+        "else null. Generated by test/fixtures/gen_gtin_vectors.py (python3 "
+        "test/fixtures/gen_gtin_vectors.py > test/fixtures/gtin_vectors.json)."
+    ),
+    "vectors": V,
+}
+json.dump(out, sys.stdout, indent=2, ensure_ascii=True)
+sys.stdout.write("\n")
