@@ -40,8 +40,8 @@ import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
 import '../helpers/viewports.dart';
 
 /// Stands in for the real service so the picker never reaches the Bluetooth
-/// plugin or `permission_handler`. `PrinterService` has a default constructor
-/// and no final state, so a subclass is enough — no mocking package needed.
+/// plugin or `permission_handler`. All constructor parameters are optional,
+/// so the subclass approach still works — no mocking package needed.
 class _FakePrinterService extends PrinterService {
   _FakePrinterService(this.devices);
 

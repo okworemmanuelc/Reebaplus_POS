@@ -5,8 +5,7 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 /// decoupled from the print library's [PaperSize] enum and from the persisted
 /// string so a library change or a stray stored value can't reshape a receipt.
 ///
-/// 58mm is the default and MUST stay byte-identical to the pre-#116 output:
-/// 32 chars/line, [PaperSize.mm58], a 200px logo raster.
+/// 58mm is the default: keeps 32 chars/line, [PaperSize.mm58], and a 200px logo raster.
 enum ReceiptPaperSize {
   mm58,
   mm80;

@@ -1,3 +1,4 @@
+- **2026-10-03** — **80mm Bluetooth receipts print without their top part on Android**: On Android with an 80mm Bluetooth thermal printer, the shop name, order number, and items were dropped because Android writes the print job within milliseconds of the RFCOMM SPP link opening or while the printer is asleep after being idle. Fix: (1) Added `_androidConnectSettle = 1000ms` delay after connect on Android; (2) Added wake/reset sequence ESC @ ([0x1B, 0x40]) followed by `_wakeGap = 500ms` before writing the receipt in a single unsplit `writeBytes` call on Android; (3) Added `generator.reset()` at the start of `ThermalReceiptService.buildReceipt` for both 58mm and 80mm. Added constructor test seams to `PrinterService`. Verified with targeted tests and full test suite passing.
 # Build Log
 
 Condensed reference of durable build notes — invariants, gotchas, migration/ADR

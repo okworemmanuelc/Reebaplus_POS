@@ -7,6 +7,19 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Fix: 80mm Bluetooth receipts print without their top part (Android) (2026-10-03)
+Branch `fix/80mm-receipt-top-missing`. Worked in `../drinkPosApp-wt-80mm-top`.
+- **Symptom**: On Android with an 80mm Bluetooth thermal printer, the shop name, order number, and items are missing; only the lower part of the receipt prints out.
+- **Cause**: Android writes the print job immediately within milliseconds of the Bluetooth RFCOMM SPP link opening or while the printer is asleep after being idle, dropping data before the print head and buffer are awake and ready. (iOS already waited 1500 ms for GATT discovery; Android had 0 ms settle time and never woke the printer).
+- **Fix**:
+  1. Let the Android Bluetooth link settle after connecting by waiting `_androidConnectSettle = Duration(milliseconds: 1000)` before completing `connect()`.
+  2. Before each print job on Android, send an ESC @ wake-up/reset sequence (`_escInit = [0x1B, 0x40]`), wait `_wakeGap = Duration(milliseconds: 500)` for the firmware to wake and clear buffers, and then write the entire job payload in a single unsplit `writeBytes` call.
+  3. Emit `generator.reset()` (`[0x1B, 0x40]`) at the very start of `ThermalReceiptService.buildReceipt` for all receipts (58mm and 80mm) so the receipt never inherits leftover printer styles or state.
+  4. Updated `ReceiptPaperSize.mm58` description note to reflect that 58mm keeps 32 chars/line, `PaperSize.mm58`, and 200px logo.
+  5. Added constructor test seams (`writeBytes`, `connectToPrinter`, `wait`, `isAndroid`) to `PrinterService`.
+- **Delay values**: `_androidConnectSettle = Duration(milliseconds: 1000)`, `_wakeGap = Duration(milliseconds: 500)`.
+- **Tests**: `test/shared/services/printer_service_test.dart` (new, 5 test cases covering Android wake sequence, unsplit body, wake failure abort, non-Android direct write, connect settle on success vs failure, printBytes with live connection); `test/receipt_builder_test.dart` (+2 tests verifying mm58 and mm80 receipts start with `[0x1B, 0x40]`); `printer_picker_overflow_test.dart` updated comment. Full test suite: 2651 passed, 271 skipped, 0 failed.
+
 ### Issue #321 — Link a scanned unknown barcode to an existing product (2026-10-01)
 Branch `feat/scan-link-existing-product-321`, stacked on `feat/scan-unknown-barcode-routing-320` (PR #326 → #325 → #324 → #323, none merged yet). Worked in `../drinkPosApp-wt-321`. Fifth and last slice of PRD #316 — **the PRD is complete pending those merges**; the shared barcode catalogue across businesses (#322) stays **parked**. **No schema change.**
 - **Gate**: `_onUnknown` now lets in anyone holding `Gates.addProduct` OR `Gates.editProductPrice`; the "Ask a manager to add it." message only when NEITHER is held.

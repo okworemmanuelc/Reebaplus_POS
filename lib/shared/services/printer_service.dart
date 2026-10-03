@@ -9,7 +9,28 @@ class PrinterService {
   static const _lastMacKey = 'last_printer_mac';
   static const _paperSizeKey = 'printer_paper_size';
 
-  PrinterService();
+  // Settle window for Android Bluetooth SPP link before commands can be processed.
+  static const _androidConnectSettle = Duration(milliseconds: 1000);
+  // Firmware wake-up and buffer-clear delay after ESC @ before receipt data arrives.
+  static const _wakeGap = Duration(milliseconds: 500);
+  // ESC @ hardware initialize command to reset line buffer and clear leftover state.
+  static const _escInit = [0x1B, 0x40];
+
+  PrinterService({
+    Future<bool> Function(List<int> bytes)? writeBytes,
+    Future<bool> Function(String mac)? connectToPrinter,
+    Future<void> Function(Duration duration)? wait,
+    bool? isAndroid,
+  })  : _writeBytes = writeBytes ?? PrintBluetoothThermal.writeBytes,
+        _connectToPrinter = connectToPrinter ??
+            ((mac) => PrintBluetoothThermal.connect(macPrinterAddress: mac)),
+        _wait = wait ?? ((d) => Future<void>.delayed(d)),
+        _isAndroid = isAndroid ?? Platform.isAndroid;
+
+  final Future<bool> Function(List<int> bytes) _writeBytes;
+  final Future<bool> Function(String mac) _connectToPrinter;
+  final Future<void> Function(Duration duration) _wait;
+  final bool _isAndroid;
 
   Future<bool> requestPermissions() async {
     if (!Platform.isAndroid) {
@@ -84,18 +105,19 @@ class PrinterService {
   Future<bool> connect(String macAddress) async {
     try {
       AppLogger.info('Connecting to printer: $macAddress');
-      final ok = await PrintBluetoothThermal.connect(
-        macPrinterAddress: macAddress,
-      );
+      final ok = await _connectToPrinter(macAddress);
       if (!ok) return false;
       // iOS/macOS (CoreBluetooth): connect() returns true the moment the link
       // is up, but the plugin only *starts* GATT service + characteristic
       // discovery at that point. The writable characteristic isn't ready for a
       // brief window, so an immediate writeBytes finds no characteristic and
-      // fails. Give discovery time to land before reporting success. Android
-      // (Bluetooth Classic SPP) has no separate discovery step.
-      if (!Platform.isAndroid) {
-        await Future.delayed(const Duration(milliseconds: 1500));
+      // fails. Give discovery time to land before reporting success.
+      // Android (Bluetooth Classic SPP): give the newly opened RFCOMM link time
+      // to settle before sending commands.
+      if (_isAndroid) {
+        await _wait(_androidConnectSettle);
+      } else {
+        await _wait(const Duration(milliseconds: 1500));
       }
       return true;
     } catch (e) {
@@ -166,13 +188,31 @@ class PrinterService {
     return false;
   }
 
+  /// Writes a complete print job to the printer.
+  ///
+  /// Fixes missing receipt headers (shop name, order #, items) on Android Bluetooth
+  /// printers. When an idle printer sleeps or a link opens, the printer drops bytes
+  /// received before its print head and firmware are awake. On Android, we first send
+  /// ESC @ ([_escInit]) to wake and reset the printer, wait [_wakeGap] for the
+  /// firmware to become ready, and then write [bytes] in one single call.
+  /// Non-Android platforms write [bytes] once directly.
+  Future<bool> _writeJob(List<int> bytes) async {
+    if (_isAndroid) {
+      final wakeOk = await _writeBytes(_escInit);
+      if (!wakeOk) return false;
+      await _wait(_wakeGap);
+      return await _writeBytes(bytes);
+    }
+    return await _writeBytes(bytes);
+  }
+
   Future<bool> printBytes(List<int> bytes) async {
     try {
       if (!await isConnected) {
         final connected = await autoConnect();
         if (!connected) return false;
       }
-      return await PrintBluetoothThermal.writeBytes(bytes);
+      return await _writeJob(bytes);
     } catch (e) {
       AppLogger.error('Printing failed: $e');
       return false;
@@ -184,7 +224,7 @@ class PrinterService {
   Future<bool> printBytesDirectly(List<int> bytes) async {
     try {
       if (!await isConnected) return false;
-      return await PrintBluetoothThermal.writeBytes(bytes);
+      return await _writeJob(bytes);
     } catch (e) {
       AppLogger.error('Direct printing failed: $e');
       return false;
