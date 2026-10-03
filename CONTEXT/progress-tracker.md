@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #322: Shared barcode catalogue, decided and parked (2026-10-03)
+Branch `docs/shared-barcode-catalogue-322`, worked in `../drinkPosApp-wt-322`. **Docs only: no code, no schema, no migration.**
+- Owner grilling settled all of #322's open questions. Decisions are in **ADR 0029** (`docs/adr/0029-shared-barcode-catalogue.md`), and #322 has been rewritten as the PRD. Slices: #330 (GTIN rule + lookup RPC + kill switch), #331 (shared photo + backfill, blocked by #330), #332 (Add Product fill-in, blocked by #330).
+- Key decisions: share name + unit + first photo only; automatic, **no opt-out**; factory GTINs only (check digit, restricted-circulation prefixes excluded, keyed by GTIN-14); one shop, one vote, most votes wins, a tie goes to the most recent; names and units are computed live from `public.products` by a definer RPC (no vote table, no name backfill); the first photo is copied to a shared bucket by an Edge Function (the backfill runs oldest first); removal is by hand through block lists; a Reebaplus-only kill switch in `platform_settings`; client lookup is online only, ~2 s, silent, fills empty boxes only, brand-new products only.
+- `architecture.md` invariant #5 notes the planned exception.
+- **Still on hold** at the owner's request: #322 and its slices carry `on-hold`, not `ready-for-agent`.
+- Owner action outside code: the terms and privacy policy should mention pooled product names, units and photos.
+
 ### Add Product: Manufacturer is no longer required (2026-10-03)
 - **Change**: In the Add Product form, manufacturer is no longer required for any business type (including crate-tracking businesses) and can be added later.
 - **Model (`fast_add_product_model.dart`)**:
