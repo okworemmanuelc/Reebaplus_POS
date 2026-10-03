@@ -572,6 +572,7 @@ class AppDrawer extends ConsumerWidget {
                   ref,
                   pendingCount: e.pendingCount,
                   orphanCount: e.orphanCount,
+                  photoCount: e.photoCount,
                 );
               }
             } on LogoutWipeException catch (e) {

@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/core/services/biometric_service.dart';
 import 'package:reebaplus_pos/core/services/business_logo_service.dart';
 import 'package:reebaplus_pos/core/services/barcode_catalogue_service.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
+import 'package:reebaplus_pos/core/services/pending_photo_uploads.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
@@ -97,6 +98,7 @@ final authProvider = ChangeNotifierProvider<AuthService>((ref) {
     ref.read(supabaseSyncServiceProvider),
     ref.read(supabaseClientProvider),
     googleWebClientId: googleWebClientId,
+    pendingPhotos: ref.read(pendingPhotoUploadsProvider),
   );
 });
 // Non-owning bridge to the AuthService-owned notifier (issue #153). AuthService
@@ -419,15 +421,9 @@ final supabaseSyncServiceProvider = Provider<SupabaseSyncService>((ref) {
   // On connectivity recovery, upload any product photos saved offline and write
   // their public URLs onto the product rows (which then sync cross-device). #78.
   service.onReconnected = () {
-    final db = ref.read(databaseProvider);
-    final businessId = db.currentBusinessId;
+    final businessId = ref.read(databaseProvider).currentBusinessId;
     if (businessId == null) return;
-    unawaited(
-      ref.read(productImageServiceProvider).flushPending(
-            businessId,
-            (productId, url) => db.catalogDao.setProductImageUrl(productId, url),
-          ),
-    );
+    unawaited(ref.read(pendingPhotoUploadsProvider).upload(businessId));
   };
   return service;
 });
@@ -599,6 +595,15 @@ final currentBusinessLogoPathProvider =
 
 final productImageServiceProvider = Provider<ProductImageService>((ref) {
   return ProductImageService(ref.read(supabaseClientProvider));
+});
+
+/// Product photos saved offline and not uploaded yet (#343): flushed on
+/// reconnect and counted by the logout wipe gate.
+final pendingPhotoUploadsProvider = Provider<PendingPhotoUploads>((ref) {
+  return PendingPhotoUploads(
+    images: ref.read(productImageServiceProvider),
+    catalog: ref.read(databaseProvider).catalogDao,
+  );
 });
 
 // ── Shared barcode catalogue (#332, ADR 0029) ───────────────────────────────

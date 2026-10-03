@@ -6625,9 +6625,17 @@ class AppDatabase extends _$AppDatabase {
   /// Covers the business-scoped tables, the `businesses` row itself, both
   /// outbox tables, and the per-business SharedPreferences keys that live
   /// outside Drift and would otherwise survive (the same wipe-trap pattern
-  /// [clearAllData] documents).
+  /// [clearAllData] documents), and the business's photo copies on disk.
   Future<void> clearBusinessData(String businessId) async {
     final scoped = businessScopedTableNames;
+    // Read before the rows go: the photo copies on disk are named by product id
+    // (#343), and once the products are deleted nothing says which were X's.
+    final productIds = (await customSelect(
+      'SELECT id FROM products WHERE business_id = ?1',
+      variables: [Variable.withString(businessId)],
+    ).get())
+        .map((row) => row.read<String>('id'))
+        .toList();
     await _withDeleteGuardsSuspended(() async {
       await transaction(() async {
         for (final table in scoped) {
@@ -6661,7 +6669,22 @@ class AppDatabase extends _$AppDatabase {
     try {
       await SyncCursorResetService.clearForBusiness(businessId);
     } catch (_) {}
+
+    // Same on disk (#343): X's product photo copies, its logo copy and its
+    // not-yet-uploaded photo entries live outside Drift. Only X's — the
+    // business being signed in to keeps its photos. Best-effort and not
+    // awaited, exactly like the [clearAllData] photo wipe.
+    unawaited(LocalPhotoFiles.deleteForBusiness(
+      businessId: businessId,
+      productIds: productIds,
+      documents: photoDocumentsForTesting,
+    ));
   }
+
+  /// Stands in for the app documents folder in [clearBusinessData]'s photo
+  /// clean-up during tests (path_provider has no test implementation).
+  @visibleForTesting
+  Directory? photoDocumentsForTesting;
 
   Future<void> clearAllData() async {
     await _withDeleteGuardsSuspended(() async {

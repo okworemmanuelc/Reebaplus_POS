@@ -307,6 +307,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
           ref,
           pendingCount: e.pendingCount,
           orphanCount: e.orphanCount,
+          photoCount: e.photoCount,
         );
       }
     } on LogoutWipeException catch (e) {
