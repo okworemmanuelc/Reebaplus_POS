@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -17,7 +16,8 @@ import 'package:reebaplus_pos/core/services/photo_encoding.dart';
 ///
 /// Public bucket: `business-logos`
 ///   - Object path: `<businessId>.jpg` (JPEG ≤512px, #340; logos saved before
-///     #340 are `<businessId>.png`, removed best-effort on the next save).
+///     #340 are `<businessId>.png`; a save leaves that object in place, #343 —
+///     only [clear] removes it).
 ///   - Upload policy: authenticated user is a member of the business
 ///     whose `businessId` matches the file path prefix.
 ///   - Read policy: public (no auth required — receipts may load offline
@@ -79,8 +79,9 @@ class BusinessLogoService {
               contentType: 'image/jpeg',
             ),
           );
-      // The pre-#340 PNG logo, if any — best effort, never blocks the save.
-      unawaited(_removeQuietly('$businessId.png'));
+      // The pre-#340 `<businessId>.png` is deliberately NOT removed here
+      // (#343): an older-version phone saving its PNG logo at the same moment
+      // could otherwise end up with logoUrl pointing at a deleted object.
 
       // (c) Public URL.
       final url = _client.storage.from(_bucket).getPublicUrl(objectPath);
@@ -151,12 +152,6 @@ class BusinessLogoService {
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
-
-  Future<void> _removeQuietly(String objectPath) async {
-    try {
-      await _client.storage.from(_bucket).remove([objectPath]);
-    } catch (_) {}
-  }
 
   // The device copy keeps its `.png` name across #340 (receipts decode the
   // content, not the extension). Wiped on logout by LocalPhotoFiles.deleteAll.

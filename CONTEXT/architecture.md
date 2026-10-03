@@ -58,7 +58,8 @@ path):
 - **`ProductImageService` (`lib/core/services/product_image_service.dart`)** —
   product photos in bucket `product-images` at `<businessId>/<productId>.jpg`
   (JPEG q80, ≤800px, transparency flattened onto white — #340; pre-#340
-  objects are `.png` and are removed best-effort on the next save). The public
+  objects are `.png`; a save leaves them in place — only an explicit photo
+  delete removes them, #343). The public
   URL written to `products.image_url` carries `?v=<millis>`, so a replaced photo
   has a new url. The device copy (`ProductPhotoCache`) lives at
   `<appDocs>/product_images/<productId>.png` — a stable path, because the synced
