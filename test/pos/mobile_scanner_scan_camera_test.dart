@@ -2,8 +2,9 @@
 //
 // #319 — the production camera's call ordering, over a fake controller (no
 // platform camera). `mobile_scanner` ignores a stop that lands while a start
-// is in flight, so the camera must queue its calls; and every read's pause
-// turns the torch off, so resume must bring the cashier's torch back.
+// is in flight, so the camera must queue its calls; and a stop (app
+// backgrounded) turns the torch off, so resume must bring the cashier's torch
+// back. A read never pauses the camera (#319 follow-up).
 
 import 'dart:async';
 
@@ -12,8 +13,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'package:reebaplus_pos/features/pos/services/mobile_scanner_scan_camera.dart';
 
-/// Mirrors the `mobile_scanner` 7.2.0 rules that matter here: stop/pause do
-/// nothing unless running, pause/stop turn the torch off, start may take a
+/// Mirrors the `mobile_scanner` 7.2.0 rules that matter here: stop does
+/// nothing unless running, stop turns the torch off, start may take a
 /// while ([startGate]) and comes back with the torch off.
 class _FakeController extends MobileScannerController {
   _FakeController() {
@@ -58,9 +59,6 @@ class _FakeController extends MobileScannerController {
   Future<void> stop() async => _halt('stop');
 
   @override
-  Future<void> pause() async => _halt('pause');
-
-  @override
   Future<void> toggleTorch() async {
     if (!value.isRunning) return;
     calls.add('torch');
@@ -91,25 +89,25 @@ void main() {
 
   test('a stop that lands mid-start runs after the start, so the camera '
       'ends off', () async {
-    await camera.pause();
+    await camera.stop(); // the app went to the background.
     controller.startGate = Completer<void>();
     final resuming = camera.resume();
     final stopping = camera.stop(); // e.g. the auto-lock landing now.
     await pumpEventQueue();
-    expect(controller.calls, ['pause', 'start']);
+    expect(controller.calls, ['stop', 'start']);
 
     controller.startGate!.complete();
     await resuming;
     await stopping;
 
-    expect(controller.calls, ['pause', 'start', 'stop']);
+    expect(controller.calls, ['stop', 'start', 'stop']);
     expect(controller.cameraOn, isFalse);
     camera.dispose();
   });
 
   test('disposing mid-start stops the camera once the start lands, then '
       'releases it', () async {
-    await camera.pause();
+    await camera.stop();
     controller.startGate = Completer<void>();
     unawaited(camera.resume());
     await pumpEventQueue();
@@ -118,7 +116,7 @@ void main() {
     controller.startGate!.complete();
     await pumpEventQueue();
 
-    expect(controller.calls, ['pause', 'start', 'stop', 'dispose']);
+    expect(controller.calls, ['stop', 'start', 'stop', 'dispose']);
     expect(controller.cameraOn, isFalse);
   });
 
@@ -146,19 +144,19 @@ void main() {
     camera.dispose();
   });
 
-  test('the torch comes back on after each scan, and stays off when the '
-      'cashier turned it off', () async {
+  test('the torch comes back on when the app returns, and stays off when '
+      'the cashier turned it off', () async {
     await camera.toggleTorch();
     expect(camera.torch.value, isTrue);
 
-    await camera.pause(); // a read freezes the camera — torch goes off.
+    await camera.stop(); // the app went to the background — torch goes off.
     expect(camera.torch.value, isFalse);
     await camera.resume();
     expect(camera.torch.value, isTrue);
 
     await camera.toggleTorch();
     expect(camera.torch.value, isFalse);
-    await camera.pause();
+    await camera.stop();
     await camera.resume();
     expect(camera.torch.value, isFalse);
     camera.dispose();

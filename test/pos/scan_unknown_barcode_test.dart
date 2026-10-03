@@ -170,8 +170,8 @@ void main() {
           .prefilledBarcode,
       'NEW-555',
     );
-    // The camera stays frozen while Add Product is open.
-    expect(scanner.camera!.isRunning, isFalse);
+    // The camera keeps running behind Add Product (it is never paused).
+    expect(scanner.camera!.isRunning, isTrue);
 
     await tester.enterText(fieldFor('Product Name'), 'Malta Guinness');
     await tester.enterText(fieldFor('Selling Price'), '500');

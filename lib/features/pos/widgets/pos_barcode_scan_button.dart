@@ -117,7 +117,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
   }
 
   /// One scanned code, shown over the scanner page ([context] is the scanner's,
-  /// #319). The scanner keeps the camera frozen until this completes.
+  /// #319). The scanner ignores other reads until this completes.
   Future<void> _onCode(BuildContext context, String code) async {
     final trimmed = code.trim();
     if (trimmed.isEmpty || !mounted) return;
@@ -189,8 +189,8 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     if (onUnknown != null) {
       saved = await onUnknown(context, code);
     } else {
-      // Awaited (#319) so the camera stays frozen while Add Product is open
-      // over the scanner. Add Product pops itself before calling
+      // Awaited (#319) so the scanner ignores reads while Add Product is open
+      // over it. Add Product pops itself before calling
       // onProductAdded, so `saved` is set by the time the push completes.
       await Navigator.of(context).push(
         slideDownRoute(

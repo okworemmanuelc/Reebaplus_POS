@@ -62,9 +62,12 @@ uniqueness with no `UNIQUE (business_id, barcode)`, `mobile_scanner`, no new
 permission for scanning itself) stands.
 
 - **Continuous scanning is no longer deferred.** The scanner stays open until
-  the cashier closes it. Each read freezes the camera and opens the tap-and-hold
-  "Add to Cart" quantity sheet over it; confirming or cancelling resumes the
-  camera, and the same code is ignored for about 1.5 s after resuming. The
+  the cashier closes it. Each read opens the tap-and-hold "Add to Cart"
+  quantity sheet over the live camera; other reads are ignored until it
+  closes, and the same code is ignored for about 1.5 s after that. The camera
+  is never paused for a read: a pause turned the torch off, and on Android
+  `mobile_scanner` 7.2.0 could not start again after one, which left the
+  scanner on "Camera unavailable" after the first scan (fixed 2026-10-03). The
   first slice (#317) keeps the one-shot camera but already routes every found
   product through the quantity sheet instead of adding 1, and gives a clear
   message instead of a sheet when the product can't be sold here (out of stock
