@@ -157,3 +157,20 @@ const Color bwdTextPrimary = Color(0xFFFAFAFA);
 const Color bwdTextSecondary = Color(0xFFA1A1AA);
 const Color bwPrimaryDark = Color(0xFFFAFAFA); // near-white primary
 const Color bwSecondaryDark = Color(0xFFBDBDBD); // gradient end (white→gray)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIXED COLOUR SET (same in every design system — PRD #346 decision 6, #349)
+// ═══════════════════════════════════════════════════════════════════════════
+// Bases for `AppFixedColors`; the tints and outlines are these at the sheet's
+// alpha values. Never reference these from widget code.
+
+const Color fixedDanger = Color(0xFFEF4444);
+const Color fixedWarning = Color(0xFFFFB020);
+const Color fixedGreen = Color(0xFF30D158); // dark-mode green text, green dot
+// Light-mode green text. Same value as `Colors.green.shade600`, the green
+// AppButton's success variant and AppNotification already use.
+const Color fixedGreenTextLight = Color(0xFF43A047);
+const Color fixedInfo = Color(0xFF3B82F6);
+const Color fixedNeutralInkLight = Color(0xFF0B1220); // stout / neutral icon
+const Color fixedNeutralInkDark = Color(0xFFE2E8F0);
+const Color fixedMalt = Color(0xFF60A5FA);
