@@ -1,6 +1,6 @@
 # ADR 0029: Shared barcode catalogue across businesses
 
-**Status:** accepted (2026-10-03). Build is **on hold** (issue #322 stays `on-hold`).  
+**Status:** accepted (2026-10-03); §6 amended the same day (in-app reports). Build is **on hold** (issue #322 stays `on-hold`).  
 **Context:** Issue #322 (owner grilling, 2026-10-03). Follows PRD #316 / ADR 0017.  
 **Amends:** architecture.md invariant #5 (cross-business data access) with one named exception.
 
@@ -128,10 +128,45 @@ shared photo and stays**. A later shop's photo never replaces it.
   source-shop column only to delete it later would be exactly the
   business-to-catalogue link this design avoids.
 
-### 6. Bad entries: removed by hand, and a removal sticks
+### 6. Bad entries: reported in the app, removed by hand, and a removal sticks
 
-No review UI and no in-app "report" button in this version. Reports arrive
-through support, and a developer applies them with the service role:
+*(Amended 2026-10-03: the owner added an in-app report on product details. The
+first version of this section said reports would come through support.)*
+
+**Reporting.** Product details shows a small **"Report a problem with the shared
+details"** link, only when the product's barcode is a factory GTIN. It opens a
+sheet that loads the current `barcode_suggestion` for that barcode, so the shop
+reports what is actually shared, not its own product's edited copy. The shop
+ticks one or more of **Wrong name**, **Wrong unit** and **Bad or private photo**,
+adds an optional note (≤ 500 characters), and taps Send. If nothing is shared
+for that code right now (no match, or the kill switch is off), the sheet says
+so and has no Send button. Sending needs internet; offline, the sheet says
+"Connect to the internet to send this report." Nothing is queued on the phone.
+
+Reports are **structured rows in the online database**, not email:
+`public.barcode_catalogue_reports (id uuid pk, gtin14, reasons text[]` (non-empty
+subset of `wrong_name`, `wrong_unit`, `bad_photo`), `note, shown_name,
+shown_unit, shown_photo_url, business_id` (→ `businesses`, `ON DELETE SET
+NULL`), `reported_by` (→ `users`, `ON DELETE SET NULL`), `status` (`open` |
+`resolved` | `dismissed`), `created_at, resolved_at)`. RLS is on with no
+policies. The only write path is the definer RPC
+`report_barcode_catalogue_entry(...)`, which takes the business and reporter
+from the caller (membership checked through `current_user_business_ids()`, never
+trusted from the client), rejects a non-GTIN code, and allows **one open report
+per business per GTIN**: a repeat updates that report's reasons and note instead
+of adding a new row. Shops never read reports back.
+
+Reports **do** record which shop and which person sent them, so Reebaplus can
+follow up. That is a deliberate, owner-approved difference from the catalogue
+itself: reports are private to Reebaplus and are never shown to other shops.
+When a shop deletes its account, its reports stay, but their shop and person
+links are set to null.
+
+Not a synced table and not in Drift. The client writes through
+`BarcodeCatalogueService`, the same sanctioned exception as the lookup.
+
+**Removal.** A developer reads open reports with the service role and applies
+the fix:
 
 - **Name:** insert `(gtin14, normalised_name)` into
   `public.barcode_catalogue_name_blocks`. The lookup ignores that name for that
@@ -141,8 +176,10 @@ through support, and a developer applies them with the service role:
   delete the row and the object, then call `share-barcode-photo` with
   `{gtin14}` to promote the next-oldest unblocked photo.
 
-Both block tables have RLS on and no policies (service role only). A review page
-in the Admin Hub is a separate, later piece of work.
+Then mark the report `resolved` (or `dismissed`) with `resolved_at`. Both block
+tables have RLS on and no policies (service role only). A review page in the
+Admin Hub that reads `barcode_catalogue_reports` is a separate, later piece of
+work.
 
 ### 7. Kill switch, Reebaplus-only
 

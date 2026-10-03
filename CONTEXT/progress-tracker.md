@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #322: In-app reports added to the shared barcode catalogue spec (2026-10-03)
+Branch `docs/barcode-catalogue-reports-322`, worked in `../drinkPosApp-wt-322r`. **Docs only.**
+- The owner reversed the earlier "no in-app report button" decision. Product details gets a "Report a problem with the shared details" link (factory barcodes only). It sends a structured report (Wrong name / Wrong unit / Bad or private photo + note) to a new cloud table `barcode_catalogue_reports` through a definer RPC. The report records the shop and the person (owner-approved; private to Reebaplus), with one open report per shop per barcode.
+- ADR 0029 §6 amended; PRD #322 updated; new slice #335 filed (blocked by #330, #332), on hold like the rest.
+
 ### Receive Stock: supplier optional unless crates move (2026-10-03)
 Branch `feat/receive-supplier-optional`, cut from `main`. Worked in `../drinkPosApp-wt-supplieropt`. **No schema change.**
 - **Rule**: on the Invoice screen the supplier is optional, **unless** a cart line moves crates (`ReceiveCartLine.movesCrates` = `trackEmpties && manufacturerId != null`, the one gate now shared by the crate inputs, the commit and this rule). Crate debt must have an owner, else #210's drift returns.
