@@ -10,8 +10,8 @@ The human updates it when resolving open questions or making architectural decis
 ### Issue #343 (item 3 + logo bucket): keep legacy `.png` on save; create `business-logos` (2026-10-03)
 Branch `fix/photo-storage-343`, worked in `../drinkPosApp-wt-343b`. **No Drift schema change.**
 - `ProductImageService._upload` and `BusinessLogoService.save` no longer remove the pre-#340 `.png` after uploading the `.jpg` (an old-version phone saving `.png` + its url at the same moment could win with a url to a deleted object). The explicit delete paths (`clear`) still remove both `.jpg` and `.png`. A leftover `.png` is at most one object per product/business.
-- Cloud `0185_business_logos_bucket.sql`: creates the missing public `business-logos` bucket (1 MB, image/jpeg + image/png) and read/insert/update/delete policies on `storage.objects`; writes limited to root-level `<businessId>.(jpg|png)` where the id (compared as text) is in `current_user_business_ids()`. **Not yet deployed** — owner runs `supabase db push`.
-- Cloud `0186_photo_bucket_limits.sql` (#341): `product-images` capped at 1 MB. Shipped early with the owner's go-ahead — the photo feature is not yet used in shops, so no older PNG uploader exists (both buckets held 0 objects). **Not yet deployed** — same push as 0185.
+- Cloud `0185_business_logos_bucket.sql`: creates the missing public `business-logos` bucket (1 MB, image/jpeg + image/png) and read/insert/update/delete policies on `storage.objects`; writes limited to root-level `<businessId>.(jpg|png)` where the id (compared as text) is in `current_user_business_ids()`. Deployed 2026-10-03.
+- Cloud `0186_photo_bucket_limits.sql` (#341): `product-images` capped at 1 MB. Shipped early with the owner's go-ahead — the photo feature is not yet used in shops, so no older PNG uploader exists (both buckets held 0 objects). Deployed 2026-10-03.
 
 ### Issue #343 items 1–2: logout warns about unsent photos; clearBusinessData removes old photo copies (2026-10-03)
 Branch `fix/photo-logout-wipe-343`, worked in `../drinkPosApp-wt-343a`. **No Drift schema change, no migration.** Item 3 (old/new phone `.png`/`.jpg` race) is a separate PR.
