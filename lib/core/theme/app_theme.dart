@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
@@ -195,7 +194,53 @@ class AppTheme {
     mutedOnSurface2: bwdTextSecondary,
   );
 
-  static ThemeData light() => ThemeData(
+  /// Puts every text style the theme carries on the bundled DM Sans family
+  /// (#349): the text themes plus the component slots that set their own
+  /// style. Only the family changes — size, weight, colour, letter spacing
+  /// and height are kept exactly as each builder set them.
+  @visibleForTesting
+  static ThemeData withAppFont(ThemeData t) {
+    TextStyle? font(TextStyle? style) =>
+        style?.apply(fontFamily: appFontFamily);
+    final navLabel = t.navigationBarTheme.labelTextStyle;
+    return t.copyWith(
+      textTheme: t.textTheme.apply(fontFamily: appFontFamily),
+      primaryTextTheme: t.primaryTextTheme.apply(fontFamily: appFontFamily),
+      appBarTheme: t.appBarTheme.copyWith(
+        titleTextStyle: font(t.appBarTheme.titleTextStyle),
+        toolbarTextStyle: font(t.appBarTheme.toolbarTextStyle),
+      ),
+      chipTheme: t.chipTheme.copyWith(
+        labelStyle: font(t.chipTheme.labelStyle),
+        secondaryLabelStyle: font(t.chipTheme.secondaryLabelStyle),
+      ),
+      inputDecorationTheme: t.inputDecorationTheme.copyWith(
+        hintStyle: font(t.inputDecorationTheme.hintStyle),
+        labelStyle: font(t.inputDecorationTheme.labelStyle),
+        floatingLabelStyle: font(t.inputDecorationTheme.floatingLabelStyle),
+        helperStyle: font(t.inputDecorationTheme.helperStyle),
+        errorStyle: font(t.inputDecorationTheme.errorStyle),
+        prefixStyle: font(t.inputDecorationTheme.prefixStyle),
+        suffixStyle: font(t.inputDecorationTheme.suffixStyle),
+        counterStyle: font(t.inputDecorationTheme.counterStyle),
+      ),
+      bottomNavigationBarTheme: t.bottomNavigationBarTheme.copyWith(
+        selectedLabelStyle: font(t.bottomNavigationBarTheme.selectedLabelStyle),
+        unselectedLabelStyle: font(
+          t.bottomNavigationBarTheme.unselectedLabelStyle,
+        ),
+      ),
+      navigationBarTheme: navLabel == null
+          ? t.navigationBarTheme
+          : t.navigationBarTheme.copyWith(
+              labelTextStyle: WidgetStateProperty.resolveWith(
+                (states) => font(navLabel.resolve(states)),
+              ),
+            ),
+    );
+  }
+
+  static ThemeData light() => withAppFont(ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
     extensions: [_blueSemantics, AppFixedColors.light, _blueSchemeLight],
@@ -291,9 +336,9 @@ class AppTheme {
         TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
       },
     ),
-  );
+  ));
 
-  static ThemeData dark() => ThemeData(
+  static ThemeData dark() => withAppFont(ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
     extensions: [_blueSemantics, AppFixedColors.dark, _blueSchemeDark],
@@ -392,7 +437,7 @@ class AppTheme {
         TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
       },
     ),
-  );
+  ));
 
   // ═══════════════════════════════════════════════════════════════════════════
   // AMBER RIBAPLUS
@@ -478,7 +523,7 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
+    return withAppFont(base.copyWith(
       extensions: [_amberSemantics, AppFixedColors.light, _amberSchemeLight],
       scaffoldBackgroundColor: alBg,
       primaryColor: amberPrimary,
@@ -608,7 +653,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   static ThemeData amberDarkTheme() {
@@ -691,7 +736,7 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
+    return withAppFont(base.copyWith(
       extensions: [_amberSemantics, AppFixedColors.dark, _amberSchemeDark],
       scaffoldBackgroundColor: adBg,
       primaryColor: amberPrimary,
@@ -821,7 +866,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   static ThemeData purpleLight() {
@@ -904,7 +949,7 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
+    return withAppFont(base.copyWith(
       extensions: [_purpleSemantics, AppFixedColors.light, _purpleSchemeLight],
       scaffoldBackgroundColor: plBg,
       primaryColor: purplePrimary,
@@ -1034,7 +1079,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   static ThemeData purpleDarkTheme() {
@@ -1117,7 +1162,7 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
+    return withAppFont(base.copyWith(
       extensions: [_purpleSemantics, AppFixedColors.dark, _purpleSchemeDark],
       scaffoldBackgroundColor: pdBg,
       primaryColor: purplePrimary,
@@ -1247,7 +1292,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1294,7 +1339,7 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
+    return withAppFont(base.copyWith(
       extensions: [_greenSemantics, AppFixedColors.light, _greenSchemeLight],
       scaffoldBackgroundColor: glBg,
       primaryColor: greenPrimary,
@@ -1384,7 +1429,7 @@ class AppTheme {
           elevation: 0,
         ),
       ),
-    );
+    ));
   }
 
   static ThemeData greenDarkTheme() {
@@ -1427,7 +1472,7 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
+    return withAppFont(base.copyWith(
       extensions: [_greenSemantics, AppFixedColors.dark, _greenSchemeDark],
       scaffoldBackgroundColor: gdBg,
       primaryColor: greenPrimary,
@@ -1517,7 +1562,7 @@ class AppTheme {
           elevation: 0,
         ),
       ),
-    );
+    ));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1604,7 +1649,7 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
+    return withAppFont(base.copyWith(
       extensions: [_bwSemantics, AppFixedColors.light, _bwSchemeLight],
       scaffoldBackgroundColor: bwlBg,
       primaryColor: bwPrimaryLight,
@@ -1735,7 +1780,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   static ThemeData bwDarkTheme() {
@@ -1818,7 +1863,7 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
+    return withAppFont(base.copyWith(
       extensions: [_bwSemantics, AppFixedColors.dark, _bwSchemeDark],
       scaffoldBackgroundColor: bwdBg,
       primaryColor: bwPrimaryDark,
@@ -1949,16 +1994,23 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 }
 
+/// The app's text family (#349): DM Sans, registered in `pubspec.yaml` from the
+/// files in `assets/google_fonts/` (400, 500, 600, 700, 800). Every theme's
+/// text styles use it via `AppTheme.withAppFont`.
+const String appFontFamily = 'DMSans';
+
+/// Monospace family for codes and IDs only (#349): Roboto Mono 400, bundled.
+const String appMonoFontFamily = 'RobotoMono';
+
 /// Text styles the Material `TextTheme` has no slot for (PRD #346 decision 2,
-/// #349). Both come from fonts bundled in `assets/google_fonts/`
-/// (`DMSans-ExtraBold.ttf`, `RobotoMono-Regular.ttf`); runtime fetching is off
-/// (`GoogleFonts.config.allowRuntimeFetching = false` in `main.dart`). Sizes are
-/// base px scaled with `getRFontSize`. Colour is left unset so the text
-/// inherits it from its surroundings (app bar foreground, `DefaultTextStyle`).
+/// #349). Both use the bundled families registered in `pubspec.yaml`, so
+/// nothing is ever fetched at runtime. Sizes are base px scaled with
+/// `getRFontSize`. Colour is left unset so the text inherits it from its
+/// surroundings (app bar foreground, `DefaultTextStyle`).
 extension AppTextStyles on BuildContext {
   /// Base size of [screenTitleStyle].
   static const double screenTitleBaseSize = 18;
@@ -1968,13 +2020,15 @@ extension AppTextStyles on BuildContext {
 
   /// Screen titles, the business name and the "POS" label under the raised
   /// button: DM Sans ExtraBold (800) at base 18.
-  TextStyle get screenTitleStyle => GoogleFonts.dmSans(
+  TextStyle get screenTitleStyle => TextStyle(
+    fontFamily: appFontFamily,
     fontSize: getRFontSize(screenTitleBaseSize),
     fontWeight: FontWeight.w800,
   );
 
   /// Codes and IDs only (e.g. "Terminal 01"): Roboto Mono Regular at base 13.
-  TextStyle get monoStyle => GoogleFonts.robotoMono(
+  TextStyle get monoStyle => TextStyle(
+    fontFamily: appMonoFontFamily,
     fontSize: getRFontSize(monoBaseSize),
     fontWeight: FontWeight.w400,
   );

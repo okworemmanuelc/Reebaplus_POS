@@ -1,13 +1,12 @@
-// #349 — DM Sans ExtraBold (800) and Roboto Mono resolve from the fonts
-// bundled in assets/google_fonts/, with runtime fetching off (as main.dart
-// sets it), so no style can ever reach for fonts.gstatic.com.
+// #349 — the app's fonts come only from the files bundled in
+// assets/google_fonts/, registered in pubspec.yaml as real multi-weight
+// families (DMSans 400–800, RobotoMono 400). Nothing is fetched at runtime.
 
-import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -27,93 +26,121 @@ int _weightClass(ByteData font) {
   throw StateError('no OS/2 table');
 }
 
+/// family -> {asset -> declared weight}, from the bundled FontManifest.json.
+Future<Map<String, Map<String, int>>> _fontManifest() async {
+  final raw = await rootBundle.loadString('FontManifest.json');
+  final families = <String, Map<String, int>>{};
+  for (final family in jsonDecode(raw) as List<Object?>) {
+    final f = family! as Map<String, Object?>;
+    final faces = <String, int>{};
+    for (final face in f['fonts']! as List<Object?>) {
+      final m = face! as Map<String, Object?>;
+      faces[m['asset']! as String] = (m['weight'] as int?) ?? 400;
+    }
+    families[f['family']! as String] = faces;
+  }
+  return families;
+}
+
 void main() {
-  setUp(() => GoogleFonts.config.allowRuntimeFetching = false);
+  test('DMSans and RobotoMono are registered from the bundled files', () async {
+    final manifest = await _fontManifest();
+    const dir = 'assets/google_fonts';
+    expect(manifest[appFontFamily], {
+      '$dir/DMSans-Regular.ttf': 400,
+      '$dir/DMSans-Medium.ttf': 500,
+      '$dir/DMSans-SemiBold.ttf': 600,
+      '$dir/DMSans-Bold.ttf': 700,
+      '$dir/DMSans-ExtraBold.ttf': 800,
+    });
+    expect(manifest[appMonoFontFamily], {'$dir/RobotoMono-Regular.ttf': 400});
 
-  test('the new font files are bundled with the right weights', () async {
-    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-    final assets = manifest.listAssets();
-    expect(assets, contains('assets/google_fonts/DMSans-ExtraBold.ttf'));
-    expect(assets, contains('assets/google_fonts/RobotoMono-Regular.ttf'));
-
-    final extraBold = await rootBundle.load(
-      'assets/google_fonts/DMSans-ExtraBold.ttf',
-    );
-    final mono = await rootBundle.load(
-      'assets/google_fonts/RobotoMono-Regular.ttf',
-    );
-    expect(_weightClass(extraBold), 800);
-    expect(_weightClass(mono), 400);
+    // Each declared weight matches the weight inside the file itself.
+    for (final family in [appFontFamily, appMonoFontFamily]) {
+      for (final face in manifest[family]!.entries) {
+        final bytes = await rootBundle.load(face.key);
+        expect(_weightClass(bytes), face.value, reason: face.key);
+      }
+    }
   });
 
-  testWidgets(
-    'screenTitleStyle (DM Sans 800 @18) and monoStyle (Roboto Mono @13) '
-    'load from bundled assets with no runtime fetch',
-    (tester) async {
-      late TextStyle title;
-      late TextStyle mono;
-      late double expectedTitleSize;
-      late double expectedMonoSize;
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light(),
-          home: Builder(
-            builder: (context) {
-              title = context.screenTitleStyle;
-              mono = context.monoStyle;
-              expectedTitleSize = context.getRFontSize(18);
-              expectedMonoSize = context.getRFontSize(13);
-              return Column(
-                children: [
-                  Text('Point of Sale', style: title),
-                  Text('Terminal 01', style: mono),
-                ],
-              );
-            },
+  testWidgets('screenTitleStyle is DM Sans 800 @18, monoStyle Roboto Mono @13', (
+    tester,
+  ) async {
+    late TextStyle title;
+    late TextStyle mono;
+    late double expectedTitleSize;
+    late double expectedMonoSize;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) {
+            title = context.screenTitleStyle;
+            mono = context.monoStyle;
+            expectedTitleSize = context.getRFontSize(18);
+            expectedMonoSize = context.getRFontSize(13);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    expect(title.fontFamily, appFontFamily);
+    expect(title.fontWeight, FontWeight.w800);
+    expect(title.fontSize, expectedTitleSize);
+    expect(mono.fontFamily, appMonoFontFamily);
+    expect(mono.fontWeight, FontWeight.w400);
+    expect(mono.fontSize, expectedMonoSize);
+    // Colour inherits from the surroundings.
+    expect(title.color, isNull);
+    expect(mono.color, isNull);
+  });
+
+  testWidgets('the real DM Sans faces resolve by weight (not a synthesised bold)', (
+    tester,
+  ) async {
+    // Widget tests render every family with the test font unless the real
+    // files are loaded, so load them here the way the engine would.
+    await tester.runAsync(() async {
+      final manifest = await _fontManifest();
+      final loader = FontLoader(appFontFamily);
+      for (final asset in manifest[appFontFamily]!.keys) {
+        loader.addFont(rootBundle.load(asset));
+      }
+      await loader.load();
+    });
+
+    double widthOf(FontWeight weight) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: 'Point of Sale 0123456789',
+          style: TextStyle(
+            fontFamily: appFontFamily,
+            fontSize: 18,
+            fontWeight: weight,
           ),
         ),
-      );
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
 
-      // Throws if either font is missing from the assets: with runtime
-      // fetching off, google_fonts has nowhere else to get it.
-      await tester.runAsync(GoogleFonts.pendingFonts);
-
-      expect(title.fontWeight, FontWeight.w800);
-      expect(title.fontFamily, 'DMSans_800');
-      expect(title.fontSize, expectedTitleSize);
-      expect(mono.fontWeight, FontWeight.w400);
-      expect(mono.fontFamily, 'RobotoMono_regular');
-      expect(mono.fontSize, expectedMonoSize);
-      // Colour inherits from the surroundings.
-      expect(title.color, isNull);
-      expect(mono.color, isNull);
-    },
-  );
-
-  testWidgets(
-    'control: a weight that is NOT bundled fails instead of fetching',
-    (tester) async {
-      // Proves the test above is meaningful: DM Sans Black (900) is not in
-      // assets/google_fonts/, so loading it must error rather than download.
-      final errors = <Object>[];
-      await tester.runAsync(() async {
-        final done = Completer<void>();
-        runZonedGuarded(() async {
-          GoogleFonts.dmSans(fontWeight: FontWeight.w900);
-          try {
-            await GoogleFonts.pendingFonts();
-          } catch (e) {
-            errors.add(e);
-          }
-          done.complete();
-        }, (error, _) => errors.add(error));
-        await done.future;
-        // Let the zone report the duplicate error from google_fonts' own
-        // bookkeeping future.
-        await Future<void>.delayed(Duration.zero);
-      });
-      expect(errors, isNotEmpty);
-      expect(errors.first.toString(), contains('allowRuntimeFetching is false'));
-    },
-  );
+    final widths = [
+      for (final w in [
+        FontWeight.w400,
+        FontWeight.w500,
+        FontWeight.w600,
+        FontWeight.w700,
+        FontWeight.w800,
+      ])
+        widthOf(w),
+    ];
+    // DM Sans gets wider with each weight; five distinct, rising widths mean
+    // five distinct files were picked.
+    for (var i = 1; i < widths.length; i++) {
+      expect(widths[i], greaterThan(widths[i - 1]), reason: 'weights $widths');
+    }
+  });
 }

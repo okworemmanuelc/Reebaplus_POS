@@ -134,6 +134,28 @@ flutter:
     - assets/images/logo.svg
     - assets/google_fonts/
 
+  # App fonts (#349). Registered as real multi-weight families so a style that
+  # asks for w700 gets the Bold file, not a synthesised bold of Regular.
+  # Family names must match appFontFamily / appMonoFontFamily in
+  # lib/core/theme/app_theme.dart.
+  fonts:
+    - family: DMSans
+      fonts:
+        - asset: assets/google_fonts/DMSans-Regular.ttf
+          weight: 400
+        - asset: assets/google_fonts/DMSans-Medium.ttf
+          weight: 500
+        - asset: assets/google_fonts/DMSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/google_fonts/DMSans-Bold.ttf
+          weight: 700
+        - asset: assets/google_fonts/DMSans-ExtraBold.ttf
+          weight: 800
+    - family: RobotoMono
+      fonts:
+        - asset: assets/google_fonts/RobotoMono-Regular.ttf
+          weight: 400
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
