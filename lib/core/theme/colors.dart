@@ -28,6 +28,12 @@ const Color blueDark = Color(0xFF1D4ED8);
 const Color danger = Color(0xFFEF4444);
 const Color success = Color(0xFF10B981);
 
+// Designer colour sheet "project" values (#346 first comment, #349). Exposed
+// through `AppSchemeColors` — never reference these from widget code.
+const Color lBgFade = Color(0xFFEEF3FD); // background fade, bottom stop
+const Color dBgFade = Color(0xFF0C1526);
+const Color lMutedOnSurface2 = Color(0xFF475569); // muted text on Surface 2
+
 // ═══════════════════════════════════════════════════════════════════════════
 // AMBER RIBAPLUS PALETTE (new)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -62,6 +68,11 @@ const Color alTextPrimary = Color(0xFF0E1420);
 const Color alTextSecondary = Color(
   0xFF4B5563,
 ); // Darkened for better contrast (was 7A8899)
+
+// Amber link hover (#349): one step darker than the light primary, one step
+// lighter than the dark primary — the same relationship as Blue's sheet values.
+const Color amberLinkHoverLight = Color(0xFFB45309);
+const Color amberLinkHoverDark = Color(0xFFFBBF24);
 // ═══════════════════════════════════════════════════════════════════════════
 // PURPLE VIOLET PALETTE (new)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -71,6 +82,7 @@ const Color purplePrimary = Color(0xFF8B5CF6); // dark-theme primary
 const Color purplePrimaryDark = Color(0xFF7C3AED); // light-theme primary
 const Color purpleDark = Color(0xFF6D28D9); // secondary / gradient end
 const Color purpleGlow = Color(0x598B5CF6);
+const Color purpleLinkHoverDark = Color(0xFFA78BFA); // #349, lighter than dark primary
 
 // Purple Dark Theme — NEUTRAL surfaces (no purple tint)
 const Color pdBg = Color(0xFF0B0D10);
@@ -87,6 +99,7 @@ const Color plSurface2 = Color(0xFFEDF0F4);
 const Color plBorder = Color(0x12000000);
 const Color plTextPrimary = Color(0xFF111827);
 const Color plTextSecondary = Color(0xFF6B7280);
+const Color plMutedOnSurface2 = Color(0xFF4B5563); // #349, one step darker
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GREEN FOREST PALETTE (new)
@@ -102,6 +115,7 @@ const Color greenPrimaryDark = Color(
 ); // light selectedItem / chip-selected
 const Color greenDark = Color(0xFF166534); // secondary / gradient end
 const Color greenGlow = Color(0x5922C55E);
+const Color greenLinkHoverDark = Color(0xFF4ADE80); // #349, lighter than dark primary
 
 // Green Dark Theme — NEUTRAL surfaces (no green tint)
 const Color gdBg = Color(0xFF0B0D10);
@@ -118,6 +132,7 @@ const Color glSurface2 = Color(0xFFEDF0F4);
 const Color glBorder = Color(0x12000000);
 const Color glTextPrimary = Color(0xFF111827);
 const Color glTextSecondary = Color(0xFF6B7280);
+const Color glMutedOnSurface2 = Color(0xFF4B5563); // #349, one step darker
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BLACK & WHITE PALETTE (monochrome chrome; status colours stay coloured)

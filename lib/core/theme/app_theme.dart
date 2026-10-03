@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -65,10 +66,138 @@ class AppTheme {
     info: Color(0xFF3B82F6),
   );
 
+  // Scheme-driven "project" colours (#349). Every scheme derives its set at
+  // Blue's alpha values via AppSchemeColors.derive; only the link hover, the
+  // background fade and the muted-on-Surface-2 colour are picked per scheme.
+  static final _blueSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: blueMain,
+    surface: lSurface,
+    textPrimary: lText,
+    linkHover: blueDark,
+    backgroundFade: lBgFade,
+    mutedOnSurface2: lMutedOnSurface2,
+  );
+  static final _blueSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: bluePrimaryDark,
+    surface: dSurface,
+    textPrimary: dText,
+    linkHover: blueLight,
+    backgroundFade: dBgFade,
+    mutedOnSurface2: dSubtext,
+  );
+  static final _amberSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: contrastAmber,
+    surface: alSurface,
+    textPrimary: alTextPrimary,
+    linkHover: amberLinkHoverLight,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.light,
+      background: alBg,
+      primary: contrastAmber,
+    ),
+    mutedOnSurface2: alTextSecondary,
+  );
+  static final _amberSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: amberPrimary,
+    surface: adSurface,
+    textPrimary: adTextPrimary,
+    linkHover: amberLinkHoverDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.dark,
+      background: adBg,
+      primary: amberPrimary,
+    ),
+    mutedOnSurface2: adTextSecondary,
+  );
+  static final _purpleSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: purplePrimaryDark,
+    surface: plSurface,
+    textPrimary: plTextPrimary,
+    linkHover: purpleDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.light,
+      background: plBg,
+      primary: purplePrimaryDark,
+    ),
+    mutedOnSurface2: plMutedOnSurface2,
+  );
+  static final _purpleSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: purplePrimary,
+    surface: pdSurface,
+    textPrimary: pdTextPrimary,
+    linkHover: purpleLinkHoverDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.dark,
+      background: pdBg,
+      primary: purplePrimary,
+    ),
+    mutedOnSurface2: pdTextSecondary,
+  );
+  static final _greenSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: greenContrast,
+    surface: glSurface,
+    textPrimary: glTextPrimary,
+    linkHover: greenDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.light,
+      background: glBg,
+      primary: greenContrast,
+    ),
+    mutedOnSurface2: glMutedOnSurface2,
+  );
+  static final _greenSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: greenPrimary,
+    surface: gdSurface,
+    textPrimary: gdTextPrimary,
+    linkHover: greenLinkHoverDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.dark,
+      background: gdBg,
+      primary: greenPrimary,
+    ),
+    mutedOnSurface2: gdTextSecondary,
+  );
+  // B&W: hover goes one step further from the background (pure black on
+  // light, pure white on dark); its muted text is already the darker step.
+  static final _bwSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: bwPrimaryLight,
+    surface: bwlSurface,
+    textPrimary: bwlTextPrimary,
+    linkHover: Colors.black,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.light,
+      background: bwlBg,
+      primary: bwPrimaryLight,
+    ),
+    mutedOnSurface2: bwlTextSecondary,
+  );
+  static final _bwSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: bwPrimaryDark,
+    surface: bwdSurface,
+    textPrimary: bwdTextPrimary,
+    linkHover: Colors.white,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.dark,
+      background: bwdBg,
+      primary: bwPrimaryDark,
+    ),
+    mutedOnSurface2: bwdTextSecondary,
+  );
+
   static ThemeData light() => ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    extensions: const [_blueSemantics],
+    extensions: [_blueSemantics, _blueSchemeLight],
     scaffoldBackgroundColor: lBg,
     primaryColor: blueMain,
     colorScheme: const ColorScheme.light(
@@ -166,11 +295,14 @@ class AppTheme {
   static ThemeData dark() => ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
-    extensions: const [_blueSemantics],
+    extensions: [_blueSemantics, _blueSchemeDark],
     scaffoldBackgroundColor: dBg,
     primaryColor: bluePrimaryDark,
     colorScheme: const ColorScheme.dark(
       primary: bluePrimaryDark,
+      // Text and icons on the blue gradient are white in dark mode too
+      // (colour sheet, #349); ColorScheme.dark defaults onPrimary to black.
+      onPrimary: Colors.white,
       secondary: blueLight,
       surface: dSurface,
       onSurface: dText,
@@ -346,7 +478,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: const [_amberSemantics],
+      extensions: [_amberSemantics, _amberSchemeLight],
       scaffoldBackgroundColor: alBg,
       primaryColor: amberPrimary,
       colorScheme: const ColorScheme.light(
@@ -559,7 +691,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: const [_amberSemantics],
+      extensions: [_amberSemantics, _amberSchemeDark],
       scaffoldBackgroundColor: adBg,
       primaryColor: amberPrimary,
       colorScheme: const ColorScheme.dark(
@@ -772,7 +904,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: const [_purpleSemantics],
+      extensions: [_purpleSemantics, _purpleSchemeLight],
       scaffoldBackgroundColor: plBg,
       primaryColor: purplePrimary,
       colorScheme: const ColorScheme.light(
@@ -985,7 +1117,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: const [_purpleSemantics],
+      extensions: [_purpleSemantics, _purpleSchemeDark],
       scaffoldBackgroundColor: pdBg,
       primaryColor: purplePrimary,
       colorScheme: const ColorScheme.dark(
@@ -1162,7 +1294,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: const [_greenSemantics],
+      extensions: [_greenSemantics, _greenSchemeLight],
       scaffoldBackgroundColor: glBg,
       primaryColor: greenPrimary,
       colorScheme: const ColorScheme.light(
@@ -1295,7 +1427,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: const [_greenSemantics],
+      extensions: [_greenSemantics, _greenSchemeDark],
       scaffoldBackgroundColor: gdBg,
       primaryColor: greenPrimary,
       colorScheme: const ColorScheme.dark(
@@ -1472,7 +1604,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: const [_bwSemantics],
+      extensions: [_bwSemantics, _bwSchemeLight],
       scaffoldBackgroundColor: bwlBg,
       primaryColor: bwPrimaryLight,
       colorScheme: const ColorScheme.light(
@@ -1686,7 +1818,7 @@ class AppTheme {
     );
 
     return base.copyWith(
-      extensions: const [_bwSemantics],
+      extensions: [_bwSemantics, _bwSchemeDark],
       scaffoldBackgroundColor: bwdBg,
       primaryColor: bwPrimaryDark,
       colorScheme: const ColorScheme.dark(
