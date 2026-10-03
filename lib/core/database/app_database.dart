@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
 import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
+import 'package:reebaplus_pos/core/services/local_photo_files.dart';
 import 'package:reebaplus_pos/core/services/sync_cursor_reset_service.dart';
 export 'daos.dart';
 
@@ -6700,6 +6701,14 @@ class AppDatabase extends _$AppDatabase {
     try {
       await SyncCursorResetService.clearAll();
     } catch (_) {}
+
+    // Same wipe-trap, on disk (#340): product photo copies, the logo copy and
+    // the not-yet-uploaded photo list live outside Drift. One user per device,
+    // so the next sign-in must not see the last user's photos. Best-effort and
+    // not awaited: the wipe must never wait on a platform channel / file
+    // system (deleteAll swallows its own errors), and a folder delete finishes
+    // long before the next sign-in can write a photo.
+    unawaited(LocalPhotoFiles.deleteAll());
   }
 
   Future<void> resetDatabase() async {
