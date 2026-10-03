@@ -52,6 +52,9 @@ class ThermalReceiptService {
     final int charsPerLine = paperSize.charsPerLine;
     List<int> bytes = [];
 
+    // Reset printer hardware and synchronize generator style state (emits ESC @).
+    bytes += generator.reset();
+
     // --- 0. REFUND STAMP ---
     if (orderStatus == 'Refunded') {
       bytes += generator.text(
