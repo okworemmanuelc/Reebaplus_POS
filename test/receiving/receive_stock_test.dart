@@ -327,4 +327,131 @@ void main() {
       expect(await db.supplierLedgerDao.getBalanceKobo(supplierId), 5000);
     });
   });
+
+  // A receipt with no supplier is a cash purchase (market / cash-and-carry):
+  // stock and cost post, but nothing is owed, nothing is paid on an account,
+  // and no crates move — so it may only carry lines that move no crates.
+  group('ReceiveStockService.confirmReceipt — no supplier', () {
+    const plainLine = ReceiveCartLine(
+      productId: plainProductId,
+      productName: 'Bottled Water',
+      unit: 'Pack',
+      qty: 3,
+      buyingPriceKobo: 20000,
+      retailKobo: 24000,
+      wholesaleKobo: 22000,
+      trackEmpties: false,
+    );
+    const crateLine = ReceiveCartLine(
+      productId: bottleProductId,
+      productName: 'Star 60cl',
+      unit: 'Bottle',
+      qty: 5,
+      buyingPriceKobo: 10000,
+      retailKobo: 12000,
+      wholesaleKobo: 11000,
+      manufacturerId: manufacturerId,
+      trackEmpties: true,
+    );
+
+    Future<int> rowCount(String table) async => (await db
+            .customSelect('SELECT COUNT(*) AS c FROM $table')
+            .getSingle())
+        .read<int>('c');
+
+    test('posts stock and a costed batch, but no invoice', () async {
+      await service.confirmReceipt(
+        supplierId: null,
+        supplierName: null,
+        storeId: storeId,
+        dateReceived: DateTime(2026, 6, 1),
+        staffId: userId,
+        lines: const [plainLine],
+        fullCratesReceivedByManufacturer: const {},
+        emptiesReturnedByManufacturer: const {},
+      );
+
+      expect(await stockOf(plainProductId), 3);
+      expect(await rowCount('supplier_ledger_entries'), 0);
+      final batch = await db
+          .customSelect(
+            'SELECT cost_kobo FROM cost_batches WHERE product_id = ?',
+            variables: [const Variable(plainProductId)],
+          )
+          .getSingle();
+      expect(batch.read<int>('cost_kobo'), 20000);
+
+      final log = await db
+          .customSelect(
+            "SELECT description, entity_type, entity_id FROM activity_logs "
+            "WHERE action = 'stock.received'",
+          )
+          .getSingle();
+      expect(log.read<String>('description'), contains('no supplier'));
+      expect(log.read<String?>('entity_type'), isNull);
+      expect(log.read<String?>('entity_id'), isNull);
+    });
+
+    test('a bottle line with no manufacturer moves no crates, so is allowed',
+        () async {
+      await service.confirmReceipt(
+        supplierId: null,
+        supplierName: null,
+        storeId: storeId,
+        dateReceived: DateTime(2026, 6, 1),
+        staffId: userId,
+        lines: const [
+          ReceiveCartLine(
+            productId: bottleProductId,
+            productName: 'Star 60cl',
+            unit: 'Bottle',
+            qty: 2,
+            buyingPriceKobo: 10000,
+            retailKobo: 12000,
+            wholesaleKobo: 11000,
+            trackEmpties: true,
+          ),
+        ],
+        fullCratesReceivedByManufacturer: const {},
+        emptiesReturnedByManufacturer: const {},
+      );
+      expect(await stockOf(bottleProductId), 2);
+    });
+
+    test('rejects a line that moves crates', () async {
+      await expectLater(
+        service.confirmReceipt(
+          supplierId: null,
+          supplierName: null,
+          storeId: storeId,
+          dateReceived: DateTime(2026, 6, 1),
+          staffId: userId,
+          lines: const [plainLine, crateLine],
+          fullCratesReceivedByManufacturer: const {},
+          emptiesReturnedByManufacturer: const {},
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(await stockOf(plainProductId), 0);
+    });
+
+    test('rejects a payment', () async {
+      await expectLater(
+        service.confirmReceipt(
+          supplierId: null,
+          supplierName: null,
+          storeId: storeId,
+          dateReceived: DateTime(2026, 6, 1),
+          staffId: userId,
+          lines: const [plainLine],
+          fullCratesReceivedByManufacturer: const {},
+          emptiesReturnedByManufacturer: const {},
+          amountPaidKobo: 5000,
+          paymentMethod: 'cash',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(await stockOf(plainProductId), 0);
+    });
+  });
 }

@@ -53,6 +53,12 @@ class ReceiveCartLine {
   /// Cost Batch lands uncosted, so those units later sell at 0 COGS until a
   /// cost is recorded. Accepted, never blocked — only disclosed (#199).
   bool get isUncosted => buyingPriceKobo == 0;
+
+  /// The line can carry crates on this receipt: a bottle that tracks empties
+  /// AND has a manufacturer (the crate-debt owner). The one gate shared by the
+  /// crate inputs, the commit, and the "supplier required" rule — a receipt
+  /// with any such line needs a supplier to hold the crate debt.
+  bool get movesCrates => trackEmpties && manufacturerId != null;
 }
 
 class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
