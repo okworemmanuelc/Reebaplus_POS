@@ -9,9 +9,8 @@
 -- from #340, `<businessId>.png` from older app versions still in shops. There
 -- is no folder segment, so the business is the file name before the dot.
 --
--- Size cap: 5 MB, same as product-images today. NOT 1 MB yet — older app
--- versions upload PNG; the 1 MB cap ships with #341 once the JPEG version is
--- on every phone.
+-- Size cap: 1 MB (#341). The app uploads JPEG ≤512px (#340), far below it;
+-- the photo feature is not yet used in shops, so no older PNG uploader exists.
 --
 -- Public read (public bucket, so getPublicUrl renders on every device);
 -- writes/deletes restricted to authenticated members of that business. The
@@ -22,7 +21,7 @@
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
-  'business-logos', 'business-logos', true, 5242880,
+  'business-logos', 'business-logos', true, 1048576,
   array['image/jpeg','image/png']
 )
 on conflict (id) do nothing;
