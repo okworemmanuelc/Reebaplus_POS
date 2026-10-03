@@ -224,7 +224,9 @@ All visual values — colours, spacing, radii, typography — are resolved throu
 - Colours are accessed through three paths — use the correct one for the type of value:
   - `Theme.of(context).colorScheme.*` for background, surface, primary, secondary, error, and text roles.
   - `Theme.of(context).scaffoldBackgroundColor`, `.dividerColor`, `.cardColor` for layout-level colours.
-  - `Theme.of(context).extension<AppSemanticColors>()!.success` / `.warning` / `.info` / `.glow` / `.successButton` for semantic state colours.
+  - `Theme.of(context).extension<AppSemanticColors>()!.success` / `.warning` / `.info` for the legacy per-scheme state colours.
+  - `Theme.of(context).extension<AppSchemeColors>()!.*` for scheme-driven tints the `ColorScheme` has no slot for (primary tint, glow, link hover, background fade, card fill, muted-on-Surface-2, shadows, scrim).
+  - `Theme.of(context).extension<AppFixedColors>()!.*` for tags, status pills, badges and tinted icon/product tiles — the fixed colour set, identical in every design system (PRD #346 decision 6).
 - Do not write hex literals or `Color(0xFF...)` values in widget files.
   - Correct: `color: Theme.of(context).colorScheme.error`
   - Wrong: `color: const Color(0xFFFF3B30)`
@@ -247,7 +249,7 @@ All visual values — colours, spacing, radii, typography — are resolved throu
 
 ### Typography
 
-- Use `Theme.of(context).textTheme.<style>` for all text styles. Do not construct `TextStyle` with raw `fontSize` or `fontWeight` outside of `app_theme.dart`.
+- Use `Theme.of(context).textTheme.<style>` for all text styles. The two styles the `TextTheme` has no slot for are `context.screenTitleStyle` (DM Sans 800) and `context.monoStyle` (Roboto Mono, codes/IDs only), both in `app_theme.dart`. Do not construct `TextStyle` with raw `fontSize` or `fontWeight` outside of `app_theme.dart`.
   - Correct: `style: Theme.of(context).textTheme.titleMedium`
   - Wrong: `style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)`
 - Font sizes scale at runtime via `context.getRFontSize(base)`. The theme applies this automatically — do not call `getRFontSize` manually in widget code.

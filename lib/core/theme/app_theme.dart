@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class SlideLeftPageTransitionsBuilder extends PageTransitionsBuilder {
   const SlideLeftPageTransitionsBuilder();
@@ -63,10 +66,184 @@ class AppTheme {
     info: Color(0xFF3B82F6),
   );
 
-  static ThemeData light() => ThemeData(
+  // Scheme-driven "project" colours (#349). Every scheme derives its set at
+  // Blue's alpha values via AppSchemeColors.derive; only the link hover, the
+  // background fade and the muted-on-Surface-2 colour are picked per scheme.
+  static final _blueSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: blueMain,
+    surface: lSurface,
+    textPrimary: lText,
+    linkHover: blueDark,
+    backgroundFade: lBgFade,
+    mutedOnSurface2: lMutedOnSurface2,
+  );
+  static final _blueSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: bluePrimaryDark,
+    surface: dSurface,
+    textPrimary: dText,
+    linkHover: blueLight,
+    backgroundFade: dBgFade,
+    mutedOnSurface2: dSubtext,
+  );
+  static final _amberSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: contrastAmber,
+    surface: alSurface,
+    textPrimary: alTextPrimary,
+    linkHover: amberLinkHoverLight,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.light,
+      background: alBg,
+      primary: contrastAmber,
+    ),
+    mutedOnSurface2: alTextSecondary,
+  );
+  static final _amberSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: amberPrimary,
+    surface: adSurface,
+    textPrimary: adTextPrimary,
+    linkHover: amberLinkHoverDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.dark,
+      background: adBg,
+      primary: amberPrimary,
+    ),
+    mutedOnSurface2: adTextSecondary,
+  );
+  static final _purpleSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: purplePrimaryDark,
+    surface: plSurface,
+    textPrimary: plTextPrimary,
+    linkHover: purpleDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.light,
+      background: plBg,
+      primary: purplePrimaryDark,
+    ),
+    mutedOnSurface2: plMutedOnSurface2,
+  );
+  static final _purpleSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: purplePrimary,
+    surface: pdSurface,
+    textPrimary: pdTextPrimary,
+    linkHover: purpleLinkHoverDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.dark,
+      background: pdBg,
+      primary: purplePrimary,
+    ),
+    mutedOnSurface2: pdTextSecondary,
+  );
+  static final _greenSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: greenContrast,
+    surface: glSurface,
+    textPrimary: glTextPrimary,
+    linkHover: greenDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.light,
+      background: glBg,
+      primary: greenContrast,
+    ),
+    mutedOnSurface2: glMutedOnSurface2,
+  );
+  static final _greenSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: greenPrimary,
+    surface: gdSurface,
+    textPrimary: gdTextPrimary,
+    linkHover: greenLinkHoverDark,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.dark,
+      background: gdBg,
+      primary: greenPrimary,
+    ),
+    mutedOnSurface2: gdTextSecondary,
+  );
+  // B&W: hover goes one step further from the background (pure black on
+  // light, pure white on dark); its muted text is already the darker step.
+  static final _bwSchemeLight = AppSchemeColors.derive(
+    brightness: Brightness.light,
+    primary: bwPrimaryLight,
+    surface: bwlSurface,
+    textPrimary: bwlTextPrimary,
+    linkHover: Colors.black,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.light,
+      background: bwlBg,
+      primary: bwPrimaryLight,
+    ),
+    mutedOnSurface2: bwlTextSecondary,
+  );
+  static final _bwSchemeDark = AppSchemeColors.derive(
+    brightness: Brightness.dark,
+    primary: bwPrimaryDark,
+    surface: bwdSurface,
+    textPrimary: bwdTextPrimary,
+    linkHover: Colors.white,
+    backgroundFade: AppSchemeColors.fadeFrom(
+      brightness: Brightness.dark,
+      background: bwdBg,
+      primary: bwPrimaryDark,
+    ),
+    mutedOnSurface2: bwdTextSecondary,
+  );
+
+  /// Puts every text style the theme carries on the bundled DM Sans family
+  /// (#349): the text themes plus the component slots that set their own
+  /// style. Only the family changes — size, weight, colour, letter spacing
+  /// and height are kept exactly as each builder set them.
+  @visibleForTesting
+  static ThemeData withAppFont(ThemeData t) {
+    TextStyle? font(TextStyle? style) =>
+        style?.apply(fontFamily: appFontFamily);
+    final navLabel = t.navigationBarTheme.labelTextStyle;
+    return t.copyWith(
+      textTheme: t.textTheme.apply(fontFamily: appFontFamily),
+      primaryTextTheme: t.primaryTextTheme.apply(fontFamily: appFontFamily),
+      appBarTheme: t.appBarTheme.copyWith(
+        titleTextStyle: font(t.appBarTheme.titleTextStyle),
+        toolbarTextStyle: font(t.appBarTheme.toolbarTextStyle),
+      ),
+      chipTheme: t.chipTheme.copyWith(
+        labelStyle: font(t.chipTheme.labelStyle),
+        secondaryLabelStyle: font(t.chipTheme.secondaryLabelStyle),
+      ),
+      inputDecorationTheme: t.inputDecorationTheme.copyWith(
+        hintStyle: font(t.inputDecorationTheme.hintStyle),
+        labelStyle: font(t.inputDecorationTheme.labelStyle),
+        floatingLabelStyle: font(t.inputDecorationTheme.floatingLabelStyle),
+        helperStyle: font(t.inputDecorationTheme.helperStyle),
+        errorStyle: font(t.inputDecorationTheme.errorStyle),
+        prefixStyle: font(t.inputDecorationTheme.prefixStyle),
+        suffixStyle: font(t.inputDecorationTheme.suffixStyle),
+        counterStyle: font(t.inputDecorationTheme.counterStyle),
+      ),
+      bottomNavigationBarTheme: t.bottomNavigationBarTheme.copyWith(
+        selectedLabelStyle: font(t.bottomNavigationBarTheme.selectedLabelStyle),
+        unselectedLabelStyle: font(
+          t.bottomNavigationBarTheme.unselectedLabelStyle,
+        ),
+      ),
+      navigationBarTheme: navLabel == null
+          ? t.navigationBarTheme
+          : t.navigationBarTheme.copyWith(
+              labelTextStyle: WidgetStateProperty.resolveWith(
+                (states) => font(navLabel.resolve(states)),
+              ),
+            ),
+    );
+  }
+
+  static ThemeData light() => withAppFont(ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    extensions: const [_blueSemantics],
+    extensions: [_blueSemantics, AppFixedColors.light, _blueSchemeLight],
     scaffoldBackgroundColor: lBg,
     primaryColor: blueMain,
     colorScheme: const ColorScheme.light(
@@ -159,16 +336,19 @@ class AppTheme {
         TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
       },
     ),
-  );
+  ));
 
-  static ThemeData dark() => ThemeData(
+  static ThemeData dark() => withAppFont(ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
-    extensions: const [_blueSemantics],
+    extensions: [_blueSemantics, AppFixedColors.dark, _blueSchemeDark],
     scaffoldBackgroundColor: dBg,
     primaryColor: bluePrimaryDark,
     colorScheme: const ColorScheme.dark(
       primary: bluePrimaryDark,
+      // Text and icons on the blue gradient are white in dark mode too
+      // (colour sheet, #349); ColorScheme.dark defaults onPrimary to black.
+      onPrimary: Colors.white,
       secondary: blueLight,
       surface: dSurface,
       onSurface: dText,
@@ -257,7 +437,7 @@ class AppTheme {
         TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
       },
     ),
-  );
+  ));
 
   // ═══════════════════════════════════════════════════════════════════════════
   // AMBER RIBAPLUS
@@ -343,8 +523,8 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      extensions: const [_amberSemantics],
+    return withAppFont(base.copyWith(
+      extensions: [_amberSemantics, AppFixedColors.light, _amberSchemeLight],
       scaffoldBackgroundColor: alBg,
       primaryColor: amberPrimary,
       colorScheme: const ColorScheme.light(
@@ -473,7 +653,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   static ThemeData amberDarkTheme() {
@@ -556,8 +736,8 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      extensions: const [_amberSemantics],
+    return withAppFont(base.copyWith(
+      extensions: [_amberSemantics, AppFixedColors.dark, _amberSchemeDark],
       scaffoldBackgroundColor: adBg,
       primaryColor: amberPrimary,
       colorScheme: const ColorScheme.dark(
@@ -686,7 +866,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   static ThemeData purpleLight() {
@@ -769,8 +949,8 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      extensions: const [_purpleSemantics],
+    return withAppFont(base.copyWith(
+      extensions: [_purpleSemantics, AppFixedColors.light, _purpleSchemeLight],
       scaffoldBackgroundColor: plBg,
       primaryColor: purplePrimary,
       colorScheme: const ColorScheme.light(
@@ -899,7 +1079,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   static ThemeData purpleDarkTheme() {
@@ -982,8 +1162,8 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      extensions: const [_purpleSemantics],
+    return withAppFont(base.copyWith(
+      extensions: [_purpleSemantics, AppFixedColors.dark, _purpleSchemeDark],
       scaffoldBackgroundColor: pdBg,
       primaryColor: purplePrimary,
       colorScheme: const ColorScheme.dark(
@@ -1112,7 +1292,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1159,8 +1339,8 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      extensions: const [_greenSemantics],
+    return withAppFont(base.copyWith(
+      extensions: [_greenSemantics, AppFixedColors.light, _greenSchemeLight],
       scaffoldBackgroundColor: glBg,
       primaryColor: greenPrimary,
       colorScheme: const ColorScheme.light(
@@ -1249,7 +1429,7 @@ class AppTheme {
           elevation: 0,
         ),
       ),
-    );
+    ));
   }
 
   static ThemeData greenDarkTheme() {
@@ -1292,8 +1472,8 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      extensions: const [_greenSemantics],
+    return withAppFont(base.copyWith(
+      extensions: [_greenSemantics, AppFixedColors.dark, _greenSchemeDark],
       scaffoldBackgroundColor: gdBg,
       primaryColor: greenPrimary,
       colorScheme: const ColorScheme.dark(
@@ -1382,7 +1562,7 @@ class AppTheme {
           elevation: 0,
         ),
       ),
-    );
+    ));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1469,8 +1649,8 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      extensions: const [_bwSemantics],
+    return withAppFont(base.copyWith(
+      extensions: [_bwSemantics, AppFixedColors.light, _bwSchemeLight],
       scaffoldBackgroundColor: bwlBg,
       primaryColor: bwPrimaryLight,
       colorScheme: const ColorScheme.light(
@@ -1600,7 +1780,7 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
 
   static ThemeData bwDarkTheme() {
@@ -1683,8 +1863,8 @@ class AppTheme {
       ),
     );
 
-    return base.copyWith(
-      extensions: const [_bwSemantics],
+    return withAppFont(base.copyWith(
+      extensions: [_bwSemantics, AppFixedColors.dark, _bwSchemeDark],
       scaffoldBackgroundColor: bwdBg,
       primaryColor: bwPrimaryDark,
       colorScheme: const ColorScheme.dark(
@@ -1814,6 +1994,42 @@ class AppTheme {
           TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
-    );
+    ));
   }
+}
+
+/// The app's text family (#349): DM Sans, registered in `pubspec.yaml` from the
+/// files in `assets/google_fonts/` (400, 500, 600, 700, 800). Every theme's
+/// text styles use it via `AppTheme.withAppFont`.
+const String appFontFamily = 'DMSans';
+
+/// Monospace family for codes and IDs only (#349): Roboto Mono 400, bundled.
+const String appMonoFontFamily = 'RobotoMono';
+
+/// Text styles the Material `TextTheme` has no slot for (PRD #346 decision 2,
+/// #349). Both use the bundled families registered in `pubspec.yaml`, so
+/// nothing is ever fetched at runtime. Sizes are base px scaled with
+/// `getRFontSize`. Colour is left unset so the text inherits it from its
+/// surroundings (app bar foreground, `DefaultTextStyle`).
+extension AppTextStyles on BuildContext {
+  /// Base size of [screenTitleStyle].
+  static const double screenTitleBaseSize = 18;
+
+  /// Base size of [monoStyle].
+  static const double monoBaseSize = 13;
+
+  /// Screen titles, the business name and the "POS" label under the raised
+  /// button: DM Sans ExtraBold (800) at base 18.
+  TextStyle get screenTitleStyle => TextStyle(
+    fontFamily: appFontFamily,
+    fontSize: getRFontSize(screenTitleBaseSize),
+    fontWeight: FontWeight.w800,
+  );
+
+  /// Codes and IDs only (e.g. "Terminal 01"): Roboto Mono Regular at base 13.
+  TextStyle get monoStyle => TextStyle(
+    fontFamily: appMonoFontFamily,
+    fontSize: getRFontSize(monoBaseSize),
+    fontWeight: FontWeight.w400,
+  );
 }
