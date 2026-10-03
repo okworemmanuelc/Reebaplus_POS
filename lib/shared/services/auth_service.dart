@@ -15,6 +15,8 @@ import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
+import 'package:reebaplus_pos/core/services/local_photo_files.dart';
+import 'package:reebaplus_pos/core/services/pending_photo_uploads.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 
@@ -77,18 +79,25 @@ class LogoutWipeException implements Exception {
 /// the user: the UI routes to the "Resolve unsynced data" flow (export the stuck
 /// records, then typed-confirm discard) and calls
 /// [AuthService.discardUnsyncedAndLogout] to complete the logout.
+///
+/// [photoCount] (#343) is product photos that would not upload while online
+/// (e.g. this phone lost access to the business). Like orphans, waiting will
+/// not clear them, so they go through the same flow instead of trapping the
+/// user.
 class LogoutBlockedByUnsyncedDataException implements Exception {
   final int pendingCount;
   final int orphanCount;
+  final int photoCount;
   const LogoutBlockedByUnsyncedDataException({
     required this.pendingCount,
     required this.orphanCount,
+    this.photoCount = 0,
   });
-  int get totalCount => pendingCount + orphanCount;
+  int get totalCount => pendingCount + orphanCount + photoCount;
   @override
   String toString() =>
       'LogoutBlockedByUnsyncedDataException(pending=$pendingCount, '
-      'orphans=$orphanCount)';
+      'orphans=$orphanCount, photos=$photoCount)';
 }
 
 /// Thrown by [AuthService.signInWithGoogle] when the native Google sign-in
@@ -115,6 +124,10 @@ class AuthService extends ValueNotifier<UserData?> {
   final SupabaseClient _supabase;
   final String googleWebClientId;
 
+  /// Product photos saved offline and not uploaded yet (#343). The logout wipe
+  /// gate counts them alongside the outbox. Null (tests) = none.
+  final PendingPhotoUploads? _pendingPhotos;
+
   /// Upserts this device's make/model + last-seen to the cloud-only `devices`
   /// table for the console's analytics (no in-app screen). Fire-and-forget.
   late final DeviceRegistryService _deviceRegistry = DeviceRegistryService(
@@ -130,7 +143,9 @@ class AuthService extends ValueNotifier<UserData?> {
     this._supabase, {
     this.googleWebClientId =
         '807123945489-048eug40i2jn7novlblidott50sqcl7b.apps.googleusercontent.com',
-  }) : super(null) {
+    PendingPhotoUploads? pendingPhotos,
+  })  : _pendingPhotos = pendingPhotos,
+        super(null) {
     // Hand the database a thin closure over `value` so DAOs that mix in
     // BusinessScopedDao always read the current session's businessId
     // (auto-tracks login/logout through the ValueNotifier).
@@ -1126,11 +1141,15 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       final pending = await _db.syncDao.countPending(businessId: businessId);
       final orphans = await _db.syncDao.countOrphans(businessId: businessId);
-      if (pending + orphans == 0) return;
+      // Raw count of waiting photo copies (not the live-product filter, which
+      // reads the signed-in business and may not be [businessId]).
+      final photos =
+          (await LocalPhotoFiles.pendingUploadProductIds(businessId)).length;
+      if (pending + orphans + photos == 0) return;
       final entry =
           '${DateTime.now().toUtc().toIso8601String()} $reason '
-          'business=$businessId lost=${pending + orphans} '
-          '(pending=$pending orphans=$orphans)';
+          'business=$businessId lost=${pending + orphans + photos} '
+          '(pending=$pending orphans=$orphans photos=$photos)';
       debugPrint('[AuthService] WIPE DATA LOSS: $entry');
       final prefs = await SharedPreferences.getInstance();
       final list =
@@ -1471,9 +1490,14 @@ class AuthService extends ValueNotifier<UserData?> {
   /// logout or a self-resign): a wipe may never destroy a
   /// committed local row that still has an un-uploaded outbox entry. The outbox
   /// is the union of retryable pending rows (`sync_queue`) and un-pushable
-  /// orphans (`sync_queue_orphans`).
+  /// orphans (`sync_queue_orphans`). Product photos saved offline and not
+  /// uploaded yet ([PendingPhotoUploads], #343) live outside the outbox but
+  /// are counted the same way: retryable while offline; once an online upload
+  /// attempt still leaves them, they go with the orphans so they never trap
+  /// the user.
   ///
-  /// If anything is queued and we are online, it push-and-CONFIRMS by re-counting
+  /// If anything is queued and we are online, it uploads waiting photos, then
+  /// push-and-CONFIRMS by re-counting
   /// AFTER the drain (a partial/failed push must not let the wipe proceed on the
   /// remainder). It then throws:
   ///   • [LogoutWipeException] — retryable rows remain (transient: offline, or a
@@ -1486,9 +1510,20 @@ class AuthService extends ValueNotifier<UserData?> {
   Future<void> _assertOutboxClearBeforeWipe(String businessId) async {
     var pendingCount = await _db.syncDao.countPending(businessId: businessId);
     var orphanCount = await _db.syncDao.countOrphans(businessId: businessId);
-    if (pendingCount + orphanCount == 0) return;
+    var photoCount = await _countUnsentPhotos(businessId);
+    if (pendingCount + orphanCount + photoCount == 0) return;
 
-    if (_sync.isOnline.value) {
+    final online = _sync.isOnline.value;
+    if (online) {
+      // Photos first: each upload writes its url onto the product, which
+      // queues that product row — the push below then carries it.
+      if (photoCount > 0) {
+        try {
+          await _pendingPhotos?.upload(businessId);
+        } catch (e) {
+          debugPrint('[AuthService] pre-wipe photo upload failed: $e');
+        }
+      }
       try {
         await _sync.pushPending();
       } catch (e) {
@@ -1496,20 +1531,53 @@ class AuthService extends ValueNotifier<UserData?> {
       }
       pendingCount = await _db.syncDao.countPending(businessId: businessId);
       orphanCount = await _db.syncDao.countOrphans(businessId: businessId);
+      photoCount = await _countUnsentPhotos(businessId);
     }
 
-    if (pendingCount > 0) {
+    // Offline, a waiting photo is retryable exactly like a pending row: it
+    // uploads on reconnect. Online, a photo that still would not upload is not
+    // going to clear by waiting, so it joins the orphans below (#343).
+    if (pendingCount > 0 || (!online && photoCount > 0)) {
       throw LogoutWipeException(
-        'You have ${pendingCount + orphanCount} change'
-        '${pendingCount + orphanCount == 1 ? "" : "s"} not yet synced. '
-        'Connect to the internet and let it sync before signing out.',
+        unsyncedBeforeWipeMessage(
+          changes: pendingCount + orphanCount,
+          photos: photoCount,
+        ),
       );
     }
-    if (orphanCount > 0) {
+    if (orphanCount + photoCount > 0) {
       throw LogoutBlockedByUnsyncedDataException(
         pendingCount: pendingCount,
         orphanCount: orphanCount,
+        photoCount: photoCount,
       );
+    }
+  }
+
+  /// The "connect and sync first" refusal, in shop-owner words: e.g. "You have
+  /// 2 changes not yet synced and 1 product photo not uploaded yet. …".
+  @visibleForTesting
+  static String unsyncedBeforeWipeMessage({
+    required int changes,
+    required int photos,
+  }) {
+    final parts = [
+      if (changes > 0) '$changes change${changes == 1 ? "" : "s"} not yet synced',
+      if (photos > 0)
+        '$photos product photo${photos == 1 ? "" : "s"} not uploaded yet',
+    ];
+    return 'You have ${parts.join(' and ')}. '
+        'Connect to the internet and let it sync before signing out.';
+  }
+
+  Future<int> _countUnsentPhotos(String businessId) async {
+    final photos = _pendingPhotos;
+    if (photos == null) return 0;
+    try {
+      return await photos.count(businessId);
+    } catch (e) {
+      debugPrint('[AuthService] counting unsent photos failed: $e');
+      return 0;
     }
   }
 

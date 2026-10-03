@@ -12,6 +12,11 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 /// is never trapped: they EXPORT the stuck records (money recoverable on paper)
 /// and then must TYPE a confirmation to discard them and complete the logout.
 ///
+/// [photoCount] (#343) is product photos that would not upload even online.
+/// They are listed in the message and deleted with the discard; a photo can't
+/// go in the export, so with photos alone there is nothing to export and the
+/// typed confirmation is the only step.
+///
 /// Returns `true` if the user discarded + logged out (the caller should treat
 /// the session as gone), `false` if they cancelled.
 ///
@@ -25,6 +30,7 @@ Future<bool> showResolveUnsyncedDataDialog(
   WidgetRef ref, {
   required int pendingCount,
   required int orphanCount,
+  int photoCount = 0,
   bool isResign = false,
 }) async {
   final result = await showDialog<bool>(
@@ -33,6 +39,7 @@ Future<bool> showResolveUnsyncedDataDialog(
     builder: (ctx) => _ResolveUnsyncedDataDialog(
       pendingCount: pendingCount,
       orphanCount: orphanCount,
+      photoCount: photoCount,
       isResign: isResign,
     ),
   );
@@ -43,11 +50,13 @@ class _ResolveUnsyncedDataDialog extends ConsumerStatefulWidget {
   const _ResolveUnsyncedDataDialog({
     required this.pendingCount,
     required this.orphanCount,
+    required this.photoCount,
     required this.isResign,
   });
 
   final int pendingCount;
   final int orphanCount;
+  final int photoCount;
   final bool isResign;
 
   @override
@@ -60,11 +69,38 @@ class _ResolveUnsyncedDataDialogState
   static const _confirmWord = 'DISCARD';
 
   final _confirmController = TextEditingController();
-  bool _hasExported = false;
+  // Only outbox records can be exported; with nothing but photos there is no
+  // file to make, so discard is unlocked from the start.
+  late bool _hasExported = _recordCount == 0;
   bool _exporting = false;
   bool _discarding = false;
 
-  int get _total => widget.pendingCount + widget.orphanCount;
+  int get _recordCount => widget.pendingCount + widget.orphanCount;
+  int get _total => _recordCount + widget.photoCount;
+
+  String get _photoPhrase =>
+      '${widget.photoCount} product photo${widget.photoCount == 1 ? "" : "s"}';
+
+  String get _discardWhat => _recordCount > 0
+      ? 'these records'
+      : (widget.photoCount == 1 ? 'this photo' : 'these photos');
+
+  String get _message {
+    if (_recordCount == 0) {
+      return '$_photoPhrase on this device could not be uploaded. Check your '
+          'internet and try again, or discard '
+          '${widget.photoCount == 1 ? "it" : "them"} to finish '
+          '${widget.isResign ? "leaving your account" : "logging out"}.';
+    }
+    final records =
+        '$_recordCount change${_recordCount == 1 ? "" : "s"} on this device '
+        'could not be uploaded — your access to this business changed, so '
+        'the server is rejecting them. Export them first so nothing is '
+        'lost, then you can finish logging out.';
+    if (widget.photoCount == 0) return records;
+    return '$records $_photoPhrase could not be uploaded either; '
+        '${widget.photoCount == 1 ? "it" : "they"} will be deleted too.';
+  }
   bool get _canDiscard =>
       _hasExported &&
       !_discarding &&
@@ -133,37 +169,35 @@ class _ResolveUnsyncedDataDialogState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Records that can\'t sync'),
+      title: Text(
+        _recordCount == 0 ? 'Photos that can\'t upload' : 'Records that can\'t sync',
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '$_total change${_total == 1 ? "" : "s"} on this device '
-              'could not be uploaded — your access to this business changed, so '
-              'the server is rejecting them. Export them first so nothing is '
-              'lost, then you can finish logging out.',
-              style: theme.textTheme.bodyMedium,
-            ),
-            SizedBox(height: context.getRSize(16)),
-            FilledButton.tonalIcon(
-              onPressed: _exporting ? null : _export,
-              icon: _exporting
-                  ? SizedBox(
-                      width: context.getRSize(16),
-                      height: context.getRSize(16),
-                      child: const CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      _hasExported ? Icons.check : Icons.download_outlined,
-                    ),
-              label: Text(_hasExported ? 'Exported — export again' : 'Export records'),
-            ),
+            Text(_message, style: theme.textTheme.bodyMedium),
+            if (_recordCount > 0) ...[
+              SizedBox(height: context.getRSize(16)),
+              FilledButton.tonalIcon(
+                onPressed: _exporting ? null : _export,
+                icon: _exporting
+                    ? SizedBox(
+                        width: context.getRSize(16),
+                        height: context.getRSize(16),
+                        child: const CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        _hasExported ? Icons.check : Icons.download_outlined,
+                      ),
+                label: Text(_hasExported ? 'Exported — export again' : 'Export records'),
+              ),
+            ],
             SizedBox(height: context.getRSize(16)),
             Text(
               _hasExported
-                  ? 'Type $_confirmWord to permanently discard these records '
+                  ? 'Type $_confirmWord to permanently discard $_discardWhat '
                       '${widget.isResign ? "and leave your account." : "and log out."}'
                   : 'Export the records to unlock discard.',
               style: theme.textTheme.bodySmall,
