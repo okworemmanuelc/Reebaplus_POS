@@ -23,8 +23,8 @@
 export const SOURCE_BUCKET = "product-images";
 export const SHARED_BUCKET = "barcode-catalogue-photos";
 
-// Same limits as the product-images bucket (0144); the shared bucket (0182)
-// enforces them too.
+// The shared bucket's (0182) limits. product-images is capped at 1 MB since
+// 0186 (#341), so a source photo is always well under this.
 export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 export const ALLOWED_CONTENT_TYPES: readonly string[] = [
   "image/png",
