@@ -7,6 +7,17 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Scanner: "Camera is off" shortcut to settings (2026-10-03)
+Branch `feat/scan-camera-permission-prompt`, cut from `main` after PRD #316 merged. Worked in `../drinkPosApp-wt-campermission`. **No schema change.**
+- **Before the scanner opens** (`MobileScannerBarcodeScanner.scanSession` → `ensureCameraAccess` in `lib/features/pos/services/camera_permission.dart`):
+  - camera allowed → the scanner opens;
+  - never asked → the phone's own prompt asks first;
+  - still refused → the scanner stays closed and `CameraPermissionSheet` ("Camera is off") offers **Open settings**, which goes straight to this app's page in the phone settings through `permission_handler`'s `openAppSettings`. If settings can't be opened, a message says where to go instead.
+- **If the permission can't be read**, the check steps aside and the scanner opens as before (mobile_scanner asks itself).
+- **Inside the scanner**, `ScannerErrorView` (was `_ScannerError`) shows the same Open settings button when mobile_scanner reports `permissionDenied`, e.g. the camera was turned off while the app was open.
+- **Seam**: `CameraPermission` (production: `PermissionHandlerCameraPermission`). Tests in `test/pos/camera_permission_test.dart`.
+- **After turning Camera on**, the cashier comes back and taps Scan again. The scanner does not reopen by itself.
+
 ### Issue #321 — Link a scanned unknown barcode to an existing product (2026-10-01)
 Branch `feat/scan-link-existing-product-321`, stacked on `feat/scan-unknown-barcode-routing-320` (PR #326 → #325 → #324 → #323, none merged yet). Worked in `../drinkPosApp-wt-321`. Fifth and last slice of PRD #316 — **the PRD is complete pending those merges**; the shared barcode catalogue across businesses (#322) stays **parked**. **No schema change.**
 - **Gate**: `_onUnknown` now lets in anyone holding `Gates.addProduct` OR `Gates.editProductPrice`; the "Ask a manager to add it." message only when NEITHER is held.
