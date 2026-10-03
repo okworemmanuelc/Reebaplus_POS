@@ -129,4 +129,38 @@ void main() {
       expect(line, '${'A' * 20} ${'B' * 20}');
     });
   });
+
+  group('buildReceipt ESC/POS reset', () {
+    setUpAll(() {
+      TestWidgetsFlutterBinding.ensureInitialized();
+    });
+
+    test('emits ESC @ [0x1B, 0x40] at the start of mm58 receipt', () async {
+      final bytes = await ThermalReceiptService.buildReceipt(
+        orderId: '101',
+        cart: [],
+        subtotal: 0,
+        crateDeposit: 0,
+        total: 0,
+        paymentMethod: 'Cash',
+        paperSize: ReceiptPaperSize.mm58,
+      );
+      expect(bytes.length, greaterThanOrEqualTo(2));
+      expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+    });
+
+    test('emits ESC @ [0x1B, 0x40] at the start of mm80 receipt', () async {
+      final bytes = await ThermalReceiptService.buildReceipt(
+        orderId: '102',
+        cart: [],
+        subtotal: 0,
+        crateDeposit: 0,
+        total: 0,
+        paymentMethod: 'Cash',
+        paperSize: ReceiptPaperSize.mm80,
+      );
+      expect(bytes.length, greaterThanOrEqualTo(2));
+      expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+    });
+  });
 }
