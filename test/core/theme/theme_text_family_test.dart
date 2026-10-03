@@ -49,7 +49,8 @@ Map<String, TextStyle?> _slotStyles(ThemeData t) {
     'input.floatingLabelStyle': t.inputDecorationTheme.floatingLabelStyle,
     'input.helperStyle': t.inputDecorationTheme.helperStyle,
     'input.errorStyle': t.inputDecorationTheme.errorStyle,
-    'bottomNav.selectedLabelStyle': t.bottomNavigationBarTheme.selectedLabelStyle,
+    'bottomNav.selectedLabelStyle':
+        t.bottomNavigationBarTheme.selectedLabelStyle,
     'bottomNav.unselectedLabelStyle':
         t.bottomNavigationBarTheme.unselectedLabelStyle,
     'navBar.label(idle)': nav?.resolve(const <WidgetState>{}),
@@ -57,7 +58,11 @@ Map<String, TextStyle?> _slotStyles(ThemeData t) {
   };
 }
 
-void _expectSameExceptFamily(TextStyle? after, TextStyle? before, String label) {
+void _expectSameExceptFamily(
+  TextStyle? after,
+  TextStyle? before,
+  String label,
+) {
   if (before == null) {
     expect(after, isNull, reason: label);
     return;
@@ -78,12 +83,18 @@ void main() {
     test('${entry.key}: every text style uses DM Sans', () {
       final theme = entry.value();
       for (final style in _textThemeStyles(theme.textTheme).entries) {
-        expect(style.value?.fontFamily, appFontFamily,
-            reason: 'textTheme.${style.key}');
+        expect(
+          style.value?.fontFamily,
+          appFontFamily,
+          reason: 'textTheme.${style.key}',
+        );
       }
       for (final style in _textThemeStyles(theme.primaryTextTheme).entries) {
-        expect(style.value?.fontFamily, appFontFamily,
-            reason: 'primaryTextTheme.${style.key}');
+        expect(
+          style.value?.fontFamily,
+          appFontFamily,
+          reason: 'primaryTextTheme.${style.key}',
+        );
       }
       var slotsChecked = 0;
       for (final slot in _slotStyles(theme).entries) {
@@ -110,7 +121,11 @@ void main() {
     final before = ThemeData(
       useMaterial3: true,
       textTheme: const TextTheme(
-        headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.2),
+        headlineSmall: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
         bodySmall: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
       ),
       appBarTheme: const AppBarTheme(titleTextStyle: s, toolbarTextStyle: s),

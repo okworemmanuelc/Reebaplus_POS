@@ -60,22 +60,30 @@ void main() {
       Brightness.light: _lightThemes,
       Brightness.dark: _darkThemes,
     }.entries) {
-      test('is installed and identical in all 5 schemes (${entry.key.name})', () {
-        final reference = entry.key == Brightness.light
-            ? AppFixedColors.light
-            : AppFixedColors.dark;
-        for (final scheme in entry.value.entries) {
-          final theme = scheme.value();
-          expect(theme.brightness, entry.key, reason: scheme.key);
-          final fixed = theme.extension<AppFixedColors>();
-          expect(fixed, isNotNull, reason: '${scheme.key} lacks AppFixedColors');
-          expect(
-            _fixedValues(fixed!),
-            _fixedValues(reference),
-            reason: '${scheme.key} ${entry.key.name} differs from the fixed set',
-          );
-        }
-      });
+      test(
+        'is installed and identical in all 5 schemes (${entry.key.name})',
+        () {
+          final reference = entry.key == Brightness.light
+              ? AppFixedColors.light
+              : AppFixedColors.dark;
+          for (final scheme in entry.value.entries) {
+            final theme = scheme.value();
+            expect(theme.brightness, entry.key, reason: scheme.key);
+            final fixed = theme.extension<AppFixedColors>();
+            expect(
+              fixed,
+              isNotNull,
+              reason: '${scheme.key} lacks AppFixedColors',
+            );
+            expect(
+              _fixedValues(fixed!),
+              _fixedValues(reference),
+              reason:
+                  '${scheme.key} ${entry.key.name} differs from the fixed set',
+            );
+          }
+        },
+      );
     }
 
     test('light values equal the colour sheet', () {
@@ -171,41 +179,47 @@ void main() {
       Brightness.light: _lightThemes,
       Brightness.dark: _darkThemes,
     }.entries) {
-      test('use Blue\'s alpha values on their own colours (${entry.key.name})', () {
-        final isLight = entry.key == Brightness.light;
-        for (final scheme in entry.value.entries) {
-          final t = scheme.value();
-          final s = t.extension<AppSchemeColors>();
-          expect(s, isNotNull, reason: '${scheme.key} lacks AppSchemeColors');
-          final primary = t.colorScheme.primary;
-          _expectColour(
-            s!.primaryTint,
-            primary.withValues(alpha: isLight ? 0.12 : 0.16),
-            '${scheme.key} primary tint',
-          );
-          _expectColour(
-            s.primaryGlow,
-            primary.withValues(alpha: 0.30),
-            '${scheme.key} glow',
-          );
-          _expectColour(
-            s.cardFill,
-            t.colorScheme.surface.withValues(alpha: isLight ? 0.90 : 0.72),
-            '${scheme.key} card fill',
-          );
-          // The fade and hover must be visibly distinct from their base.
-          expect(
-            s.backgroundFade,
-            isNot(t.scaffoldBackgroundColor),
-            reason: '${scheme.key} fade equals the background',
-          );
-          expect(s.linkHover, isNot(primary), reason: '${scheme.key} hover');
-        }
-      });
+      test(
+        'use Blue\'s alpha values on their own colours (${entry.key.name})',
+        () {
+          final isLight = entry.key == Brightness.light;
+          for (final scheme in entry.value.entries) {
+            final t = scheme.value();
+            final s = t.extension<AppSchemeColors>();
+            expect(s, isNotNull, reason: '${scheme.key} lacks AppSchemeColors');
+            final primary = t.colorScheme.primary;
+            _expectColour(
+              s!.primaryTint,
+              primary.withValues(alpha: isLight ? 0.12 : 0.16),
+              '${scheme.key} primary tint',
+            );
+            _expectColour(
+              s.primaryGlow,
+              primary.withValues(alpha: 0.30),
+              '${scheme.key} glow',
+            );
+            _expectColour(
+              s.cardFill,
+              t.colorScheme.surface.withValues(alpha: isLight ? 0.90 : 0.72),
+              '${scheme.key} card fill',
+            );
+            // The fade and hover must be visibly distinct from their base.
+            expect(
+              s.backgroundFade,
+              isNot(t.scaffoldBackgroundColor),
+              reason: '${scheme.key} fade equals the background',
+            );
+            expect(s.linkHover, isNot(primary), reason: '${scheme.key} hover');
+          }
+        },
+      );
     }
 
     test('other schemes keep their own primary (fixed set does not leak)', () {
-      expect(AppTheme.amberLight().colorScheme.primary, isNot(const Color(0xFF2563EB)));
+      expect(
+        AppTheme.amberLight().colorScheme.primary,
+        isNot(const Color(0xFF2563EB)),
+      );
       expect(AppTheme.bwDarkTheme().colorScheme.onPrimary, Colors.black);
     });
   });
