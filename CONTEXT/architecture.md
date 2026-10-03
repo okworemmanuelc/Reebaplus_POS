@@ -54,6 +54,19 @@ path):
   equivalent; the resulting public URL is written to `businesses.logoUrl` and
   syncs via the normal outbox. A local file cache at
   `<appDocs>/business_logos/<businessId>.png` ensures receipts render offline.
+  Logos are uploaded as JPEG ≤512px to `<businessId>.jpg` (#340).
+- **`ProductImageService` (`lib/core/services/product_image_service.dart`)** —
+  product photos in bucket `product-images` at `<businessId>/<productId>.jpg`
+  (JPEG q80, ≤800px, transparency flattened onto white — #340; pre-#340
+  objects are `.png` and are removed best-effort on the next save). The public
+  URL written to `products.image_url` carries `?v=<millis>`, so a replaced photo
+  has a new url. The device copy (`ProductPhotoCache`) lives at
+  `<appDocs>/product_images/<productId>.png` — a stable path, because the synced
+  `products.image_path` may hold it — with a `<productId>.url` record of the url
+  it holds: a changed url downloads once and replaces the file, an unchanged url
+  never re-downloads, a photo saved offline (pending upload) always wins.
+  Both folders are deleted by `clearAllData` (logout / resign / removal /
+  business delete) via `LocalPhotoFiles.deleteAll`.
 
 All ordinary business writes still go to Drift first and drain through the
 `sync_queue`.
