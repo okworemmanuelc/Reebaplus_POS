@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import 'package:reebaplus_pos/features/pos/services/camera_permission.dart';
 import 'package:reebaplus_pos/features/pos/services/scan_camera.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
 /// The production [ScanCamera], backed by the device camera via
 /// `mobile_scanner` (#118, continuous since #319).
@@ -24,7 +27,9 @@ import 'package:reebaplus_pos/features/pos/services/scan_camera.dart';
 class MobileScannerScanCamera implements ScanCamera {
   MobileScannerScanCamera({
     @visibleForTesting MobileScannerController? controller,
-  }) : _controller =
+    CameraPermission permission = const PermissionHandlerCameraPermission(),
+  }) : _permission = permission,
+       _controller =
           controller ??
           // DetectionSpeed.normal, not noDuplicates (#319): the scanner stays
           // open, so the same product must scan again after the debounce —
@@ -35,6 +40,9 @@ class MobileScannerScanCamera implements ScanCamera {
   }
 
   final MobileScannerController _controller;
+
+  /// Opens the phone's settings from the "camera is off" view.
+  final CameraPermission _permission;
 
   final ValueNotifier<bool?> _torch = ValueNotifier<bool?>(null);
 
@@ -100,7 +108,11 @@ class MobileScannerScanCamera implements ScanCamera {
           }
         }
       },
-      errorBuilder: (context, error) => const _ScannerError(),
+      errorBuilder: (context, error) => ScannerErrorView(
+        isPermissionDenied:
+            error.errorCode == MobileScannerErrorCode.permissionDenied,
+        onOpenSettings: () => unawaited(_permission.openSettings()),
+      ),
       overlayBuilder: (context, constraints) => const _ScannerHint(),
     );
   }
@@ -155,29 +167,50 @@ class MobileScannerScanCamera implements ScanCamera {
   }
 }
 
-/// Shown when the camera cannot start — most commonly a denied camera
-/// permission. Keeps the flow calm (invariant #7) instead of surfacing a raw
-/// error.
-class _ScannerError extends StatelessWidget {
-  const _ScannerError();
+/// Shown when the camera cannot start. Keeps the flow calm (invariant #7)
+/// instead of surfacing a raw error. When the camera permission is off (it was
+/// turned off while the app was open, after the pre-open check in
+/// `MobileScannerBarcodeScanner`) it also offers a shortcut to the phone's
+/// settings.
+class ScannerErrorView extends StatelessWidget {
+  const ScannerErrorView({
+    super.key,
+    required this.isPermissionDenied,
+    required this.onOpenSettings,
+  });
+
+  final bool isPermissionDenied;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
     // Material fallback icon — font_awesome_flutter has no camera-slash glyph.
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(32),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.no_photography, color: Colors.white, size: 40),
-            SizedBox(height: 16),
+            const Icon(Icons.no_photography, color: Colors.white, size: 40),
+            const SizedBox(height: 16),
             Text(
-              'Camera unavailable. Allow camera access for this app in your '
-              'device settings to scan barcodes.',
+              isPermissionDenied
+                  ? 'Camera is off for this app. Turn it on in your phone '
+                        'settings, then close and reopen the scanner.'
+                  : 'Camera unavailable. Allow camera access for this app in '
+                        'your device settings to scan barcodes.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white),
             ),
+            if (isPermissionDenied) ...[
+              const SizedBox(height: 24),
+              AppButton(
+                text: 'Open settings',
+                icon: FontAwesomeIcons.gear.data,
+                isFullWidth: false,
+                onPressed: onOpenSettings,
+              ),
+            ],
           ],
         ),
       ),
