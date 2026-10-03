@@ -22,6 +22,8 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/services/barcode_catalogue_service.dart';
 import 'package:reebaplus_pos/core/services/barcode_suggestion.dart';
+import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
+import 'package:reebaplus_pos/core/services/catalogue_report.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/catalogue_filled_note.dart';
@@ -54,6 +56,24 @@ class _FakeCatalogue implements BarcodeCatalogueService {
     photoAsked.add(includePhoto);
     return pending?.future ?? Future.value(answer);
   }
+
+  // Report sheet methods (#335): Add Product never calls them.
+  @override
+  Future<CatalogueLookup> lookupOutcome(
+    String code, {
+    bool includePhoto = true,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<CatalogueReportResult> report({
+    required String businessId,
+    required String barcode,
+    required Set<CatalogueReportReason> reasons,
+    String? note,
+    String? shownName,
+    String? shownUnit,
+    String? shownPhotoUrl,
+  }) => throw UnimplementedError();
 }
 
 /// Real photo processing ([processBytes] is inherited); [save] records what

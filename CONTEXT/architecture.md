@@ -68,13 +68,19 @@ path):
   Both folders are deleted by `clearAllData` (logout / resign / removal /
   business delete) via `LocalPhotoFiles.deleteAll`.
 - **`BarcodeCatalogueService` (`lib/core/services/barcode_catalogue_service.dart`)**
-  — the shared barcode catalogue lookup (ADR 0029 §8, #332). Read-only: it
+  — the shared barcode catalogue lookup (ADR 0029 §8, #332). The lookup is read-only: it
   calls the definer RPC `barcode_suggestion(p_barcode)` and fetches the public
   Storage object named in its `photo_url` (a plain GET; the shared bucket has
   no `storage.objects` policies). About 2 s per step; any failure is silent and
-  returns null. No lookup result is kept on the phone. Only Add Product uses it,
+  returns null. No lookup result is kept on the phone. Add Product uses `lookup`
   to fill empty boxes for a brand-new product; a suggested photo is processed
   and saved through `ProductImageService` as the shop's own photo.
+  Its one write (#335): `report(...)` calls the definer RPC
+  `report_barcode_catalogue_entry` from the product-details report sheet
+  (business and reporter taken from the caller on the server; ~2 s; online
+  only, never queued; the table `barcode_catalogue_reports` is unreadable by
+  clients). `lookupOutcome` is the lookup that says why nothing came back
+  (nothing shared / unreachable / failed) for that sheet.
 
 All ordinary business writes still go to Drift first and drain through the
 `sync_queue`.

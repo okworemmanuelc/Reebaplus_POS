@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/catalogue_report_link.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
@@ -1204,6 +1205,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               ],
             ),
           ),
+          // Shown only for a factory barcode (ADR 0029 §6, #335).
+          CatalogueReportLink(barcode: _productData?.barcode),
           SizedBox(height: context.getRSize(40)),
         ],
       ),
