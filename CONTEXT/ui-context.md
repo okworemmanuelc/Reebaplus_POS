@@ -159,10 +159,15 @@ below.
 
 ## Typography
 
-Fonts are bundled in `assets/google_fonts/` and loaded through the
-`google_fonts` package with `GoogleFonts.config.allowRuntimeFetching = false`
-(`main.dart`), so a missing file surfaces as an asset error and nothing is ever
-fetched from the network.
+Fonts are bundled in `assets/google_fonts/` and registered in `pubspec.yaml`
+as two real font families — `DMSans` (400, 500, 600, 700, 800) and
+`RobotoMono` (400). Nothing is fetched from the network
+(`GoogleFonts.config.allowRuntimeFetching = false` in `main.dart` stays as a
+guard for any future `google_fonts` call). Because each weight is its own
+file in one family, a style that asks for w700 gets the Bold file, never a
+synthesised bold of Regular. The family names are the constants
+`appFontFamily` / `appMonoFontFamily` in `lib/core/theme/app_theme.dart`;
+widgets never write the family name themselves.
 
 | File | Family / weight | Source |
 |---|---|---|
@@ -183,11 +188,15 @@ fetched from the network.
 | 700 | Prices, totals, names, card titles, buttons, badges, big figures |
 | 800 | Screen titles (base 18), the business name, the "POS" label under the raised button |
 
-> **Current state (2026-10-03):** the `TextTheme`s in `app_theme.dart` set
-> sizes and weights but **no `fontFamily`**, so body text still renders in the
-> platform default font. Only the two styles below use the bundled fonts.
-> Switching the whole `TextTheme` to DM Sans is an open item for the redesign
-> (see `progress-tracker.md`, #349).
+**Every theme uses DM Sans (#349).** All 10 builders (5 schemes × light/dark)
+return through `AppTheme.withAppFont`, which puts `textTheme`,
+`primaryTextTheme` and the component slots that carry their own style (app
+bar title/toolbar, chip labels, input hint/label/helper/error, bottom-nav
+labels, navigation-bar labels) on `DMSans`. It changes only the family —
+size, weight, colour, letter spacing and height stay as each builder sets
+them. Text styled with a raw `TextStyle` inherits the family from
+`DefaultTextStyle`. The few explicit `fontFamily: 'monospace'` call sites are
+left for the `monoStyle` adoption in Wave 2.
 
 ### Styles outside the `TextTheme`
 
