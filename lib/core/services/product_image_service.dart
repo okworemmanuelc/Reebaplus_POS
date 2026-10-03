@@ -68,8 +68,19 @@ class ProductImageService {
       final picked = await picker.pickImage(source: source, imageQuality: 90);
       if (picked == null) return Result.err(AppError.cancelled());
 
-      final rawBytes = await picked.readAsBytes();
-      final decoded = img.decodeImage(rawBytes);
+      return processBytes(await picked.readAsBytes());
+    } catch (e) {
+      return Result.err(AppError.unknown(e));
+    }
+  }
+
+  /// Decodes [raw] and runs it through the same [_encode] step as a picked
+  /// photo (≤800px JPEG). For a photo that did not come from the picker (the
+  /// shared barcode catalogue's suggestion, #332), so it is held and saved as
+  /// the shop's own photo. Returns [Result.err] if [raw] can't be decoded.
+  Result<Uint8List, AppError> processBytes(Uint8List raw) {
+    try {
+      final decoded = img.decodeImage(raw);
       if (decoded == null) {
         return Result.err(AppError.io('Could not decode image.'));
       }

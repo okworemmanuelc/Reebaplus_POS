@@ -67,6 +67,14 @@ path):
   never re-downloads, a photo saved offline (pending upload) always wins.
   Both folders are deleted by `clearAllData` (logout / resign / removal /
   business delete) via `LocalPhotoFiles.deleteAll`.
+- **`BarcodeCatalogueService` (`lib/core/services/barcode_catalogue_service.dart`)**
+  — the shared barcode catalogue lookup (ADR 0029 §8, #332). Read-only: it
+  calls the definer RPC `barcode_suggestion(p_barcode)` and fetches the public
+  Storage object named in its `photo_url` (a plain GET; the shared bucket has
+  no `storage.objects` policies). About 2 s per step; any failure is silent and
+  returns null. No lookup result is kept on the phone. Only Add Product uses it,
+  to fill empty boxes for a brand-new product; a suggested photo is processed
+  and saved through `ProductImageService` as the shop's own photo.
 
 All ordinary business writes still go to Drift first and drain through the
 `sync_queue`.
@@ -352,7 +360,7 @@ These are rules, not guidelines. Code that breaks one of these is wrong even if 
 
 4. **Every cloud write goes through the outbox.** A repository that needs to change cloud state writes to Drift and enqueues an outbox entry; it must not call Supabase directly. This guarantees offline durability, ordered delivery, idempotent retries, and adaptive batching through one and only one write path.
 
-5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Planned exception (ADR 0029, #322, on hold):** the shared barcode catalogue. Once it ships, one read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity. No row of another business ever becomes readable.
+5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Exception (ADR 0029, #322):** the shared barcode catalogue. One read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity; Add Product reads it through `BarcodeCatalogueService` (#332). No row of another business ever becomes readable.
 
 6. **Permissions are read from data, never hard-coded.** Gating decisions come exclusively from role and override rows via `lib/core/permissions/`. No feature may branch on a hard-coded role name (e.g. `if (role == 'Cashier')`); it must ask `can(action)`.
 

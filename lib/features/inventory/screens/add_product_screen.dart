@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,7 +14,10 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/barcode_suggestion.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/utils/factory_barcode.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/catalogue_filled_note.dart';
 
 import 'package:reebaplus_pos/features/inventory/models/fast_add_product_model.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -112,6 +117,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// new product row is created, in [_persistNewProduct].
   Uint8List? _pendingImageBytes;
 
+  /// Which boxes the shared barcode catalogue filled in (ADR 0029 §8, #332).
+  /// Each one shows [CatalogueFilledNote] until the person edits that field.
+  bool _isNameFromCatalogue = false;
+  bool _isUnitFromCatalogue = false;
+  bool _isPhotoFromCatalogue = false;
+
+  /// A catalogue-suggested unit missing from the business's starter list, kept
+  /// so [_loadData] re-adds it when it rebuilds [_dynamicUnits].
+  String? _catalogueUnit;
+
+  /// Debounces catalogue lookups while the barcode box is being typed in.
+  Timer? _catalogueDebounce;
+  static const _catalogueDebounceDelay = Duration(milliseconds: 500);
+
   /// Fast-Add: the "More details" section is collapsed by default (ADR 0006).
   bool _showMoreDetails = false;
 
@@ -158,6 +177,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final prefillBarcode = widget.prefilledBarcode?.trim() ?? '';
     if (prefillBarcode.isNotEmpty) _barcodeCtrl.text = prefillBarcode;
     _loadData();
+    // #332: a POS scan of an unknown code looks it up in the shared catalogue.
+    if (prefillBarcode.isNotEmpty) _lookUpCatalogue(prefillBarcode);
   }
 
   Future<void> _loadData() async {
@@ -181,10 +202,21 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         _allCategories = cats;
         _allProducts = productsList;
         // Merge the industry's starter units (#80) with any already in use.
-        final mergedUnits = {
-          ..._lexicon.starterUnits,
-          ...uniqueUnits,
-        }.toList()..sort();
+        final listedUnits = {..._lexicon.starterUnits, ...uniqueUnits};
+        // A catalogue unit (#332) filled in before this load: take the
+        // list's own spelling when it is listed after all, else keep it.
+        final catalogueUnit = _catalogueUnit;
+        if (catalogueUnit != null) {
+          final listed = listedUnits
+              .where((u) => u.toLowerCase() == catalogueUnit.toLowerCase())
+              .firstOrNull;
+          if (listed != null) {
+            if (_unit == catalogueUnit) _unit = listed;
+            _catalogueUnit = null;
+          }
+        }
+        final mergedUnits = {...listedUnits, ?_catalogueUnit}.toList()
+          ..sort();
         _dynamicUnits = mergedUnits;
 
         // #320: start on the caller's store (the POS active store) when it is
@@ -213,6 +245,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _manufacturerCtrl.dispose();
     _categoryCtrl.dispose();
     _barcodeCtrl.dispose();
+    _catalogueDebounce?.cancel();
     super.dispose();
   }
 
@@ -222,6 +255,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// avoid jamming the offline outbox).
   Future<void> _onBarcodeChanged(String value) async {
     final trimmed = value.trim();
+    _scheduleCatalogueLookup(trimmed);
     if (trimmed.isEmpty) {
       if (_barcodeCollisionName != null) {
         setState(() => _barcodeCollisionName = null);
@@ -238,6 +272,115 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (collision != _barcodeCollisionName) {
       setState(() => _barcodeCollisionName = collision);
     }
+  }
+
+  // ── Shared barcode catalogue (ADR 0029 §8, #332) ─────────────────────────
+
+  /// Only a brand-new product is filled in: never with an existing product
+  /// picked for restock. (Edits use Update Product, and the #321 "link to an
+  /// existing product" flow never opens this screen.)
+  bool get _canSuggestFromCatalogue => _selectedExistingProduct == null;
+
+  /// The photo box only exists on the Fast-Add form for a new product, so a
+  /// suggested photo is only held there.
+  bool get _showsPhotoField =>
+      _selectedExistingProduct == null && !widget.receiveMode;
+
+  /// Looks a typed or scanned [code] up after a short pause. A code that is
+  /// not a factory barcode never reaches the service.
+  void _scheduleCatalogueLookup(String code) {
+    _catalogueDebounce?.cancel();
+    if (!_canSuggestFromCatalogue || FactoryBarcode.tryParse(code) == null) {
+      return;
+    }
+    _catalogueDebounce = Timer(
+      _catalogueDebounceDelay,
+      () => _lookUpCatalogue(code),
+    );
+  }
+
+  /// Asks the shared catalogue about [code] and fills only the boxes that are
+  /// still empty when the answer comes. The answer is dropped when the barcode
+  /// box no longer holds [code]. Any failure leaves the form alone, silently;
+  /// saving never waits on this.
+  Future<void> _lookUpCatalogue(String code) async {
+    if (!_canSuggestFromCatalogue || FactoryBarcode.tryParse(code) == null) {
+      return;
+    }
+    final service = ref.read(barcodeCatalogueServiceProvider);
+    // Only download the photo when it could be used (saves phone data);
+    // _applyCatalogueSuggestion re-checks before using the bytes.
+    final suggestion = await service.lookup(
+      code,
+      includePhoto: _showsPhotoField && _pendingImageBytes == null,
+    );
+    if (suggestion == null || !mounted) return;
+    if (_barcodeCtrl.text.trim() != code || !_canSuggestFromCatalogue) return;
+    _applyCatalogueSuggestion(suggestion);
+  }
+
+  void _applyCatalogueSuggestion(BarcodeSuggestion suggestion) {
+    final name = suggestion.name;
+    final fillName = name != null && _nameCtrl.text.trim().isEmpty;
+    final unit = suggestion.unit == null
+        ? null
+        : _matchListedUnit(suggestion.unit!);
+    final fillUnit = unit != null && _unit == null;
+    final photo = _showsPhotoField && _pendingImageBytes == null
+        ? _processCataloguePhoto(suggestion.photoBytes)
+        : null;
+    if (!fillName && !fillUnit && photo == null) return;
+
+    if (fillName) _nameCtrl.text = name;
+    setState(() {
+      if (fillName) _isNameFromCatalogue = true;
+      if (fillUnit) {
+        if (!_dynamicUnits.contains(unit)) {
+          _catalogueUnit = unit;
+          _dynamicUnits = [..._dynamicUnits, unit]..sort();
+        }
+        _unit = unit;
+        // As picking a unit by hand: Bottle turns empties tracking on.
+        _trackEmpties = unit.toLowerCase() == 'bottle';
+        _isUnitFromCatalogue = true;
+      }
+      if (photo != null) {
+        _pendingImageBytes = photo;
+        _isPhotoFromCatalogue = true;
+      }
+    });
+  }
+
+  /// The dropdown's own spelling of [unit] when it is already listed (case
+  /// aside), else [unit] as suggested.
+  String _matchListedUnit(String unit) {
+    final lower = unit.toLowerCase();
+    return _dynamicUnits.firstWhere(
+      (u) => u.toLowerCase() == lower,
+      orElse: () => unit,
+    );
+  }
+
+  /// Runs the suggested photo through the same processing as a picked photo,
+  /// so it is held and saved as the shop's own photo. Null when it can't be
+  /// decoded.
+  Uint8List? _processCataloguePhoto(Uint8List? raw) {
+    if (raw == null) return null;
+    final result = ref.read(productImageServiceProvider).processBytes(raw);
+    return switch (result) {
+      Ok(:final value) => value,
+      Err() => null,
+    };
+  }
+
+  void _onUnitPicked(String? value) {
+    setState(() {
+      _unit = value;
+      // Auto-enable tracking for bottle products, off otherwise (a null unit
+      // is not a bottle).
+      _trackEmpties = value?.toLowerCase() == 'bottle';
+      _isUnitFromCatalogue = false;
+    });
   }
 
   void _onSupplierChanged(String query) {
@@ -333,6 +476,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   void _onNameChanged(String query) {
     final q = query.trim().toLowerCase();
     setState(() {
+      _isNameFromCatalogue = false;
       _selectedExistingProduct = null;
       _productSuggestions = q.isEmpty
           ? []
@@ -362,9 +506,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final keepTypedBarcode = _barcodeCtrl.text.trim().isNotEmpty;
     if (!keepTypedBarcode) _barcodeCtrl.text = product.barcode ?? '';
 
+    _catalogueDebounce?.cancel();
     setState(() {
       _selectedExistingProduct = product;
       _barcodeCollisionName = null;
+      _isNameFromCatalogue = false;
+      _isUnitFromCatalogue = false;
       _unit = product.unit;
       _size = product.size;
       _trackEmpties = product.trackEmpties;
@@ -416,6 +563,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     setState(() {
       _selectedExistingProduct = null;
       _barcodeCollisionName = null;
+      _isNameFromCatalogue = false;
+      _isUnitFromCatalogue = false;
       // Clearing an existing selection to add fresh resets to "No unit" (owner
       // request) — the same up-front, non-pre-filled default as initState.
       _unit = null;
@@ -1152,7 +1301,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (!mounted) return;
     switch (result) {
       case Ok(:final value):
-        setState(() => _pendingImageBytes = value);
+        setState(() {
+          _pendingImageBytes = value;
+          _isPhotoFromCatalogue = false;
+        });
       case Err(:final error):
         if (!error.isCancelled) {
           AppNotification.showError(context, 'Could not load image.');
@@ -1330,6 +1482,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   prefixIcon: Icon(Icons.search, size: 18, color: subtext),
                   onChanged: _onNameChanged,
                 ),
+                if (_isNameFromCatalogue) const CatalogueFilledNote(),
                 if (_productSuggestions.isNotEmpty)
                   _suggestionList(
                     children: _productSuggestions
@@ -1502,15 +1655,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                           DropdownMenuItem<String?>(value: u, child: Text(u)),
                     ),
                   ],
-                  onChanged: (v) {
-                    setState(() {
-                      _unit = v;
-                      // Auto-enable tracking for bottle products, off otherwise
-                      // (a null unit is not a bottle).
-                      _trackEmpties = v?.toLowerCase() == 'bottle';
-                    });
-                  },
+                  onChanged: _onUnitPicked,
                 ),
+                if (_isUnitFromCatalogue && !isExisting)
+                  const CatalogueFilledNote(),
                 const SizedBox(height: 8),
 
                 // ── ALLOW FRACTIONAL SALES ─────────────────────────────
@@ -1777,6 +1925,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         onChanged: _onNameChanged,
       ),
       _fieldHelper('Include the size or key detail in the name.', subtext),
+      if (_isNameFromCatalogue) const CatalogueFilledNote(),
       if (_productSuggestions.isNotEmpty)
         _suggestionList(
           children: _productSuggestions
@@ -1894,15 +2043,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
           ),
         ],
-        onChanged: (v) {
-          setState(() {
-            _unit = v;
-            // Auto-enable tracking for bottle products, off otherwise (a null
-            // unit is not a bottle).
-            _trackEmpties = v?.toLowerCase() == 'bottle';
-          });
-        },
+        onChanged: _onUnitPicked,
       ),
+      if (_isUnitFromCatalogue) const CatalogueFilledNote(),
       const SizedBox(height: 20),
 
       // ── MORE DETAILS (collapsible) ──────────────────────────────────────
@@ -1934,8 +2077,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           onPick: _pickPhoto,
           onRemove: _pendingImageBytes == null
               ? null
-              : () => setState(() => _pendingImageBytes = null),
+              : () => setState(() {
+                  _pendingImageBytes = null;
+                  _isPhotoFromCatalogue = false;
+                }),
         ),
+        if (_isPhotoFromCatalogue) const CatalogueFilledNote(),
         const SizedBox(height: 14),
       ],
       // ── DESCRIPTION (optional) ──────────────────────────────────────────
