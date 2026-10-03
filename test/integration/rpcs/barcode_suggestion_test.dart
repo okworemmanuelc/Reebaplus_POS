@@ -425,8 +425,8 @@ void main() {
         clients.env.url,
         clients.env.anonKey,
       );
-      expect(
-        () => anonClient.rpc(
+      await expectLater(
+        anonClient.rpc(
           'barcode_suggestion',
           params: {'p_barcode': '6150001234561'},
         ),
