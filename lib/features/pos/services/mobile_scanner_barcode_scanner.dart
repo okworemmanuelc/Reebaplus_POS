@@ -32,7 +32,8 @@ class MobileScannerBarcodeScanner implements BarcodeScanner {
         // A factory, not an instance: the page creates the camera once, in
         // initState, however often the route rebuilds this builder.
         builder: (_) => BarcodeScanPage(
-          createCamera: MobileScannerScanCamera.new,
+          // The same permission, so the camera's "Open settings" uses it too.
+          createCamera: () => MobileScannerScanCamera(permission: permission),
           onCode: onCode,
         ),
       ),
