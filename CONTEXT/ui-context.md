@@ -38,8 +38,8 @@ scheme (only light vs dark differ).
 `AppFixedColors` — e.g. a pale icon tile on a Home stat card or settings row is
 `infoTint` with an `info` icon in every scheme. The scheme still drives primary
 buttons, active nav (the active rail item's pale pill is
-`AppSchemeColors.primaryTint`), prices, the screen-title icon tile and focus
-outlines.
+`AppSchemeColors.primaryTint`), prices, the screen-title icon tile (a solid
+primary gradient, not a tint) and focus outlines.
 
 ---
 
@@ -69,7 +69,7 @@ added by #349 from the designer colour sheet.
 | Primary | `colorScheme.primary` | `#2563EB` | `#3B82F6` | Prices, totals, subtitles, active items, focus border |
 | Secondary | `colorScheme.secondary` | `#60A5FA` | `#60A5FA` | Gradient start on primary buttons/FAB |
 | On primary | `colorScheme.onPrimary` | `#FFFFFF` | `#FFFFFF` | Text and icons on the blue gradient (dark was black before #349 — deliberate change) |
-| Primary tint | `AppSchemeColors.primaryTint` | `#2563EB` @ 0.12 | `#3B82F6` @ 0.16 | Active rail item, screen-title icon tile |
+| Primary tint | `AppSchemeColors.primaryTint` | `#2563EB` @ 0.12 | `#3B82F6` @ 0.16 | Active rail item and other pale active fills (not the screen-title icon tile, which is the solid primary gradient) |
 | Primary glow | `AppSchemeColors.primaryGlow` | `#2563EB` @ 0.30 | `#3B82F6` @ 0.30 | Shadow under primary buttons |
 | Link hover | `AppSchemeColors.linkHover` | `#1D4ED8` | `#60A5FA` | Link hover / pressed |
 | Error | `colorScheme.error` | `#EF4444` | `#EF4444` | Form errors (per scheme; Amber/Purple/Green/B&W use `#FF3B30`) |

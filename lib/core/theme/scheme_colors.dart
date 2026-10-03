@@ -13,7 +13,8 @@ import 'package:flutter/material.dart';
 /// ```
 @immutable
 class AppSchemeColors extends ThemeExtension<AppSchemeColors> {
-  /// Pale primary fill: active rail item, screen-title icon tile.
+  /// Pale primary fill: the active rail item and other pale active fills.
+  /// Not the screen-title icon tile — that is the solid primary gradient.
   final Color primaryTint;
 
   /// Shadow under primary (gradient) buttons.
