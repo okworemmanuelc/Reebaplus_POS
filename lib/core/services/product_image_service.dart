@@ -130,9 +130,11 @@ class ProductImageService {
   }
 
   /// Uploads JPEG [bytes] to `<businessId>/<productId>.jpg` and returns its
-  /// versioned public URL. A photo saved before #340 lived at `.png`; once the
-  /// `.jpg` is up that old object is removed in the background (best effort —
-  /// it never blocks or fails the save).
+  /// versioned public URL. A photo saved before #340 lived at `.png`; that old
+  /// object is deliberately left in place (#343): an older-version phone may
+  /// be saving `.png` + its url at the same moment, and removing it here could
+  /// leave the winning url pointing at a deleted object. Only [clear] removes
+  /// it.
   Future<String> _upload(
     String businessId,
     String productId,
@@ -144,17 +146,10 @@ class ProductImageService {
           bytes,
           fileOptions: const FileOptions(upsert: true, contentType: 'image/jpeg'),
         );
-    unawaited(_removeQuietly(_legacyObjectPath(businessId, productId)));
     return versionedUrl(
       _client.storage.from(_bucket).getPublicUrl(objectPath),
       DateTime.now().millisecondsSinceEpoch,
     );
-  }
-
-  Future<void> _removeQuietly(String objectPath) async {
-    try {
-      await _client.storage.from(_bucket).remove([objectPath]);
-    } catch (_) {}
   }
 
   // ── Offline retry ───────────────────────────────────────────────────────────
