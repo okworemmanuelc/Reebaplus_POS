@@ -7,6 +7,20 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #331: Shared barcode catalogue 2/4 — first photo copied to a shared bucket + backfill (2026-10-03)
+Branch `feat/barcode-catalogue-photo-331`, stacked on `feat/barcode-catalogue-rpc-330` (PR #338, unmerged), worked in `../drinkPosApp-wt-331`. **No Drift schema change, no client code.**
+- **Migration `0182_barcode_catalogue_photos.sql`** (DEPLOYED via `supabase db push`; dev and prod are the same project, `ewwyofbvfjyqqirrcaou`):
+  - Bucket `barcode-catalogue-photos`: public read, 5 MB, same types as `product-images`, **no storage.objects policies** (service role only; no listing).
+  - `public.barcode_catalogue_photo_blocks (sha256 pk lower-hex, gtin14, blocked_at)`, RLS on, no policies.
+  - `public.barcode_catalogue_photo_candidates(p_product_id | p_gtin14)`: qualifying products (factory GTIN, not deleted, has photo), oldest `created_at` first. Service role only. The Edge Function uses it, so the factory rule still lives only in SQL + Dart.
+  - `public.barcode_catalogue_request_share(jsonb)`: pg_net POST to the function, reading Vault `project_url` + `barcode_catalogue_hook_secret`; NULL when unconfigured. Service role only. Used by trigger, backfill, runbook.
+  - Trigger `trg_share_barcode_photo` AFTER INSERT OR UPDATE OF image_url, barcode ON products, WHEN image_url not null AND factory GTIN; skips deleted rows and GTINs already shared; errors downgraded to a warning so a product push can never be rejected.
+- **Edge Function `share-barcode-photo`** (DEPLOYED, verify_jwt off, secret header `x-barcode-catalogue-hook-secret`): `{record}` re-reads the product by id; `{gtin14}` walks candidates oldest first. Pure logic in `share.ts` (source path must be the product's own `product-images/<businessId>/...` object; sha256; blocked skipped; upload `upsert:false`; row `ON CONFLICT DO NOTHING`; an object without a row is adopted, or removed if its hash is blocked). 15 Deno unit tests in `share_test.ts` (no CI Deno tier).
+- **Backfill**: `supabase/scripts/backfill_barcode_catalogue_photos.sql`. Prod today has 4 factory-GTIN products and **0 with a photo**, so the backfill will queue 0 requests.
+- **Runbook**: ADR 0029 §6 Photo bullet now carries the exact SQL + Storage steps.
+- **Tests**: Tier-2 `test/integration/rpcs/barcode_catalogue_photo_test.dart` (6 tests, random GTINs under unassigned GS1 prefix 19). The bucket/table lockdown test PASSES live. The 5 pipeline tests need the hook secret.
+- **OPEN (owner action)**: the hook secret isn't set yet. The auto-mode classifier blocks secret-store writes. Until it is set, the trigger does nothing (safe). After setting it: run the 5 pipeline tests, then the backfill.
+
 ### Issue #330: Shared barcode catalogue 1/4 — factory barcode rule, lookup RPC, kill switch (2026-10-03)
 Branch `feat/barcode-catalogue-rpc-330`, cut from `main`. **No Drift schema change.**
 - **Factory-barcode rule (ADR 0029 §2)**:

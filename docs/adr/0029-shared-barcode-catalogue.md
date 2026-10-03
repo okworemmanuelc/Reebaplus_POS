@@ -1,6 +1,6 @@
 # ADR 0029: Shared barcode catalogue across businesses
 
-**Status:** accepted (2026-10-03); §6 amended the same day (in-app reports). Build is **on hold** (issue #322 stays `on-hold`).  
+**Status:** accepted (2026-10-03); §6 amended the same day (in-app reports). Build in progress: #330 (lookup) and #331 (shared photo) are built; #332 and #335 are not.  
 **Context:** Issue #322 (owner grilling, 2026-10-03). Follows PRD #316 / ADR 0017.  
 **Amends:** architecture.md invariant #5 (cross-business data access) with one named exception.
 
@@ -181,7 +181,30 @@ the fix:
   bring it back by saving again. The vote falls to the next name.
 - **Photo:** insert its `sha256` into `public.barcode_catalogue_photo_blocks`,
   delete the row and the object, then call `share-barcode-photo` with
-  `{gtin14}` to promote the next-oldest unblocked photo.
+  `{gtin14}` to promote the next-oldest unblocked photo:
+  ```sql
+  -- 1. Block the hash (taken from the current row).
+  INSERT INTO public.barcode_catalogue_photo_blocks (sha256, gtin14)
+  SELECT sha256, gtin14 FROM public.barcode_catalogue_photos
+   WHERE gtin14 = public.gtin14('<barcode>');
+  -- 2. Delete the row.
+  DELETE FROM public.barcode_catalogue_photos
+   WHERE gtin14 = public.gtin14('<barcode>');
+  ```
+  3. Delete the object `barcode-catalogue-photos/<gtin14>.png` in the Storage
+     dashboard (SQL can't delete Storage objects). Don't skip this: the URL is
+     guessable and stays public while the object exists. The CDN can keep
+     serving a cached copy for up to an hour.
+  ```sql
+  -- 4. Promote the next-oldest unblocked photo (returns a pg_net request id;
+  --    NULL means the Vault secret is missing). Check the outcome in
+  --    net._http_response.
+  SELECT public.barcode_catalogue_request_share(
+    jsonb_build_object('gtin14', public.gtin14('<barcode>')));
+  ```
+  If no other shop has an unblocked photo, the code simply has no shared
+  photo until one is saved. If step 3 was forgotten, the function removes the
+  blocked object itself the next time it shares a photo for that code.
 
 Then mark the report `resolved` (or `dismissed`) with `resolved_at`. Both block
 tables have RLS on and no policies (service role only). A review page in the
