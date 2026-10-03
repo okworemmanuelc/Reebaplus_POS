@@ -678,16 +678,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         return;
       }
 
-      final hasManufacturer = _selectedManufacturer != null ||
-          _manufacturerCtrl.text.trim().isNotEmpty;
-      if (_effectiveTrackEmpties && !hasManufacturer) {
-        AppNotification.showError(
-          context,
-          'Manufacturer is required to track empty crates.',
-        );
-        return;
-      }
-
       final confirmed = await _confirmSaveProduct(existingName);
       if (!confirmed) return;
 
@@ -810,8 +800,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final name = _nameCtrl.text.trim();
     final hasCategory =
         _selectedCategory != null || _categoryCtrl.text.trim().isNotEmpty;
-    final hasManufacturer = _selectedManufacturer != null ||
-        _manufacturerCtrl.text.trim().isNotEmpty;
 
     if (!mounted) return;
 
@@ -838,14 +826,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
     if (missingField != null) {
       AppNotification.showError(context, '$missingField is required.');
-      return;
-    }
-
-    if (_effectiveTrackEmpties && !hasManufacturer) {
-      AppNotification.showError(
-        context,
-        'Manufacturer is required to track empty crates.',
-      );
       return;
     }
 
@@ -894,17 +874,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         _selectedSupplier = await _getOrCreateSupplier(
           _supplierCtrl.text.trim(),
         );
-      }
-
-      if (_effectiveTrackEmpties && _selectedManufacturer == null) {
-        setState(() => _isSaving = false);
-        if (mounted) {
-          AppNotification.showError(
-            context,
-            'Manufacturer is required to track empty crates.',
-          );
-        }
-        return;
       }
 
       final productBusinessId = auth.currentUser?.businessId;
@@ -1209,7 +1178,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final border = Theme.of(context).dividerColor;
     final isExisting = _selectedExistingProduct != null;
     final canEditBuying = Gates.editBuyingPrice.allows(ref);
-    final manufacturerRequired = _unit?.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Scaffold(
       // Keep the body + save button above the keyboard. This screen is pushed
@@ -1580,7 +1548,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 // ── MANUFACTURER ───────────────────────────────────────
                 AppInput(
                   controller: _manufacturerCtrl,
-                  labelText: 'MANUFACTURER ${manufacturerRequired ? '*' : '(optional)'}',
+                  labelText: 'MANUFACTURER (optional)',
                   hintText: 'Search or type manufacturer name…',
                   prefixIcon: Icon(Icons.search, size: 18, color: subtext),
                   onChanged: _onManufacturerChanged,
@@ -1876,11 +1844,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         _categorySuggestionsList(card, textColor, border),
       const SizedBox(height: 16),
 
-      // ── MANUFACTURER (crate businesses only, required) ──────────────────
+      // ── MANUFACTURER (crate businesses only, optional) ──────────────────
       if (_isCrateBusiness) ...[
         AppInput(
           controller: _manufacturerCtrl,
-          labelText: 'Manufacturer *',
+          labelText: 'Manufacturer (optional)',
           hintText: 'Search or type manufacturer name…',
           prefixIcon: Icon(Icons.search, size: 18, color: subtext),
           onChanged: _onManufacturerChanged,

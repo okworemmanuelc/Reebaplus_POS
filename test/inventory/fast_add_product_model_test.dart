@@ -145,14 +145,13 @@ void main() {
     });
   });
 
-  group('manufacturer-required-for-crate rule', () {
-    test('crate business with no manufacturer → Manufacturer error', () {
+  group('manufacturer is optional', () {
+    test('crate business with no manufacturer resolves (can be added later)', () {
       final result = resolveFastAdd(
         input(hasManufacturer: false),
         ctx(tracksCrates: true),
       );
-      expect(result, isA<FastAddInvalid>());
-      expect((result as FastAddInvalid).field, 'Manufacturer');
+      expect(result, isA<FastAddIntent>());
     });
 
     test('crate business with a manufacturer resolves', () {

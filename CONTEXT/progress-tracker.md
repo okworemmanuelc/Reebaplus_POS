@@ -7,6 +7,20 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Add Product: Manufacturer is no longer required (2026-10-03)
+- **Change**: In the Add Product form, manufacturer is no longer required for any business type (including crate-tracking businesses) and can be added later.
+- **Model (`fast_add_product_model.dart`)**:
+  - Removed `FastAddInvalid` validation error for missing manufacturer in `resolveFastAdd`.
+  - Updated `FastAddInput.hasManufacturer` and `FastAddContext.tracksCrates` doc comments to mark manufacturer as optional.
+- **Form Screens & Sheets (`add_product_screen.dart`, `update_product_sheet.dart`)**:
+  - Removed `_effectiveTrackEmpties && !hasManufacturer` validation guards blocking saves with `'Manufacturer is required to track empty crates.'`.
+  - Removed dynamic `manufacturerRequired` calculation.
+  - Updated field labels to `'Manufacturer (optional)'` in Fast-Add and `'MANUFACTURER (optional)'` in classic mode and `UpdateProductSheet`.
+- **Tests**:
+  - Updated `test/inventory/fast_add_product_model_test.dart` to assert crate businesses with no manufacturer resolve cleanly to `FastAddIntent`.
+  - Added test in `test/inventory/add_product_confirmation_test.dart` verifying `AddProductScreen` in crate businesses saves products without manufacturer (`manufacturerId == null`) and displays `'Manufacturer (optional)'`.
+- **Verification**: `flutter analyze` 0 issues, 190 tests in `test/inventory/` passing.
+
 ### Receipt paper size remembered per printer, asked once (2026-10-03)
 Branch `feat/paper-size-per-printer`, cut from `main`. Worked in `../drinkPosApp-wt-paper-per-printer`. **No schema change, no dependency change** (device-local SharedPreferences only).
 - **Owner report**: after the 80mm top-missing fix, 80mm receipts still came out in the 58mm layout.

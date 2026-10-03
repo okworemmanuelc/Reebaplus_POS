@@ -741,7 +741,6 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
-    final manufacturerRequired = _unit?.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Padding(
       padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
@@ -1142,7 +1141,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     // ── MANUFACTURER ─────────────────────────────────────────
                     AppInput(
                       controller: _manufacturerCtrl,
-                      labelText: 'MANUFACTURER ${manufacturerRequired ? '*' : '(optional)'}',
+                      labelText: 'MANUFACTURER (optional)',
                       hintText: 'Search or type manufacturer name…',
                       prefixIcon: Icon(Icons.search, size: 18, color: subtext),
                       onChanged: _onManufacturerChanged,

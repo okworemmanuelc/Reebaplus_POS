@@ -260,4 +260,82 @@ void main() {
     container.dispose();
     await tester.pump(Duration.zero);
   });
+
+  testWidgets(
+      'AddProductScreen saves new product without manufacturer in crate business',
+      (tester) async {
+    final business = await (db.select(db.businesses)
+          ..where((t) => t.id.equals(businessId)))
+        .getSingle();
+    final crateBusiness = business.copyWith(
+      type: const Value('Beverage distributor'),
+      tracksEmptyCrates: true,
+    );
+
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        currentBusinessProvider.overrideWith((ref) => crateBusiness),
+        currentUserPermissionsProvider.overrideWithValue({
+          'products.edit_buying_price',
+          'products.edit_price',
+          'products.add',
+        }),
+      ],
+    );
+
+    final user = await db.storesDao.getUserById(userId);
+    container.read(authProvider).value = user;
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: AddProductScreen(receiveMode: false),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Finder fieldFor(String labelPart) => find.descendant(
+          of: find.ancestor(
+            of: find.textContaining(labelPart),
+            matching: find.byType(AppInput),
+          ),
+          matching: find.byType(TextFormField),
+        );
+
+    // Verify Manufacturer is labeled optional
+    expect(find.text('Manufacturer (optional)'), findsOneWidget);
+
+    // Fill in required Fast-Add fields without Manufacturer
+    await tester.enterText(fieldFor('Product Name'), 'Fanta Orange');
+    await tester.enterText(fieldFor('Selling Price'), '250');
+    await tester.enterText(fieldFor('Quantity'), '15');
+    await tester.pumpAndSettle();
+
+    // Tap Add Product
+    final saveButtonFinder = find.widgetWithText(AppButton, 'Add Product');
+    await tester.ensureVisible(saveButtonFinder);
+    await tester.tap(saveButtonFinder);
+    await tester.pumpAndSettle();
+
+    // Confirmation dialog is shown
+    expect(find.text('Save Product?'), findsOneWidget);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Verification: product was saved to Drift with no manufacturer
+    final product = await (db.select(db.products)
+          ..where((tbl) => tbl.name.equals('Fanta Orange')))
+        .getSingle();
+    expect(product.manufacturerId, null);
+
+    await tester.pump(const Duration(seconds: 5));
+    container.dispose();
+    await tester.pump(Duration.zero);
+  });
 }
+

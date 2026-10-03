@@ -20,7 +20,7 @@ class FastAddContext {
     required this.storeIds,
   });
 
-  /// `businessTracksCrates(business)` — a crate business surfaces + requires a
+  /// `businessTracksCrates(business)` — a crate business surfaces a
   /// Manufacturer and defaults the unit to Bottle.
   final bool tracksCrates;
 
@@ -85,8 +85,7 @@ class FastAddInput {
   /// on a bottle unit.
   final String emptyCrateValue;
 
-  /// Whether a manufacturer was selected or typed. Required for crate
-  /// businesses (the deposit rate lives on the manufacturer).
+  /// Whether a manufacturer was selected or typed. Optional (can be added later).
   final bool hasManufacturer;
 
   /// The chosen store for a multi-store business. Ignored (resolved silently)
@@ -173,8 +172,7 @@ final class FastAddIntent extends FastAddResult {
 /// Validate and shape a Fast-Add submission. Pure: same inputs ⇒ same result.
 ///
 /// Required fields are checked in visible-first order so a single missing field
-/// names itself. Crate businesses additionally require a Manufacturer (surfaced
-/// in the fast section). A multi-store business requires a store selection; a
+/// names itself. A multi-store business requires a store selection; a
 /// single-store business resolves its one store silently.
 FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
   final name = input.name.trim();
@@ -198,16 +196,6 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
     return const FastAddInvalid(
       field: 'Quantity',
       message: 'Quantity must be greater than 0.',
-    );
-  }
-
-  // Crate businesses surface Manufacturer in the fast section and require it —
-  // the crate deposit rate lives on the manufacturer, so omitting it would
-  // silently disable the flagship crate feature.
-  if (context.tracksCrates && !input.hasManufacturer) {
-    return const FastAddInvalid(
-      field: 'Manufacturer',
-      message: 'Manufacturer is required.',
     );
   }
 

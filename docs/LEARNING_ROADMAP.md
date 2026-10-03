@@ -373,7 +373,7 @@ Hot restart, then complete a sale. The stream fires by itself and the Orders tab
 
 ### Look for
 
-**Versioning.** `pubspec.yaml` says `version: 1.0.8+8`. The part before `+` is the version *name* users see; after `+` is the version *code* Play Store orders releases by. **The build number must increase on every upload** or Play rejects it.
+**Versioning.** `pubspec.yaml` says `version: 1.0.9+9`. The part before `+` is the version *name* users see; after `+` is the version *code* Play Store orders releases by. **The build number must increase on every upload** or Play rejects it.
 
 **Signing.** `android/key.properties` exists locally and is (correctly) not in git. Release builds sign with it; without it, Gradle falls back to the debug key — which Play Store will reject. Losing that keystore means you can never update this app again, so back it up somewhere safe.
 
