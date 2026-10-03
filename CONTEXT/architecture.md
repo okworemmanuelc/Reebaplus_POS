@@ -339,7 +339,7 @@ These are rules, not guidelines. Code that breaks one of these is wrong even if 
 
 4. **Every cloud write goes through the outbox.** A repository that needs to change cloud state writes to Drift and enqueues an outbox entry; it must not call Supabase directly. This guarantees offline durability, ordered delivery, idempotent retries, and adaptive batching through one and only one write path.
 
-5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`.
+5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Planned exception (ADR 0029, #322, on hold):** the shared barcode catalogue. Once it ships, one read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity. No row of another business ever becomes readable.
 
 6. **Permissions are read from data, never hard-coded.** Gating decisions come exclusively from role and override rows via `lib/core/permissions/`. No feature may branch on a hard-coded role name (e.g. `if (role == 'Cashier')`); it must ask `can(action)`.
 
