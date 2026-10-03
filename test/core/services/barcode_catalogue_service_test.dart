@@ -4,35 +4,46 @@
 // non-factory code never reaches the network, and any failure gives null.
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/services/barcode_catalogue_service.dart';
+import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
+import 'package:reebaplus_pos/core/services/catalogue_report.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 const _gtin = '6150001234561';
 
 void main() {
   late List<String> rowCalls;
   late List<Uri> photoCalls;
+  late List<CatalogueReportRequest> reportCalls;
 
   setUp(() {
     rowCalls = [];
     photoCalls = [];
+    reportCalls = [];
   });
 
   BarcodeCatalogueService service({
-    required Future<BarcodeSuggestionRow?> Function(String code) row,
+    Future<BarcodeSuggestionRow?> Function(String code)? row,
     Future<Uint8List?> Function(Uri url)? photo,
+    Future<void> Function(CatalogueReportRequest request)? send,
     Duration timeout = const Duration(milliseconds: 50),
   }) => BarcodeCatalogueService.withFetchers(
     fetchRow: (code) {
       rowCalls.add(code);
-      return row(code);
+      return (row ?? (_) async => null)(code);
     },
     fetchPhoto: (url) {
       photoCalls.add(url);
       return (photo ?? (_) async => null)(url);
+    },
+    sendReport: (request) {
+      reportCalls.add(request);
+      return (send ?? (_) async {})(request);
     },
     timeout: timeout,
   );
@@ -118,5 +129,97 @@ void main() {
     );
     expect(await s.lookup(_gtin), isNull);
     expect(photoCalls, isEmpty);
+  });
+
+  group('lookupOutcome (#335)', () {
+    test('a non-factory code is nothing shared, without a call', () async {
+      final s = service(row: (_) async => (name: 'X', unit: null, photoUrl: null));
+      expect(await s.lookupOutcome('SCAN-1'), isA<CatalogueNothingShared>());
+      expect(rowCalls, isEmpty);
+    });
+
+    test('zero rows or an all-empty row is nothing shared', () async {
+      expect(
+        await service().lookupOutcome(_gtin),
+        isA<CatalogueNothingShared>(),
+      );
+      final blank = service(
+        row: (_) async => (name: ' ', unit: null, photoUrl: 'not a url'),
+      );
+      expect(await blank.lookupOutcome(_gtin), isA<CatalogueNothingShared>());
+    });
+
+    test('offline or slow is unreachable; a server error is failed', () async {
+      final offline = service(
+        row: (_) async => throw const SocketException('Failed host lookup'),
+      );
+      expect(await offline.lookupOutcome(_gtin), isA<CatalogueUnreachable>());
+
+      final slow = service(
+        row: (_) => Completer<BarcodeSuggestionRow?>().future,
+      );
+      expect(await slow.lookupOutcome(_gtin), isA<CatalogueUnreachable>());
+
+      final broken = service(
+        row: (_) async => throw const PostgrestException(message: 'boom'),
+      );
+      expect(await broken.lookupOutcome(_gtin), isA<CatalogueLookupFailed>());
+    });
+
+    test('keeps the photo URL without downloading it', () async {
+      final s = service(
+        row: (_) async => (name: null, unit: null, photoUrl: 'https://x.test/p.jpg'),
+      );
+      final got = await s.lookupOutcome(_gtin, includePhoto: false);
+      final suggestion = (got as CatalogueFound).suggestion;
+      expect(suggestion.photoUrl, 'https://x.test/p.jpg');
+      expect(suggestion.photoBytes, isNull);
+      expect(photoCalls, isEmpty);
+      // Add Product's quiet lookup still has nothing to fill.
+      expect(await s.lookup(_gtin, includePhoto: false), isNull);
+    });
+  });
+
+  group('report (#335)', () {
+    Future<CatalogueReportResult> send(BarcodeCatalogueService s) => s.report(
+      businessId: 'biz-1',
+      barcode: _gtin,
+      reasons: {CatalogueReportReason.badPhoto, CatalogueReportReason.wrongName},
+      note: '   ',
+      shownName: 'Peak Milk',
+      shownUnit: null,
+      shownPhotoUrl: 'https://x.test/p.jpg',
+    );
+
+    test('sends the wire reasons in a fixed order and drops a blank note',
+        () async {
+      expect(await send(service()), isA<CatalogueReportSent>());
+      final r = reportCalls.single;
+      expect(r.businessId, 'biz-1');
+      expect(r.barcode, _gtin);
+      expect(r.reasons, ['wrong_name', 'bad_photo']);
+      expect(r.note, isNull);
+      expect(r.shownName, 'Peak Milk');
+      expect(r.shownUnit, isNull);
+      expect(r.shownPhotoUrl, 'https://x.test/p.jpg');
+    });
+
+    test('offline or slow is offline; a server error is failed', () async {
+      final offline = service(
+        send: (_) async => throw const SocketException('Network is unreachable'),
+      );
+      expect(await send(offline), isA<CatalogueReportOffline>());
+
+      final slow = service(send: (_) => Completer<void>().future);
+      expect(await send(slow), isA<CatalogueReportOffline>());
+
+      final rejected = service(
+        send: (_) async => throw const PostgrestException(
+          message: 'not a member of this business',
+          code: '42501',
+        ),
+      );
+      expect(await send(rejected), isA<CatalogueReportFailed>());
+    });
   });
 }
