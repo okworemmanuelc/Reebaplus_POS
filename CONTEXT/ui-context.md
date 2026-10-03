@@ -11,50 +11,133 @@ inventing one.
 ## Theme system (read this first)
 
 The app ships **5 selectable design systems** via `ThemeController`
-(`lib/core/theme/theme_notifier.dart`): Blue Classic, **Amber (default,
-Reebaplus brand)**, Purple Violet, Green Forest, Black & White — each with a
-light and dark variant.
+(`lib/core/theme/theme_notifier.dart`): **Blue Classic (default)**, Amber,
+Purple Violet, Green Forest, Black & White — each with a light and dark
+variant. Blue Classic carries the designer's exact colour sheet (PRD #346,
+first comment; #349).
 
-Widget code must **never** reference a raw palette constant (`amberPrimary`,
-`alBg`, `adSurface`, etc.) directly. Always resolve through one of these
-three access paths:
+Widget code must **never** reference a raw palette constant (`blueMain`,
+`amberPrimary`, `alBg`, `fixedDanger`, etc.) directly. Always resolve through
+one of these access paths:
 
-| What you need | Access path |
-|---|---|
-| Background, surface, primary, secondary, error, text | `Theme.of(context).colorScheme.*` |
-| Scaffold bg, divider, card colour | `Theme.of(context).scaffoldBackgroundColor` / `.dividerColor` / `.cardColor` |
-| Success, warning, info | `Theme.of(context).extension<AppSemanticColors>()!.success` / `.warning` / `.info` |
+| What you need | Access path | Follows the scheme? |
+|---|---|---|
+| Background, surface, primary, secondary, error, text, on-primary | `Theme.of(context).colorScheme.*` | Yes |
+| Scaffold bg, divider, card colour | `Theme.of(context).scaffoldBackgroundColor` / `.dividerColor` / `.cardColor` | Yes |
+| Success, warning, info (legacy per-scheme status) | `Theme.of(context).extension<AppSemanticColors>()!.success` / `.warning` / `.info` | Yes |
+| Primary tint, glow, link hover, background fade, card fill, muted-on-Surface-2, shadows, scrim | `Theme.of(context).extension<AppSchemeColors>()!.*` (`lib/core/theme/scheme_colors.dart`) | Yes |
+| Tags, status pills, stock badges, pale icon tiles, Credit/Debt boxes, product-tile tints | `Theme.of(context).extension<AppFixedColors>()!.*` (`lib/core/theme/fixed_colors.dart`) | **No — identical in all 5 schemes** |
 
-This file documents the **Amber** palette as the concrete hex reference.
-The same semantic access paths resolve to different hex values under the other
-four themes — the access path is the contract, not the hex value.
+This file documents the **Blue Classic** palette as the concrete hex
+reference. The scheme-following access paths resolve to different hex values
+under the other four themes — the access path is the contract, not the hex
+value. `AppFixedColors` is the exception: its values are the same in every
+scheme (only light vs dark differ).
+
+**Which one for a tint?** (PRD #346 decision 6) Tags and tinted icon tiles use
+`AppFixedColors` — e.g. a pale icon tile on a Home stat card or settings row is
+`infoTint` with an `info` icon in every scheme. The scheme still drives primary
+buttons, active nav (the active rail item's pale pill is
+`AppSchemeColors.primaryTint`), prices, the screen-title icon tile (a solid
+primary gradient, not a tint) and focus outlines.
 
 ---
 
-## Colour palette (Amber — default)
+## Colour palette (Blue Classic — default)
 
-| Semantic token | Access path | Light hex | Dark hex | Usage |
+"System" values live in `lib/core/theme/colors.dart`; "project" values were
+added by #349 from the designer colour sheet.
+
+### Surfaces and text
+
+| Semantic token | Access path | Light | Dark | Usage |
 |---|---|---|---|---|
-| Background | `scaffoldBackgroundColor` | `#F4F6FA` | `#080C12` | App/screen background |
-| Surface | `colorScheme.surface` | `#FFFFFF` | `#0E1420` | Cards, app bar, bottom sheets |
-| Surface 2 | `cardColor` (dark) / `colorScheme.surfaceContainerHighest` (light) | `#EDF0F5` | `#141B28` | Chips, secondary cards |
-| Border / Divider | `dividerColor` | `rgba(0,0,0,0.07)` | `rgba(255,255,255,0.06)` | Dividers, outlines, app-bar bottom border |
-| Text primary | `colorScheme.onSurface` | `#0E1420` | `#E8EEF6` | Headings, body text |
-| Text secondary | `colorScheme.onSurfaceVariant` | `#4B5563` | `#6B7A90` | Subtext, captions, `bodySmall` / `labelSmall` |
-| Primary (brand) | `colorScheme.primary` | `#D97706` | `#F5A623` | Primary buttons, active nav, FAB, focus border |
-| Secondary | `colorScheme.secondary` | `#FF7A00` | `#FF7A00` | Gradient end on primary buttons/FAB |
-| Primary container | `colorScheme.primaryContainer` | `primary @ 12% opacity` | `primary @ 12% opacity` | Secondary button background |
-| Error / Danger | `colorScheme.error` | `#FF3B30` | `#FF3B30` | Error states, danger button text/bg |
-| Success | `AppSemanticColors.success` | `#30D158` | `#30D158` | Status badges, banners, notification success |
-| Success button | `AppSemanticColors.successButton` | `#43A047` | `#43A047` | `AppButton` / `AppFAB` success-variant gradient base |
-| Warning | `AppSemanticColors.warning` | `#FFB020` | `#FFB020` | Warning badges, banners |
-| Info | `AppSemanticColors.info` | `#3B82F6` | `#3B82F6` | Info badges, banners |
-| Glow | `AppSemanticColors.glow` | `rgba(245,166,35,0.35)` | `rgba(245,166,35,0.35)` | Box-shadow glow on primary buttons/FAB |
+| Background | `scaffoldBackgroundColor` | `#F8FAFC` | `#090D14` | Screen background (top of the fade) |
+| Background fade | `AppSchemeColors.backgroundFade` | `#EEF3FD` | `#0C1526` | Bottom stop of the screen background fade |
+| Surface | `colorScheme.surface` | `#FFFFFF` | `#111827` | Top bars, cart, menu, bottom bar |
+| Surface 2 | `inputDecorationTheme.fillColor` / `chipTheme.backgroundColor` (dark: also `cardColor`) | `#F1F5F9` | `#1C2438` | Inputs, grey buttons, steppers |
+| Card fill | `AppSchemeColors.cardFill` | `#FFFFFF` @ 0.90 | `#111827` @ 0.72 | Slightly see-through card fill |
+| Border / Divider | `dividerColor` | `#E2E8F0` | `#FFFFFF` @ 0.12 | Borders and dividers |
+| Text primary | `colorScheme.onSurface` | `#0F172A` | `#F8FAFC` | Main text |
+| Text secondary | `textTheme.bodySmall.color` / `iconTheme.color` | `#64748B` | `#A0AEC0` | Muted text |
+| Muted on Surface 2 | `AppSchemeColors.mutedOnSurface2` | `#475569` | `#A0AEC0` | Muted text placed on Surface 2 |
 
-> The other four themes (Blue Classic, Purple Violet, Green Forest, Black &
-> White) define their own light/dark palette constants in
-> `lib/core/theme/colors.dart`. Do not copy their hex values into widget code.
-> The access paths above resolve to the active theme automatically.
+### Brand
+
+| Semantic token | Access path | Light | Dark | Usage |
+|---|---|---|---|---|
+| Primary | `colorScheme.primary` | `#2563EB` | `#3B82F6` | Prices, totals, subtitles, active items, focus border |
+| Secondary | `colorScheme.secondary` | `#60A5FA` | `#60A5FA` | Gradient start on primary buttons/FAB |
+| On primary | `colorScheme.onPrimary` | `#FFFFFF` | `#FFFFFF` | Text and icons on the blue gradient (dark was black before #349 — deliberate change) |
+| Primary tint | `AppSchemeColors.primaryTint` | `#2563EB` @ 0.12 | `#3B82F6` @ 0.16 | Active rail item and other pale active fills (not the screen-title icon tile, which is the solid primary gradient) |
+| Primary glow | `AppSchemeColors.primaryGlow` | `#2563EB` @ 0.30 | `#3B82F6` @ 0.30 | Shadow under primary buttons |
+| Link hover | `AppSchemeColors.linkHover` | `#1D4ED8` | `#60A5FA` | Link hover / pressed |
+| Error | `colorScheme.error` | `#EF4444` | `#EF4444` | Form errors (per scheme; Amber/Purple/Green/B&W use `#FF3B30`) |
+| Success / warning / info | `AppSemanticColors.success` / `.warning` / `.info` | `#30D158` / `#FFB020` / `#3B82F6` | same | Legacy per-scheme status colours; new tags and tiles use `AppFixedColors` |
+
+### Shadows and overlays
+
+| Semantic token | Access path | Light | Dark |
+|---|---|---|---|
+| Card shadow | `AppSchemeColors.cardShadow` | `#000000` @ 0.05 | `#000000` @ 0.25 |
+| Dim behind open menu / cart | `AppSchemeColors.scrim` | `#000000` @ 0.35 | `#000000` @ 0.55 |
+| Slide-in panel shadow | `AppSchemeColors.panelShadow` | `#0F172A` @ 0.12 | `#000000` @ 0.50 |
+| Top bar shadow | `AppSchemeColors.topBarShadow` | `#0F172A` @ 0.05 | `#000000` @ 0.30 |
+
+The sheet's card shadow geometry (0 0 10px) is not a colour token; it lands
+with the flat card style (#351).
+
+### The other four schemes
+
+Amber, Purple Violet, Green Forest and Black & White keep their own system
+hexes in `colors.dart`. Their `AppSchemeColors` are built by the same
+`AppSchemeColors.derive` as Blue, so the alpha values are identical:
+
+| Token | Rule (every scheme) |
+|---|---|
+| `primaryTint` | own `colorScheme.primary` @ 0.12 light / 0.16 dark |
+| `primaryGlow` | own primary @ 0.30 |
+| `cardFill` | own `colorScheme.surface` @ 0.90 light / 0.72 dark |
+| `cardShadow`, `scrim` | black at Blue's alphas |
+| `panelShadow`, `topBarShadow` | light: own text primary @ 0.12 / 0.05; dark: black @ 0.50 / 0.30 |
+| `backgroundFade` | own primary @ 5% (light) / 7% (dark) laid over own background (`AppSchemeColors.fadeFrom`); Blue uses the sheet's exact hexes |
+| `linkHover` | one step darker than the light primary, one step lighter than the dark primary (Amber `#B45309` / `#FBBF24`, Purple `#6D28D9` / `#A78BFA`, Green `#166534` / `#4ADE80`, B&W `#000000` / `#FFFFFF`) |
+| `mutedOnSurface2` | light: the scheme's 600-step grey (Amber `#4B5563`, Purple/Green `#4B5563`, B&W `#52525B`); dark: the scheme's muted text |
+
+On-primary stays as before outside Blue: B&W dark is black on the near-white
+primary; Amber/Purple/Green dark use Material's default (black).
+
+---
+
+## Fixed colour set (`AppFixedColors`)
+
+Identical in **all 5 design systems** (PRD #346 decision 6). One instance per
+brightness — `AppFixedColors.light` / `AppFixedColors.dark` — is installed in
+every `ThemeData`. Use it for PRO/CEO pills, status pills (Positive / None /
+Live / Clear), stock badges, the pale icon tiles (Home stat cards, settings
+rows), Credit/Debt boxes and product-tile tints. Access:
+`Theme.of(context).extension<AppFixedColors>()!.<token>`.
+
+| Token | Light | Dark | Usage |
+|---|---|---|---|
+| `danger` | `#EF4444` | `#EF4444` | Clear, Log Out, remove, count badges |
+| `dangerTint` | `#EF4444` @ 0.10 | `#EF4444` @ 0.14 | Pale danger fill |
+| `dangerOutline` | `#EF4444` @ 0.35 | `#EF4444` @ 0.45 | Clear button border |
+| `warning` | `#FFB020` | `#FFB020` | Crates, pending, low stock |
+| `warningTint` | `#FFB020` @ 0.15 | `#FFB020` @ 0.14 | Pale warning fill |
+| `warningOutline` | `#FFB020` @ 0.55 | `#FFB020` @ 0.45 | Warning border |
+| `green` | `#43A047` | `#30D158` | Green text and icons: balance, discount, profit (darker on white for readability; `#43A047` = `Colors.green.shade600`, the AppButton success colour) |
+| `greenDot` | `#30D158` | `#30D158` | Stock is fine |
+| `greenTint` | `#30D158` @ 0.15 | `#30D158` @ 0.14 | Pale green fill |
+| `info` | `#3B82F6` | `#3B82F6` | Water icons, Roles icon |
+| `infoTint` | `#3B82F6` @ 0.12 | `#3B82F6` @ 0.16 | Pale info fill; the fixed icon-tile fill |
+| `neutralIcon` | `#0B1220` | `#E2E8F0` | Stout and neutral icon |
+| `neutralTile` | `#0B1220` @ 0.08 | `#FFFFFF` @ 0.08 | Stout and neutral tile |
+| `maltTile` | `#60A5FA` @ 0.20 | `#60A5FA` @ 0.16 | Malt tile |
+
+The sheet defines outlines for danger and warning only; there is no green or
+info outline token. Base hexes are the `fixed*` constants at the bottom of
+`colors.dart` — never reference them from widgets.
 
 ---
 
@@ -67,7 +150,7 @@ below.
 |---|---|---|---|
 | Primary surface gradient | `colorScheme.primary.withValues(alpha:0.8)` → `colorScheme.primary` | top-left → bottom-right | `AppDecorations.primaryGradient(context)` |
 | Primary button / FAB | `colorScheme.secondary` → `colorScheme.primary` | top-left → bottom-right | Built into `AppButton` primary variant and `AppFAB` |
-| Success button | `Color.lerp(AppSemanticColors.successButton, Colors.white, 0.1)` → `AppSemanticColors.successButton` | top-left → bottom-right | Built into `AppButton` / `AppFAB` success variant |
+| Success button | `Color.lerp(Colors.green.shade600, Colors.white, 0.1)` → `Colors.green.shade600` (`#43A047`, same as `AppFixedColors.light.green`) | top-left → bottom-right | Built into `AppButton` success variant |
 | Disabled button | `Colors.grey.shade400` → `Colors.grey.shade500` | top-left → bottom-right | Built into `AppButton` / `AppFAB` disabled state |
 | Amber glow line | `transparent` → `colorScheme.primary` → `transparent` | horizontal, 2px height | `AmberGlowLine` widget |
 | Drawer header | `scaffoldBackgroundColor` → `roleAccentColor.withValues(alpha:0.3)` | top-left → bottom-right | Built into `AppDrawer` header; `roleAccentColor` is resolved per role inside `AppDrawer` |
@@ -76,9 +159,57 @@ below.
 
 ## Typography
 
-Font: **DM Sans**, bundled locally in `assets/google_fonts/` (weights 400,
-500, 600, 700) via the `google_fonts` package with
-`allowRuntimeFetching = false`. It never falls back to a network fetch.
+Fonts are bundled in `assets/google_fonts/` and registered in `pubspec.yaml`
+as two real font families — `DMSans` (400, 500, 600, 700, 800) and
+`RobotoMono` (400). Nothing is fetched from the network
+(`GoogleFonts.config.allowRuntimeFetching = false` in `main.dart` stays as a
+guard for any future `google_fonts` call). Because each weight is its own
+file in one family, a style that asks for w700 gets the Bold file, never a
+synthesised bold of Regular. The family names are the constants
+`appFontFamily` / `appMonoFontFamily` in `lib/core/theme/app_theme.dart`;
+widgets never write the family name themselves.
+
+| File | Family / weight | Source |
+|---|---|---|
+| `DMSans-Regular.ttf` | DM Sans 400 | googlefonts/dm-fonts @ `4412393b` (v4.004) |
+| `DMSans-Medium.ttf` | DM Sans 500 | same |
+| `DMSans-SemiBold.ttf` | DM Sans 600 | same |
+| `DMSans-Bold.ttf` | DM Sans 700 | same |
+| `DMSans-ExtraBold.ttf` | DM Sans 800 | same (added #349) |
+| `RobotoMono-Regular.ttf` | Roboto Mono 400 | googlefonts/RobotoMono @ `111eb14e` (v3.001; added #349) |
+
+### DM Sans weights (PRD #346 decision 2)
+
+| Weight | Used for |
+|---|---|
+| 400 | Helper text and captions |
+| 500 | Typed input, normal drawer items |
+| 600 | Blue subtitles, chips, nav labels, "Subtotal"-style labels |
+| 700 | Prices, totals, names, card titles, buttons, badges, big figures |
+| 800 | Screen titles (base 18), the business name, the "POS" label under the raised button |
+
+**Every theme uses DM Sans (#349).** All 10 builders (5 schemes × light/dark)
+return through `AppTheme.withAppFont`, which puts `textTheme`,
+`primaryTextTheme` and the component slots that carry their own style (app
+bar title/toolbar, chip labels, input hint/label/helper/error, bottom-nav
+labels, navigation-bar labels) on `DMSans`. It changes only the family —
+size, weight, colour, letter spacing and height stay as each builder sets
+them. Text styled with a raw `TextStyle` inherits the family from
+`DefaultTextStyle`. The few explicit `fontFamily: 'monospace'` call sites are
+left for the `monoStyle` adoption in Wave 2.
+
+### Styles outside the `TextTheme`
+
+Defined as a `BuildContext` extension (`AppTextStyles`) in
+`lib/core/theme/app_theme.dart`; sizes are already scaled with
+`getRFontSize`, colour is unset (inherits from the surroundings).
+
+| Access | Font | Base size | Use |
+|---|---|---|---|
+| `context.screenTitleStyle` | DM Sans 800 | 18 | Screen titles, business name, the "POS" label |
+| `context.monoStyle` | Roboto Mono 400 | 13 | Codes and IDs only (e.g. "Terminal 01") |
+
+### `TextTheme`
 
 All sizes are **base px** scaled at runtime via `context.getRFontSize(base)`.
 Do not pass raw `fontSize` values — always wrap in `getRFontSize`.
@@ -152,8 +283,8 @@ wrap in `context.getRSize(n)`.
 ## AI / accent variants
 
 No AI feature exists in this project. There is **no AI accent token**.
-If one is ever authorised, reuse `AppSemanticColors.info` (`#3B82F6`) or
-`AppSemanticColors.glow` before adding a new token. Do not add a speculative
+If one is ever authorised, reuse `AppFixedColors.info` (`#3B82F6`) or
+`AppSchemeColors.primaryGlow` before adding a new token. Do not add a speculative
 colour token.
 
 ---
@@ -171,7 +302,7 @@ All shared components live in `lib/shared/widgets/` (and
 | Variants | `primary`, `secondary`, `outline`, `danger`, `ghost`, `success` |
 | Heights | `xsmall` 32px / `small` 40px / `normal` 54px / `large` 60px |
 | Radius | `AppRadius.md` (14px) |
-| Primary bg | Secondary → Primary gradient + `AppSemanticColors.glow` shadow |
+| Primary bg | Secondary → Primary gradient + `primary` @ 0.30 shadow (the `AppSchemeColors.primaryGlow` value) |
 | Secondary bg | `colorScheme.primary` @ 12% opacity |
 | Success bg | Success button gradient (see Gradients) |
 | Danger | `colorScheme.error` text / bg |
@@ -206,7 +337,7 @@ above. Chevron: `FontAwesomeIcons.chevronDown`.
 ### `AppNotification`
 
 Use for all success, error, info, and warning feedback messages. Never use a
-raw `SnackBar`. Success variant uses `AppSemanticColors.successButton` to
+raw `SnackBar`. Success variant uses `Colors.green.shade600` (`#43A047`) to
 match `AppButton`'s success gradient.
 
 ### `AppDecorations` (`app_decorations.dart`)
