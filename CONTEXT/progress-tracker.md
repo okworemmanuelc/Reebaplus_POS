@@ -18,8 +18,10 @@ Branch `feat/barcode-catalogue-photo-331`, stacked on `feat/barcode-catalogue-rp
 - **Edge Function `share-barcode-photo`** (DEPLOYED, verify_jwt off, secret header `x-barcode-catalogue-hook-secret`): `{record}` re-reads the product by id; `{gtin14}` walks candidates oldest first. Pure logic in `share.ts` (source path must be the product's own `product-images/<businessId>/...` object; sha256; blocked skipped; upload `upsert:false`; row `ON CONFLICT DO NOTHING`; an object without a row is adopted, or removed if its hash is blocked). 15 Deno unit tests in `share_test.ts` (no CI Deno tier).
 - **Backfill**: `supabase/scripts/backfill_barcode_catalogue_photos.sql`. Prod today has 4 factory-GTIN products and **0 with a photo**, so the backfill will queue 0 requests.
 - **Runbook**: ADR 0029 §6 Photo bullet now carries the exact SQL + Storage steps.
-- **Tests**: Tier-2 `test/integration/rpcs/barcode_catalogue_photo_test.dart` (6 tests, random GTINs under unassigned GS1 prefix 19). The bucket/table lockdown test PASSES live. The 5 pipeline tests need the hook secret.
-- **OPEN (owner action)**: the hook secret isn't set yet. The auto-mode classifier blocks secret-store writes. Until it is set, the trigger does nothing (safe). After setting it: run the 5 pipeline tests, then the backfill.
+- **Hook secret** set with owner permission (Vault `barcode_catalogue_hook_secret` + Edge `BARCODE_CATALOGUE_HOOK_SECRET`, same value).
+- **Tests**: Tier-2 `test/integration/rpcs/barcode_catalogue_photo_test.dart`: 6/6 pass live (random GTINs under unassigned GS1 prefix 19; cleanup verified, 0 leftovers). #330's `barcode_suggestion_test` still 10/10 with the trigger live.
+- **Backfill run on prod**: 0 GTINs with a photo, 0 requests queued, 0 shared photos.
+- **Follow-up (not this slice)**: #330's `barcode_suggestion_test.dart` doesn't pass `skip:`, so a plain `flutter test` without the TEST_SUPABASE_* env fails its 10 tests instead of skipping.
 
 ### Issue #330: Shared barcode catalogue 1/4 — factory barcode rule, lookup RPC, kill switch (2026-10-03)
 Branch `feat/barcode-catalogue-rpc-330`, cut from `main`. **No Drift schema change.**
