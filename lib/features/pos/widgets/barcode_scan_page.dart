@@ -15,11 +15,15 @@ import 'package:reebaplus_pos/features/pos/widgets/scan_cart_count.dart';
 /// The full-screen scan session (#319). Stays open until the cashier closes it
 /// (✕ or system back) and lands back on the till with the cart intact.
 ///
-/// On each read: a short buzz, the camera freezes, [onCode] runs with THIS
-/// page's context (so its sheets and messages sit over the camera), then the
-/// camera resumes. Reads while a code is being handled are ignored, and the
-/// code just handled is ignored for [sameCodeDebounce] after resuming
-/// ([ScanGate]).
+/// On each read: a short buzz, then [onCode] runs with THIS page's context (so
+/// its sheets and messages sit over the camera). The camera keeps running the
+/// whole time: reads while a code is being handled are ignored, and the code
+/// just handled is ignored for [sameCodeDebounce] afterwards ([ScanGate]).
+///
+/// It is never paused for a read. A pause turns the torch off, and on Android
+/// `mobile_scanner` 7.2.0 cannot start again after a pause (its start reports
+/// "already started"), which left the scanner on "Camera unavailable" after
+/// the first scan.
 ///
 /// The camera never runs behind the app: it stops when the app is backgrounded
 /// and, if the app locks (auto-lock, suspension), the page stops it and closes.
@@ -98,11 +102,12 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
 
   Future<void> _handle(String code) async {
     unawaited(HapticFeedback.mediumImpact());
-    await _camera.pause();
     try {
       if (mounted) await widget.onCode(context, code);
     } finally {
       _gate.finish();
+      // Only does anything when the app went to the background (camera
+      // stopped) while this read was being handled.
       _maybeResume();
     }
   }

@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Scanner keeps the camera running between scans (2026-10-03)
+Branch `fix/scanner-keeps-camera-running`, cut from `main`. Worked in `../drinkPosApp-wt-scanrestart`. **No schema change, no dependency change.**
+- **Bug (owner, Samsung SM-A566B)**: after the first scan the scanner showed "Camera unavailable". On Android, `mobile_scanner` 7.2.0 can't `start()` after `pause()`: its native start clears the paused flag before the "already started" check. Fixed upstream in 7.2.1.
+- **Fix**: `BarcodeScanPage._handle` no longer pauses the camera. Reads are still ignored while one is handled (`ScanGate`). `ScanCamera.pause` was removed (production camera and `FakeScanCamera`).
+- **Side effect, as the owner wanted**: the torch stays on through scans. Backgrounding still stops the camera, and coming back restarts it and turns the torch back on.
+
 ### Fix: 80mm Bluetooth receipts print without their top part (Android) (2026-10-03)
 Branch `fix/80mm-receipt-top-missing`. Worked in `../drinkPosApp-wt-80mm-top`.
 - **Symptom**: On Android with an 80mm Bluetooth thermal printer, the shop name, order number, and items are missing; only the lower part of the receipt prints out.

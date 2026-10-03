@@ -3,7 +3,8 @@
 // #319 — test doubles for the continuous scan session. No camera can run
 // headless, so the fake scanner pushes the REAL [BarcodeScanPage] over a
 // [FakeScanCamera]; tests feed codes with `camera.read(code)` and see exactly
-// what the page does with them (freeze, debounce, count, close, lock).
+// what the page does with them (ignore while busy, debounce, count, close,
+// lock).
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -20,10 +21,9 @@ class FakeScanCamera implements ScanCamera {
   final ValueNotifier<bool?> _torch;
   ValueChanged<String>? _onRead;
 
-  /// False after pause/stop/dispose, true again after resume.
+  /// False after stop/dispose, true again after resume.
   bool isRunning = true;
   bool isDisposed = false;
-  int pauseCount = 0;
   int stopCount = 0;
 
   /// Simulates the camera decoding [code].
@@ -36,12 +36,6 @@ class FakeScanCamera implements ScanCamera {
   Widget buildPreview(BuildContext context, ValueChanged<String> onRead) {
     _onRead = onRead;
     return const ColoredBox(color: Colors.black);
-  }
-
-  @override
-  Future<void> pause() async {
-    pauseCount++;
-    isRunning = false;
   }
 
   @override

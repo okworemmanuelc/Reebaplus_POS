@@ -21,9 +21,9 @@
 //     "Link to an existing product" saves only the barcode on the picked
 //     product (asking before replacing a different one), then the quantity
 //     sheet opens and the next scan of the code finds it;
-//   - the scanner stays open (#319): each read freezes the camera, shows its
-//     outcome over the scanner, then resumes; the same code is ignored for the
-//     debounce window; the running count follows the cart; ✕ / back close it
+//   - the scanner stays open (#319): each read shows its outcome over the
+//     live camera (never paused, so the torch stays on); other reads are
+//     ignored meanwhile; the same code is ignored for the debounce window; the running count follows the cart; ✕ / back close it
 //     with the cart intact; backgrounding stops the camera; a lock closes it.
 //
 // The button is placed in a bare Scaffold's FAB slot (its real home, ADR 0017)
@@ -1332,9 +1332,11 @@ void main() {
       expect(countText(tester), '0 items in cart');
 
       await scan(tester, 'BC-A');
-      // The camera is frozen while the sheet is up, over the scanner.
+      // The sheet is up over the scanner and the camera keeps running: it is
+      // never paused for a read (that turned the torch off, and on Android
+      // mobile_scanner 7.2.0 could not start again after it).
       expect(find.byType(EditItemModal), findsOneWidget);
-      expect(scanner.camera!.isRunning, isFalse);
+      expect(scanner.camera!.isRunning, isTrue);
       await tapSheetButton(tester, 'Add to Cart');
       expect(find.byType(BarcodeScanPage), findsOneWidget);
       expect(scanner.camera!.isRunning, isTrue);
@@ -1438,8 +1440,16 @@ void main() {
       scanner.camera!.read('BC-B');
       await tester.pumpAndSettle();
 
+      // Still the one sheet, for the first code; the camera kept running.
       expect(find.byType(EditItemModal), findsOneWidget);
-      expect(scanner.camera!.pauseCount, 1);
+      expect(
+        find.descendant(
+          of: find.byType(EditItemModal),
+          matching: find.text('Gulder'),
+        ),
+        findsNothing,
+      );
+      expect(scanner.camera!.isRunning, isTrue);
     });
 
     testWidgets('✕ closes the scanner onto the till with the cart intact', (
@@ -1520,8 +1530,8 @@ void main() {
       await tester.pump();
       expect(camera.isRunning, isTrue);
 
-      // With a sheet open, coming back keeps the camera frozen until the
-      // sheet closes.
+      // Backgrounded with a sheet open: the camera stays off until the sheet
+      // closes.
       await scan(tester);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);

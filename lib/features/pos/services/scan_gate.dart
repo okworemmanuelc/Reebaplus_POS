@@ -20,7 +20,7 @@ class ScanGate {
   String? _lastCode;
   DateTime? _resumedAt;
 
-  /// True while a read is being handled (the camera is frozen).
+  /// True while a read is being handled (other reads are ignored).
   bool get isBusy => _isBusy;
 
   /// Claims [code] for handling. Returns false — and changes nothing — when a

@@ -46,8 +46,8 @@ class MobileScannerScanCamera implements ScanCamera {
 
   final ValueNotifier<bool?> _torch = ValueNotifier<bool?>(null);
 
-  /// The cashier's torch choice. Every read pauses the camera, which turns
-  /// the torch off; [resume] turns it back on when this is set.
+  /// The cashier's torch choice. A stop (app backgrounded) turns the torch
+  /// off; [resume] turns it back on when this is set.
   bool _wantsTorch = false;
 
   bool _isDisposed = false;
@@ -116,9 +116,6 @@ class MobileScannerScanCamera implements ScanCamera {
       overlayBuilder: (context, constraints) => const _ScannerHint(),
     );
   }
-
-  @override
-  Future<void> pause() => _enqueue('pause', _controller.pause);
 
   @override
   Future<void> resume() => _enqueue('resume', () async {
