@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/providers/mirror_notifier.dart';
 import 'package:reebaplus_pos/core/services/biometric_service.dart';
 import 'package:reebaplus_pos/core/services/business_logo_service.dart';
+import 'package:reebaplus_pos/core/services/barcode_catalogue_service.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
@@ -598,6 +599,16 @@ final currentBusinessLogoPathProvider =
 
 final productImageServiceProvider = Provider<ProductImageService>((ref) {
   return ProductImageService(ref.read(supabaseClientProvider));
+});
+
+// ── Shared barcode catalogue (#332, ADR 0029) ───────────────────────────────
+
+/// The shared barcode catalogue lookup Add Product uses to fill empty boxes.
+/// Widget tests override it with a fake.
+final barcodeCatalogueServiceProvider = Provider<BarcodeCatalogueService>((
+  ref,
+) {
+  return BarcodeCatalogueService(ref.read(supabaseClientProvider));
 });
 
 /// Lifts the `SupabaseSyncService.pullStatus` ValueNotifier into Riverpod
