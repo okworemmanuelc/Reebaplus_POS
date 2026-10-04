@@ -28,9 +28,7 @@ class SubscriptionBadge extends ConsumerWidget {
     final color = isPro
         ? Theme.of(context).colorScheme.primary
         : const Color(0xFFF59E0B);
-    final icon = isPro
-        ? AppIcons.premium
-        : AppIcons.time;
+    final icon = isPro ? AppIcons.premium : AppIcons.time;
 
     return Container(
       padding: EdgeInsets.symmetric(

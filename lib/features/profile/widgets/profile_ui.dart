@@ -354,7 +354,11 @@ class ProfileInfoRow extends StatelessWidget {
         ),
         if (onTap != null) ...[
           SizedBox(width: context.getRSize(4)),
-          Icon(AppIcons.chevronRight, size: context.getRSize(18), color: subtext),
+          Icon(
+            AppIcons.chevronRight,
+            size: context.getRSize(18),
+            color: subtext,
+          ),
         ],
       ],
     );

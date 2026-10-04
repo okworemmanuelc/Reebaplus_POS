@@ -28,11 +28,7 @@ class SchemaErrorScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                const Icon(
-                  AppIcons.warning,
-                  size: 56,
-                  color: Colors.amber,
-                ),
+                const Icon(AppIcons.warning, size: 56, color: Colors.amber),
                 const SizedBox(height: 16),
                 const Text(
                   'Schema corruption detected',

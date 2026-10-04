@@ -271,11 +271,7 @@ class _ThankYouSubscriptionScreenState
                       ),
                     ],
                   ),
-                  child: Icon(
-                    AppIcons.premium,
-                    color: successColor,
-                    size: 46,
-                  ),
+                  child: Icon(AppIcons.premium, color: successColor, size: 46),
                 ),
               ],
             ),

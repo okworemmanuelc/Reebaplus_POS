@@ -365,11 +365,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                       ),
                     ],
                   ),
-                  child: Icon(
-                    AppIcons.check,
-                    color: successColor,
-                    size: 48,
-                  ),
+                  child: Icon(AppIcons.check, color: successColor, size: 48),
                 ),
               ],
             ),
