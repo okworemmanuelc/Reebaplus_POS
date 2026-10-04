@@ -131,7 +131,7 @@ flutter:
     - assets/images/auth_bg_light.png
     - assets/images/calculator_bg.png
     - assets/images/auth_gradient_bg.png
-    - assets/images/reebaplus_logo.png
+    - assets/images/brand/
     - assets/images/logo.svg
     - assets/google_fonts/
 
@@ -184,27 +184,31 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 # Launcher-icon generation (dev-only, via flutter_launcher_icons).
-# Source images are derived from the dark-theme logo by tool/generate_app_icon.dart:
-#   reebaplus_icon.png    — the logo on a dark navy/charcoal (#0B1220) background
-#   reebaplus_icon_fg.png — the padded transparent logo for Android adaptive icons
-# Regenerate with: dart run tool/generate_app_icon.dart && dart run flutter_launcher_icons
+# Built from the official logo artworks in assets/branding/ by
+# tool/generate_brand_assets.dart, which also writes the Android dark-mode
+# icon (res/*-night/) that this package can't express. Light background =
+# #BEBFC1 (light artwork), dark = #000000 (dark artwork).
+# Regenerate with: dart run tool/generate_brand_assets.dart && dart run flutter_launcher_icons
 flutter_launcher_icons:
-  image_path: "assets/images/reebaplus_icon.png"
+  image_path: "assets/launcher/icon_light.png"
   min_sdk_android: 24
   android: true
-  adaptive_icon_background: "#0B1220"
-  adaptive_icon_foreground: "assets/images/reebaplus_icon_fg.png"
+  adaptive_icon_background: "#BEBFC1"
+  adaptive_icon_foreground: "assets/launcher/icon_fg_light.png"
+  adaptive_icon_monochrome: "assets/launcher/icon_monochrome.png"
   ios: true
   remove_alpha_ios: true
+  image_path_ios_dark_transparent: "assets/launcher/icon_ios_dark.png"
+  image_path_ios_tinted_grayscale: "assets/launcher/icon_ios_dark.png"
+  desaturate_tinted_to_grayscale_ios: true
   web:
     generate: true
-    image_path: "assets/images/reebaplus_icon.png"
-    background_color: "#0B1220"
-    theme_color: "#0B1220"
+    image_path: "assets/launcher/icon_light.png"
+    background_color: "#BEBFC1"
+    theme_color: "#BEBFC1"
   macos:
     generate: true
-    image_path: "assets/images/reebaplus_icon.png"
+    image_path: "assets/launcher/icon_light.png"
   windows:
     generate: true
-    image_path: "assets/images/reebaplus_icon.png"
-
+    image_path: "assets/launcher/icon_light.png"

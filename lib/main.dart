@@ -42,6 +42,7 @@ import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
 import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/screens/subscription_locked_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/reebaplus_logo.dart';
 
 import 'package:timezone/data/latest.dart' as tz;
 
@@ -499,35 +500,32 @@ class _BrandedSplash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Drawn before the saved theme is read, so it follows the device's
+    // light/dark setting (matching the native launch screen and icon).
+    final brightness = MediaQuery.platformBrightnessOf(context);
+    final dark = brightness == Brightness.dark;
+    final fg = dark ? Colors.white : Colors.black;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: dark ? Colors.black : Colors.white,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              'assets/images/reebaplus_logo.png',
-              height: 90,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.storefront, size: 90, color: Colors.white),
-            ),
+            ReebaplusLogo(height: 90, brightness: brightness),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Reebaplus POS',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: fg,
               ),
             ),
             const SizedBox(height: 24),
-            const SizedBox(
+            SizedBox(
               width: 24,
               height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: Colors.white,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: fg),
             ),
           ],
         ),

@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
+import 'package:reebaplus_pos/shared/widgets/reebaplus_logo.dart';
 
 /// First screen on a fresh install and after a full logout (master plan §4).
 /// Branded entry with three CTAs. The CTAs route to today's auth entry points;
@@ -193,41 +194,12 @@ class _SmallPrint extends StatelessWidget {
   }
 }
 
-/// Logo with the master-plan §4.1 fallback: a rounded square with "RP" in the
-/// amber accent, shown only if the asset fails to load.
+/// The official Reebaplus ring mark, sized for the welcome hero.
 class _WelcomeLogo extends StatelessWidget {
   const _WelcomeLogo();
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Image.asset(
-        'assets/images/reebaplus_logo.png',
-        height: 104,
-        errorBuilder: (_, __, ___) => Container(
-          width: 104,
-          height: 104,
-          decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.primary,
-              width: 2,
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            'RP',
-            style: TextStyle(
-              fontSize: 40,
-              fontWeight: FontWeight.w800,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-      ),
-    );
+    return const Center(child: ReebaplusLogo(height: 104));
   }
 }
