@@ -470,6 +470,20 @@ handles insets. See `CLAUDE.md` for the full platform-specific rule.
 
 ---
 
+## Brand logo
+
+The official Reebaplus logo (ring mark "R+" with a rising arrow, plus the
+"Reebaplus" wordmark) comes in two artworks: **dark** (light-grey R, white
+wordmark; for dark themes) and **light** (dark R, black wordmark; for light
+themes). The designer's originals live in `assets/branding/` (not bundled).
+
+- **In the app, always use `ReebaplusLogo(height:)`** (`lib/shared/widgets/reebaplus_logo.dart`). It picks the artwork for the current theme. Never reference `assets/images/brand/*` directly (enforced by `test/shared/widgets/reebaplus_logo_test.dart`).
+- `lockup: true` adds the wordmark under the mark. Leave it off where the screen already prints the name next to the logo.
+- `brightness:` overrides the theme, only for screens drawn before the theme is known (the startup splash follows the device setting).
+- **Launcher icon follows the device theme where the OS allows it**: Android light icon on `#BEBFC1`, dark icon on `#040404` (the dark artwork's near-black) via `-night` resources, plus a monochrome layer for Android 13+ themed icons; iOS 18 light / dark / tinted icons.
+- Regenerate everything after a logo change: `dart run tool/generate_brand_assets.dart && dart run flutter_launcher_icons`.
+- The business's own logo (drawer header, receipts) is separate from the Reebaplus logo.
+
 ## Icon library
 
 All UI icons are unified under `AppIcons` (`lib/core/theme/app_icons.dart`), backed by **Material Symbols Outlined (w400)** via `package:material_symbols_icons`.

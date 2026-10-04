@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart
 import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
+import 'package:reebaplus_pos/shared/widgets/reebaplus_logo.dart';
 
 /// Two-phase PIN entry. Two callers:
 ///   * New-business onboarding wizard — [user] is null, [isNewBusinessSetup]
@@ -395,15 +396,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
           ),
         if (_isOnboarding) SizedBox(height: context.getRSize(16)),
         // Logo
-        Image.asset(
-          'assets/images/reebaplus_logo.png',
-          height: context.getRSize(60),
-          errorBuilder: (_, __, ___) => Icon(
-            Icons.storefront,
-            size: context.getRSize(60),
-            color: textColor,
-          ),
-        ),
+        ReebaplusLogo(height: context.getRSize(60)),
         SizedBox(height: context.getRSize(12)),
 
         Text(

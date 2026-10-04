@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/shared/widgets/reebaplus_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   /// When set (e.g. routed from OTP verification or an existing-account
@@ -841,10 +842,7 @@ class _PinPad extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ] else ...[
-                  Image.asset(
-                    'assets/images/reebaplus_logo.png',
-                    height: 36,
-                  ),
+                  const ReebaplusLogo(height: 36),
                   const SizedBox(height: 4),
                 ],
                 if (identifiedUser == null)
@@ -1005,10 +1003,7 @@ class _PinPad extends StatelessWidget {
                 ),
               ),
             ] else ...[
-              Image.asset(
-                'assets/images/reebaplus_logo.png',
-                height: context.getRSize(60),
-              ),
+              ReebaplusLogo(height: context.getRSize(60)),
               SizedBox(height: context.getRSize(12)),
             ],
 
