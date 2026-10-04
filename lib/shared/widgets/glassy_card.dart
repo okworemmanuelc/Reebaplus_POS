@@ -29,14 +29,14 @@ class GlassyCard extends StatelessWidget {
     return Container(
       margin: margin,
       padding: padding ?? EdgeInsets.all(context.getRSize(16)),
+      // Clip to the rounded corners, as the old ClipRRect did, so edge-to-edge
+      // children (coloured strips, images, ripples) don't poke out square.
+      clipBehavior: Clip.antiAlias,
       decoration: baseDec.copyWith(
         color: backgroundColor ?? baseDec.color,
         border: border ?? baseDec.border,
       ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: child,
-      ),
+      child: Material(type: MaterialType.transparency, child: child),
     );
   }
 }

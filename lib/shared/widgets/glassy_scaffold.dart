@@ -36,10 +36,7 @@ class GlassyScaffold extends StatelessWidget {
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: subtitle == null
-              ? Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                )
+              ? Text(title, style: const TextStyle(fontWeight: FontWeight.bold))
               : Column(
                   crossAxisAlignment: centerTitle
                       ? CrossAxisAlignment.center

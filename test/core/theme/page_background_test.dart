@@ -22,38 +22,73 @@ final Map<String, ThemeData Function()> _themes = {
 
 void main() {
   for (final entry in _themes.entries) {
-    testWidgets('${entry.key}: pageBackground has 2 opaque stops matching theme', (tester) async {
-      late BoxDecoration decoration;
-      final theme = entry.value();
+    testWidgets(
+      '${entry.key}: pageBackground has 2 opaque stops matching theme',
+      (tester) async {
+        late BoxDecoration decoration;
+        final theme = entry.value();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: theme,
-          home: Builder(
-            builder: (context) {
-              decoration = AppDecorations.pageBackground(context);
-              return const SizedBox();
-            },
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Builder(
+              builder: (context) {
+                decoration = AppDecorations.pageBackground(context);
+                return const SizedBox();
+              },
+            ),
           ),
-        ),
-      );
+        );
 
-      final gradient = decoration.gradient;
-      expect(gradient, isA<LinearGradient>(), reason: '${entry.key}: must be LinearGradient');
-      final linear = gradient! as LinearGradient;
+        final gradient = decoration.gradient;
+        expect(
+          gradient,
+          isA<LinearGradient>(),
+          reason: '${entry.key}: must be LinearGradient',
+        );
+        final linear = gradient! as LinearGradient;
 
-      expect(linear.begin, Alignment.topCenter, reason: '${entry.key}: begin alignment');
-      expect(linear.end, Alignment.bottomCenter, reason: '${entry.key}: end alignment');
-      expect(linear.colors.length, 2, reason: '${entry.key}: exactly 2 stops');
+        expect(
+          linear.begin,
+          Alignment.topCenter,
+          reason: '${entry.key}: begin alignment',
+        );
+        expect(
+          linear.end,
+          Alignment.bottomCenter,
+          reason: '${entry.key}: end alignment',
+        );
+        expect(
+          linear.colors.length,
+          2,
+          reason: '${entry.key}: exactly 2 stops',
+        );
 
-      final topStop = linear.colors[0];
-      final bottomStop = linear.colors[1];
+        final topStop = linear.colors[0];
+        final bottomStop = linear.colors[1];
 
-      expect(topStop.a, 1.0, reason: '${entry.key}: top stop must be fully opaque');
-      expect(bottomStop.a, 1.0, reason: '${entry.key}: bottom stop must be fully opaque');
+        expect(
+          topStop.a,
+          1.0,
+          reason: '${entry.key}: top stop must be fully opaque',
+        );
+        expect(
+          bottomStop.a,
+          1.0,
+          reason: '${entry.key}: bottom stop must be fully opaque',
+        );
 
-      expect(topStop, theme.scaffoldBackgroundColor, reason: '${entry.key}: top stop == scaffoldBackgroundColor');
-      expect(bottomStop, theme.extension<AppSchemeColors>()!.backgroundFade, reason: '${entry.key}: bottom stop == backgroundFade');
-    });
+        expect(
+          topStop,
+          theme.scaffoldBackgroundColor,
+          reason: '${entry.key}: top stop == scaffoldBackgroundColor',
+        );
+        expect(
+          bottomStop,
+          theme.extension<AppSchemeColors>()!.backgroundFade,
+          reason: '${entry.key}: bottom stop == backgroundFade',
+        );
+      },
+    );
   }
 }
