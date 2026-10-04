@@ -77,14 +77,14 @@ class NavigationService {
   final GlobalKey<ScaffoldState> mainScaffoldKey = GlobalKey<ScaffoldState>();
 
   final ValueNotifier<bool> drawerOpenNotifier = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> isDesktopNotifier = ValueNotifier<bool>(false);
 
   /// How many [AppDrawer]s are mounted right now.
   ///
-  /// The drawer does **not** belong to MainLayout's Scaffold — every screen
-  /// builds its own via [SharedScaffold], and a handful build one directly. So
-  /// MainLayout's `onDrawerChanged` never fires and `mainScaffoldKey`'s state
-  /// reports a drawer it does not own as permanently closed. Counting the
+  /// Under 600dp wide the drawer does **not** belong to MainLayout's Scaffold —
+  /// every screen builds its own via [SharedScaffold], and a handful build one
+  /// directly — so `mainScaffoldKey`'s state reports a drawer it does not own
+  /// as permanently closed. At 600dp+ (#352) MainLayout's Scaffold owns it
+  /// instead, so it can pop over the side rail. Counting the
   /// drawer widget itself is the one signal that is true wherever the drawer
   /// was declared: Flutter's `DrawerController` does not build its child while
   /// dismissed, so an [AppDrawer] exists exactly while a drawer is open or
@@ -132,22 +132,20 @@ class NavigationService {
 
   /// "Is the nav drawer covering content right now?" — the *visibility*
   /// question, which is what the first-run rail asks before cutting a hole over
-  /// a button the drawer may be sitting on. Desktop counts: there the drawer is
-  /// a permanent sidebar, so it is always on screen.
+  /// a button the drawer may be sitting on.
+  ///
+  /// Until #352 a desktop-width screen had a permanent 280dp sidebar that
+  /// counted as always open (the old `isDesktopNotifier`). The drawer now pops
+  /// over the screen at every size, so it is open only while it is shown.
   bool get isDrawerOpen =>
-      isDesktopNotifier.value ||
       drawerOpenNotifier.value ||
       (mainScaffoldKey.currentState?.isDrawerOpen ?? false);
 
-  /// "Is there a *dismissable* drawer open?" — the back-button question, which
-  /// is not the same as [isDrawerOpen]. Desktop's sidebar is permanent: there is
-  /// nothing to dismiss, so answering the visibility question on desktop
-  /// swallowed every back press into a no-op close and stranded the user (no
-  /// nested pop, no tab fallback, no double-back exit).
-  bool get isModalDrawerOpen =>
-      !isDesktopNotifier.value &&
-      (drawerOpenNotifier.value ||
-          (mainScaffoldKey.currentState?.isDrawerOpen ?? false));
+  /// "Is there a *dismissable* drawer open?" — the back-button question. Every
+  /// drawer is dismissable since #352 (no permanent sidebar), so this is now
+  /// the same answer as [isDrawerOpen]; it stays a separate name because the
+  /// two questions could split again.
+  bool get isModalDrawerOpen => isDrawerOpen;
 
   /// Close callbacks published by the [AppDrawer]s currently mounted, innermost
   /// last. The drawer belongs to each screen's own Scaffold, never to
@@ -344,8 +342,7 @@ class NavigationService {
 
     debugPrint('[NavigationService] handleBackPress triggered at $now');
 
-    // Step 1: close the drawer if one is open *and dismissable*. Desktop's
-    // sidebar is permanent, so it must not consume the press — see
+    // Step 1: close the drawer if one is open *and dismissable* — see
     // [isModalDrawerOpen].
     if (isModalDrawerOpen) {
       closeDrawer();

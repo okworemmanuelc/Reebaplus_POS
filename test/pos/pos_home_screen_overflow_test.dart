@@ -67,11 +67,16 @@ void main() {
   /// Width → expected columns, with the `pos_grid_columns` preference at 2.
   ///
   /// Under 380dp a phone is capped at 2; over 600dp the grid takes
-  /// `(width / 180).floor()`; in between the preference governs.
+  /// `(width / 180).floor()`; in between the preference governs. The width is
+  /// the grid's own, so at 600dp+ the app frame's side rail (#352, ~73dp with
+  /// its divider) comes off first.
   const widthToColumns = <String, (Size, int)>{
     'pixel7Portrait (412dp wide, preference governs)': (pixel7Portrait, 2),
-    'pixel7Landscape (915dp wide, 915/180 = 5)': (pixel7Landscape, 5),
-    'androidCompactLandscape (800dp wide, 800/180 = 4)': (
+    'pixel7Landscape (915dp − 73dp rail = 842dp, 842/180 = 4)': (
+      pixel7Landscape,
+      4,
+    ),
+    'androidCompactLandscape (800dp − 73dp rail = 727dp, 727/180 = 4)': (
       androidCompactLandscape,
       4,
     ),

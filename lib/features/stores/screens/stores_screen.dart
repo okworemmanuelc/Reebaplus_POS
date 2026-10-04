@@ -560,7 +560,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       appBar: AppBar(
         backgroundColor: _surface,
         elevation: 0,
-        leading: context.isDesktop ? null : const MenuButton(),
+        leading: context.isRailLayout ? null : const MenuButton(),
         title: AppBarHeader(
           icon: AppIcons.store,
           title: 'Stores',

@@ -65,7 +65,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
       appBar: AppBar(
         backgroundColor: surfaceCol,
         elevation: 0,
-        leading: Builder(
+        leading: context.isRailLayout ? null : Builder(
           builder: (ctx) => InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () => Scaffold.of(ctx).openDrawer(),
@@ -169,7 +169,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           SizedBox(width: context.getRSize(8)),
         ],
       ),
-      drawer: const AppDrawer(activeRoute: 'activity_logs'),
+      drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'activity_logs'),
       body: DrawerHost(child: Column(
         children: [
           Expanded(

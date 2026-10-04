@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -63,7 +64,9 @@ Future<SupabaseClient> initTestSupabase() async {
 /// lie by ~48dp.
 const EdgeInsets kRealisticPhoneInsets = EdgeInsets.only(top: 24, bottom: 24);
 
-/// Height of the bottom navigation bar MainLayout renders under every screen.
+/// Height of the bottom navigation bar MainLayout renders under every screen
+/// under 600dp wide. At 600dp+ (#352) the frame has a side rail instead, which
+/// [pumpScreen] models as [ResponsiveHelper.navRailWidth] of width.
 const double kBottomNavBodyHeight = 56.0;
 
 /// Default number of products seeded into a screen environment.
@@ -224,8 +227,10 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
 }
 
 /// Pumps [screen] at [size] with the environment's database, a CEO role, real
-/// device insets and the bottom navigation bar MainLayout puts under every
-/// screen.
+/// device insets and the app frame MainLayout puts around every screen: under
+/// 600dp wide a [bottomNavHeight] bottom bar; at 600dp+ (#352) the side rail's
+/// width on the left and no bottom bar. Pass `bottomNavHeight: 0` for a screen
+/// that is not inside the frame (auth, MainLayout itself).
 ///
 /// Returns the captured [BuildContext] so a test can read responsive getters.
 Future<BuildContext> pumpScreen(
@@ -314,10 +319,23 @@ Future<BuildContext> pumpScreen(
   );
   env.db.businessIdResolver = () => env.businessId;
 
-  Widget content = screen;
-  if (bottomNavHeight > 0) {
-    content = Scaffold(
-      body: content,
+  // Re-evaluated on every build so a test that rotates through the 600dp
+  // line gets the frame that size really has.
+  Widget framed(BuildContext context) {
+    if (bottomNavHeight <= 0) return screen;
+    if (context.isRailLayout) {
+      return Scaffold(
+        body: Row(
+          children: [
+            // The rail plus its 1dp divider.
+            SizedBox(width: context.navRailWidth + 1),
+            Expanded(child: screen),
+          ],
+        ),
+      );
+    }
+    return Scaffold(
+      body: screen,
       bottomNavigationBar: SizedBox(height: bottomNavHeight),
     );
   }
@@ -341,7 +359,7 @@ Future<BuildContext> pumpScreen(
             child: Builder(
               builder: (context) {
                 capturedContext = context;
-                return content;
+                return framed(context);
               },
             ),
           ),

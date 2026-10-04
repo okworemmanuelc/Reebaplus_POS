@@ -213,9 +213,12 @@ void main() {
           child: MaterialApp(
             home: Builder(
               builder: (context) {
-                // On 800x360 landscape phone, getRSize(60) scales down to 42.0dp
-                final scaledExtent = context.getRSize(60.0);
-                expect(scaledExtent, equals(42.0));
+                // On 800x360 landscape phone, getRSize(55) scales down to
+                // 46.2dp — under the 48dp floor. (#352 raised the short
+                // spacing floor 0.70 → 0.84; getRSize(60) used to give 42.0
+                // and now gives 50.4, which no longer exercises the floor.)
+                final scaledExtent = context.getRSize(55.0);
+                expect(scaledExtent, closeTo(46.2, 0.001));
 
                 return Scaffold(
                   body: CustomScrollView(
@@ -249,7 +252,7 @@ void main() {
         expect(tabBarFinder, findsOneWidget);
 
         final renderedHeight = tester.getSize(tabBarFinder).height;
-        // Even though scaledExtent was 42.0, the rendered height must be floored at kMinInteractiveDimension (48.0)
+        // Even though scaledExtent was 46.2, the rendered height must be floored at kMinInteractiveDimension (48.0)
         expect(renderedHeight, greaterThanOrEqualTo(kMinInteractiveDimension));
         expect(renderedHeight, equals(48.0));
       },

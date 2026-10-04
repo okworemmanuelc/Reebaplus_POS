@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
 import 'package:reebaplus_pos/core/utils/frame_safe.dart';
@@ -33,17 +35,20 @@ class AppDrawer extends ConsumerWidget {
 
   const AppDrawer({super.key, required this.activeRoute});
 
+  /// Closes the drawer, then opens [screen] inside the current tab, so the
+  /// bottom bar / rail stays put. Under 600dp the drawer sits in the tab's own
+  /// Scaffold, so the tab Navigator is also the nearest one; at 600dp+ (#352)
+  /// it sits in MainLayout's Scaffold, whose nearest Navigator is the root one,
+  /// so the tab Navigator is named explicitly.
   void _pushRoute(BuildContext context, WidgetRef ref, Widget screen) {
-    if (!context.isDesktop) {
-      Navigator.pop(context);
-    }
     final nav = ref.read(navigationProvider);
-    if (context.isDesktop) {
-      final tabState = nav.tabNavigatorKeys[nav.currentIndex.value].currentState;
-      tabState?.push(MaterialPageRoute(builder: (_) => screen));
-    } else {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
-    }
+    final tabState =
+        nav.currentIndex.value < nav.tabNavigatorKeys.length
+            ? nav.tabNavigatorKeys[nav.currentIndex.value].currentState
+            : null;
+    final target = tabState ?? Navigator.of(context);
+    Navigator.pop(context); // close the drawer
+    target.push(MaterialPageRoute(builder: (_) => screen));
   }
 
   @override
@@ -58,13 +63,8 @@ class AppDrawer extends ConsumerWidget {
       ),
     );
 
-    if (context.isDesktop) {
-      return Container(
-        color: t.colorScheme.surface,
-        child: content,
-      );
-    }
-
+    // A pop-over drawer at every size (#352); the permanent desktop sidebar
+    // is gone.
     return Drawer(
       backgroundColor: t.colorScheme.surface,
       child: content,
@@ -152,7 +152,7 @@ class AppDrawer extends ConsumerWidget {
                     // Pop the drawer first — mirrors the Log Out pattern below
                     // so the watched currentUser flipping to null doesn't trip
                     // tenant-scoped widgets while the drawer is still painting.
-                    if (!context.isDesktop) Navigator.pop(context);
+                    Navigator.pop(context);
                     // Drop any stale paused-time marker so a rapid
                     // background→resume right after lock doesn't double-fire
                     // the auto-lock branch.
@@ -559,7 +559,7 @@ class AppDrawer extends ConsumerWidget {
               ),
             );
             if (confirmed != true) return;
-            if (context.mounted && !context.isDesktop) Navigator.pop(context); // close the drawer
+            if (context.mounted) Navigator.pop(context); // close the drawer
             try {
               await auth.logOutCurrentUser(); // → main.dart routes to Welcome
             } on LogoutBlockedByUnsyncedDataException catch (e) {
@@ -592,7 +592,7 @@ class AppDrawer extends ConsumerWidget {
         // "Display" (light/dark mode) — stays in the side menu for the CEO (and
         // while the role is still resolving, so it's never unreachable). For
         // roles below CEO it now lives inside Staff Settings (§10.5).
-        if (!isBelowCeo) _buildAppearanceTile(context),
+        if (!isBelowCeo) _buildAppearanceTile(context, ref),
         // Extra space for system navigation bar
         SizedBox(height: context.deviceBottomPadding + context.getRSize(20)),
       ],
@@ -603,7 +603,7 @@ class AppDrawer extends ConsumerWidget {
 
   // ── Navigation logic — now uses NavigationService shell ────────────────────
   void _navigateTo(BuildContext context, WidgetRef ref, String route) {
-    if (!context.isDesktop) Navigator.pop(context);
+    Navigator.pop(context); // close the drawer
     final nav = ref.read(navigationProvider);
 
     if (route == 'dashboard') {
@@ -640,10 +640,62 @@ class AppDrawer extends ConsumerWidget {
     Color? labelColor,
   }) {
     final t = Theme.of(context);
-    final primary = t.colorScheme.primary;
     final cardColor = t.cardColor;
     final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
     final textColor = t.colorScheme.onSurface;
+
+    // Selected item (#352, phone-drawer-dark.png): a solid primary-gradient
+    // bar with a white filled icon, white label and a chevron. Idle items keep
+    // their look until the Wave 1 drawer restyle.
+    final onPrimary = t.colorScheme.onPrimary;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    final row = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(16),
+        vertical: context.getRSize(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: context.getRSize(36),
+            height: context.getRSize(36),
+            decoration: active
+                ? null
+                : BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+            child: AppIcon(
+              icon,
+              filled: active,
+              size: context.getRSize(active ? 22 : 16),
+              color: active ? onPrimary : (iconColor ?? subtextColor),
+            ),
+          ),
+          SizedBox(width: context.getRSize(14)),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: active ? FontWeight.bold : FontWeight.w600,
+                fontSize: context.getRFontSize(14.5),
+                color: active ? onPrimary : (labelColor ?? textColor),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (active) ...[
+            SizedBox(width: context.getRSize(8)),
+            AppIcon(
+              AppIcons.chevronRight,
+              size: context.getRSize(20),
+              color: onPrimary,
+            ),
+          ],
+        ],
+      ),
+    );
 
     return Container(
       margin: EdgeInsets.only(bottom: context.getRSize(6)),
@@ -656,57 +708,19 @@ class AppDrawer extends ConsumerWidget {
             )
           : null,
       child: Material(
-        color: active ? primary.withValues(alpha: 0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap ?? () {},
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(16),
-              vertical: context.getRSize(12),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: context.getRSize(36),
-                  height: context.getRSize(36),
-                  decoration: BoxDecoration(
-                    color: active ? primary.withValues(alpha: 0.2) : cardColor,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: context.getRSize(16),
-                    color: iconColor ?? (active ? primary : subtextColor),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(14)),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: active ? FontWeight.bold : FontWeight.w600,
-                      fontSize: context.getRFontSize(14.5),
-                      color: labelColor ?? (active ? primary : textColor),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (active) ...[
-                  SizedBox(width: context.getRSize(8)),
-                  Container(
-                    width: context.getRSize(6),
-                    height: context.getRSize(6),
-                    decoration: BoxDecoration(
-                      color: primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+        type: MaterialType.transparency,
+        child: Ink(
+          decoration: active
+              ? AppDecorations.primaryButtonGradient(
+                  context,
+                  radius: AppSpacing.borderRadiusL,
+                )
+              : null,
+          child: InkWell(
+            key: active ? const Key('drawer-selected-item') : null,
+            borderRadius: radius,
+            onTap: onTap ?? () {},
+            child: row,
           ),
         ),
       ),
@@ -814,7 +828,7 @@ class AppDrawer extends ConsumerWidget {
   }
 
   /// Appearance tile that navigates to the full Theme Settings screen.
-  Widget _buildAppearanceTile(BuildContext context) {
+  Widget _buildAppearanceTile(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
     final primary = t.colorScheme.primary;
 
@@ -824,12 +838,7 @@ class AppDrawer extends ConsumerWidget {
         vertical: context.getRSize(12),
       ),
       child: GestureDetector(
-        onTap: () {
-          Navigator.pop(context); // close drawer
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ThemeSettingsScreen()),
-          );
-        },
+        onTap: () => _pushRoute(context, ref, const ThemeSettingsScreen()),
         child: Container(
           width: double.infinity,
           padding: EdgeInsets.symmetric(
@@ -917,8 +926,8 @@ class AppDrawer extends ConsumerWidget {
 /// Flutter's `DrawerController` does not build its child while the drawer is
 /// dismissed, so "an [AppDrawer] is mounted" is the same statement as "a drawer
 /// is open or animating" — and unlike `Scaffold.onDrawerChanged`, it is true
-/// wherever the drawer was declared. On desktop the drawer is a permanent
-/// sidebar and therefore permanently open, which is also what this reports.
+/// wherever the drawer was declared — a screen's own Scaffold under 600dp
+/// wide, MainLayout's at 600dp+ (#352).
 ///
 /// Both edges are deferred past the current frame: the tour's overlay listens
 /// to `drawerOpenNotifier` from a sibling `Stack` entry, and marking a sibling
@@ -998,8 +1007,8 @@ class _DrawerHostState extends State<DrawerHost> {
   bool _openOwningDrawer() {
     if (!mounted) return false;
     final scaffold = Scaffold.maybeOf(context);
-    // No drawer to open — notably every screen on desktop, where SharedScaffold
-    // passes `drawer: null` and the sidebar is permanent instead.
+    // No drawer to open — notably every screen at 600dp+ wide, where the
+    // screens pass `drawer: null` and MainLayout's Scaffold owns it (#352).
     if (scaffold == null || !scaffold.hasDrawer) return false;
     // Buried under a pushed page within this tab.
     if (ModalRoute.of(context)?.isCurrent == false) return false;

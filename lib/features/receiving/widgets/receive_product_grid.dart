@@ -41,8 +41,19 @@ class ReceiveProductGrid extends ConsumerWidget {
     // Stock keepers without it can still tap existing products to receive
     // quantity — they just don't get the "New Product" card.
     final canAddProduct = Gates.addProduct.allows(ref);
-    final screenWidth = MediaQuery.of(context).size.width;
-    final availableWidth = context.isDesktop ? (screenWidth - 280.0) : screenWidth;
+    // The grid's real width: the screen minus the app frame's side rail
+    // (#352). Read from the layout, not the screen.
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _buildGrid(context, constraints.maxWidth, canAddProduct),
+    );
+  }
+
+  Widget _buildGrid(
+    BuildContext context,
+    double availableWidth,
+    bool canAddProduct,
+  ) {
     int effectiveColumns = gridColumns;
 
     if (availableWidth < 380) {

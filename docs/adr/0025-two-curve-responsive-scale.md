@@ -209,3 +209,33 @@ a structural re-flow is required, not optional.**
    compact padding and icon constraints do not reach them. Phase 1 (auth landscape adaptation)
    must not assume `AppDecorations` or raw `TextField`s are compacted by Phase 0.
 
+
+## Amendment, #352 (2026-10-04): short-viewport spacing floor 0.70 → 0.84
+
+**Change.** `_kSpacingFloorShort` in `lib/core/utils/responsive.dart` is now **0.84**
+(was 0.70). The comfortable floor stays 0.85; the font floor stays 0.90.
+
+**Why.** Owner QA on #349 found sideways phones looked flattened: in a short viewport
+boxes dropped to 0.70 while text stayed at 0.90, so text sat 22% larger relative to its
+boxes than upright, and DM Sans's wider letters made it more visible. The 0.70 squeeze
+existed to fit fixed chrome (a 56dp bottom bar plus top bars) into ~360dp of height. Since
+#352 the app frame keys navigation off **width**: a sideways phone (600dp+ wide) gets the
+side rail instead of the bottom bar, so it keeps the bar's height and the squeeze is no
+longer needed there.
+
+**Why 0.84 and not 0.85.** The brief asked for about 0.85 and to take the highest value
+that passes if anything breaks. At 0.85, `pos_home_screen_overflow_test.dart`'s
+`se1Landscape` case (568×320 — under 600dp wide, so it still has the bottom bar) put POS's
+chrome 0.9dp past the 240dp viewport, so no product row showed at rest. 0.84 passes every
+viewport suite and the PRD #239 sweep (`VIEWPORT_SWEEP=1`, 140 screen × state lines at
+800×360: 0 loud, 0 silent; the same 10 entries error on missing plugins as before). The
+margin at 568×320 is ~2dp, so any taller POS chrome will trip that test again.
+
+**Alternative not taken (supervisor's call).** Make the short floor depend on whether the
+rail is showing: 0.85 at 600dp+ wide, 0.70 under 600dp (sideways phones narrow enough to
+keep the bottom bar). That follows the reasoning above more exactly and would not leave a
+knife-edge, but the brief asked for one value.
+
+**Harness.** `test/helpers/screen_harness.dart` now models the frame each screen really
+gets: a bottom bar under 600dp wide, the rail's width (`navRailWidth` + 1dp divider) and no
+bottom bar at 600dp+. The sweep at 800×360 therefore measures screens beside the rail.

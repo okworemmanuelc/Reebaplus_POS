@@ -22,6 +22,10 @@ import '../helpers/viewports.dart';
 ///   [x] Sideways swipes between tabs and along chip rows never toggle the bar
 ///   [x] Hidden or shown, no layout overflow is reported and the last row remains reachable
 ///   [x] The wide-screen side rail is unaffected
+///
+/// #352: the bottom bar exists only under 600dp wide now (600dp+ gets the side
+/// rail), so the sideways cases run on a sideways phone narrower than that —
+/// an SE-class 568x320 — and 800x360 asserts the rail instead.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -38,8 +42,10 @@ void main() {
     'hint_pos_gestures': 2,
   };
 
-  // Sideways, but narrower than the 1024dp side-rail cutoff.
-  const sidewaysSevenInchTablet = Size(960, 600);
+  // Sideways and under the 600dp rail cutoff (#352), so the bar applies.
+  const sidewaysNarrowPhone = Size(568, 320);
+  // Sideways, under 600dp, and tall enough for the empty cart to fit.
+  const sidewaysNarrowRoomy = Size(592, 560);
 
   const clipKey = Key('main-bottom-nav-clip');
   const alignKey = Key('main-bottom-nav-align');
@@ -102,12 +108,12 @@ void main() {
     });
 
     testWidgets(
-      'Sideways (800x360), scrolling into list hides bottom bar; scrolling back shows it',
+      'Sideways (568x320), scrolling into list hides bottom bar; scrolling back shows it',
       (tester) async {
         await pumpMainLayout(
           tester,
           env: env,
-          size: androidCompactLandscape,
+          size: sidewaysNarrowPhone,
         );
 
         // Initially on POS, bottom bar is fully visible
@@ -186,14 +192,13 @@ void main() {
 
         // The rule lives in MainLayout and covers every main tab. POS can't
         // demonstrate it: its collapsing header always leaves scroll room
-        // sideways (92dp at 800x360, 49dp at 960x600, even with no products).
-        // The empty cart on a sideways 7" tablet — still under the 1024dp
-        // side-rail cutoff, so the bottom bar applies — genuinely fits.
+        // sideways, even with no products. The empty cart on a roomy sideways
+        // window still under the 600dp rail cutoff (#352) genuinely fits.
         NavigationService().setIndex(8); // Cart — same bare index app_drawer.dart uses
         await pumpMainLayout(
           tester,
           env: emptyEnv,
-          size: sidewaysSevenInchTablet,
+          size: sidewaysNarrowRoomy,
         );
 
         expect(barHeight(tester), greaterThan(40.0));
@@ -231,7 +236,7 @@ void main() {
         await pumpMainLayout(
           tester,
           env: env,
-          size: androidCompactLandscape,
+          size: sidewaysNarrowPhone,
         );
 
         expect(barHeight(tester), greaterThan(40.0));
@@ -259,7 +264,7 @@ void main() {
         await pumpMainLayout(
           tester,
           env: env,
-          size: androidCompactLandscape,
+          size: sidewaysNarrowPhone,
         );
 
         final scrollable = find.byKey(kPosScrollSurfaceKey);
@@ -289,7 +294,7 @@ void main() {
         await pumpMainLayout(
           tester,
           env: env,
-          size: androidCompactLandscape,
+          size: sidewaysNarrowPhone,
         );
 
         final scrollable = find.byKey(kPosScrollSurfaceKey);
@@ -318,7 +323,7 @@ void main() {
         await pumpMainLayout(
           tester,
           env: env,
-          size: androidCompactLandscape,
+          size: sidewaysNarrowPhone,
         );
 
         final scrollable = find.byKey(kPosScrollSurfaceKey);
@@ -350,6 +355,32 @@ void main() {
 
         // Bottom nav bar is null on desktop
         expect(find.byKey(navKey), findsNothing);
+        expect(find.byKey(const Key('main-nav-rail')), findsOneWidget);
+
+        await disposeScreen(tester);
+      },
+    );
+
+    testWidgets(
+      '#352: a sideways phone 600dp+ wide (800x360) gets the rail, and '
+      'scrolling never brings a bottom bar in',
+      (tester) async {
+        await pumpMainLayout(
+          tester,
+          env: env,
+          size: androidCompactLandscape,
+        );
+
+        expect(find.byKey(navKey), findsNothing);
+        expect(find.byKey(const Key('main-nav-rail')), findsOneWidget);
+
+        await tester.drag(find.byKey(kPosScrollSurfaceKey), const Offset(0, -180));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(find.byKey(navKey), findsNothing);
+        expect(find.byKey(const Key('main-nav-rail')), findsOneWidget);
+        expect(tester.takeException(), isNull);
 
         await disposeScreen(tester);
       },

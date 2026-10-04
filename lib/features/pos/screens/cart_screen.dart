@@ -1035,7 +1035,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         appBar: AppBar(
           backgroundColor: _surface,
           elevation: 0,
-          leading: context.isDesktop ? null : const MenuButton(),
+          leading: context.isRailLayout ? null : const MenuButton(),
           title: AppBarHeader(
             icon: AppIcons.cart,
             title: 'Cart',
@@ -1086,7 +1086,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       appBar: AppBar(
         backgroundColor: _surface,
         elevation: 0,
-        leading: context.isDesktop ? null : const MenuButton(),
+        leading: context.isRailLayout ? null : const MenuButton(),
         title: AppBarHeader(
           icon: AppIcons.cart,
           title: 'Cart',

@@ -37,9 +37,9 @@ scheme (only light vs dark differ).
 **Which one for a tint?** (PRD #346 decision 6) Tags and tinted icon tiles use
 `AppFixedColors` — e.g. a pale icon tile on a Home stat card or settings row is
 `infoTint` with an `info` icon in every scheme. The scheme still drives primary
-buttons, active nav (the active rail item's pale pill is
-`AppSchemeColors.primaryTint`), prices, the screen-title icon tile (a solid
-primary gradient, not a tint) and focus outlines.
+buttons, active nav (a filled primary icon + primary label; since the PRD
+#346 addendum the rail has no pale pill, #352), prices, the screen-title icon
+tile (a solid primary gradient, not a tint) and focus outlines.
 
 ---
 
@@ -69,7 +69,7 @@ added by #349 from the designer colour sheet.
 | Primary | `colorScheme.primary` | `#2563EB` | `#3B82F6` | Prices, totals, subtitles, active items, focus border |
 | Secondary | `colorScheme.secondary` | `#60A5FA` | `#60A5FA` | Gradient start on primary buttons/FAB |
 | On primary | `colorScheme.onPrimary` | `#FFFFFF` | `#FFFFFF` | Text and icons on the blue gradient (dark was black before #349 — deliberate change) |
-| Primary tint | `AppSchemeColors.primaryTint` | `#2563EB` @ 0.12 | `#3B82F6` @ 0.16 | Active rail item and other pale active fills (not the screen-title icon tile, which is the solid primary gradient) |
+| Primary tint | `AppSchemeColors.primaryTint` | `#2563EB` @ 0.12 | `#3B82F6` @ 0.16 | Pale active fills (not the screen-title icon tile, which is the solid primary gradient; the rail's selected item has no pill since #352) |
 | Primary glow | `AppSchemeColors.primaryGlow` | `#2563EB` @ 0.30 | `#3B82F6` @ 0.30 | Shadow under primary buttons |
 | Link hover | `AppSchemeColors.linkHover` | `#1D4ED8` | `#60A5FA` | Link hover / pressed |
 | Error | `colorScheme.error` | `#EF4444` | `#EF4444` | Form errors (per scheme; Amber/Purple/Green/B&W use `#FF3B30`) |
@@ -197,6 +197,18 @@ size, weight, colour, letter spacing and height stay as each builder sets
 them. Text styled with a raw `TextStyle` inherits the family from
 `DefaultTextStyle`. The few explicit `fontFamily: 'monospace'` call sites are
 left for the `monoStyle` adoption in Wave 2.
+
+### Fonts in tests
+
+`test/flutter_test_config.dart` (#352) loads the bundled DM Sans (all five
+weights), Roboto Mono and the Material Symbols Outlined font into every test,
+straight from disk and without initialising the test binding, so widget tests
+and goldens measure and draw real glyphs. Two known test-only artifacts: text
+whose style sets no family at all (e.g. `AppDropdown`'s selected value, a
+`DefaultTextStyle` built from a bare `TextStyle`) draws as solid bars, and
+`₦` draws as a box because DM Sans has no Naira glyph (a device falls back to
+the system font). Pixel goldens live in `test/redesign/goldens/`, never
+`test/golden/` (Linux CI).
 
 ### Styles outside the `TextTheme`
 
@@ -333,6 +345,7 @@ above. Chevron: `AppIcons.chevronDown`.
 | Radius | `AppRadius.lg` (16px) |
 | Background | Secondary → Primary gradient + glow shadow |
 | `reserveBottomInset` | `true` by default (lifts above the nav bar). Set `false` only on the 5 visible-bar tab roots (Home, POS, Inventory, Orders, Cart). |
+| Under POS | The frame's View Cart bar sits below the POS tab (not over it), so POS's FAB rises above it (#352). |
 
 ### `AppNotification`
 
@@ -347,6 +360,7 @@ match `AppButton`'s success gradient.
 | `AppDecorations.pageBackground(context)` | `BoxDecoration` with vertical opaque background fade (`scaffoldBackgroundColor` → `backgroundFade`) | Screen roots |
 | `AppDecorations.card(context, {radius})` | `BoxDecoration` flat card (`cardFill`, `dividerColor` border, `cardShadow`) | General use |
 | `AppDecorations.primaryGradient(context)` | `BoxDecoration` with primary gradient, radius `AppRadius.sm` | General use |
+| `AppDecorations.primaryButtonGradient(context, {radius, shape, glow})` | `BoxDecoration` with the button gradient (`secondary` → `primary`) and `primaryGlow` shadow; `shape: BoxShape.circle` for a round button | The frame's raised POS button (bar + rail), the drawer's selected item, the View Cart bar (#352) |
 | `AppDecorations.surfaceCard(context)` | `BoxDecoration` (delegates to `card`) | Legacy callers |
 | `AppDecorations.glassCard(context)` | `BoxDecoration` (delegates to `card`) | Legacy callers |
 | `AppDecorations.authInputDecoration(context, ...)` | `InputDecoration` with radius `AppRadius.inputAuth` (10px) | Auth / onboarding screens only |
@@ -413,22 +427,35 @@ form-factor-vs-available-width split — land here in Phase 9; see
 
 ## Layout patterns
 
-### `MainLayout` (`lib/shared/widgets/main_layout.dart`)
+### `MainLayout` — the app frame (`lib/shared/widgets/main_layout.dart`, #352)
 
-One root `Scaffold` with a `BottomNavigationBar` (fixed type). The nav bar
-is always present in the widget tree even when hidden — it is never removed,
-only replaced with `SizedBox.shrink()` so the layout does not shift.
+One root `Scaffold`. What surrounds the tabs depends on the **screen width**
+(not the shortest side), read only through `context.isRailLayout` (600dp+) and
+`context.isWideLayout` (1024dp+) in `lib/core/utils/responsive.dart`. Other
+screens keep using `isPhone` / `isTablet` / `isDesktop` for their own layouts.
 
-**Visible bottom-bar tabs (5):** Home, POS, Inventory, Orders, Cart.
+| Width | Navigation | Cart on POS |
+|---|---|---|
+| under 600 | **Bottom bar** (`FrameBottomBar`) | Cart tab; a floating **View Cart** bar under POS opens the Cart tab |
+| 600–1023 | **Side rail** (`FrameNavRail`), no bottom bar | **View Cart** opens a **slide-in panel** from the right over a dim (`AppSchemeColors.scrim`); ✕ or tapping the dim closes it |
+| 1024+ | Side rail | Cart panel **fixed on the right** of POS (open by default); ✕ hides it and brings back the View Cart bar |
 
-**Drawer-accessed destinations (not in the bottom bar):** Customers, Payments,
-Expenses, Stores, Suppliers, Staff, Reports, Activity Log, Settings, CEO
-Settings. These are full tab roots that use the same per-tab `Navigator` and
-fade-transition machinery as the bottom-bar tabs — they simply do not appear
-in the bar itself.
+**Shared parts** (`lib/shared/widgets/frame/`):
+- `frame_nav.dart` — `FrameNavItem` (one list, built once in MainLayout from the gates, drawn by both the bar and the rail, so items / order / permission hiding / tap behaviour cannot drift), `FrameBottomBar`, `FrameNavRail`. Item keys: `frameNavItemKey(tabIndex)`.
+- `cart_panel.dart` — `CartPanel` (solid `colorScheme.surface`, `AppSchemeColors.panelShadow`, left hairline, a top strip holding the ✕) and `CartPanelScrim`. Widths: slide-in = 60% of the screen, max 460; fixed = 30%, 360–440.
+- `view_cart_bar.dart` — `ViewCartBar` (count badge, "N items · customer", the Cart screen's Total, chevron). Moves into the shared parts in #352 PR 2.
+
+**Visible nav items (5):** Home, Stock (`Gates.viewInventory`), POS + Cart (`Gates.makeSale`), Orders (pending-orders badge for the active store). Cart shows the cart-line count badge.
+
+- **Bottom bar** (under 600): solid Surface, hairline top border, `topBarShadow`. **Only POS is raised**: a primary-gradient circle in a Surface ring with a glow, white icon, ExtraBold primary "POS" label. Selected = filled primary icon + primary label (600); idle = outlined icon + muted label. Shown only on the 5 nav-tab roots (hidden on drawer destinations and pushed pages, as before). Sideways **and** under 600dp wide it slides away on scroll (#258); at 600dp+ there is no bar to slide.
+- **Rail** (600+, `context.navRailWidth` = `getRSize(80)` clamped 72–96): solid Surface, 1px `dividerColor` line on its right. Menu (☰, `AppIcons.menu`) on top — it opens the drawer and is the first-run tour's `SpotlightTargetId.menuButton` at this size — then the same five items. POS = raised primary-gradient tile with glow, white icon, primary label. Selected = filled primary icon + primary label, **no pill**; idle = outlined + muted. Always shown at 600dp+ (also on drawer destinations and pushed pages, like the old desktop sidebar), so the menu is always reachable.
+- **Drawer** pops over the screen at **every** size (the permanent 280dp desktop drawer is gone). Under 600dp each screen's own Scaffold declares it (`SharedScaffold` & co.) and the screen's `MenuButton` opens it; at 600dp+ MainLayout's Scaffold declares it so it covers the rail too, and screens pass `drawer: null` and drop their own menu button (`context.isRailLayout ? null : const MenuButton()`). Selected drawer item = solid primary-gradient bar (`primaryButtonGradient`) with a white filled icon, white label and a chevron. Permission hiding unchanged.
+- **Cart panel** hosts the **existing Cart screen, unchanged**, in its own Navigator — checkout and the receipt open inside the panel through the Cart tab's own code. Back first unwinds the panel's pushed pages, then closes a slide-in panel. Leaving POS closes the slide-in panel; the fixed panel stays wanted. The Cart tab itself still exists at every size (rail Cart = Cart tab, same as the bar).
+- **View Cart bar** sits **under** POS (a Column slot, so it never covers the grid or the scan button) on the POS root when the cart has lines, the panel is not showing, and the keyboard is down.
 
 Each tab keeps its own push stack. Tab switches use a 200ms `easeOut` fade.
 Only the landing tab is pre-initialised; other tabs initialise on first visit.
+The tab stack is keyed so a rotation across 600dp keeps every tab's Navigator.
 
 **Landing tab is per role** (`NavigationService.landingTabForRole`): CEO,
 Manager and Stock keeper open on Home; Cashier opens on POS. A session starts on
@@ -436,6 +463,10 @@ Home — the neutral default, and the only tab never hidden from a nav bar —
 because the role has not resolved from local SQLite at login; MainLayout applies
 the role's tab once permissions land, once per session. A root-level back press
 falls home to that same landing tab.
+
+**Drawer-accessed destinations (not in the bar/rail):** Customers, Payments,
+Expenses, Stores, Suppliers, Staff, Reports, Activity Log, Settings, CEO
+Settings — full tab roots on the same per-tab `Navigator` machinery.
 
 ### App bar
 
@@ -451,6 +482,8 @@ falls home to that same landing tab.
 
 | Section | Detail |
 |---|---|
+| Presentation | A pop-over `Drawer` at every size (#352) |
+| Selected item | Solid primary-gradient bar + white filled icon + chevron (#352); idle items unchanged until the Wave 1 drawer restyle |
 | Header | 56×56px logo avatar (radius `AppRadius.md`), role badge, sync status badge |
 | Header background | Gradient: `scaffoldBackgroundColor` → `roleAccentColor @ 30% alpha` |
 | Nav list | Permission-gated; items not permitted to the current role are omitted entirely (hide-don't-block) |

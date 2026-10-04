@@ -242,7 +242,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       backgroundColor: surfaceCol,
       elevation: 0,
       iconTheme: IconThemeData(color: textCol),
-      leading: context.isDesktop ? null : const MenuButton(),
+      leading: context.isRailLayout ? null : const MenuButton(),
       title: AppBarHeader(
         icon: AppIcons.receipt,
         title: 'Orders',

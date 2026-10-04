@@ -142,13 +142,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       gate: Gates.viewExpenses,
       loading: Scaffold(
         backgroundColor: _bg,
-        drawer: const AppDrawer(activeRoute: 'expenses'),
+        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'expenses'),
         appBar: _buildAppBar(context),
         body: const DrawerHost(child: SizedBox.shrink()),
       ),
       denied: Scaffold(
         backgroundColor: _bg,
-        drawer: const AppDrawer(activeRoute: 'expenses'),
+        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'expenses'),
         appBar: _buildAppBar(context),
         body: DrawerHost(child: Center(
           child: Padding(
@@ -174,7 +174,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   Widget _buildExpenses(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      drawer: const AppDrawer(activeRoute: 'expenses'),
+      drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'expenses'),
       appBar: _buildAppBar(context),
       body: DrawerHost(child: Builder(
         builder: (context) {
@@ -302,7 +302,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       backgroundColor: _surface,
       elevation: 0,
       iconTheme: IconThemeData(color: _text),
-      leading: Builder(
+      leading: context.isRailLayout ? null : Builder(
         builder: (ctx) => InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () => Scaffold.of(ctx).openDrawer(),

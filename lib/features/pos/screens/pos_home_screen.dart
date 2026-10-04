@@ -672,7 +672,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     return AppBar(
       backgroundColor: surfaceCol,
       elevation: 0,
-      leading: context.isDesktop ? null : const MenuButton(),
+      leading: context.isRailLayout ? null : const MenuButton(),
       title: AppBarHeader(
         icon: AppIcons.beerMug,
         title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
