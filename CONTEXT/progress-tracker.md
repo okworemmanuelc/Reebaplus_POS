@@ -11,7 +11,7 @@ The human updates it when resolving open questions or making architectural decis
 Branch `feat/brand-logo-346` (parent PRD #346). **No Drift/cloud change.**
 - Designer artworks saved in `assets/branding/` (`reebaplus_logo_on_dark.jpg`, `reebaplus_logo_on_light.jpg`; not bundled).
 - `tool/generate_brand_assets.dart` (replaces `tool/generate_app_icon.dart`) keys out each artwork's flat background, splits the ring mark from the wordmark, and writes: in-app `assets/images/brand/reebaplus_{mark,lockup}_{dark,light}.png`; launcher sources in `assets/launcher/`; the Android dark-mode icon straight into `res/*-night/`.
-- `flutter_launcher_icons` config: light icon on `#BEBFC1`, Android monochrome (themed icons), iOS dark + tinted icons. Android dark icon = `values-night/colors.xml` `#000000` + `drawable-night-*/ic_launcher_foreground.png` + `mipmap-night-*/ic_launcher.png`. The Android 12+ launch splash shows the same theme-matched icon.
+- `flutter_launcher_icons` config: light icon on `#BEBFC1`, Android monochrome (themed icons), iOS dark + tinted icons. Android dark icon = `values-night/colors.xml` `#040404` + `drawable-night-*/ic_launcher_foreground.png` + `mipmap-night-*/ic_launcher.png`. The Android 12+ launch splash shows the same theme-matched icon.
 - `ReebaplusLogo` widget replaces every `reebaplus_logo.png` use (startup splash, welcome, login ×2, create PIN). The startup splash now follows the device light/dark setting instead of always black.
 - Old `reebaplus_logo.png` / `reebaplus_icon*.png` deleted. Drawer header still shows the placeholder `logo.svg`; per the mockup it becomes the business's initial tile (#352 / Wave 2, not the Reebaplus logo).
 - Tests: `test/shared/widgets/reebaplus_logo_test.dart` (4).

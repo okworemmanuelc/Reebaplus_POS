@@ -187,7 +187,7 @@ flutter:
 # Built from the official logo artworks in assets/branding/ by
 # tool/generate_brand_assets.dart, which also writes the Android dark-mode
 # icon (res/*-night/) that this package can't express. Light background =
-# #BEBFC1 (light artwork), dark = #000000 (dark artwork).
+# #BEBFC1 (light artwork), dark = #040404 (dark artwork).
 # Regenerate with: dart run tool/generate_brand_assets.dart && dart run flutter_launcher_icons
 flutter_launcher_icons:
   image_path: "assets/launcher/icon_light.png"
