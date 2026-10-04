@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -762,7 +763,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                     minHeight: kMinInteractiveDimension,
                   ),
                   icon: Icon(
-                    Icons.arrow_back_ios,
+                    AppIcons.arrowBackIos,
                     color: authTextPrimary(context),
                     size: 18,
                   ),
@@ -798,7 +799,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                   opacity: showBack ? 1 : 0,
                   child: IconButton(
                     icon: Icon(
-                      Icons.arrow_back_ios,
+                      AppIcons.arrowBackIos,
                       color: authTextPrimary(context),
                       size: 20,
                     ),
@@ -858,7 +859,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Business name',
-              prefixIcon: Icons.storefront_outlined,
+              prefixIcon: AppIcons.storefront,
             ),
           ),
         ),
@@ -928,7 +929,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         AuthInputCard(
           child: _AutocompleteField(
             label: 'Country',
-            icon: Icons.public_outlined,
+            icon: AppIcons.public,
             initial: _countryValue,
             options: kCountries,
             onChanged: (v) => setState(() {
@@ -959,7 +960,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Business phone number',
-              prefixIcon: Icons.phone_outlined,
+              prefixIcon: AppIcons.phone,
               enabled: _dialCode.isNotEmpty,
               prefixText: _dialCode.isNotEmpty ? '$_dialCode ' : null,
               helperText: _dialCode.isEmpty ? 'Choose your country first' : null,
@@ -970,7 +971,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         Row(
           children: [
             Icon(
-              Icons.payments_outlined,
+              AppIcons.payments,
               size: 18,
               color: authTextPrimary(context).withValues(alpha: 0.6),
             ),
@@ -1020,7 +1021,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Full name',
-              prefixIcon: Icons.person_outline,
+              prefixIcon: AppIcons.user,
             ),
           ),
         ),
@@ -1048,7 +1049,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Email address',
-              prefixIcon: Icons.email_outlined,
+              prefixIcon: AppIcons.email,
             ),
           ),
         ),
@@ -1196,7 +1197,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               context,
             ).colorScheme.primary.withValues(alpha: 0.12),
             child: Icon(
-              Icons.check_rounded,
+              AppIcons.check,
               size: 48,
               color: Theme.of(context).colorScheme.primary,
             ),
@@ -1229,7 +1230,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.check_circle_rounded,
+                AppIcons.checkCircle,
                 color: Colors.greenAccent,
                 size: 80,
               ),
@@ -1402,7 +1403,7 @@ class _TypeCard extends StatelessWidget {
               ),
               if (selected)
                 Icon(
-                  Icons.check_circle_rounded,
+                  AppIcons.checkCircle,
                   color: Theme.of(context).colorScheme.primary,
                   size: 22,
                 ),

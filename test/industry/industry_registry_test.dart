@@ -170,15 +170,15 @@ void main() {
     // flag changed: update this golden in the SAME commit, deliberately.
     // (label | icon codepoint | comingSoon | crateEligible | selectable)
     const golden = <String>[
-      'Restaurant|0xf0108|false|false|false',
-      'Supermarket|0xf86e|false|false|false',
-      'Bar|0xf865|false|true|false',
-      'Beverage distributor|0xf01b8|false|true|true',
-      'Pharmacy|0xf877|false|false|true',
-      'Building Materials|0xf7a3|false|false|false',
-      'Boutique|0xf639|false|false|false',
-      'Phone & Gadgets|0xf019b|false|false|false',
-      'Frozen Foods & Grocery|0xf516|false|false|true',
+      'Restaurant|0xe56c|false|false|false',
+      'Supermarket|0xe8cc|false|false|false',
+      'Bar|0xe540|false|true|false',
+      'Beverage distributor|0xf1f3|false|true|true',
+      'Pharmacy|0xe550|false|false|true',
+      'Building Materials|0xf200|false|false|false',
+      'Boutique|0xf19e|false|false|false',
+      'Phone & Gadgets|0xe7ba|false|false|false',
+      'Frozen Foods & Grocery|0xeb3b|false|false|true',
     ];
 
     test('catalogue matches the frozen golden', () {

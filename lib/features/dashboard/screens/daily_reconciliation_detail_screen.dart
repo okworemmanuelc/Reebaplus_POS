@@ -1498,7 +1498,7 @@ class _DailyReconciliationDetailScreenState
                   ),
                 ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right_rounded, color: theme.hintColor),
+              Icon(AppIcons.chevronRight, color: theme.hintColor),
             ],
           ),
         ),

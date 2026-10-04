@@ -147,7 +147,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                         labelText: 'Store Name',
                         hintText: 'e.g. Main Store, Annex B',
                         prefixIcon:
-                            const Icon(Icons.store_outlined, size: 20),
+                            const Icon(AppIcons.store, size: 20),
                         validator: (v) => v == null || v.trim().isEmpty
                             ? 'Name is required'
                             : null,
@@ -158,7 +158,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                         controller: addressCtrl,
                         labelText: 'Street Address',
                         hintText: 'e.g. 14 Market Road',
-                        prefixIcon: const Icon(Icons.map_outlined, size: 20),
+                        prefixIcon: const Icon(AppIcons.map, size: 20),
                         validator: (v) => v == null || v.trim().isEmpty
                             ? 'Street Address is required'
                             : null,
@@ -167,7 +167,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
 
                       _AppAutocompleteField(
                         label: 'Country',
-                        icon: Icons.public_outlined,
+                        icon: AppIcons.public,
                         initial: countryValue,
                         options: kCountries,
                         onChanged: (v) => setSheet(() => countryValue = v),
@@ -332,7 +332,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                         labelText: 'Store Name',
                         hintText: 'e.g. Main Store',
                         prefixIcon:
-                            const Icon(Icons.store_outlined, size: 20),
+                            const Icon(AppIcons.store, size: 20),
                         validator: (v) => v == null || v.trim().isEmpty
                             ? 'Name is required'
                             : null,
@@ -343,7 +343,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                         controller: addressCtrl,
                         labelText: 'Street Address',
                         hintText: 'e.g. 14 Market Road',
-                        prefixIcon: const Icon(Icons.map_outlined, size: 20),
+                        prefixIcon: const Icon(AppIcons.map, size: 20),
                         validator: (v) => v == null || v.trim().isEmpty
                             ? 'Street Address is required'
                             : null,
@@ -352,7 +352,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
 
                       _AppAutocompleteField(
                         label: 'Country',
-                        icon: Icons.public_outlined,
+                        icon: AppIcons.public,
                         initial: countryValue,
                         options: kCountries,
                         onChanged: (v) => setSheet(() => countryValue = v),
@@ -455,7 +455,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                 child: Row(
                   children: [
                     const Icon(
-                      Icons.warning_amber_rounded,
+                      AppIcons.warning,
                       color: AppColors.warning,
                       size: 18,
                     ),
@@ -576,7 +576,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               id: SpotlightTargetId.createStoreFab,
               child: AppFAB(
                 onPressed: () => _showAddSheet(context),
-                icon: Icons.add_rounded,
+                icon: AppIcons.add,
                 label: 'Add Store',
               ),
             )
@@ -826,7 +826,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                           Row(
                             children: [
                               Icon(
-                                Icons.location_on_outlined,
+                                AppIcons.location,
                                 size: rSize(context, 12),
                                 color: _subtext,
                               ),

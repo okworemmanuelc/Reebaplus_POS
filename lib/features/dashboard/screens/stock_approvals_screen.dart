@@ -290,7 +290,7 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              isRemove ? Icons.arrow_downward : Icons.arrow_upward,
+              isRemove ? AppIcons.arrowDown : AppIcons.arrowUp,
               color: _accent,
               size: 20,
             ),

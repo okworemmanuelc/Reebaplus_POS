@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -191,7 +192,7 @@ class _PinDialogState extends ConsumerState<PinDialog> {
                 const SizedBox(width: 8),
                 _keyBtn('0', cardCol, textColor),
                 const SizedBox(width: 8),
-                _iconBtn(Icons.backspace_outlined, cardCol, textColor),
+                _iconBtn(AppIcons.backspace, cardCol, textColor),
               ],
             ),
 

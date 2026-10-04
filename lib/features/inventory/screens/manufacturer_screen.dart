@@ -285,7 +285,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back),
+                icon: const Icon(AppIcons.arrowBack),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 onPressed: () => Navigator.of(context).pop(),
@@ -555,7 +555,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
               child: Row(
                 children: [
                   Icon(
-                    Icons.info_outline,
+                    AppIcons.infoCircle,
                     size: context.getRSize(16),
                     color: theme.colorScheme.primary,
                   ),

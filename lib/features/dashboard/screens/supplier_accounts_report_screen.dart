@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -55,7 +56,7 @@ class _SupplierAccountsReportScreenState extends ConsumerState<SupplierAccountsR
               : Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
+            icon: Icon(AppIcons.arrowBackIosNew, color: text, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(

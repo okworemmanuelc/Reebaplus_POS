@@ -27,6 +27,7 @@ import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/crate_money_arrangement_section.dart';
 
 BusinessData _business({
@@ -233,7 +234,7 @@ void main() {
           findsNothing);
       expect(
         tester
-            .widgetList<Icon>(find.byIcon(Icons.radio_button_checked))
+            .widgetList<Icon>(find.byIcon(AppIcons.radioButtonChecked))
             .length,
         1,
         reason: 'exactly one arrangement is selected, and it is still `none`',

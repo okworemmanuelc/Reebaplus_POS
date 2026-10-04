@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -119,7 +120,7 @@ class _RoleCard extends ConsumerWidget {
                   color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(Icons.badge_rounded, color: color, size: 20),
+                child: Icon(AppIcons.staff, color: color, size: 20),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -146,7 +147,7 @@ class _RoleCard extends ConsumerWidget {
                 ),
               ),
               Icon(
-                Icons.chevron_right,
+                AppIcons.chevronRight,
                 color: t.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ],

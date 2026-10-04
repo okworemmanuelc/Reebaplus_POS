@@ -638,7 +638,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                                   : null,
                               secondary: isVanStore(s)
                                   ? Icon(
-                                      Icons.local_shipping_rounded,
+                                      AppIcons.supplier,
                                       size: context.getRSize(18),
                                       color: t.textTheme.bodySmall?.color,
                                     )

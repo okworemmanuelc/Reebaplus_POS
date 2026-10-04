@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/home_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
@@ -579,29 +580,28 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                     type: BottomNavigationBarType.fixed,
                     items: [
                       BottomNavigationBarItem(
-                        icon: const Icon(Icons.dashboard_outlined),
-                        activeIcon: Icon(
-                          isNavTab ? Icons.dashboard : Icons.dashboard_outlined,
+                        icon: const AppIcon(AppIcons.home),
+                        activeIcon: AppIcon(
+                          AppIcons.home,
+                          filled: isNavTab,
                         ),
                         label: 'Home',
                       ),
                       if (showStock)
                         BottomNavigationBarItem(
-                          icon: const Icon(Icons.inventory_2_outlined),
-                          activeIcon: Icon(
-                            isNavTab
-                                ? Icons.inventory_2
-                                : Icons.inventory_2_outlined,
+                          icon: const AppIcon(AppIcons.inventory),
+                          activeIcon: AppIcon(
+                            AppIcons.inventory,
+                            filled: isNavTab,
                           ),
                           label: 'Stock',
                         ),
                       if (showPos)
                         BottomNavigationBarItem(
-                          icon: const Icon(Icons.point_of_sale_outlined),
-                          activeIcon: Icon(
-                            isNavTab
-                                ? Icons.point_of_sale
-                                : Icons.point_of_sale_outlined,
+                          icon: const AppIcon(AppIcons.pos),
+                          activeIcon: AppIcon(
+                            AppIcons.pos,
+                            filled: isNavTab,
                           ),
                           label: 'POS',
                         ),
@@ -610,16 +610,15 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                           label: Text(pendingOrderCount.toString()),
                           isLabelVisible: pendingOrderCount > 0,
                           backgroundColor: t.colorScheme.error,
-                          child: const Icon(Icons.receipt_long_outlined),
+                          child: const AppIcon(AppIcons.orders),
                         ),
                         activeIcon: Badge(
                           label: Text(pendingOrderCount.toString()),
                           isLabelVisible: pendingOrderCount > 0,
                           backgroundColor: t.colorScheme.error,
-                          child: Icon(
-                            isNavTab
-                                ? Icons.receipt_long
-                                : Icons.receipt_long_outlined,
+                          child: AppIcon(
+                            AppIcons.orders,
+                            filled: isNavTab,
                           ),
                         ),
                         label: 'Orders',
@@ -635,8 +634,8 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                                   label: Text(cart.length.toString()),
                                   isLabelVisible: cart.isNotEmpty,
                                   backgroundColor: t.colorScheme.error,
-                                  child: const Icon(
-                                    Icons.shopping_cart_outlined,
+                                  child: const AppIcon(
+                                    AppIcons.cart,
                                   ),
                                 ),
                               ),
@@ -649,10 +648,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                                   label: Text(cart.length.toString()),
                                   isLabelVisible: cart.isNotEmpty,
                                   backgroundColor: t.colorScheme.error,
-                                  child: Icon(
-                                    isNavTab
-                                        ? Icons.shopping_cart
-                                        : Icons.shopping_cart_outlined,
+                                  child: AppIcon(
+                                    AppIcons.cart,
+                                    filled: isNavTab,
                                   ),
                                 ),
                               ),

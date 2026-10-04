@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -310,7 +311,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           decoration: AppDecorations.authInputDecoration(
                             context,
                             label: 'Business name',
-                            prefixIcon: Icons.business_rounded,
+                            prefixIcon: AppIcons.business,
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -323,7 +324,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           decoration: AppDecorations.authInputDecoration(
                             context,
                             label: 'Phone number',
-                            prefixIcon: Icons.phone_rounded,
+                            prefixIcon: AppIcons.phone,
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -332,7 +333,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           isExpanded: true,
                           labelText: 'Business type',
                           prefixIcon:
-                              const Icon(Icons.category_rounded, size: 20),
+                              const Icon(AppIcons.category, size: 20),
                           items: [
                             for (final type in typeOptions)
                               DropdownMenuItem(
@@ -374,7 +375,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           isExpanded: true,
                           labelText: 'Currency',
                           prefixIcon:
-                              const Icon(Icons.payments_rounded, size: 20),
+                              const Icon(AppIcons.payments, size: 20),
                           items: [
                             for (final code in _currencyCodes)
                               DropdownMenuItem(
@@ -440,7 +441,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                             decoration: AppDecorations.authInputDecoration(
                               context,
                               label: 'VAT rate (%)',
-                              prefixIcon: Icons.percent_rounded,
+                              prefixIcon: AppIcons.divide,
                             ),
                           ),
                           // #176 — inclusive/exclusive basis (inclusive default).
@@ -523,7 +524,7 @@ class _LogoSection extends StatelessWidget {
       );
     } else {
       avatar = Icon(
-        Icons.business_rounded,
+        AppIcons.business,
         size: context.getRSize(40),
         color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
       );

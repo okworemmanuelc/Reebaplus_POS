@@ -465,7 +465,7 @@ class _RecordDriverPaymentSheetState
                   GestureDetector(
                     onTap: () => setState(() => _receipt = null),
                     child: Icon(
-                      Icons.close,
+                      AppIcons.close,
                       size: context.getRSize(18),
                       color: _subtext,
                     ),

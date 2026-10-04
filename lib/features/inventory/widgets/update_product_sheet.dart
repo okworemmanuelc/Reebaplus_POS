@@ -842,7 +842,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                               border: Border.all(color: bg, width: 1.5),
                             ),
                             child: const Icon(
-                              Icons.edit,
+                              AppIcons.edit,
                               color: Colors.white,
                               size: 8,
                             ),
@@ -903,7 +903,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         child: Row(
                           children: [
                             const Icon(
-                              Icons.error_outline,
+                              AppIcons.alertCircle,
                               color: Colors.red,
                               size: 18,
                             ),
@@ -921,7 +921,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                             GestureDetector(
                               onTap: () => setState(() => _errorMessage = null),
                               child: const Icon(
-                                Icons.close,
+                                AppIcons.close,
                                 color: Colors.red,
                                 size: 16,
                               ),
@@ -944,12 +944,12 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       controller: _categoryCtrl,
                       labelText: '${_lexicon.category.toUpperCase()} *',
                       hintText: 'Search or type category name…',
-                      prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                      prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
                       onChanged: _onCategoryChanged,
                       suffixIcon: _selectedCategory != null
                           ? GestureDetector(
                               onTap: _clearCategory,
-                              child: Icon(Icons.close, size: 16, color: subtext),
+                              child: Icon(AppIcons.close, size: 16, color: subtext),
                             )
                           : null,
                     ),
@@ -961,7 +961,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                           ..._categorySuggestions.map(
                             (c) => _suggestionTile(
                               label: c.name,
-                              icon: Icons.category_outlined,
+                              icon: AppIcons.category,
                               textColor: textColor,
                               card: card,
                               border: border,
@@ -976,7 +976,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                               ))
                             _suggestionTile(
                               label: 'Create "${_categoryCtrl.text.trim()}"',
-                              icon: Icons.add_circle_outline,
+                              icon: AppIcons.addCircle,
                               textColor: Theme.of(context).colorScheme.primary,
                               card: card,
                               border: border,
@@ -1143,13 +1143,13 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       controller: _manufacturerCtrl,
                       labelText: 'MANUFACTURER (optional)',
                       hintText: 'Search or type manufacturer name…',
-                      prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                      prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
                       onChanged: _onManufacturerChanged,
                       suffixIcon: _selectedManufacturer != null
                           ? GestureDetector(
                               onTap: _clearManufacturer,
                               child: Icon(
-                                Icons.close,
+                                AppIcons.close,
                                 size: 16,
                                 color: subtext,
                               ),
@@ -1179,7 +1179,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                             _suggestionTile(
                               label:
                                   'Create "${_manufacturerCtrl.text.trim()}"',
-                              icon: Icons.add_circle_outline,
+                              icon: AppIcons.addCircle,
                               textColor: Theme.of(context).colorScheme.primary,
                               card: card,
                               border: border,
@@ -1255,13 +1255,13 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         controller: _supplierCtrl,
                         labelText: 'SUPPLIER (optional)',
                         hintText: 'Search supplier name…',
-                        prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                        prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
                         onChanged: _onSupplierChanged,
                         suffixIcon: _selectedSupplier != null
                             ? GestureDetector(
                                 onTap: _clearSupplier,
                                 child: Icon(
-                                  Icons.close,
+                                  AppIcons.close,
                                   size: 16,
                                   color: subtext,
                                 ),
@@ -1290,7 +1290,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                                 ))
                               _suggestionTile(
                                 label: 'Create "${_supplierCtrl.text.trim()}"',
-                                icon: Icons.add_circle_outline,
+                                icon: AppIcons.addCircle,
                                 textColor: Theme.of(context).colorScheme.primary,
                                 card: card,
                                 border: border,
@@ -1442,7 +1442,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         ),
         child: Row(
           children: [
-            Icon(Icons.event_outlined, size: 18, color: subtext),
+            Icon(AppIcons.event, size: 18, color: subtext),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -1457,7 +1457,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
             if (hasDate)
               GestureDetector(
                 onTap: () => setState(() => _expiryDate = null),
-                child: Icon(Icons.close, size: 16, color: subtext),
+                child: Icon(AppIcons.close, size: 16, color: subtext),
               ),
           ],
         ),
@@ -1494,7 +1494,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
             padding: const EdgeInsets.only(top: 6, left: 4),
             child: Row(
               children: [
-                Icon(Icons.warning_amber_rounded, size: 14, color: error),
+                Icon(AppIcons.warning, size: 14, color: error),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -1531,7 +1531,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     required Color card,
     required Color border,
     required VoidCallback onTap,
-    IconData icon = Icons.person_outline,
+    IconData icon = AppIcons.user,
   }) {
     return InkWell(
       onTap: onTap,

@@ -175,3 +175,144 @@ This document maps all legacy icon references to their replacement in `AppIcons`
 | Drawer: Supplier Accounts | `AppIcons.supplier` | `Symbols.local_shipping` | Matches navigation mockup icon for Supplier Accounts |
 | Drawer: Expenses | `AppIcons.expenses` | `Symbols.payments` | Matches navigation mockup icon for Expenses |
 | Home: Total Expenses Metric Card | `AppIcons.bill` | `Symbols.request_quote` | Matches the Home mockup; also used for supplier invoices and the credit-sale card |
+
+## Material Icons Migration Mapping Table
+
+This table documents the mapping of all Material `Icons.*` references in the codebase to their unified `AppIcons` equivalent.
+
+| Material Icon | AppIcons Name | Symbols Name |
+|---|---|---|
+| `Icons.ac_unit_rounded` | `AppIcons.acUnit` | `Symbols.ac_unit` |
+| `Icons.add` | `AppIcons.add` | `Symbols.add` |
+| `Icons.add_circle_outline` | `AppIcons.addCircle` | `Symbols.add_circle` |
+| `Icons.add_rounded` | `AppIcons.add` | `Symbols.add` |
+| `Icons.admin_panel_settings_rounded` | `AppIcons.adminPanel` | `Symbols.admin_panel_settings` |
+| `Icons.arrow_back` | `AppIcons.arrowBack` | `Symbols.arrow_back` |
+| `Icons.arrow_back_ios` | `AppIcons.arrowBackIos` | `Symbols.arrow_back_ios` |
+| `Icons.arrow_back_ios_new` | `AppIcons.arrowBackIosNew` | `Symbols.arrow_back_ios_new` |
+| `Icons.arrow_back_ios_new_rounded` | `AppIcons.arrowBackIosNew` | `Symbols.arrow_back_ios_new` |
+| `Icons.arrow_downward` | `AppIcons.arrowDown` | `Symbols.arrow_downward` |
+| `Icons.arrow_downward_rounded` | `AppIcons.arrowDown` | `Symbols.arrow_downward` |
+| `Icons.arrow_upward` | `AppIcons.arrowUp` | `Symbols.arrow_upward` |
+| `Icons.arrow_upward_rounded` | `AppIcons.arrowUp` | `Symbols.arrow_upward` |
+| `Icons.backspace_outlined` | `AppIcons.backspace` | `Symbols.backspace` |
+| `Icons.badge_rounded` | `AppIcons.staff` | `Symbols.badge` |
+| `Icons.brightness_6_rounded` | `AppIcons.themeMode` | `Symbols.brightness_6` |
+| `Icons.business_rounded` | `AppIcons.business` | `Symbols.business` |
+| `Icons.calendar_month` | `AppIcons.calendarMonth` | `Symbols.calendar_month` |
+| `Icons.category_outlined` | `AppIcons.category` | `Symbols.category` |
+| `Icons.category_rounded` | `AppIcons.category` | `Symbols.category` |
+| `Icons.check` | `AppIcons.check` | `Symbols.check` |
+| `Icons.check_box` | `AppIcons.checkBox` | `Symbols.check_box` |
+| `Icons.check_box_outline_blank` | `AppIcons.checkBoxOutlineBlank` | `Symbols.check_box_outline_blank` |
+| `Icons.check_circle` | `AppIcons.checkCircle` | `Symbols.check_circle` |
+| `Icons.check_circle_outline` | `AppIcons.checkCircle` | `Symbols.check_circle` |
+| `Icons.check_circle_rounded` | `AppIcons.checkCircle` | `Symbols.check_circle` |
+| `Icons.check_rounded` | `AppIcons.check` | `Symbols.check` |
+| `Icons.checkroom_rounded` | `AppIcons.checkroom` | `Symbols.checkroom` |
+| `Icons.chevron_right` | `AppIcons.chevronRight` | `Symbols.chevron_right` |
+| `Icons.chevron_right_rounded` | `AppIcons.chevronRight` | `Symbols.chevron_right` |
+| `Icons.clear` | `AppIcons.close` | `Symbols.close` |
+| `Icons.close` | `AppIcons.close` | `Symbols.close` |
+| `Icons.close_rounded` | `AppIcons.close` | `Symbols.close` |
+| `Icons.cloud_off_rounded` | `AppIcons.cloudOff` | `Symbols.cloud_off` |
+| `Icons.cloud_sync_rounded` | `AppIcons.cloudSync` | `Symbols.cloud_sync` |
+| `Icons.confirmation_number_outlined` | `AppIcons.discount` | `Symbols.confirmation_number` |
+| `Icons.copy` | `AppIcons.copy` | `Symbols.content_copy` |
+| `Icons.dashboard` | `AppIcons.home` | `Symbols.dashboard` |
+| `Icons.dashboard_outlined` | `AppIcons.home` | `Symbols.dashboard` |
+| `Icons.delete_forever_rounded` | `AppIcons.deleteForever` | `Symbols.delete_forever` |
+| `Icons.delete_outline` | `AppIcons.delete` | `Symbols.delete` |
+| `Icons.download_outlined` | `AppIcons.download` | `Symbols.cloud_download` |
+| `Icons.edit` | `AppIcons.edit` | `Symbols.edit` |
+| `Icons.email_outlined` | `AppIcons.email` | `Symbols.mail` |
+| `Icons.error_outline` | `AppIcons.alertCircle` | `Symbols.error` |
+| `Icons.error_outline_rounded` | `AppIcons.alertCircle` | `Symbols.error` |
+| `Icons.event_outlined` | `AppIcons.event` | `Symbols.event` |
+| `Icons.event_rounded` | `AppIcons.event` | `Symbols.event` |
+| `Icons.expand_less` | `AppIcons.chevronUp` | `Symbols.expand_less` |
+| `Icons.expand_more` | `AppIcons.chevronDown` | `Symbols.expand_more` |
+| `Icons.fact_check_outlined` | `AppIcons.auditCheck` | `Symbols.fact_check` |
+| `Icons.fact_check_rounded` | `AppIcons.auditCheck` | `Symbols.fact_check` |
+| `Icons.fingerprint` | `AppIcons.biometrics` | `Symbols.fingerprint` |
+| `Icons.fingerprint_rounded` | `AppIcons.biometrics` | `Symbols.fingerprint` |
+| `Icons.flash_off` | `AppIcons.flashOff` | `Symbols.flash_off` |
+| `Icons.flash_on` | `AppIcons.flashOn` | `Symbols.flash_on` |
+| `Icons.foundation_rounded` | `AppIcons.foundation` | `Symbols.foundation` |
+| `Icons.history_rounded` | `AppIcons.history` | `Symbols.history` |
+| `Icons.hourglass_empty_rounded` | `AppIcons.waiting` | `Symbols.hourglass_empty` |
+| `Icons.info` | `AppIcons.infoCircle` | `Symbols.info` |
+| `Icons.info_outline` | `AppIcons.infoCircle` | `Symbols.info` |
+| `Icons.inventory_2` | `AppIcons.inventory` | `Symbols.inventory_2` |
+| `Icons.inventory_2_outlined` | `AppIcons.inventory` | `Symbols.inventory_2` |
+| `Icons.keyboard_arrow_down` | `AppIcons.keyboardArrowDown` | `Symbols.keyboard_arrow_down` |
+| `Icons.keyboard_arrow_up` | `AppIcons.keyboardArrowUp` | `Symbols.keyboard_arrow_up` |
+| `Icons.keyboard_double_arrow_down_rounded` | `AppIcons.keyboardDoubleArrowDown` | `Symbols.keyboard_double_arrow_down` |
+| `Icons.local_bar_rounded` | `AppIcons.localBar` | `Symbols.local_bar` |
+| `Icons.local_grocery_store_rounded` | `AppIcons.localGroceryStore` | `Symbols.local_grocery_store` |
+| `Icons.local_pharmacy_rounded` | `AppIcons.localPharmacy` | `Symbols.local_pharmacy` |
+| `Icons.local_shipping_rounded` | `AppIcons.supplier` | `Symbols.local_shipping` |
+| `Icons.location_on_outlined` | `AppIcons.location` | `Symbols.location_on` |
+| `Icons.location_on_rounded` | `AppIcons.location` | `Symbols.location_on` |
+| `Icons.lock_clock_outlined` | `AppIcons.lockClock` | `Symbols.lock_clock` |
+| `Icons.lock_clock_rounded` | `AppIcons.lockClock` | `Symbols.lock_clock` |
+| `Icons.lock_outline` | `AppIcons.lock` | `Symbols.lock` |
+| `Icons.lock_rounded` | `AppIcons.lock` | `Symbols.lock` |
+| `Icons.map_outlined` | `AppIcons.map` | `Symbols.map` |
+| `Icons.no_photography` | `AppIcons.noPhotography` | `Symbols.no_photography` |
+| `Icons.palette_rounded` | `AppIcons.palette` | `Symbols.palette` |
+| `Icons.payments_outlined` | `AppIcons.payments` | `Symbols.payments` |
+| `Icons.payments_rounded` | `AppIcons.payments` | `Symbols.payments` |
+| `Icons.percent_rounded` | `AppIcons.divide` | `Symbols.percent` |
+| `Icons.person_outline` | `AppIcons.user` | `Symbols.person` |
+| `Icons.person_rounded` | `AppIcons.user` | `Symbols.person` |
+| `Icons.person_search_outlined` | `AppIcons.personSearch` | `Symbols.person_search` |
+| `Icons.phone_outlined` | `AppIcons.phone` | `Symbols.call` |
+| `Icons.phone_rounded` | `AppIcons.phone` | `Symbols.call` |
+| `Icons.play_arrow` | `AppIcons.play` | `Symbols.play_arrow` |
+| `Icons.point_of_sale` | `AppIcons.pos` | `Symbols.point_of_sale` |
+| `Icons.point_of_sale_outlined` | `AppIcons.pos` | `Symbols.point_of_sale` |
+| `Icons.print` | `AppIcons.print` | `Symbols.print` |
+| `Icons.print_rounded` | `AppIcons.print` | `Symbols.print` |
+| `Icons.public_outlined` | `AppIcons.public` | `Symbols.public` |
+| `Icons.radio_button_checked` | `AppIcons.radioButtonChecked` | `Symbols.radio_button_checked` |
+| `Icons.radio_button_unchecked` | `AppIcons.radioButtonUnchecked` | `Symbols.radio_button_unchecked` |
+| `Icons.receipt_long` | `AppIcons.orders` | `Symbols.receipt_long` |
+| `Icons.receipt_long_outlined` | `AppIcons.orders` | `Symbols.receipt_long` |
+| `Icons.receipt_long_rounded` | `AppIcons.orders` | `Symbols.receipt_long` |
+| `Icons.refresh` | `AppIcons.refresh` | `Symbols.refresh` |
+| `Icons.refresh_rounded` | `AppIcons.refresh` | `Symbols.refresh` |
+| `Icons.restaurant_rounded` | `AppIcons.restaurant` | `Symbols.restaurant` |
+| `Icons.schedule_rounded` | `AppIcons.time` | `Symbols.schedule` |
+| `Icons.search` | `AppIcons.search` | `Symbols.search` |
+| `Icons.search_rounded` | `AppIcons.search` | `Symbols.search` |
+| `Icons.shopping_cart` | `AppIcons.cart` | `Symbols.shopping_cart` |
+| `Icons.shopping_cart_outlined` | `AppIcons.cart` | `Symbols.shopping_cart` |
+| `Icons.shopping_cart_rounded` | `AppIcons.cart` | `Symbols.shopping_cart` |
+| `Icons.smartphone_rounded` | `AppIcons.smartphone` | `Symbols.smartphone` |
+| `Icons.sports_bar_rounded` | `AppIcons.beerMug` | `Symbols.sports_bar` |
+| `Icons.store_outlined` | `AppIcons.store` | `Symbols.store` |
+| `Icons.store_rounded` | `AppIcons.store` | `Symbols.store` |
+| `Icons.storefront_outlined` | `AppIcons.storefront` | `Symbols.storefront` |
+| `Icons.storefront_rounded` | `AppIcons.storefront` | `Symbols.storefront` |
+| `Icons.update_rounded` | `AppIcons.update` | `Symbols.update` |
+| `Icons.visibility_rounded` | `AppIcons.visibility` | `Symbols.visibility` |
+| `Icons.warning_amber_rounded` | `AppIcons.warning` | `Symbols.warning` |
+| `Icons.workspace_premium_rounded` | `AppIcons.premium` | `Symbols.workspace_premium` |
+
+## Filled Symbol Variants
+
+Material Symbols Outlined supports a variable `fill` axis. In `lib/shared/widgets/main_layout.dart`, the active bottom navigation bar destinations use `AppIcon(icon, filled: isNavTab)` for smooth selection states:
+- `AppIcons.home`
+- `AppIcons.inventory`
+- `AppIcons.pos`
+- `AppIcons.orders`
+- `AppIcons.cart`
+
+Pairs with distinct geometric shapes intentionally use distinct constants rather than `filled:`:
+- `radioButtonChecked` / `radioButtonUnchecked`
+- `checkBox` / `checkBoxOutlineBlank`
+- `flashOn` / `flashOff`
+- `chevronUp` / `chevronDown`
+- `close` / `search`
+- `close` / `edit`

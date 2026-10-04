@@ -327,7 +327,7 @@ class NotificationCard extends ConsumerWidget {
             ),
             IconButton(
               icon: Icon(
-                Icons.close,
+                AppIcons.close,
                 size: context.getRSize(18),
                 color: subtextCol,
               ),

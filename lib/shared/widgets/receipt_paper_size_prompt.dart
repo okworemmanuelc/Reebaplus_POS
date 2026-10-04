@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
@@ -115,7 +116,7 @@ class _PaperSizeDialog extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              Icon(Icons.receipt_long_rounded, color: t.colorScheme.primary),
+              Icon(AppIcons.orders, color: t.colorScheme.primary),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(

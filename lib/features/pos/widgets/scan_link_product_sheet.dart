@@ -227,7 +227,7 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
                           child: IconButton(
                             onPressed: () => Navigator.pop(context),
                             icon: Icon(
-                              Icons.close,
+                              AppIcons.close,
                               size: context.getRSize(20),
                               color: text.withValues(alpha: 0.5),
                             ),

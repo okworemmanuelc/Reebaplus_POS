@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
@@ -859,7 +860,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                   opacity: showBack ? 1 : 0,
                   child: IconButton(
                     icon: Icon(
-                      Icons.arrow_back_ios,
+                      AppIcons.arrowBackIos,
                       color: authTextPrimary(context),
                       size: 20,
                     ),
@@ -923,7 +924,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Invite code',
-              prefixIcon: Icons.confirmation_number_outlined,
+              prefixIcon: AppIcons.discount,
             ).copyWith(counterText: ''),
           ),
         ),
@@ -957,7 +958,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Email address',
-              prefixIcon: Icons.email_outlined,
+              prefixIcon: AppIcons.email,
             ),
           ),
         ),
@@ -1078,7 +1079,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Full name',
-              prefixIcon: Icons.person_outline,
+              prefixIcon: AppIcons.user,
             ),
           ),
         ),
@@ -1098,7 +1099,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         AuthInputCard(
           child: AutocompleteField(
             label: 'Country',
-            icon: Icons.public_outlined,
+            icon: AppIcons.public,
             initial: _countryValue,
             options: kCountries,
             onChanged: (v) => setState(() {
@@ -1135,7 +1136,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Phone number',
-              prefixIcon: Icons.phone_outlined,
+              prefixIcon: AppIcons.phone,
               enabled: _dialCode.isNotEmpty,
               prefixText: _dialCode.isNotEmpty ? '$_dialCode ' : null,
               helperText: _dialCode.isEmpty ? 'Choose your country first' : null,
@@ -1170,7 +1171,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Street address',
-              prefixIcon: Icons.location_on_outlined,
+              prefixIcon: AppIcons.location,
             ),
           ),
         ),
@@ -1236,7 +1237,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
               context,
             ).colorScheme.primary.withValues(alpha: 0.12),
             child: Icon(
-              Icons.check_rounded,
+              AppIcons.check,
               size: 48,
               color: Theme.of(context).colorScheme.primary,
             ),
@@ -1274,7 +1275,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.check_circle_rounded,
+                AppIcons.checkCircle,
                 color: Colors.greenAccent,
                 size: 80,
               ),

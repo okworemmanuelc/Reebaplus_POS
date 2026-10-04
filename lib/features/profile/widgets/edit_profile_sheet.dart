@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -163,7 +164,7 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Name',
-              prefixIcon: Icons.person_rounded,
+              prefixIcon: AppIcons.user,
             ),
           ),
           const SizedBox(height: 20),
@@ -198,7 +199,7 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
                     ),
                     child: _selectedHex == hex
                         ? const Icon(
-                            Icons.check_rounded,
+                            AppIcons.check,
                             color: Colors.white,
                             size: 20,
                           )

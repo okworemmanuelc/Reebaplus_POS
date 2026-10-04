@@ -855,8 +855,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     Icon(
                       _skusExpanded
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
+                          ? AppIcons.keyboardArrowUp
+                          : AppIcons.keyboardArrowDown,
                       color: _subtext,
                     ),
                   ],
@@ -1177,7 +1177,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
               const Spacer(),
-              Icon(Icons.chevron_right, color: _subtext, size: 20),
+              Icon(AppIcons.chevronRight, color: _subtext, size: 20),
             ],
           ),
           SizedBox(height: context.spacingM),

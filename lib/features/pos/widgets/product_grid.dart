@@ -327,7 +327,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                       ],
                     ),
                     child: const Icon(
-                      Icons.shopping_cart_rounded,
+                      AppIcons.cart,
                       color: Colors.white,
                       size: 15,
                     ),

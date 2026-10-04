@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
@@ -33,7 +34,7 @@ class NoAccountFoundScreen extends StatelessWidget {
                 alignment: Alignment.topLeft,
                 child: IconButton(
                   icon: Icon(
-                    Icons.arrow_back_ios,
+                    AppIcons.arrowBackIos,
                     color: authTextPrimary(context),
                     size: 20,
                   ),
@@ -52,7 +53,7 @@ class NoAccountFoundScreen extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        Icons.person_search_outlined,
+                        AppIcons.personSearch,
                         color: Theme.of(context).colorScheme.primary,
                         size: 56,
                       ),

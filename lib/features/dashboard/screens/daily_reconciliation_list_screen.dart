@@ -386,7 +386,7 @@ class _DailyReconciliationListScreenState
                   ),
                 ),
               SizedBox(width: context.getRSize(8)),
-              Icon(Icons.chevron_right_rounded, color: theme.hintColor),
+              Icon(AppIcons.chevronRight, color: theme.hintColor),
             ],
           ),
         ),

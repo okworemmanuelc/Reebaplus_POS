@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/avatar_helpers.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
@@ -353,7 +354,11 @@ class ProfileInfoRow extends StatelessWidget {
         ),
         if (onTap != null) ...[
           SizedBox(width: context.getRSize(4)),
-          Icon(Icons.chevron_right, size: context.getRSize(18), color: subtext),
+          Icon(
+            AppIcons.chevronRight,
+            size: context.getRSize(18),
+            color: subtext,
+          ),
         ],
       ],
     );

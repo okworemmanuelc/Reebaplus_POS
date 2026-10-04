@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 enum AppNotificationType { success, error, info }
 
@@ -169,11 +170,11 @@ class _NotificationOverlayState extends State<_NotificationOverlay>
   IconData _getIcon(AppNotificationType type) {
     switch (type) {
       case AppNotificationType.success:
-        return Icons.check_circle_outline;
+        return AppIcons.checkCircle;
       case AppNotificationType.error:
-        return Icons.error_outline;
+        return AppIcons.alertCircle;
       case AppNotificationType.info:
-        return Icons.info_outline;
+        return AppIcons.infoCircle;
     }
   }
 
@@ -232,7 +233,7 @@ class _NotificationOverlayState extends State<_NotificationOverlay>
                           Icon(
                             _currentData != null
                                 ? _getIcon(_currentData!.type)
-                                : Icons.info,
+                                : AppIcons.infoCircle,
                             color: Colors.white,
                             size: 26,
                           ),
@@ -285,7 +286,7 @@ class _NotificationOverlayState extends State<_NotificationOverlay>
                           const SizedBox(width: 8),
                           const IconButton(
                             icon: Icon(
-                              Icons.close,
+                              AppIcons.close,
                               color: Colors.white70,
                               size: 20,
                             ),

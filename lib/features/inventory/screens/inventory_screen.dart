@@ -480,7 +480,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             tooltip: _showSearch
                 ? 'Close search'
                 : 'Search ${ref.watch(industryLexiconProvider).itemPluralLower}',
-            icon: Icon(_showSearch ? Icons.close : Icons.search),
+            icon: Icon(_showSearch ? AppIcons.close : AppIcons.search),
             onPressed: () => setState(() {
               _showSearch = !_showSearch;
               if (!_showSearch) {
@@ -496,7 +496,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         if (Gates.dailyStockCount.allows(ref))
           IconButton(
             tooltip: 'Daily Stock Count',
-            icon: const Icon(Icons.fact_check_outlined),
+            icon: const Icon(AppIcons.auditCheck),
             onPressed: () => Navigator.push(
               context,
               slideDownRoute(
@@ -986,7 +986,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                         ),
                       ),
                       Icon(
-                        Icons.chevron_right,
+                        AppIcons.chevronRight,
                         color: _subtext,
                         size: context.getRSize(20),
                       ),
@@ -1157,11 +1157,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           isDense: true,
           hintText:
               'Search ${ref.watch(industryLexiconProvider).itemPluralLower}…',
-          prefixIcon: Icon(Icons.search, size: 18, color: _subtext),
+          prefixIcon: Icon(AppIcons.search, size: 18, color: _subtext),
           suffixIcon: _searchQuery.isEmpty
               ? null
               : IconButton(
-                  icon: Icon(Icons.clear, size: 18, color: _subtext),
+                  icon: Icon(AppIcons.close, size: 18, color: _subtext),
                   onPressed: () => setState(() {
                     _searchCtrl.clear();
                     _searchQuery = '';

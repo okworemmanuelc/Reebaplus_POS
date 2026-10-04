@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
@@ -103,7 +104,7 @@ class _SubscriptionLockedScreenState
                             ),
                           ),
                           child: Icon(
-                            Icons.lock_rounded,
+                            AppIcons.lock,
                             color: lockColor,
                             size: 46,
                           ),
@@ -146,7 +147,7 @@ class _SubscriptionLockedScreenState
                       const SizedBox(height: 28),
                       AppButton(
                         text: 'Subscribe',
-                        icon: Icons.workspace_premium_rounded,
+                        icon: AppIcons.premium,
                         onPressed: _showSubscribeInfo,
                       ),
                       const SizedBox(height: 12),

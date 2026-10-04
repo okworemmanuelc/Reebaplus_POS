@@ -37,6 +37,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
@@ -411,7 +412,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(EditItemModal),
-          matching: find.byIcon(Icons.close),
+          matching: find.byIcon(AppIcons.close),
         ),
       );
       await tester.pumpAndSettle();
@@ -736,7 +737,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(ScanWhichOneSheet),
-          matching: find.byIcon(Icons.close),
+          matching: find.byIcon(AppIcons.close),
         ),
       );
       await tester.pumpAndSettle();
@@ -1062,7 +1063,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(ScanUnknownChoiceSheet),
-          matching: find.byIcon(Icons.close),
+          matching: find.byIcon(AppIcons.close),
         ),
       );
       await tester.pumpAndSettle();
@@ -1200,7 +1201,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(ScanLinkProductSheet),
-          matching: find.byIcon(Icons.close),
+          matching: find.byIcon(AppIcons.close),
         ),
       );
       await tester.pumpAndSettle();

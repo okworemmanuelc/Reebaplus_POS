@@ -594,7 +594,7 @@ class _RolePermissionsDetailScreenState
       child: Column(
         children: [
           Icon(
-            Icons.storefront_outlined,
+            AppIcons.storefront,
             size: 36,
             color: t.colorScheme.onSurface.withValues(alpha: 0.4),
           ),
@@ -621,7 +621,7 @@ class _RolePermissionsDetailScreenState
       child: Row(
         children: [
           Icon(
-            Icons.storefront_outlined,
+            AppIcons.storefront,
             size: 20,
             color: t.colorScheme.onSurface.withValues(alpha: 0.6),
           ),

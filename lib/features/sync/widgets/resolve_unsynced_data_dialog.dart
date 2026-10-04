@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -189,7 +190,7 @@ class _ResolveUnsyncedDataDialogState
                         child: const CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Icon(
-                        _hasExported ? Icons.check : Icons.download_outlined,
+                        _hasExported ? AppIcons.check : AppIcons.download,
                       ),
                 label: Text(_hasExported ? 'Exported — export again' : 'Export records'),
               ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -333,7 +334,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
               Align(
                 alignment: Alignment.topLeft,
                 child: IconButton(
-                  icon: Icon(Icons.arrow_back_ios, color: textColor, size: 20),
+                  icon: Icon(AppIcons.arrowBackIos, color: textColor, size: 20),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),

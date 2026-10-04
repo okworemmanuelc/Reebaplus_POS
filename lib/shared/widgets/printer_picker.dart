@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -79,7 +80,7 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
                   ),
                 ),
                 IconButton(
-                  icon: Icon(Icons.refresh, size: context.getRSize(20)),
+                  icon: Icon(AppIcons.refresh, size: context.getRSize(20)),
                   onPressed: _loadDevices,
                 ),
               ],
@@ -140,7 +141,7 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
                   final device = _devices[index];
                   return ListTile(
                     leading: Icon(
-                      Icons.print,
+                      AppIcons.print,
                       color: Theme.of(context).primaryColor,
                     ),
                     title: Text(device.name, style: TextStyle(color: text)),

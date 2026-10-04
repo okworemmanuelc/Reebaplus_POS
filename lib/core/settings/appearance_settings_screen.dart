@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -241,7 +242,7 @@ class _AccentCard extends StatelessWidget {
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          Icons.check,
+                          AppIcons.check,
                           size: iconSize,
                           color: checkIconColor,
                         ),

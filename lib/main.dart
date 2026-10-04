@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
@@ -633,7 +634,7 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
             children: [
               const Spacer(),
               Icon(
-                Icons.lock_clock_outlined,
+                AppIcons.lockClock,
                 size: 72,
                 color: theme.colorScheme.primary,
               ),

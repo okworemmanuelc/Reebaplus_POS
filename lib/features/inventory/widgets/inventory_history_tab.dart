@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -180,7 +181,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
               'Stock In',
               '+${fmtNumber(totalIn)} units',
               AppColors.success,
-              Icons.arrow_downward_rounded,
+              AppIcons.arrowDown,
             ),
           ),
           SizedBox(width: context.spacingS),
@@ -190,7 +191,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
               'Stock Out',
               '-${fmtNumber(totalOut)} units',
               AppColors.danger,
-              Icons.arrow_upward_rounded,
+              AppIcons.arrowUp,
             ),
           ),
         ],
@@ -335,7 +336,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
                   Padding(
                     padding: const EdgeInsets.only(right: 2),
                     child: Icon(
-                      Icons.warning_amber_rounded,
+                      AppIcons.warning,
                       color: AppColors.warning,
                       size: context.getRSize(10),
                     ),
@@ -452,7 +453,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.history_rounded,
+                  AppIcons.history,
                   size: context.getRSize(48),
                   color: colorScheme.onSurface.withValues(alpha: 0.2),
                 ),

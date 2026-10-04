@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
 /// Six amber PIN dots. [filled] is how many are entered (0–6).
@@ -120,7 +121,7 @@ class PinKeypad extends StatelessWidget {
               const SizedBox(width: 12),
               PinKey(label: '0', onTap: () => onDigit('0')),
               const SizedBox(width: 12),
-              PinKey(icon: Icons.backspace_outlined, onTap: onBackspace),
+              PinKey(icon: AppIcons.backspace, onTap: onBackspace),
             ],
           ),
         ],

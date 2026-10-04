@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 /// A trade the app can be set up for — the single input that morphs the app's
 /// words, presets, and optional feature surfaces (CONTEXT.md → *Industry*).
@@ -21,38 +22,38 @@ import 'package:flutter/material.dart';
 /// of domain nouns, starter categories/units, further feature flags); #77
 /// introduces only the facts that were already duplicated.
 enum Industry {
-  restaurant(label: 'Restaurant', icon: Icons.restaurant_rounded),
-  supermarket(label: 'Supermarket', icon: Icons.local_grocery_store_rounded),
-  bar(label: 'Bar', icon: Icons.local_bar_rounded, crateEligible: true),
+  restaurant(label: 'Restaurant', icon: AppIcons.restaurant),
+  supermarket(label: 'Supermarket', icon: AppIcons.localGroceryStore),
+  bar(label: 'Bar', icon: AppIcons.localBar, crateEligible: true),
 
   /// The one industry that was live before the multi-industry unlock (#79). The
   /// DB stores the legacy canonical `'Beer distributor'` for these tenants
   /// (mapped to this display label at load/save), so [aliases] carries it.
   beverage(
     label: 'Beverage distributor',
-    icon: Icons.sports_bar_rounded,
+    icon: AppIcons.beerMug,
     crateEligible: true,
     selectable: true,
     aliases: {'beer distributor'},
   ),
   pharmacy(
     label: 'Pharmacy',
-    icon: Icons.local_pharmacy_rounded,
+    icon: AppIcons.localPharmacy,
     selectable: true,
   ),
-  buildingMaterials(label: 'Building Materials', icon: Icons.foundation_rounded),
-  boutique(label: 'Boutique', icon: Icons.checkroom_rounded),
+  buildingMaterials(label: 'Building Materials', icon: AppIcons.foundation),
+  boutique(label: 'Boutique', icon: AppIcons.checkroom),
 
   /// New in the multi-industry unlock (#79). No crate features (bottle/crate
   /// tracking stays Bar/Beverage-only); deeper serial/IMEI capture is a later,
   /// separately-flagged slice (ADR 0015).
-  phoneAndGadgets(label: 'Phone & Gadgets', icon: Icons.smartphone_rounded),
+  phoneAndGadgets(label: 'Phone & Gadgets', icon: AppIcons.smartphone),
 
   /// New in the multi-industry unlock (#79). No crate features; cold-chain /
   /// expiry emphasis is a later per-industry slice (ADR 0015).
   frozenFoodsAndGrocery(
     label: 'Frozen Foods & Grocery',
-    icon: Icons.ac_unit_rounded,
+    icon: AppIcons.acUnit,
     selectable: true,
   ),
 
@@ -60,7 +61,7 @@ enum Industry {
   /// offered in a picker (excluded from [catalogue]); it exists so [industryOf]
   /// is total and the interior falls back to neutral words and no
   /// industry-only features.
-  generic(label: 'Business', icon: Icons.storefront_rounded);
+  generic(label: 'Business', icon: AppIcons.storefront);
 
   const Industry({
     required this.label,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
@@ -43,55 +44,55 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // Const instances are canonicalised (no per-build construction cost).
   static const List<_SettingEntry> _entries = [
     (
-      icon: Icons.business_rounded,
+      icon: AppIcons.business,
       title: 'Business Info',
       subtitle: 'Name, type, and currency',
       screen: BusinessInfoScreen(),
     ),
     (
-      icon: Icons.workspace_premium_rounded,
+      icon: AppIcons.premium,
       title: 'Subscription',
       subtitle: 'Plan, status, and renewal',
       screen: SubscriptionScreen(),
     ),
     (
-      icon: Icons.store_rounded,
+      icon: AppIcons.store,
       title: 'Stores',
       subtitle: 'Your store locations',
       screen: StoresSettingsScreen(),
     ),
     (
-      icon: Icons.lock_rounded,
+      icon: AppIcons.lock,
       title: 'Security',
       subtitle: 'Auto-lock and biometric login',
       screen: SecuritySettingsScreen(),
     ),
     (
-      icon: Icons.admin_panel_settings_rounded,
+      icon: AppIcons.adminPanel,
       title: 'Roles & Permissions',
       subtitle: 'What each role can do',
       screen: RolesPermissionsScreen(),
     ),
     (
-      icon: Icons.fact_check_rounded,
+      icon: AppIcons.auditCheck,
       title: 'Activity Logs access',
       subtitle: 'Which roles can view activity logs',
       screen: ActivityLogsAccessScreen(),
     ),
     (
-      icon: Icons.cloud_sync_rounded,
+      icon: AppIcons.cloudSync,
       title: 'Sync Issues access',
       subtitle: 'Which roles can open Sync Issues',
       screen: SyncIssuesAccessScreen(),
     ),
     (
-      icon: Icons.print_rounded,
+      icon: AppIcons.print,
       title: 'Receipt printer',
       subtitle: 'Paper size for each printer (58mm or 80mm)',
       screen: ReceiptPrinterSettingsScreen(),
     ),
     (
-      icon: Icons.palette_rounded,
+      icon: AppIcons.palette,
       title: 'Appearance',
       subtitle: 'Business colour (applies to all devices)',
       screen: AppearanceSettingsScreen(),
@@ -140,11 +141,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
                       hintText: 'Search settings',
-                      prefixIcon: const Icon(Icons.search_rounded),
+                      prefixIcon: const Icon(AppIcons.search),
                       suffixIcon: q.isEmpty
                           ? null
                           : IconButton(
-                              icon: const Icon(Icons.close_rounded),
+                              icon: const Icon(AppIcons.close),
                               tooltip: 'Clear',
                               onPressed: () {
                                 _searchCtrl.clear();
@@ -228,7 +229,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.delete_forever_rounded, color: error),
+                  Icon(AppIcons.deleteForever, color: error),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -256,7 +257,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                   Icon(
-                    Icons.chevron_right,
+                    AppIcons.chevronRight,
                     color: error.withValues(alpha: 0.6),
                   ),
                 ],
@@ -269,7 +270,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _chevron(BuildContext context) => Icon(
-    Icons.chevron_right,
+    AppIcons.chevronRight,
     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
   );
 

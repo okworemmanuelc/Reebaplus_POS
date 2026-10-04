@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 /// Animated step-progress indicator for the onboarding flow.
 ///
@@ -158,7 +159,7 @@ class _OnboardingStepIndicatorState extends State<OnboardingStepIndicator>
       ),
       child: isCompleted
           ? const Center(
-              child: Icon(Icons.check_rounded, size: 10, color: Colors.white),
+              child: Icon(AppIcons.check, size: 10, color: Colors.white),
             )
           : null,
     );

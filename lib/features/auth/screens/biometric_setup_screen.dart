@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -122,7 +123,7 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
                 stepLabels: OnboardingStepIndicator.pathALabels,
               ),
             if (widget.isNewBusinessSetup) const SizedBox(height: 16),
-            Icon(Icons.fingerprint, size: 80, color: primary),
+            Icon(AppIcons.biometrics, size: 80, color: primary),
             const SizedBox(height: 24),
             Text(
               'Speed up your login',

@@ -7,6 +7,23 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #350: Redesign Wave 0 ② — Material Symbols Outlined via AppIcons (Material Icons replacement — PR B) (2026-10-04)
+Branch `feat/redesign-w0-icons-350b`. Parent PRD #346 (decision 3; issue #350). **No Drift/cloud change.** Replaces all Material `Icons.*` in `lib/` with `AppIcons.<semanticName>` (Material Symbols Outlined w400).
+- **Added 38 new `AppIcons` constants (`lib/core/theme/app_icons.dart`)**:
+  - *Navigation*: `arrowBackIos`, `arrowBackIosNew`, `keyboardArrowDown`, `keyboardArrowUp`, `keyboardDoubleArrowDown`
+  - *Commerce*: `localGroceryStore`
+  - *Inventory*: `acUnit`, `checkroom`, `foundation`, `localBar`, `localPharmacy`, `restaurant`, `smartphone`
+  - *Status*: `cloudOff`, `cloudSync`, `premium`
+  - *Actions*: `backspace`, `checkBox`, `checkBoxOutlineBlank`, `deleteForever`, `flashOff`, `flashOn`, `noPhotography`, `play`, `radioButtonChecked`, `radioButtonUnchecked`, `update`, `visibility`
+  - *People*: `adminPanel`, `personSearch`
+  - *Settings*: `business`, `calendarMonth`, `event`, `lockClock`, `map`, `public`, `storefront`, `themeMode`
+- **Exposed `buildQuickSaleProduct`**: Extracted `@visibleForTesting Map<String, dynamic> buildQuickSaleProduct(...)` from `QuickSaleModal` (`lib/features/pos/widgets/quick_sale_modal.dart`), and updated `test/shared/utils/product_icon_helper_test.dart` to use it.
+- **MainLayout bottom navigation**: Migrated bottom nav bar items to `AppIcon(AppIcons.<name>, filled: isNavTab)` for `AppIcons.home`, `inventory`, `pos`, `orders`, `cart`.
+- **Migration sweep**: Replaced all 280 occurrences of `Icons.*` across 90 files in `lib/` with `AppIcons.*`, importing `app_icons.dart` where needed.
+- **Test updates**: Updated `test/crates/crate_money_arrangement_section_test.dart`, `test/inventory/manufacturer_screen_viewport_test.dart`, `test/inventory/speed_dial_fab_test.dart`, `test/tour/first_run_rail_flow_test.dart`, `test/pos/barcode_scan_test.dart`, and `test/industry/industry_registry_test.dart` (golden codepoints for industry icons) to use `AppIcons.*`.
+- **Ban test (`test/core/theme/icon_set_ban_test.dart`)**: Added test asserting zero direct `Icons.*` occurrences in `lib/` outside `lib/core/theme/app_icons.dart`.
+- **Docs**: Updated `docs/redesign/icon-map.md` with the full Material Icons mapping table and the filled symbol variants section; updated `context/progress-tracker.md`.
+
 ### Official Reebaplus logo + theme-aware launcher icon (2026-10-04)
 Branch `feat/brand-logo-346` (parent PRD #346). **No Drift/cloud change.**
 - Designer artworks saved in `assets/branding/` (`reebaplus_logo_on_dark.jpg`, `reebaplus_logo_on_light.jpg`; not bundled).

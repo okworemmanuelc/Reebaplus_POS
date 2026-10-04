@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
@@ -270,11 +271,7 @@ class _ThankYouSubscriptionScreenState
                       ),
                     ],
                   ),
-                  child: Icon(
-                    Icons.workspace_premium_rounded,
-                    color: successColor,
-                    size: 46,
-                  ),
+                  child: Icon(AppIcons.premium, color: successColor, size: 46),
                 ),
               ],
             ),

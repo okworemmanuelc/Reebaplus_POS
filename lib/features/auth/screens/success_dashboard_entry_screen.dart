@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
@@ -63,7 +64,7 @@ class _SuccessDashboardEntryScreenState
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.check_circle_rounded,
+                AppIcons.checkCircle,
                 color: Colors.greenAccent,
                 size: 80,
               ),

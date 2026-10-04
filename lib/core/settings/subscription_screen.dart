@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -49,7 +50,7 @@ class SubscriptionScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
                   AppButton(
                     text: 'Subscribe / Renew',
-                    icon: Icons.workspace_premium_rounded,
+                    icon: AppIcons.premium,
                     onPressed: () => _showRenewInfo(context),
                   ),
                   const SizedBox(height: 12),
@@ -121,7 +122,7 @@ class SubscriptionScreen extends ConsumerWidget {
           Divider(height: 28, color: t.dividerColor),
           _detailRow(
             context,
-            Icons.event_rounded,
+            AppIcons.event,
             _periodLabel(access),
             _periodValue(business, access),
           ),

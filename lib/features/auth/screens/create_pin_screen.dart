@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -257,7 +258,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
           radius: context.getRSize(44),
           backgroundColor: primary.withValues(alpha: 0.1),
           child: Icon(
-            Icons.check_rounded,
+            AppIcons.check,
             size: context.getRSize(48),
             color: primary,
           ),
