@@ -21,6 +21,7 @@ abstract final class AppIcons {
   static const IconData keyboardDoubleArrowDown =
       Symbols.keyboard_double_arrow_down;
   static const IconData location = Symbols.location_on;
+  static const IconData menu = Symbols.menu;
   static const IconData moreVertical = Symbols.more_vert;
 
   // --- Commerce ---

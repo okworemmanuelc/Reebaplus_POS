@@ -24,7 +24,25 @@ const double _kFontFloor = 0.90;
 const double _kSpacingFloorComfortable = 0.85;
 
 /// Lower clamp for spacing in short viewports (allows structural compression).
-const double _kSpacingFloorShort = 0.70;
+///
+/// 0.84 since #352 (was 0.70). A sideways phone is 600dp+ wide, so it gets the
+/// side rail instead of the bottom bar and keeps the bar's height for content;
+/// the deeper squeeze is no longer needed, and at 0.70 boxes shrank 22% further
+/// than text (font floor 0.90), which made landscape look flattened. The brief
+/// asked for about 0.85; 0.85 itself pushes POS's chrome 0.9dp past the
+/// viewport on a 568x320 sideways phone (still under 600dp, so it keeps the
+/// bottom bar) and no product row shows at rest. 0.84 is the highest value the
+/// viewport suites pass at. See ADR 0025 ("Amendment, #352").
+const double _kSpacingFloorShort = 0.84;
+
+/// Screen width at or above which the app frame swaps the bottom bar for the
+/// side rail (PRD #346, #352). Width, not shortest side: a phone turned
+/// sideways gets the rail.
+const double kRailLayoutMinWidth = 600.0;
+
+/// Screen width at or above which the cart panel is fixed on the right of POS
+/// instead of sliding in over a dimmed screen (PRD #346, #352).
+const double kWideLayoutMinWidth = 1024.0;
 
 /// Minimum fraction of a short viewport a bottom sheet may be capped to.
 /// See [ResponsiveHelper.sheetMaxHeight].
@@ -45,9 +63,10 @@ const Size _kFallbackSize = Size(375.0, 812.0);
 /// comfortable-height device (e.g. iPhone SE1 portrait) produces 18% smaller
 /// boxes with 5.5% larger text — a 28% ratio swing across 3,300 call sites
 /// nobody will manually review. Holding the spacing floor at 0.85 when the
-/// viewport is not short keeps the ratio swing under 6%. Only truly short
-/// viewports (height < 500dp, e.g. landscape phones) drop to 0.70 to fit
-/// chrome on screen without collapsing Expanded content.
+/// viewport is not short keeps the ratio swing under 6%. Short viewports
+/// (height < 500dp, e.g. landscape phones) dropped to 0.70 until #352; the
+/// side rail now frees the bottom bar's height there, so the short floor is
+/// 0.84, next to 0.85 for comfortable viewports.
 double _rawScale(Size size) {
   final formFactor = size.shortestSide / _kBaseShortestSide;
   final heightFactor = (size.height / _kComfortableHeight).clamp(0.0, 1.0);
@@ -82,7 +101,7 @@ double rHeight(BuildContext context, double fraction) {
 }
 
 /// Scales a fixed pixel value by the responsive spacing curve.
-/// Uses the structural spacing curve (compressed to 0.70 in short viewports).
+/// Uses the structural spacing curve (floored at 0.84 short / 0.85 otherwise).
 double rSize(BuildContext context, double basePixels) =>
     context.getRSize(basePixels);
 
@@ -105,17 +124,36 @@ extension ResponsiveHelper on BuildContext {
   /// Form factor, not window width. A phone in landscape is still a phone.
   bool get isPhone => screenShortestSide < 600;
 
-  /// The 280dp side-rail decision. Width-driven — but never in a short window.
+  /// Desktop-width layout for individual screens. Width-driven — but never in a
+  /// short window. Until #352 it also drove the permanent 280dp drawer; the
+  /// app frame now uses [isRailLayout] / [isWideLayout] instead.
   bool get isDesktop => screenWidth >= 1024 && !isShortViewport;
 
   /// Tablet form factor, excluding viewports that receive the desktop rail layout.
   bool get isTablet => screenShortestSide >= 600 && !isDesktop;
 
+  /// The app frame shows the side rail (and no bottom bar): screen width at
+  /// least [kRailLayoutMinWidth]. The ONE place the frame's navigation width
+  /// check lives (#352) — every frame decision reads this or [isWideLayout],
+  /// never a raw width. Independent of [isPhone] / [isTablet] / [isDesktop],
+  /// which other screens use for their own layouts.
+  bool get isRailLayout => screenWidth >= kRailLayoutMinWidth;
+
+  /// The cart panel sits fixed on the right of POS: screen width at least
+  /// [kWideLayoutMinWidth]. Always implies [isRailLayout].
+  bool get isWideLayout => screenWidth >= kWideLayoutMinWidth;
+
+  /// Width of the app frame's side rail (#352): the spacing curve applied to
+  /// 80dp, held between 72dp (room for a 48dp tap target and a nav label on a
+  /// sideways phone) and 96dp (a tablet's 1.5x scale would otherwise make it a
+  /// sidebar). Only meaningful when [isRailLayout].
+  double get navRailWidth => getRSize(80).clamp(72.0, 96.0);
+
   /// Scales a base font size relative to form factor and height (capped 0.90 - 1.35).
   double getRFontSize(double baseSize) =>
       baseSize * _calcFontScale(_screenSize);
 
-  /// Scales a fixed pixel value by the spacing curve (capped 0.70/0.85 - 1.50).
+  /// Scales a fixed pixel value by the spacing curve (capped 0.84/0.85 - 1.50).
   double getRSize(double basePixels) =>
       basePixels * _calcSpacingScale(_screenSize);
 

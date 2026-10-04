@@ -41,6 +41,45 @@ class AppDecorations {
     );
   }
 
+  /// The primary button / FAB gradient (`colorScheme.secondary` →
+  /// `colorScheme.primary`, top-left → bottom-right) with the scheme's
+  /// primary glow underneath. The frame's raised POS tile on the bottom bar and
+  /// rail, and the drawer's selected item, use it (#352).
+  ///
+  /// [shape] lets the raised POS button be a circle; [radius] is ignored then.
+  static BoxDecoration primaryButtonGradient(
+    BuildContext context, {
+    double radius = AppSpacing.borderRadiusL,
+    BoxShape shape = BoxShape.rectangle,
+    bool glow = true,
+  }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final glowColor =
+        theme.extension<AppSchemeColors>()?.primaryGlow ??
+        scheme.primary.withValues(alpha: 0.3);
+    return BoxDecoration(
+      shape: shape,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [scheme.secondary, scheme.primary],
+      ),
+      borderRadius: shape == BoxShape.circle
+          ? null
+          : BorderRadius.circular(radius),
+      boxShadow: glow
+          ? [
+              BoxShadow(
+                color: glowColor,
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ]
+          : null,
+    );
+  }
+
   /// Full-screen page background. A vertical gradient from the scaffold
   /// background to the scheme's background fade. Both stops are fully opaque.
   static BoxDecoration pageBackground(BuildContext context) {

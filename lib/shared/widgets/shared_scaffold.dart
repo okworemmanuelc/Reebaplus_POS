@@ -53,12 +53,12 @@ class SharedScaffold extends StatelessWidget {
     return Scaffold(
       appBar: bodyOwnsAppBar
           ? null
-          : appBar ?? AppBar(leading: (isPrimaryRoute && !context.isDesktop) ? const MenuButton() : null),
+          : appBar ?? AppBar(leading: (isPrimaryRoute && !context.isRailLayout) ? const MenuButton() : null),
       backgroundColor: backgroundColor,
       floatingActionButton: floatingActionButton,
       floatingActionButtonLocation: floatingActionButtonLocation,
       bottomNavigationBar: bottomNavigationBar,
-      drawer: context.isDesktop ? null : AppDrawer(activeRoute: activeRoute),
+      drawer: context.isRailLayout ? null : AppDrawer(activeRoute: activeRoute),
       // DrawerHost must sit *inside* this Scaffold so it can reach it — see its
       // doc comment. Left null when there is no body: a screen with nothing in
       // it has no menu button to open the drawer from either.

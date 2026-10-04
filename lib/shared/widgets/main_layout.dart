@@ -21,6 +21,9 @@ import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
 import 'package:reebaplus_pos/shared/widgets/sync_pull_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
+import 'package:reebaplus_pos/shared/widgets/frame/cart_panel.dart';
+import 'package:reebaplus_pos/shared/widgets/frame/frame_nav.dart';
+import 'package:reebaplus_pos/shared/widgets/frame/view_cart_bar.dart';
 import 'package:reebaplus_pos/shared/widgets/push_permission_sheet.dart';
 import 'package:reebaplus_pos/features/dashboard/controllers/first_run_tour_controller.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -85,6 +88,30 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
   late final AnimationController _bottomBarController;
   late final Animation<double> _bottomBarAnimation;
+
+  // ── App frame (#352) ──────────────────────────────────────────────────────
+  /// Keeps the tab stack (and every tab Navigator) intact when a rotation
+  /// moves it between the bottom-bar and the rail layouts.
+  final GlobalKey _contentKey = GlobalKey();
+
+  /// The cart panel's own Navigator (600dp+), so checkout opened from the
+  /// panel stays inside the panel.
+  final GlobalKey<NavigatorState> _panelNavigatorKey =
+      GlobalKey<NavigatorState>();
+
+  /// Built once, on the panel's first appearance.
+  CartScreen? _panelCartScreen;
+
+  /// Whether the cart panel is wanted open: the slide-in panel after "View
+  /// Cart" (600–1023dp), the fixed panel until its ✕ (1024dp+).
+  bool _panelOpen = false;
+
+  /// Mounted lazily on first show, then kept so an in-progress checkout
+  /// survives closing and reopening the panel.
+  bool _panelMounted = false;
+
+  /// The panel mode seen by the last build; a change resets [_panelOpen].
+  _CartPanelMode? _lastPanelMode;
 
   @override
   void initState() {
@@ -173,6 +200,14 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     _previousTabIndex = newIndex;
     _tabSwitchController.forward(from: 0);
     _showBottomBar(immediate: true);
+    // Leaving POS takes the slide-in cart panel (and its dim) with it; the
+    // fixed wide panel stays wanted for when POS comes back.
+    if (mounted &&
+        _panelOpen &&
+        _lastPanelMode == _CartPanelMode.slideIn &&
+        newIndex != NavigationService.posTab) {
+      setState(() => _panelOpen = false);
+    }
   }
 
   void _onCurrentTabCanPopChanged() {
@@ -203,11 +238,11 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     BuildContext context,
     ScrollNotification notification,
   ) {
-    // 1. Only sideways (mobile landscape) viewports slide the bottom bar away.
-    // Upright (portrait) and desktop never hide.
+    // 1. Only sideways viewports that still have the bottom bar (under 600dp
+    // wide, #352) slide it away. Upright never hides; 600dp+ has the rail.
     final isMobileLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape &&
-            !context.isDesktop;
+        !context.isRailLayout;
     if (!isMobileLandscape) {
       return false;
     }
@@ -274,7 +309,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
   ) {
     final isMobileLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape &&
-            !context.isDesktop;
+        !context.isRailLayout;
     if (!isMobileLandscape) {
       return false;
     }
@@ -346,7 +381,6 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
     final nav = ref.read(navigationProvider);
 
     // §12.1: the Orders badge is scoped to the active side-bar store. A concrete
@@ -399,7 +433,6 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     // `applyRoleLanding` is a one-shot — re-scheduling it on every build until
     // the role resolves is cheap, and it will not yank a user who has already
     // moved to another tab.
-    nav.isDesktopNotifier.value = context.isDesktop;
     final canSell = Gates.makeSale.allows(ref);
     final role = ref.watch(currentUserRoleProvider);
     final permsResolved =
@@ -433,245 +466,496 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
     final isMobileLandscape =
         MediaQuery.orientationOf(context) == Orientation.landscape &&
-            !context.isDesktop;
+        !context.isRailLayout;
     if (!isMobileLandscape && _bottomBarController.value < 1.0) {
       _bottomBarController.value = 1.0;
+    }
+
+    // Cart panel mode follows the width (#352). Entering the wide layout opens
+    // the fixed panel; entering the slide-in layout (or the phone layout)
+    // starts it closed. Plain field writes: nothing listens to them but this
+    // build.
+    final panelMode = _panelModeOf(context);
+    if (panelMode != _lastPanelMode) {
+      _panelOpen = panelMode == _CartPanelMode.fixed;
+      _lastPanelMode = panelMode;
     }
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        if (_handleCartPanelBack()) return;
         _nav.handleBackPress(context);
       },
       child: ValueListenableBuilder<int>(
         valueListenable: nav.currentIndex,
         builder: (context, currentIndex, _) {
           _initializedTabs.add(currentIndex); // mark as visited
-
-          Widget bodyWidget = Stack(
-            children: [
-              // Tab content
-              ...List.generate(_tabWidgets.length, (i) {
-                if (!_initializedTabs.contains(i)) {
-                  // Not yet visited — render nothing
-                  return const SizedBox.shrink();
-                }
-                final tab = Offstage(
-                  offstage: i != currentIndex,
-                  // TickerMode guarantees animations on offstage tabs don't tick
-                  child: TickerMode(
-                    enabled: i == currentIndex,
-                    child: TabNavigator(
-                      navigatorKey: _navigatorKeys[i],
-                      rootScreen: _tabWidgets[i],
-                      observer: _observers[i],
-                    ),
-                  ),
-                );
-                if (i != currentIndex) return tab;
-                return FadeTransition(opacity: _tabFadeAnimation, child: tab);
-              }),
-              // Non-blocking sync pull status overlay — first-download
-              // progress bar at top, "Synced" pill above the bottom nav.
-              const Positioned.fill(
-                child: SyncPullBanner(),
-              ),
-            ],
-          );
-
-          if (context.isDesktop) {
-            final activeRoute = _getActiveRoute(currentIndex);
-            bodyWidget = Row(
-              children: [
-                SizedBox(
-                  width: 280.0,
-                  child: AppDrawer(activeRoute: activeRoute),
-                ),
-                const VerticalDivider(width: 1, thickness: 1),
-                Expanded(child: bodyWidget),
-              ],
-            );
-          }
-
-          final scrollListeningBody =
-              NotificationListener<ScrollMetricsNotification>(
-            onNotification: (notification) =>
-                _handleScrollMetricsNotification(context, notification),
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (notification) =>
-                  _handleScrollNotification(context, notification),
-              child: bodyWidget,
+          return ValueListenableBuilder<bool>(
+            valueListenable: nav.currentTabCanPop,
+            builder: (context, canPop, _) => _buildFrame(
+              context,
+              currentIndex: currentIndex,
+              canPop: canPop,
+              pendingOrderCount: pendingOrderCount,
+              panelMode: panelMode,
             ),
           );
-
-          return Stack(
-            children: [
-              Scaffold(
-                key: nav.mainScaffoldKey,
-                onDrawerChanged: (opened) => nav.drawerOpenNotifier.value = opened,
-                body: scrollListeningBody,
-            bottomNavigationBar: context.isDesktop
-                ? null
-                : Builder(
-                    builder: (context) {
-              final iconColor =
-                  t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-
-              // Nav tabs in bar order. Stock (Inventory, tab 2) is gated on
-              // Gates.viewInventory (§16.7); POS (tab 1) and Cart (tab 8) are
-              // gated on Gates.makeSale (hard rule #7 — hide what the role
-              // can't use, e.g. the stock keeper) — the same entries as the
-              // drawer items and destination screens. Driving the index math
-              // AND the items list from one list keeps a hidden tab from
-              // desyncing them. Home(0), Stock(2), POS(1), Orders(3), Cart(8).
-              final showStock = Gates.viewInventory.allows(ref);
-              final showPos = Gates.makeSale.allows(ref);
-              final tabOrder = <int>[
-                0,
-                if (showStock) 2,
-                if (showPos) 1,
-                3,
-                if (showPos) 8,
-              ];
-              final bool isNavTab = tabOrder.contains(currentIndex);
-              final int navIndex = isNavTab
-                  ? tabOrder.indexOf(currentIndex)
-                  : 0;
-
-              return ValueListenableBuilder<bool>(
-                valueListenable: nav.currentTabCanPop,
-                builder: (context, canPop, _) {
-                  if (!isNavTab || canPop) return const SizedBox.shrink();
-                  return AnimatedBuilder(
-                    animation: _bottomBarAnimation,
-                    builder: (context, child) {
-                      return ClipRect(
-                        key: const Key('main-bottom-nav-clip'),
-                        child: Align(
-                          key: const Key('main-bottom-nav-align'),
-                          alignment: Alignment.topCenter,
-                          heightFactor: _bottomBarAnimation.value,
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: BottomNavigationBar(
-                      key: const Key('main-bottom-nav'),
-                      currentIndex: navIndex,
-                    selectedItemColor: isNavTab
-                        ? t.colorScheme.primary
-                        : iconColor,
-                    unselectedItemColor: iconColor,
-                    onTap: (index) {
-                      // tabOrder maps a bottom-bar slot to its underlying tab index,
-                      // so it stays correct whether or not the Stock tab is present.
-                      final indexToSet = tabOrder[index];
-
-                      if (currentIndex == indexToSet) {
-                        // Tap current tab: pop all detail screens to root
-                        _navigatorKeys[indexToSet].currentState?.popUntil(
-                          (r) => r.isFirst,
-                        );
-                      } else {
-                        nav.setIndex(indexToSet);
-                      }
-                    },
-                    type: BottomNavigationBarType.fixed,
-                    items: [
-                      BottomNavigationBarItem(
-                        icon: const AppIcon(AppIcons.home),
-                        activeIcon: AppIcon(
-                          AppIcons.home,
-                          filled: isNavTab,
-                        ),
-                        label: 'Home',
-                      ),
-                      if (showStock)
-                        BottomNavigationBarItem(
-                          icon: const AppIcon(AppIcons.inventory),
-                          activeIcon: AppIcon(
-                            AppIcons.inventory,
-                            filled: isNavTab,
-                          ),
-                          label: 'Stock',
-                        ),
-                      if (showPos)
-                        BottomNavigationBarItem(
-                          icon: const AppIcon(AppIcons.pos),
-                          activeIcon: AppIcon(
-                            AppIcons.pos,
-                            filled: isNavTab,
-                          ),
-                          label: 'POS',
-                        ),
-                      BottomNavigationBarItem(
-                        icon: Badge(
-                          label: Text(pendingOrderCount.toString()),
-                          isLabelVisible: pendingOrderCount > 0,
-                          backgroundColor: t.colorScheme.error,
-                          child: const AppIcon(AppIcons.orders),
-                        ),
-                        activeIcon: Badge(
-                          label: Text(pendingOrderCount.toString()),
-                          isLabelVisible: pendingOrderCount > 0,
-                          backgroundColor: t.colorScheme.error,
-                          child: AppIcon(
-                            AppIcons.orders,
-                            filled: isNavTab,
-                          ),
-                        ),
-                        label: 'Orders',
-                      ),
-                      if (showPos)
-                        BottomNavigationBarItem(
-                          icon:
-                              ValueListenableBuilder<
-                                List<Map<String, dynamic>>
-                              >(
-                                valueListenable: ref.read(cartProvider),
-                                builder: (_, cart, __) => Badge(
-                                  label: Text(cart.length.toString()),
-                                  isLabelVisible: cart.isNotEmpty,
-                                  backgroundColor: t.colorScheme.error,
-                                  child: const AppIcon(
-                                    AppIcons.cart,
-                                  ),
-                                ),
-                              ),
-                          activeIcon:
-                              ValueListenableBuilder<
-                                List<Map<String, dynamic>>
-                              >(
-                                valueListenable: ref.read(cartProvider),
-                                builder: (_, cart, __) => Badge(
-                                  label: Text(cart.length.toString()),
-                                  isLabelVisible: cart.isNotEmpty,
-                                  backgroundColor: t.colorScheme.error,
-                                  child: AppIcon(
-                                    AppIcons.cart,
-                                    filled: isNavTab,
-                                  ),
-                                ),
-                              ),
-                          label: 'Cart',
-                        ),
-                    ],
-                  ),
-                );
-                },
-              );
-            },
-          ),
+        },
       ),
-      const FirstRunRailTourView(),
-    ],
-  );
-},
-),
-);
+    );
+  }
+
+  /// The tabs, the navigation (bottom bar or rail), the drawer and the cart
+  /// panel host, arranged for the current width (#352).
+  Widget _buildFrame(
+    BuildContext context, {
+    required int currentIndex,
+    required bool canPop,
+    required int pendingOrderCount,
+    required _CartPanelMode panelMode,
+  }) {
+    final nav = _nav;
+    final isRail = context.isRailLayout;
+    final onPosRoot = currentIndex == NavigationService.posTab && !canPop;
+    final panelShown =
+        panelMode != _CartPanelMode.none && onPosRoot && _panelOpen;
+    if (panelShown) _panelMounted = true;
+
+    // Tab content. Keyed so the whole stack (and every tab's Navigator) moves
+    // intact when a rotation swaps the bottom bar for the rail.
+    final tabs = KeyedSubtree(
+      key: _contentKey,
+      child: Stack(
+        children: [
+          ...List.generate(_tabWidgets.length, (i) {
+            if (!_initializedTabs.contains(i)) {
+              // Not yet visited — render nothing
+              return const SizedBox.shrink();
+            }
+            Widget tabChild = TabNavigator(
+              navigatorKey: _navigatorKeys[i],
+              rootScreen: _tabWidgets[i],
+              observer: _observers[i],
+            );
+            if (i == NavigationService.posTab) {
+              // The View Cart bar sits under POS (never over its grid or its
+              // scan button). The Column is unconditional so POS's Navigator
+              // keeps its place in the tree whether the bar shows or not.
+              tabChild = Column(
+                children: [
+                  Expanded(child: tabChild),
+                  _buildViewCartSlot(
+                    context,
+                    onPosRoot: onPosRoot,
+                    panelMode: panelMode,
+                  ),
+                ],
+              );
+            }
+            final tab = Offstage(
+              offstage: i != currentIndex,
+              // TickerMode guarantees animations on offstage tabs don't tick
+              child: TickerMode(enabled: i == currentIndex, child: tabChild),
+            );
+            if (i != currentIndex) return tab;
+            return FadeTransition(opacity: _tabFadeAnimation, child: tab);
+          }),
+          // Non-blocking sync pull status overlay — first-download
+          // progress bar at top, "Synced" pill above the bottom nav.
+          const Positioned.fill(child: SyncPullBanner()),
+        ],
+      ),
+    );
+
+    final cartPanel = (panelMode != _CartPanelMode.none && _panelMounted)
+        ? _buildCartPanel()
+        : null;
+
+    // Side system insets (#352 phone check): a landscape navigation bar on
+    // the right, or a display cutout on the left. The rail owns the left one;
+    // the content owns the right one unless the fixed cart panel sits there
+    // (the panel owns it then). Under 600dp the content owns both.
+    final fixedPanelShown = panelMode == _CartPanelMode.fixed && panelShown;
+    Widget bodyWidget = _insetContent(
+      context,
+      tabs,
+      padLeft: !isRail,
+      padRight: !fixedPanelShown,
+    );
+    if (isRail) {
+      bodyWidget = Row(
+        children: [
+          _buildNavigation(
+            context,
+            currentIndex: currentIndex,
+            pendingOrderCount: pendingOrderCount,
+            rail: true,
+          ),
+          VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: Theme.of(context).dividerColor,
+          ),
+          Expanded(child: bodyWidget),
+          if (panelMode == _CartPanelMode.fixed && cartPanel != null)
+            Offstage(
+              offstage: !panelShown,
+              child: TickerMode(enabled: panelShown, child: cartPanel),
+            ),
+        ],
+      );
+    }
+
+    final scrollListeningBody = NotificationListener<ScrollMetricsNotification>(
+      onNotification: (notification) =>
+          _handleScrollMetricsNotification(context, notification),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) =>
+            _handleScrollNotification(context, notification),
+        child: bodyWidget,
+      ),
+    );
+
+    final slideIn = panelMode == _CartPanelMode.slideIn && cartPanel != null;
+    final activeRoute = _getActiveRoute(currentIndex);
+
+    return Stack(
+      children: [
+        Scaffold(
+          key: nav.mainScaffoldKey,
+          // At 600dp+ the drawer belongs to this Scaffold, so it pops over the
+          // rail and the content alike; the rail's menu button opens it. Under
+          // 600dp each screen keeps declaring its own (SharedScaffold & co.).
+          drawer: isRail ? AppDrawer(activeRoute: activeRoute) : null,
+          // DrawerHost must sit inside the Scaffold that declares the drawer
+          // (test/tour/drawer_presence_ban_test.dart). Its opener rules itself
+          // out — it is not inside a tab Navigator — so NavigationService.
+          // openDrawer() falls back to mainScaffoldKey, which is this drawer.
+          body: DrawerHost(child: scrollListeningBody),
+          bottomNavigationBar: isRail
+              ? null
+              : _buildBottomBarHost(
+                  context,
+                  currentIndex: currentIndex,
+                  canPop: canPop,
+                  pendingOrderCount: pendingOrderCount,
+                ),
+        ),
+        if (slideIn) ...[
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !panelShown,
+              child: AnimatedOpacity(
+                opacity: panelShown ? 1.0 : 0.0,
+                duration: _kPanelSlideDuration,
+                curve: Curves.easeOut,
+                child: CartPanelScrim(onTap: _closeCartPanel),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            bottom: 0,
+            right: 0,
+            child: IgnorePointer(
+              ignoring: !panelShown,
+              child: AnimatedSlide(
+                offset: panelShown ? Offset.zero : const Offset(1, 0),
+                duration: _kPanelSlideDuration,
+                curve: Curves.easeOutCubic,
+                child: TickerMode(enabled: panelShown, child: cartPanel),
+              ),
+            ),
+          ),
+        ],
+        const FirstRunRailTourView(),
+      ],
+    );
+  }
+
+  /// Pads [child] clear of the left / right system insets it owns and removes
+  /// those insets from its MediaQuery, so screens inside never add them again.
+  Widget _insetContent(
+    BuildContext context,
+    Widget child, {
+    required bool padLeft,
+    required bool padRight,
+  }) {
+    final insets = MediaQuery.paddingOf(context);
+    return Padding(
+      padding: EdgeInsets.only(
+        left: padLeft ? insets.left : 0.0,
+        right: padRight ? insets.right : 0.0,
+      ),
+      child: MediaQuery.removePadding(
+        context: context,
+        removeLeft: true,
+        removeRight: true,
+        child: child,
+      ),
+    );
+  }
+
+  /// The bottom bar under 600dp wide, inside #258's slide-away clip.
+  Widget _buildBottomBarHost(
+    BuildContext context, {
+    required int currentIndex,
+    required bool canPop,
+    required int pendingOrderCount,
+  }) {
+    final isNavTab = _navTabOrder().contains(currentIndex);
+    if (!isNavTab || canPop) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: _bottomBarAnimation,
+      builder: (context, child) {
+        final value = _bottomBarAnimation.value;
+        return ClipRect(
+          key: const Key('main-bottom-nav-clip'),
+          // Fully shown, the raised POS circle may rise above the bar; only
+          // clip while the bar is sliding away (#258).
+          clipBehavior: value >= 1.0 ? Clip.none : Clip.hardEdge,
+          child: Align(
+            key: const Key('main-bottom-nav-align'),
+            alignment: Alignment.topCenter,
+            heightFactor: value,
+            child: child,
+          ),
+        );
+      },
+      child: _buildNavigation(
+        context,
+        currentIndex: currentIndex,
+        pendingOrderCount: pendingOrderCount,
+        rail: false,
+      ),
+    );
+  }
+
+  /// Nav tabs in bar order. Stock (Inventory, tab 2) is gated on
+  /// Gates.viewInventory (§16.7); POS (tab 1) and Cart (tab 8) are gated on
+  /// Gates.makeSale (hard rule #7 — hide what the role can't use, e.g. the
+  /// stock keeper) — the same entries as the drawer items and destination
+  /// screens. Home(0), Stock(2), POS(1), Orders(3), Cart(8). The bottom bar
+  /// and the rail both draw from this one list (#352).
+  List<int> _navTabOrder() {
+    final showStock = Gates.viewInventory.allows(ref);
+    final showPos = Gates.makeSale.allows(ref);
+    return <int>[
+      NavigationService.homeTab,
+      if (showStock) 2,
+      if (showPos) NavigationService.posTab,
+      3,
+      if (showPos) 8,
+    ];
+  }
+
+  List<FrameNavItem> _navItems({
+    required int pendingOrderCount,
+    required int cartCount,
+  }) {
+    return [
+      for (final tab in _navTabOrder())
+        switch (tab) {
+          NavigationService.homeTab => const FrameNavItem(
+            tabIndex: NavigationService.homeTab,
+            icon: AppIcons.home,
+            label: 'Home',
+          ),
+          2 => const FrameNavItem(
+            tabIndex: 2,
+            icon: AppIcons.inventory,
+            label: 'Stock',
+          ),
+          NavigationService.posTab => const FrameNavItem(
+            tabIndex: NavigationService.posTab,
+            icon: AppIcons.pos,
+            label: 'POS',
+            raised: true,
+          ),
+          3 => FrameNavItem(
+            tabIndex: 3,
+            icon: AppIcons.orders,
+            label: 'Orders',
+            badgeCount: pendingOrderCount,
+          ),
+          _ => FrameNavItem(
+            tabIndex: 8,
+            icon: AppIcons.cart,
+            label: 'Cart',
+            badgeCount: cartCount,
+          ),
+        },
+    ];
+  }
+
+  /// The bottom bar ([rail] false) or the side rail ([rail] true). Same items,
+  /// same order, same permission hiding, same tap behaviour.
+  Widget _buildNavigation(
+    BuildContext context, {
+    required int currentIndex,
+    required int pendingOrderCount,
+    required bool rail,
+  }) {
+    return ValueListenableBuilder<List<Map<String, dynamic>>>(
+      valueListenable: ref.read(cartProvider),
+      builder: (context, cart, _) {
+        final items = _navItems(
+          pendingOrderCount: pendingOrderCount,
+          cartCount: cart.length,
+        );
+        void onTap(int tab) => _onNavTap(tab, currentIndex);
+        return rail
+            ? FrameNavRail(
+                key: const Key('main-nav-rail'),
+                items: items,
+                currentIndex: currentIndex,
+                onTap: onTap,
+              )
+            : FrameBottomBar(
+                key: const Key('main-bottom-nav'),
+                items: items,
+                currentIndex: currentIndex,
+                onTap: onTap,
+              );
+      },
+    );
+  }
+
+  void _onNavTap(int tab, int currentIndex) {
+    if (currentIndex == tab) {
+      // Tap current tab: pop all detail screens to root
+      _navigatorKeys[tab].currentState?.popUntil((r) => r.isFirst);
+    } else {
+      _nav.setIndex(tab);
+    }
+  }
+
+  /// The View Cart bar under POS: shown on the POS root when the cart has
+  /// lines and the cart panel is not already showing it.
+  Widget _buildViewCartSlot(
+    BuildContext context, {
+    required bool onPosRoot,
+    required _CartPanelMode panelMode,
+  }) {
+    final cart = ref.read(cartProvider);
+    return ListenableBuilder(
+      listenable: Listenable.merge([cart, cart.activeCustomer]),
+      builder: (context, _) {
+        // Hidden while the keyboard is up (e.g. searching POS): the bottom
+        // bar sits behind the keyboard, and so should this. Read from the raw
+        // view because this Scaffold body has the inset removed.
+        final view = View.maybeOf(context);
+        final keyboardUp =
+            view != null && MediaQueryData.fromView(view).viewInsets.bottom > 0;
+        final panelHandlesCart = panelMode != _CartPanelMode.none && _panelOpen;
+        if (!onPosRoot ||
+            cart.value.isEmpty ||
+            keyboardUp ||
+            panelHandlesCart) {
+          return const SizedBox.shrink();
+        }
+        final gutter = context.getRSize(16);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            context.getRSize(8),
+            gutter,
+            context.getRSize(8) +
+                (context.isRailLayout
+                    ? MediaQuery.paddingOf(context).bottom
+                    : 0),
+          ),
+          child: ViewCartBar(
+            itemCount: cart.value.length,
+            customerName: cart.activeCustomer.value?.name ?? 'Walk-in Customer',
+            total: cart.subtotal - cart.discountTotalKobo / 100.0,
+            onTap: () => _onViewCart(panelMode),
+          ),
+        );
+      },
+    );
+  }
+
+  void _onViewCart(_CartPanelMode panelMode) {
+    if (panelMode == _CartPanelMode.none) {
+      // Under 600dp the cart lives on the Cart tab.
+      _nav.setIndex(_cartTab);
+      return;
+    }
+    setState(() => _panelOpen = true);
+  }
+
+  void _closeCartPanel() {
+    if (!mounted) return;
+    setState(() => _panelOpen = false);
+  }
+
+  /// Back press while the cart panel is on screen: first unwind anything the
+  /// panel pushed (checkout, receipt), then close a slide-in panel. Returns
+  /// whether the press was used.
+  bool _handleCartPanelBack() {
+    final mode = _lastPanelMode;
+    if (mode == null || mode == _CartPanelMode.none || !_panelOpen) {
+      return false;
+    }
+    final onPos =
+        _nav.currentIndex.value == NavigationService.posTab &&
+        !_nav.currentTabCanPop.value;
+    if (!onPos) return false;
+    final panelNav = _panelNavigatorKey.currentState;
+    if (panelNav != null && panelNav.canPop()) {
+      panelNav.pop();
+      return true;
+    }
+    if (mode == _CartPanelMode.slideIn) {
+      _closeCartPanel();
+      return true;
+    }
+    return false;
+  }
+
+  /// The cart panel's content: the existing Cart screen in its own Navigator,
+  /// so checkout and the receipt open inside the panel through the very same
+  /// code path the Cart tab uses.
+  Widget _buildCartPanel() {
+    _panelCartScreen ??= CartScreen(
+      cart: const [],
+      activeCustomer: ref.read(cartProvider).activeCustomer.value,
+      onCustomerChanged: _voidOnCustomerChanged,
+      onClosePanel: _closeCartPanel,
+    );
+    return CartPanel(
+      child: TabNavigator(
+        navigatorKey: _panelNavigatorKey,
+        rootScreen: _panelCartScreen!,
+      ),
+    );
   }
 }
+
+/// How the cart is hosted on POS at the current width (#352).
+enum _CartPanelMode {
+  /// Under 600dp: no panel; the cart is the Cart tab.
+  none,
+
+  /// 600–1023dp: slides in from the right over a dimmed screen.
+  slideIn,
+
+  /// 1024dp+: fixed on the right of POS.
+  fixed,
+}
+
+_CartPanelMode _panelModeOf(BuildContext context) {
+  if (!context.isRailLayout) return _CartPanelMode.none;
+  return context.isWideLayout ? _CartPanelMode.fixed : _CartPanelMode.slideIn;
+}
+
+const Duration _kPanelSlideDuration = Duration(milliseconds: 250);
+
+/// MainLayout's Cart tab index.
+const int _cartTab = 8;
 
 class _TabPopObserver extends NavigatorObserver {
   _TabPopObserver({required this.tabIndex, required this.nav});

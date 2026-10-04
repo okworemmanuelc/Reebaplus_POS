@@ -64,7 +64,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),
-        drawer: const AppDrawer(activeRoute: 'customers'),
+        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'customers'),
         body: DrawerHost(child: Column(
           children: [
           Expanded(
@@ -177,7 +177,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         const NotificationBell(),
         SizedBox(width: context.getRSize(8)),
       ],
-      leading: Builder(
+      leading: context.isRailLayout ? null : Builder(
         builder: (ctx) => InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () => Scaffold.of(ctx).openDrawer(),

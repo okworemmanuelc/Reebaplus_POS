@@ -467,7 +467,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     return AppBar(
       backgroundColor: _surface,
       elevation: 0,
-      leading: context.isDesktop ? null : const MenuButton(),
+      leading: context.isRailLayout ? null : const MenuButton(),
       title: AppBarHeader(
         icon: AppIcons.inventory,
         title: 'Inventory',

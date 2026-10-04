@@ -91,11 +91,11 @@ void main() {
       expect(context.isShortViewport, isFalse);
     });
 
-    testWidgets('pixel7Landscape (915x412): spacing 0.70, font 0.90',
+    testWidgets('pixel7Landscape (915x412): spacing 0.84 (#352), font 0.90',
         (tester) async {
       final context = await pumpWithViewport(tester, size: pixel7Landscape);
 
-      expect(context.getRSize(100), closeTo(70.0, 0.01));
+      expect(context.getRSize(100), closeTo(84.0, 0.01));
       expect(context.getRFontSize(100), closeTo(90.0, 0.01));
       expect(rSize(context, 100), closeTo(context.getRSize(100), 0.0001));
       expect(rFontSize(context, 100), closeTo(context.getRFontSize(100), 0.0001));
@@ -108,12 +108,12 @@ void main() {
     });
 
     testWidgets(
-        'androidCompactLandscape (800x360): spacing 0.70, font 0.90',
+        'androidCompactLandscape (800x360): spacing 0.84 (#352), font 0.90',
         (tester) async {
       final context =
           await pumpWithViewport(tester, size: androidCompactLandscape);
 
-      expect(context.getRSize(100), closeTo(70.0, 0.01));
+      expect(context.getRSize(100), closeTo(84.0, 0.01));
       expect(context.getRFontSize(100), closeTo(90.0, 0.01));
       expect(rSize(context, 100), closeTo(context.getRSize(100), 0.0001));
       expect(rFontSize(context, 100), closeTo(context.getRFontSize(100), 0.0001));
@@ -332,6 +332,31 @@ void main() {
       expect(context.isTablet, isFalse);
       expect(context.isDesktop, isTrue);
       expect(context.isShortViewport, isFalse);
+    });
+  });
+
+  // #352: the app frame's own width checks. Width, not shortest side, so a
+  // sideways phone gets the rail; independent of isPhone / isTablet / isDesktop.
+  group('Frame layout helpers (#352)', () {
+    final cases = <Size, (bool, bool)>{
+      const Size(599, 900): (false, false),
+      const Size(600, 900): (true, false),
+      phoneMiniPortrait: (false, false),
+      const Size(844, 390): (true, false),
+      androidCompactLandscape: (true, false),
+      const Size(800, 1280): (true, false),
+      const Size(1023, 700): (true, false),
+      const Size(1024, 700): (true, true),
+      const Size(1280, 800): (true, true),
+      const Size(1280, 400): (true, true),
+    };
+    cases.forEach((size, expected) {
+      testWidgets('${size.width.toInt()}x${size.height.toInt()}: '
+          'rail ${expected.$1}, wide ${expected.$2}', (tester) async {
+        final context = await pumpWithViewport(tester, size: size);
+        expect(context.isRailLayout, expected.$1);
+        expect(context.isWideLayout, expected.$2);
+      });
     });
   });
 

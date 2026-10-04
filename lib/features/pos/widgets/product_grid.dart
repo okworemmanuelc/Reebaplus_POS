@@ -146,44 +146,49 @@ class ProductGrid extends StatelessWidget {
       );
     }
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final availableWidth = context.isDesktop ? (screenWidth - 280.0) : screenWidth;
-    final effectiveColumns = columnsFor(availableWidth, gridColumns);
+    // The grid's real width: the screen minus whatever the app frame puts
+    // beside it (the side rail, the fixed cart panel — #352).
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.crossAxisExtent;
+        final effectiveColumns = columnsFor(availableWidth, gridColumns);
 
-    // Calculate aspect ratio dynamically to guarantee a minimum height and avoid overflow
-    final totalPadding = context.getRSize(16); // 8 padding on each side
-    final totalSpacing = context.getRSize(8) * (effectiveColumns - 1);
-    final cellWidth = (availableWidth - totalPadding - totalSpacing) / effectiveColumns;
-    // We need roughly 210px (scaled) of height for the image, name, price, stock
-    final aspect = cellWidth / context.getRSize(210);
+        // Calculate aspect ratio dynamically to guarantee a minimum height and avoid overflow
+        final totalPadding = context.getRSize(16); // 8 padding on each side
+        final totalSpacing = context.getRSize(8) * (effectiveColumns - 1);
+        final cellWidth = (availableWidth - totalPadding - totalSpacing) / effectiveColumns;
+        // We need roughly 210px (scaled) of height for the image, name, price, stock
+        final aspect = cellWidth / context.getRSize(210);
 
-    return SliverPadding(
-      padding: EdgeInsets.all(context.getRSize(8)),
-      sliver: SliverGrid.builder(
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: effectiveColumns,
-          childAspectRatio: aspect,
-          crossAxisSpacing: context.getRSize(8),
-          mainAxisSpacing: context.getRSize(8),
-        ),
-        itemCount: products.length,
-        itemBuilder: (context, index) {
-          final item = products[index];
-          return _ProductCard(
-            key: posProductTileKey(item.product.id),
-            item: item,
-            onTap: () => onProductTap(item),
-            cardCol: cardCol,
-            textCol: textCol,
-            subtextCol: subtextCol,
-            borderCol: borderCol,
-            controller: controller,
-            isListView: false,
-            showHint: showHint,
-            onHintTap: onHintTap,
-          );
-        },
-      ),
+        return SliverPadding(
+          padding: EdgeInsets.all(context.getRSize(8)),
+          sliver: SliverGrid.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: effectiveColumns,
+              childAspectRatio: aspect,
+              crossAxisSpacing: context.getRSize(8),
+              mainAxisSpacing: context.getRSize(8),
+            ),
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              final item = products[index];
+              return _ProductCard(
+                key: posProductTileKey(item.product.id),
+                item: item,
+                onTap: () => onProductTap(item),
+                cardCol: cardCol,
+                textCol: textCol,
+                subtextCol: subtextCol,
+                borderCol: borderCol,
+                controller: controller,
+                isListView: false,
+                showHint: showHint,
+                onHintTap: onHintTap,
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

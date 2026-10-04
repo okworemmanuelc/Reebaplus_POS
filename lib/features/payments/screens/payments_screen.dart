@@ -36,7 +36,7 @@ class PaymentsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: bg,
-      drawer: const AppDrawer(activeRoute: 'supplier_accounts'),
+      drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'supplier_accounts'),
       appBar: _buildAppBar(context, ref),
       body: DrawerHost(child: !canManage
           ? Center(
@@ -69,7 +69,7 @@ class PaymentsScreen extends ConsumerWidget {
       backgroundColor: surface,
       elevation: 0,
       iconTheme: IconThemeData(color: text),
-      leading: Builder(
+      leading: context.isRailLayout ? null : Builder(
         builder: (ctx) => InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () => Scaffold.of(ctx).openDrawer(),

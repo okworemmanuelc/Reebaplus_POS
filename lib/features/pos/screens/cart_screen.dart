@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/shared/widgets/frame/cart_panel.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
@@ -54,12 +55,18 @@ class CartScreen extends ConsumerStatefulWidget {
   final Function(Customer?) onCustomerChanged;
   final VoidCallback? onCheckoutSuccess;
 
+  /// Set only when this screen is hosted in the app frame's cart panel
+  /// (#352): adds the panel's ✕ to the end of the header, so the panel needs
+  /// no extra strip (and no second status-bar band) above it.
+  final VoidCallback? onClosePanel;
+
   const CartScreen({
     super.key,
     required this.cart,
     this.activeCustomer,
     required this.onCustomerChanged,
     this.onCheckoutSuccess,
+    this.onClosePanel,
   });
 
   @override
@@ -1035,14 +1042,16 @@ class _CartScreenState extends ConsumerState<CartScreen>
         appBar: AppBar(
           backgroundColor: _surface,
           elevation: 0,
-          leading: context.isDesktop ? null : const MenuButton(),
+          leading: context.isRailLayout ? null : const MenuButton(),
           title: AppBarHeader(
             icon: AppIcons.cart,
             title: 'Cart',
             subtitle: ref.watch(activeStoreLabelProvider),
           ),
-          actions: const [
-            NotificationBell(),
+          actions: [
+            const NotificationBell(),
+            if (widget.onClosePanel != null)
+              CartPanelCloseButton(onPressed: widget.onClosePanel!),
           ],
         ),
         body: const SafeArea(
@@ -1086,7 +1095,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       appBar: AppBar(
         backgroundColor: _surface,
         elevation: 0,
-        leading: context.isDesktop ? null : const MenuButton(),
+        leading: context.isRailLayout ? null : const MenuButton(),
         title: AppBarHeader(
           icon: AppIcons.cart,
           title: 'Cart',
@@ -1137,6 +1146,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                 ),
               ),
             ),
+          if (widget.onClosePanel != null)
+            CartPanelCloseButton(onPressed: widget.onClosePanel!),
         ],
       ),
       body: SafeArea(
