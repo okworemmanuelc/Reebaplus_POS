@@ -7,6 +7,24 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #351: Redesign Wave 0 ③ — flat with a soft fade replaces Glassy (2026-10-04)
+Branch `feat/redesign-w0-flat-surfaces-351`. Parent PRD #346 (issue #351). **No Drift/cloud change, no new packages.** Replaces the Glassy/blur aesthetic with "flat with a soft fade".
+- **Page background**: Renamed `AppDecorations.glassyBackground` to `AppDecorations.pageBackground` across 11 caller files in `lib/`. Vertical `LinearGradient` from `scaffoldBackgroundColor` to `AppSchemeColors.backgroundFade` with two 100% opaque stops.
+- **Card decoration**: Added `AppDecorations.card(context, {radius})` using `AppSchemeColors.cardFill`, hairline border with `theme.dividerColor`, and soft `AppSchemeColors.cardShadow` (blur 12, offset 0,2); card radius default uses `AppSpacing.borderRadiusXL = 20.0` (added to `design_tokens.dart`). `surfaceCard` and `glassCard` delegate to `card`.
+- **Shared widgets**:
+  - `GlassyCard` updated to render `AppDecorations.card(...)` without `BackdropFilter`, `ImageFilter`, `AnimatedBuilder`, or `ClipRRect` blur workarounds; preserves `backgroundColor` and `border` overrides.
+  - `GlassyScaffold` converted to `StatelessWidget` with body on `pageBackground`, removed scroll listener and `_scrollOffset`, solid `colorScheme.surface` AppBar with 1px `dividerColor` hairline and soft `topBarShadow` shadow.
+  - Deleted `lib/shared/widgets/optimized_backdrop_filter.dart` and replaced its 3 call sites (`app_dropdown.dart`, `driver_profile_screen.dart`, `supplier_detail_screen.dart`) with plain containers.
+- **Removed BackdropFilter app-wide**: Eliminated blur from `app_dropdown.dart` (control and overlay; overlay panel now uses opaque `colorScheme.surface`), `access_granted_screen.dart`, and `force_update_wrapper.dart`. The only remaining exception in `lib/` is `auth_background.dart` on sign-in screens.
+- **Solid top bars & theme styling**:
+  - Verified `SliverAppBar` in `product_detail_screen.dart` is pinned with solid `_surface`.
+  - Added `scrolledUnderElevation: 0` to `appBarTheme` in Blue light and Blue dark (already present in the other 8 themes).
+  - Configured `bottomSheetTheme` and `dialogTheme` in all 10 `ThemeData` builders: `backgroundColor: surface`, `surfaceTintColor: transparent`, `modalBarrierColor / barrierColor: scrim`, top-rounded 24px for sheets with `dragHandleColor = border` (`showDragHandle: false`), 20px rounded for dialogs.
+- **Tests**:
+  - `test/core/theme/no_backdrop_blur_ban_test.dart`: asserts zero occurrences of `BackdropFilter` or `ImageFilter.blur` in `lib/` outside `auth_background.dart`.
+  - `test/core/theme/page_background_test.dart`: validates all 10 themes have exactly 2 stops, both fully opaque (`alpha == 1.0`), matching `scaffoldBackgroundColor` and `backgroundFade`.
+- **Docs**: Updated `context/ui-context.md`, `context/code-standards.md`, and `context/progress-tracker.md`.
+
 ### Issue #350: Redesign Wave 0 ② — Material Symbols Outlined via AppIcons (Material Icons replacement — PR B) (2026-10-04)
 Branch `feat/redesign-w0-icons-350b`. Parent PRD #346 (decision 3; issue #350). **No Drift/cloud change.** Replaces all Material `Icons.*` in `lib/` with `AppIcons.<semanticName>` (Material Symbols Outlined w400).
 - **Added 38 new `AppIcons` constants (`lib/core/theme/app_icons.dart`)**:

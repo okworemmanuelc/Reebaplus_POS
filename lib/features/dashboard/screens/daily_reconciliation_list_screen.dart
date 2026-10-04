@@ -147,7 +147,7 @@ class _DailyReconciliationListScreenState
     return ColoredBox(
       color: theme.scaffoldBackgroundColor,
       child: Container(
-        decoration: AppDecorations.glassyBackground(context),
+        decoration: AppDecorations.pageBackground(context),
         child: SharedScaffold(
           activeRoute: 'dashboard',
           backgroundColor: Colors.transparent,

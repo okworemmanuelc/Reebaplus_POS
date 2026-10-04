@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -388,9 +387,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
+      child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: isDark
@@ -441,7 +438,6 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
             ],
           ),
         ),
-      ),
     );
   }
 }

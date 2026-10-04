@@ -1393,7 +1393,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     _syncTabController(_resolveTabKeys(showCrates));
 
     return Container(
-      decoration: AppDecorations.glassyBackground(context),
+      decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(

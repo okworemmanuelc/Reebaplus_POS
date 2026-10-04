@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,7 +25,6 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
 /// Key prefix on every ledger row, followed by the entry id. The test seam for
@@ -132,7 +130,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     return ColoredBox(
       color: _bg,
       child: Container(
-        decoration: AppDecorations.glassyBackground(context),
+        decoration: AppDecorations.pageBackground(context),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
@@ -317,10 +315,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: OptimizedBackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          fallbackBuilder: (context, child) => child,
-          child: TabBar(
+        child: TabBar(
             controller: _tabController,
             indicatorSize: TabBarIndicatorSize.tab,
             indicatorPadding: EdgeInsets.all(context.getRSize(4)),
@@ -346,7 +341,6 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
             ],
           ),
         ),
-      ),
     );
   }
 

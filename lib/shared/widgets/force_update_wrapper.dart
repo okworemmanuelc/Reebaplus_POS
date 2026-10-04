@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
@@ -61,10 +60,7 @@ class _ForceUpdateWrapperState extends State<ForceUpdateWrapper> {
                 ),
               ),
               Positioned.fill(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(color: Colors.black.withValues(alpha: 0.7)),
-                ),
+                child: Container(color: Colors.black.withValues(alpha: 0.7)),
               ),
               SafeArea(
                 child: Center(

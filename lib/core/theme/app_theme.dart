@@ -257,11 +257,30 @@ class AppTheme {
       backgroundColor: lSurface,
       foregroundColor: lText,
       elevation: 0,
+      scrolledUnderElevation: 0,
       centerTitle: false,
       toolbarHeight: kToolbarHeight + 12,
       shadowColor: lBorder,
       surfaceTintColor: Colors.transparent,
       shape: Border(bottom: BorderSide(color: lBorder, width: 1.5)),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: lSurface,
+      surfaceTintColor: Colors.transparent,
+      modalBarrierColor: Colors.black.withValues(alpha: 0.35),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      dragHandleColor: lBorder,
+      dragHandleSize: const Size(36, 4),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: lSurface,
+      surfaceTintColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: lSurface,
@@ -358,11 +377,30 @@ class AppTheme {
       backgroundColor: dSurface,
       foregroundColor: dText,
       elevation: 0,
+      scrolledUnderElevation: 0,
       centerTitle: false,
       toolbarHeight: kToolbarHeight + 12,
       shadowColor: dBorder,
       surfaceTintColor: Colors.transparent,
       shape: Border(bottom: BorderSide(color: dBorder, width: 1.5)),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: dSurface,
+      surfaceTintColor: Colors.transparent,
+      modalBarrierColor: Colors.black.withValues(alpha: 0.55),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      dragHandleColor: dBorder,
+      dragHandleSize: const Size(36, 4),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: dSurface,
+      surfaceTintColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: dSurface,
@@ -543,6 +581,24 @@ class AppTheme {
         toolbarHeight: kToolbarHeight + 12,
         surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: alBorder, width: 1)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: alSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.35),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        dragHandleColor: alBorder,
+        dragHandleSize: const Size(36, 4),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: alSurface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.35),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: alSurface,
@@ -757,6 +813,24 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: adBorder, width: 1)),
       ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: adSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.55),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        dragHandleColor: adBorder,
+        dragHandleSize: const Size(36, 4),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: adSurface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.55),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: adSurface,
         selectedItemColor: amberPrimary,
@@ -969,6 +1043,24 @@ class AppTheme {
         toolbarHeight: kToolbarHeight + 12,
         surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: plBorder, width: 1)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: plSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.35),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        dragHandleColor: plBorder,
+        dragHandleSize: const Size(36, 4),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: plSurface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.35),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: plSurface,
@@ -1183,6 +1275,24 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: pdBorder, width: 1)),
       ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: pdSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.55),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        dragHandleColor: pdBorder,
+        dragHandleSize: const Size(36, 4),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: pdSurface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.55),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: pdSurface,
         selectedItemColor: purplePrimary,
@@ -1360,6 +1470,24 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: glBorder, width: 1)),
       ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: glSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.35),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        dragHandleColor: glBorder,
+        dragHandleSize: const Size(36, 4),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: glSurface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.35),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: glSurface,
         selectedItemColor: greenPrimaryDark,
@@ -1492,6 +1620,24 @@ class AppTheme {
         toolbarHeight: kToolbarHeight + 12,
         surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: gdBorder, width: 1)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: gdSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.55),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        dragHandleColor: gdBorder,
+        dragHandleSize: const Size(36, 4),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: gdSurface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.55),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: gdSurface,
@@ -1670,6 +1816,24 @@ class AppTheme {
         toolbarHeight: kToolbarHeight + 12,
         surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: bwlBorder, width: 1)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: bwlSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.35),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        dragHandleColor: bwlBorder,
+        dragHandleSize: const Size(36, 4),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: bwlSurface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.35),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: bwlSurface,
@@ -1884,6 +2048,24 @@ class AppTheme {
         toolbarHeight: kToolbarHeight + 12,
         surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: bwdBorder, width: 1)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: bwdSurface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.55),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        dragHandleColor: bwdBorder,
+        dragHandleSize: const Size(36, 4),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: bwdSurface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.55),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: bwdSurface,
