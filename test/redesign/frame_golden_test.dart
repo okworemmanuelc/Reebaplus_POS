@@ -90,68 +90,117 @@ void main() {
     NavigationService().resetNavigation();
   });
 
+  Future<void> pumpGolden(
+    WidgetTester tester, {
+    required String screen,
+    required Brightness brightness,
+    required Size size,
+    required EdgeInsets padding,
+    required String goldenName,
+    bool openPanel = false,
+  }) async {
+    NavigationService().setIndex(
+      screen == 'home' ? NavigationService.homeTab : NavigationService.posTab,
+    );
+    final context = await pumpScreen(
+      tester,
+      env: env,
+      size: size,
+      padding: padding,
+      screen: const MainLayout(),
+      bottomNavHeight: 0,
+      grantedKeys: grants,
+      roleSlug: 'manager',
+      roleName: 'Manager',
+      roleRank: 3,
+      theme: brightness == Brightness.light
+          ? AppTheme.light()
+          : AppTheme.dark(),
+      overrides: [
+        firstRunTourStopProvider.overrideWithValue(TourStop.none),
+        firstRunSurfaceStateProvider.overrideWithValue(
+          FirstRunSurfaceState.hasContent,
+        ),
+      ],
+      sharedPreferences: prefs,
+      settle: false,
+    );
+
+    if (screen == 'pos') {
+      final cart = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(cartProvider);
+      cart.addItem(env.products[0], qty: 2, maxStock: 100);
+      cart.addItem(env.products[1], qty: 1, maxStock: 100);
+    }
+
+    // Let Drift streams deliver and every animation run out. Bounded:
+    // spinners never settle.
+    Future<void> settle() async {
+      for (var i = 0; i < 8; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+    }
+
+    await settle();
+    if (openPanel) {
+      await tester.tap(find.byKey(const Key('view-cart-bar')));
+      await settle();
+    }
+
+    await expectLater(
+      find.byType(MainLayout),
+      matchesGoldenFile('goldens/$goldenName.png'),
+    );
+
+    await disposeScreen(tester);
+  }
+
   for (final screen in const ['home', 'pos']) {
     for (final brightness in Brightness.values) {
       final themeName = brightness == Brightness.light ? 'light' : 'dark';
       sizes.forEach((sizeName, size) {
-        testWidgets('frame $screen $sizeName $themeName', (tester) async {
-          NavigationService().setIndex(
-            screen == 'home'
-                ? NavigationService.homeTab
-                : NavigationService.posTab,
-          );
-          final context = await pumpScreen(
+        testWidgets(
+          'frame $screen $sizeName $themeName',
+          (tester) => pumpGolden(
             tester,
-            env: env,
+            screen: screen,
+            brightness: brightness,
             size: size,
             padding: EdgeInsets.zero,
-            screen: const MainLayout(),
-            bottomNavHeight: 0,
-            grantedKeys: grants,
-            roleSlug: 'manager',
-            roleName: 'Manager',
-            roleRank: 3,
-            theme: brightness == Brightness.light
-                ? AppTheme.light()
-                : AppTheme.dark(),
-            overrides: [
-              firstRunTourStopProvider.overrideWithValue(TourStop.none),
-              firstRunSurfaceStateProvider.overrideWithValue(
-                FirstRunSurfaceState.hasContent,
-              ),
-            ],
-            sharedPreferences: prefs,
-            settle: false,
-          );
-
-          if (screen == 'pos') {
-            final cart = ProviderScope.containerOf(
-              context,
-              listen: false,
-            ).read(cartProvider);
-            cart.addItem(env.products[0], qty: 2, maxStock: 100);
-            cart.addItem(env.products[1], qty: 1, maxStock: 100);
-          }
-
-          // Let Drift streams deliver and every animation run out. Bounded:
-          // spinners never settle.
-          for (var i = 0; i < 8; i++) {
-            await tester.runAsync(
-              () => Future<void>.delayed(const Duration(milliseconds: 20)),
-            );
-            await tester.pump(const Duration(milliseconds: 250));
-          }
-
-          await expectLater(
-            find.byType(MainLayout),
-            matchesGoldenFile(
-              'goldens/frame_${screen}_${sizeName}_$themeName.png',
-            ),
-          );
-
-          await disposeScreen(tester);
-        });
+            goldenName: 'frame_${screen}_${sizeName}_$themeName',
+          ),
+        );
       });
+    }
+  }
+
+  // #352 phone check: a sideways phone with a 24dp status bar and 3-button
+  // navigation on the right. Home, POS, and POS with the slide-in panel open.
+  const sidewaysInsets = EdgeInsets.only(top: 24, right: 48);
+  for (final brightness in Brightness.values) {
+    final themeName = brightness == Brightness.light ? 'light' : 'dark';
+    for (final (screen, openPanel, name) in const [
+      ('home', false, 'home'),
+      ('pos', false, 'pos'),
+      ('pos', true, 'pos_panel'),
+    ]) {
+      testWidgets(
+        'frame $name 844x390 with insets $themeName',
+        (tester) => pumpGolden(
+          tester,
+          screen: screen,
+          brightness: brightness,
+          size: const Size(844, 390),
+          padding: sidewaysInsets,
+          openPanel: openPanel,
+          goldenName: 'frame_${name}_844x390_insets_$themeName',
+        ),
+      );
     }
   }
 }

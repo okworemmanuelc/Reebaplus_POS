@@ -573,7 +573,17 @@ class _MainLayoutState extends ConsumerState<MainLayout>
         ? _buildCartPanel()
         : null;
 
-    Widget bodyWidget = tabs;
+    // Side system insets (#352 phone check): a landscape navigation bar on
+    // the right, or a display cutout on the left. The rail owns the left one;
+    // the content owns the right one unless the fixed cart panel sits there
+    // (the panel owns it then). Under 600dp the content owns both.
+    final fixedPanelShown = panelMode == _CartPanelMode.fixed && panelShown;
+    Widget bodyWidget = _insetContent(
+      context,
+      tabs,
+      padLeft: !isRail,
+      padRight: !fixedPanelShown,
+    );
     if (isRail) {
       bodyWidget = Row(
         children: [
@@ -662,6 +672,29 @@ class _MainLayoutState extends ConsumerState<MainLayout>
         ],
         const FirstRunRailTourView(),
       ],
+    );
+  }
+
+  /// Pads [child] clear of the left / right system insets it owns and removes
+  /// those insets from its MediaQuery, so screens inside never add them again.
+  Widget _insetContent(
+    BuildContext context,
+    Widget child, {
+    required bool padLeft,
+    required bool padRight,
+  }) {
+    final insets = MediaQuery.paddingOf(context);
+    return Padding(
+      padding: EdgeInsets.only(
+        left: padLeft ? insets.left : 0.0,
+        right: padRight ? insets.right : 0.0,
+      ),
+      child: MediaQuery.removePadding(
+        context: context,
+        removeLeft: true,
+        removeRight: true,
+        child: child,
+      ),
     );
   }
 
@@ -891,9 +924,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       cart: const [],
       activeCustomer: ref.read(cartProvider).activeCustomer.value,
       onCustomerChanged: _voidOnCustomerChanged,
+      onClosePanel: _closeCartPanel,
     );
     return CartPanel(
-      onClose: _closeCartPanel,
       child: TabNavigator(
         navigatorKey: _panelNavigatorKey,
         rootScreen: _panelCartScreen!,

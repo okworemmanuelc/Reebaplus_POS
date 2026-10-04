@@ -30,23 +30,28 @@ double cartPanelWidth(BuildContext context) {
 
 /// The container that hosts the cart on POS at 600dp+ (#352).
 ///
-/// It only frames [child] — the existing Cart screen, unchanged (its restyle is
-/// Wave 1's Cart agent): solid Surface, the slide-in panel shadow, a hairline
-/// edge on the left, and a slim strip on top holding the ✕ that hides it.
+/// It only frames [child] — the existing Cart screen, whose own header carries
+/// the panel's ✕ (`CartScreen.onClosePanel`); the rest of its restyle is Wave
+/// 1's Cart agent: solid Surface, the slide-in panel shadow and a hairline edge
+/// on the left.
+///
+/// The panel sits at the right edge of the screen, so it owns the right system
+/// inset (a landscape navigation bar): its Surface extends under the inset,
+/// while the Cart screen is laid out beside it. The top inset is left to the
+/// Cart screen's own app bar, which pads for the status bar exactly once.
 class CartPanel extends StatelessWidget {
-  const CartPanel({super.key, required this.child, required this.onClose});
+  const CartPanel({super.key, required this.child});
 
   final Widget child;
-  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final scheme = t.extension<AppSchemeColors>();
-    final topInset = MediaQuery.paddingOf(context).top;
+    final rightInset = MediaQuery.paddingOf(context).right;
     return Container(
       key: const Key('cart-panel'),
-      width: cartPanelWidth(context),
+      width: cartPanelWidth(context) + rightInset,
       decoration: BoxDecoration(
         color: t.colorScheme.surface,
         border: Border(left: BorderSide(color: t.dividerColor)),
@@ -59,37 +64,43 @@ class CartPanel extends StatelessWidget {
             ),
         ],
       ),
-      child: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.only(top: topInset, right: context.getRSize(8)),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: IconButton(
-                key: const Key('cart-panel-close'),
-                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-                constraints: const BoxConstraints(
-                  minWidth: kMinInteractiveDimension,
-                  minHeight: kMinInteractiveDimension,
-                ),
-                icon: AppIcon(
-                  AppIcons.close,
-                  size: context.getRSize(22),
-                  color: t.colorScheme.onSurface,
-                ),
-                onPressed: onClose,
-              ),
-            ),
-          ),
-          Expanded(
-            // The strip above already answered for the status bar.
-            child: MediaQuery.removePadding(
-              context: context,
-              removeTop: true,
-              child: child,
-            ),
-          ),
-        ],
+      child: Padding(
+        padding: EdgeInsets.only(right: rightInset),
+        child: MediaQuery.removePadding(
+          context: context,
+          removeLeft: true,
+          removeRight: true,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// The ✕ that hides the cart panel, placed at the end of the hosted Cart
+/// screen's header (#352). A full 48dp tap target.
+class CartPanelCloseButton extends StatelessWidget {
+  const CartPanelCloseButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(right: context.getRSize(4)),
+      child: IconButton(
+        key: const Key('cart-panel-close'),
+        tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+        constraints: const BoxConstraints(
+          minWidth: kMinInteractiveDimension,
+          minHeight: kMinInteractiveDimension,
+        ),
+        icon: AppIcon(
+          AppIcons.close,
+          size: context.getRSize(22),
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+        onPressed: onPressed,
       ),
     );
   }

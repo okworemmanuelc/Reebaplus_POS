@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #352 PR 1 — phone-check fixes (2026-10-04)
+Same branch, new commit. Owner's phone check (Samsung sideways, 3-button nav on the RIGHT, ~915×412) found 3 bugs; all fixed.
+- **Rail didn't fit the height** ("Orde…" cut, Cart below the screen): the rail now spreads its items over the height and compacts under 440dp (POS tile `railWidth × 0.56`, 2dp item padding), keeps a scroll fallback (`SingleChildScrollView` → `ConstrainedBox(minHeight)` → `IntrinsicHeight` → spaced `Column`), and labels scale down in a `FittedBox` instead of ellipsizing.
+- **Side insets ignored**: rail width = `navRailWidth` + left inset (Surface under the cutout, items beside it); the content area is padded by the right inset (left too under 600dp) and those insets are removed from the screens' MediaQuery; `CartPanel` width = panel width + right inset with its content padded clear; when the fixed panel shows it owns the right inset instead of the content.
+- **Doubled top band in the panel**: the ✕ strip is gone. `CartScreen` gained an optional `onClosePanel` (set only by the panel host) that appends `CartPanelCloseButton` to its own header, so the status-bar padding is applied once by the Cart app bar.
+- **Tests**: `app_frame_test.dart` +18 (insets top 24 + right 48, top 24 + left 48, at 844×390 / 915×412 / 800×360: whole rail inside the safe area, items ≥ 48dp, no ellipsized label; View Cart bar/total/chevron and the panel ✕ inside the safe area; Cart header within one toolbar of the top inset; the same rail checks at text scale 1.3; 1280×800 fixed panel ✕ clear of a right nav bar; portrait bottom 48). 12 of the first 14 fail on the previous commit. Goldens: 6 new `*_844x390_insets_*` (Home, POS, POS with the panel open; light/dark); 6 regenerated (844×390 rail, POS 1280 panel without the strip).
+- **Not verifiable without a device**: real Samsung inset values / text size, gesture-nav bottom inset in landscape, cutout phones.
+
 ### Issue #352 PR 1: Redesign Wave 0 ④ — the app frame (2026-10-04)
 Branch `feat/redesign-w0-app-frame-352`, stacked on `feat/redesign-w0-flat-surfaces-351` (PR #363 not merged yet), worked in `../drinkPosApp-wt-352`. Parent PRD #346. **No Drift/cloud/sync change, no new packages, no pubspec change.** **RELEASE FREEZE is ON** (PRD #346): Wave 0 + Wave 1 ship together. PR 2 (shared parts) and PR 3 (fly-to-cart) not started.
 - **Width helpers** (`lib/core/utils/responsive.dart`): `isRailLayout` (width ≥ 600), `isWideLayout` (≥ 1024), `navRailWidth` (`getRSize(80)` clamped 72–96), constants `kRailLayoutMinWidth` / `kWideLayoutMinWidth`. `isPhone` / `isTablet` / `isDesktop` untouched (doc only).

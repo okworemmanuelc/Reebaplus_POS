@@ -294,40 +294,61 @@ class FrameNavRail extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
+  /// Below this much height (after the system insets) the rail compacts:
+  /// a smaller POS tile and tighter item padding, so a sideways phone
+  /// (~360dp minus a 24dp status bar) fits all five items and the menu.
+  static const double _kCompactBelowHeight = 440;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final gap = context.getRSize(8);
+    final insets = MediaQuery.paddingOf(context);
+    // The rail owns the left system inset (a display cutout, or a landscape
+    // navigation bar on the left): its Surface extends under it, its items
+    // sit beside it.
     return Container(
-      width: context.navRailWidth,
+      width: context.navRailWidth + insets.left,
       color: t.colorScheme.surface,
       child: SafeArea(
         right: false,
-        child: Column(
-          children: [
-            SizedBox(height: gap),
-            const _RailMenuButton(),
-            SizedBox(height: gap),
-            Expanded(
-              // Short windows (a sideways phone is ~360dp tall) scroll the
-              // items rather than overflow; taller ones never need to.
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    for (final item in items) ...[
-                      _RailItem(
-                        key: frameNavItemKey(item.tabIndex),
-                        item: item,
-                        selected: item.tabIndex == currentIndex,
-                        onTap: () => onTap(item.tabIndex),
-                      ),
-                      SizedBox(height: gap),
-                    ],
-                  ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxHeight < _kCompactBelowHeight;
+            final children = <Widget>[
+              const _RailMenuButton(),
+              for (final item in items)
+                _RailItem(
+                  key: frameNavItemKey(item.tabIndex),
+                  item: item,
+                  compact: compact,
+                  selected: item.tabIndex == currentIndex,
+                  onTap: () => onTap(item.tabIndex),
+                ),
+            ];
+            // Items are spread over the height when they fit; if a window is
+            // ever too short even when compact, the rail scrolls rather than
+            // clipping anything.
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    mainAxisAlignment: compact
+                        ? MainAxisAlignment.spaceEvenly
+                        : MainAxisAlignment.start,
+                    children: compact
+                        ? children
+                        : [
+                            for (final child in children) ...[
+                              SizedBox(height: context.getRSize(8)),
+                              child,
+                            ],
+                          ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -365,11 +386,15 @@ class _RailItem extends StatelessWidget {
   const _RailItem({
     super.key,
     required this.item,
+    required this.compact,
     required this.selected,
     required this.onTap,
   });
 
   final FrameNavItem item;
+
+  /// Short window: smaller POS tile, tighter padding (see FrameNavRail).
+  final bool compact;
   final bool selected;
   final VoidCallback onTap;
 
@@ -383,7 +408,9 @@ class _RailItem extends StatelessWidget {
     final Widget icon = item.raised
         ? _RaisedPosButton(
             item: item,
-            extent: math.max(kMinInteractiveDimension, railWidth * 0.72),
+            extent: compact
+                ? railWidth * 0.56
+                : math.max(kMinInteractiveDimension, railWidth * 0.72),
             circle: false,
           )
         : _NavIcon(
@@ -409,17 +436,27 @@ class _RailItem extends StatelessWidget {
               minHeight: kMinInteractiveDimension,
             ),
             child: Padding(
-              padding: EdgeInsets.symmetric(vertical: context.getRSize(6)),
+              padding: EdgeInsets.symmetric(
+                vertical: context.getRSize(compact ? 2 : 6),
+                horizontal: context.getRSize(4),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   icon,
-                  SizedBox(height: context.getRSize(4)),
-                  Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _labelStyle(context, color, bold: item.raised),
+                  SizedBox(height: context.getRSize(compact ? 2 : 4)),
+                  // Never ellipsized: a label too wide for the rail (large
+                  // system text size) shrinks to fit instead, so "Orders"
+                  // always reads in full.
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: _labelStyle(context, color, bold: item.raised),
+                    ),
                   ),
                 ],
               ),

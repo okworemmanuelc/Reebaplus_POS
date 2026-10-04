@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -83,12 +84,16 @@ void main() {
     int tab = NavigationService.homeTab,
     Set<String> grants = posGrants,
     String roleSlug = 'manager',
+    EdgeInsets padding = kRealisticPhoneInsets,
+    TextScaler? textScaler,
   }) async {
     NavigationService().setIndex(tab);
     final context = await pumpScreen(
       tester,
       env: env,
       size: size,
+      padding: padding,
+      textScaler: textScaler,
       screen: const MainLayout(),
       bottomNavHeight: 0,
       grantedKeys: grants,
@@ -515,5 +520,237 @@ void main() {
         await disposeScreen(tester);
       });
     }
+  });
+
+  // #352 phone check: a Samsung sideways with 3-button navigation on the
+  // right (~915x412) clipped the rail and hid the panel's ✕ and the View Cart
+  // total under the system buttons. The harness had no side insets, so these
+  // pin the frame against realistic ones.
+  group('system insets', () {
+    const insetCases = <String, EdgeInsets>{
+      'nav bar right': EdgeInsets.only(top: 24, right: 48),
+      'cutout left': EdgeInsets.only(top: 24, left: 48),
+    };
+    const landscapeSizes = [Size(844, 390), Size(915, 412), Size(800, 360)];
+
+    void expectInside(
+      WidgetTester tester,
+      Finder finder,
+      Size size,
+      EdgeInsets insets, {
+      required String what,
+    }) {
+      expect(finder, findsOneWidget, reason: what);
+      final r = tester.getRect(finder);
+      expect(
+        r.left,
+        greaterThanOrEqualTo(insets.left - 0.01),
+        reason: '$what left',
+      );
+      expect(
+        r.right,
+        lessThanOrEqualTo(size.width - insets.right + 0.01),
+        reason: '$what right',
+      );
+      expect(
+        r.top,
+        greaterThanOrEqualTo(insets.top - 0.01),
+        reason: '$what top',
+      );
+      expect(
+        r.bottom,
+        lessThanOrEqualTo(size.height - insets.bottom + 0.01),
+        reason: '$what bottom',
+      );
+    }
+
+    for (final size in landscapeSizes) {
+      insetCases.forEach((name, insets) {
+        final label = '${size.width.toInt()}x${size.height.toInt()} $name';
+
+        testWidgets('$label: the whole rail fits, unclipped, labels in full', (
+          tester,
+        ) async {
+          await pumpFrame(tester, size, padding: insets);
+          expectInside(
+            tester,
+            find.byKey(const Key('frame-rail-menu')),
+            size,
+            insets,
+            what: 'menu',
+          );
+          for (final t in [
+            NavigationService.homeTab,
+            2,
+            NavigationService.posTab,
+            3,
+            8,
+          ]) {
+            final item = find.byKey(frameNavItemKey(t));
+            expectInside(tester, item, size, insets, what: 'rail item $t');
+            final s = tester.getSize(item);
+            expect(s.height, greaterThanOrEqualTo(kMinInteractiveDimension));
+            expect(s.width, greaterThanOrEqualTo(kMinInteractiveDimension));
+          }
+          for (final text in ['Home', 'Stock', 'POS', 'Orders', 'Cart']) {
+            final para = tester.renderObject<RenderParagraph>(
+              find.descendant(of: find.byKey(rail), matching: find.text(text)),
+            );
+            expect(para.didExceedMaxLines, isFalse, reason: '$text ellipsized');
+          }
+          expect(tester.takeException(), isNull);
+          await disposeScreen(tester);
+        });
+
+        testWidgets('$label: View Cart total + chevron and the panel ✕ sit '
+            'inside the safe area; no doubled top band', (tester) async {
+          final context = await pumpFrame(
+            tester,
+            size,
+            tab: NavigationService.posTab,
+            padding: insets,
+          );
+          await addToCart(tester, context);
+
+          final bar = find.byKey(viewCart);
+          expectInside(tester, bar, size, insets, what: 'View Cart bar');
+          expectInside(
+            tester,
+            find.descendant(of: bar, matching: find.textContaining('2,000')),
+            size,
+            insets,
+            what: 'View Cart total',
+          );
+          final chevron = find.descendant(
+            of: bar,
+            matching: find.byWidgetPredicate(
+              (w) => w is AppIcon && w.icon == AppIcons.chevronRight,
+            ),
+          );
+          expectInside(tester, chevron, size, insets, what: 'chevron');
+
+          await tester.tap(bar);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(panelShowing(), isTrue);
+          expectInside(
+            tester,
+            find.byKey(panelClose),
+            size,
+            insets,
+            what: 'panel ✕',
+          );
+
+          // The Cart header sits right under the status bar: its title is
+          // within one toolbar of the top inset, not a second band lower.
+          final header = find
+              .descendant(of: find.byKey(panel), matching: find.text('Cart'))
+              .first;
+          final headerTop = tester.getRect(header).top;
+          expect(headerTop, greaterThanOrEqualTo(insets.top));
+          expect(
+            headerTop,
+            lessThan(insets.top + kToolbarHeight),
+            reason: 'the status-bar padding is applied once, not twice',
+          );
+          expect(tester.takeException(), isNull);
+          await disposeScreen(tester);
+        });
+      });
+    }
+
+    for (final size in landscapeSizes) {
+      testWidgets('${size.width.toInt()}x${size.height.toInt()} at the largest '
+          'text size (1.3, main.dart clamp): rail fits, labels in full', (
+        tester,
+      ) async {
+        const insets = EdgeInsets.only(top: 24, right: 48);
+        await pumpFrame(
+          tester,
+          size,
+          padding: insets,
+          textScaler: const TextScaler.linear(1.3),
+        );
+        for (final t in [
+          NavigationService.homeTab,
+          2,
+          NavigationService.posTab,
+          3,
+          8,
+        ]) {
+          expectInside(
+            tester,
+            find.byKey(frameNavItemKey(t)),
+            size,
+            insets,
+            what: 'rail item $t',
+          );
+        }
+        final orders = tester.renderObject<RenderParagraph>(
+          find.descendant(of: find.byKey(rail), matching: find.text('Orders')),
+        );
+        expect(orders.didExceedMaxLines, isFalse);
+        expect(tester.takeException(), isNull);
+        await disposeScreen(tester);
+      });
+    }
+
+    testWidgets('1280x800 nav bar right: the fixed panel ✕ is clear of it', (
+      tester,
+    ) async {
+      const insets = EdgeInsets.only(top: 24, right: 48);
+      const size = Size(1280, 800);
+      await pumpFrame(
+        tester,
+        size,
+        tab: NavigationService.posTab,
+        padding: insets,
+      );
+      expect(panelShowing(), isTrue);
+      expectInside(
+        tester,
+        find.byKey(panelClose),
+        size,
+        insets,
+        what: 'panel ✕',
+      );
+      expect(
+        tester.getRect(find.byKey(panel)).right,
+        size.width,
+        reason: 'the panel Surface still runs under the nav bar',
+      );
+      await disposeScreen(tester);
+    });
+
+    testWidgets('portrait 390x844 with 48dp bottom (gesture/3-button): '
+        'bottom bar and View Cart clear it', (tester) async {
+      const insets = EdgeInsets.only(top: 24, bottom: 48);
+      const size = Size(390, 844);
+      final context = await pumpFrame(
+        tester,
+        size,
+        tab: NavigationService.posTab,
+        padding: insets,
+      );
+      await addToCart(tester, context);
+      expectInside(
+        tester,
+        find.byKey(viewCart),
+        size,
+        insets,
+        what: 'View Cart bar',
+      );
+      for (final t in [NavigationService.homeTab, 2, 3, 8]) {
+        expectInside(
+          tester,
+          find.byKey(frameNavItemKey(t)),
+          size,
+          insets,
+          what: 'bar item $t',
+        );
+      }
+      expect(tester.takeException(), isNull);
+      await disposeScreen(tester);
+    });
   });
 }
