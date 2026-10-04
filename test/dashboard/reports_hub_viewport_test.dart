@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -296,7 +296,7 @@ void main() {
         expect(cardRect.contains(badgeRect.topLeft), isTrue);
         expect(cardRect.contains(badgeRect.bottomRight), isTrue);
         for (final part in [
-          find.byIcon(FontAwesomeIcons.clipboardList.data),
+          find.byIcon(AppIcons.clipboardList),
           find.text('Approvals'),
           find.text('Stock, quick sales & crate deposits'),
         ]) {

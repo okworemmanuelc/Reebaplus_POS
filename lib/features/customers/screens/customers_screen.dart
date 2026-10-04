@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -156,7 +156,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           ? AppFAB(
               heroTag: 'customers_fab',
               onPressed: () => AddCustomerSheet.show(context),
-              icon: FontAwesomeIcons.userPlus.data,
+              icon: AppIcons.userAdd,
               label: 'Add Customer',
             )
           : null,
@@ -239,7 +239,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               ],
             ),
             child: Icon(
-              FontAwesomeIcons.users.data,
+              AppIcons.customers,
               color: Colors.white,
               size: context.getRSize(16),
             ),

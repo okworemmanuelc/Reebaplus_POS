@@ -8,7 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
@@ -40,7 +40,7 @@ void main() {
       find.text('Create a store to start adding products and selling.'),
       findsOneWidget,
     );
-    expect(find.byIcon(FontAwesomeIcons.store.data), findsOneWidget);
+    expect(find.byIcon(AppIcons.store), findsOneWidget);
 
     final buttonFinder = find.text('Create a store');
     expect(buttonFinder, findsOneWidget);

@@ -254,6 +254,12 @@ All visual values — colours, spacing, radii, typography — are resolved throu
   - Wrong: `style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)`
 - Font sizes scale at runtime via `context.getRFontSize(base)`. The theme applies this automatically — do not call `getRFontSize` manually in widget code.
 
+### Icons
+
+- Never reference an icon set package (`font_awesome_flutter`, `material_symbols_icons`) or icon class directly in widget code.
+- Always use semantic identifiers from `AppIcons` (`lib/core/theme/app_icons.dart`). If a new icon is needed, add a semantic mapping to `AppIcons` first.
+- Use `AppIcon(icon, {size, color, filled})` or `Icon(icon, ...)` with an `AppIcons.*` constant.
+
 ### Inline styles
 
 - No inline `style:` overrides on `Text`, `Container`, or `DecoratedBox` widgets outside of the theme. If a style recurs more than once, it becomes a token or a named widget.

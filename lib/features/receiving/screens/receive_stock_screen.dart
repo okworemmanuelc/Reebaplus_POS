@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -153,7 +153,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
         actions: [
           IconButton(
             icon: Icon(
-              _isSearching ? FontAwesomeIcons.xmark.data : FontAwesomeIcons.magnifyingGlass.data,
+              _isSearching ? AppIcons.close : AppIcons.search,
               size: 17,
               color: subtextCol,
             ),
@@ -233,7 +233,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
       child: Row(
         children: [
           Icon(
-            FontAwesomeIcons.circleInfo.data,
+            AppIcons.infoCircle,
             size: context.getRSize(16),
             color: primary,
           ),
@@ -249,7 +249,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
           ),
           IconButton(
             icon: Icon(
-              FontAwesomeIcons.xmark.data,
+              AppIcons.close,
               size: context.getRSize(16),
               color: primary,
             ),
@@ -276,7 +276,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
         autofocus: true,
         onChanged: (v) => setState(() => _searchQuery = v),
         hintText: 'Search products...',
-        prefixIcon: Icon(FontAwesomeIcons.magnifyingGlass.data, size: context.getRSize(16)),
+        prefixIcon: Icon(AppIcons.search, size: context.getRSize(16)),
       ),
     );
   }
@@ -299,7 +299,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
       ),
       child: AppButton(
         text: 'Review Items ($cartLineCount)',
-        icon: FontAwesomeIcons.cartShopping.data,
+        icon: AppIcons.cart,
         isFullWidth: true,
         onPressed: () {
           Navigator.of(context).push(

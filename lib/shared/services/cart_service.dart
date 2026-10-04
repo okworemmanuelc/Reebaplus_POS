@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
@@ -141,7 +141,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
         'version': product is ProductData ? product.version : null,
         'qty': allowed,
         'icon': product is ProductData
-            ? (product.iconCodePoint ?? FontAwesomeIcons.box.codePoint)
+            ? (product.iconCodePoint ?? kStoredIconBox)
             : product['icon'],
         'color': product is ProductData ? product.colorHex : product['color'],
         'category': product is ProductData

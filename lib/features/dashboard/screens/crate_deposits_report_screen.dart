@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart' show CrateDepositSummary;
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -93,7 +93,7 @@ class CrateDepositsReportScreen extends ConsumerWidget {
             IconButton(
               tooltip: 'Export CSV',
               icon: Icon(
-                FontAwesomeIcons.fileExport.data,
+                AppIcons.export,
                 size: 18,
                 color: context.primaryColor,
               ),
@@ -146,7 +146,7 @@ class CrateDepositsReportScreen extends ConsumerWidget {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.beerMugEmpty.data,
+                AppIcons.beerMug,
                 size: 16,
                 color: context.primaryColor,
               ),
@@ -307,7 +307,7 @@ class CrateDepositsReportScreen extends ConsumerWidget {
       child: Column(
         children: [
           Icon(
-            FontAwesomeIcons.boxOpen.data,
+            AppIcons.box,
             size: 28,
             color: Theme.of(context).hintColor,
           ),

@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:drift/drift.dart' show innerJoin;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
@@ -683,7 +683,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         child: Row(
                           children: [
                             Icon(
-                              FontAwesomeIcons.circleInfo.data,
+                              AppIcons.infoCircle,
                               size: ctx.getRSize(14),
                               color: accent,
                             ),
@@ -712,7 +712,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     SizedBox(height: ctx.getRSize(24)),
                     AmberButton(
                       label: inDebt ? 'Refund to Credit Balance' : 'Refund Cash',
-                      icon: FontAwesomeIcons.moneyBillTransfer.data,
+                      icon: AppIcons.transfer,
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         final amount = parseCurrency(amountCtrl.text);
@@ -1192,7 +1192,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         Expanded(
                           child: AppButton(
                             text: 'Print',
-                            icon: FontAwesomeIcons.print.data,
+                            icon: AppIcons.print,
                             onPressed: () {
                               setModalState(() => reprintDate = DateTime.now());
                               _printReceiptFromDetail(
@@ -1209,7 +1209,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         Expanded(
                           child: AppButton(
                             text: 'Share',
-                            icon: FontAwesomeIcons.shareNodes.data,
+                            icon: AppIcons.share,
                             variant: AppButtonVariant.secondary,
                             onPressed: () async {
                               setModalState(() => reshareDate = DateTime.now());
@@ -1415,7 +1415,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 padding: EdgeInsets.all(context.getRSize(8)),
                 decoration: AppDecorations.primaryGradient(context, radius: 12),
                 child: Icon(
-                  FontAwesomeIcons.user.data,
+                  AppIcons.user,
                   color: Colors.white,
                   size: context.getRSize(16),
                 ),
@@ -1461,7 +1461,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 Gates.deleteCustomer.allows(ref))
               IconButton(
                 icon: Icon(
-                  FontAwesomeIcons.trashCan.data,
+                  AppIcons.delete,
                   size: context.getRSize(18),
                   color: danger,
                 ),
@@ -1581,7 +1581,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         child: Padding(
                           padding: EdgeInsets.all(context.getRSize(4)),
                           child: Icon(
-                            FontAwesomeIcons.penToSquare.data,
+                            AppIcons.edit,
                             size: context.getRSize(15),
                             color: theme.colorScheme.primary,
                           ),
@@ -1598,7 +1598,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 if (_phone.isNotEmpty) ...[
                   SizedBox(height: context.getRSize(8)),
                   _InfoRow(
-                    icon: FontAwesomeIcons.phone.data,
+                    icon: AppIcons.phone,
                     text: _phone,
                     theme: theme,
                   ),
@@ -1606,14 +1606,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 if (_address.isNotEmpty && _address != 'N/A') ...[
                   SizedBox(height: context.getRSize(4)),
                   _InfoRow(
-                    icon: FontAwesomeIcons.locationDot.data,
+                    icon: AppIcons.location,
                     text: _address,
                     theme: theme,
                   ),
                 ],
                 SizedBox(height: context.getRSize(4)),
                 _InfoRow(
-                  icon: FontAwesomeIcons.calendarCheck.data,
+                  icon: AppIcons.calendarCheck,
                   text: 'Since ${DateFormat('MMM yyyy').format(_joinedAt)}',
                   theme: theme,
                 ),
@@ -1649,7 +1649,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     Row(
                       children: [
                         Icon(
-                          FontAwesomeIcons.wallet.data,
+                          AppIcons.creditBalance,
                           size: context.getRSize(14),
                           color: theme.colorScheme.primary,
                         ),
@@ -1755,7 +1755,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                       Row(
                         children: [
                           Icon(
-                            FontAwesomeIcons.creditCard.data,
+                            AppIcons.creditCard,
                             size: context.getRSize(12),
                             color: theme.colorScheme.onSurface.withAlpha(102),
                           ),
@@ -1802,7 +1802,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         Row(
                           children: [
                             Icon(
-                              FontAwesomeIcons.boxOpen.data,
+                              AppIcons.box,
                               size: context.getRSize(12),
                               color: theme.colorScheme.primary.withAlpha(178),
                             ),
@@ -1851,7 +1851,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         Expanded(
                           child: AppButton(
                             text: 'Add Credit',
-                            icon: FontAwesomeIcons.plus.data,
+                            icon: AppIcons.add,
                             size: AppButtonSize.small,
                             onPressed: _showAddFundsSheet,
                           ),
@@ -1862,7 +1862,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         Expanded(
                           child: AppButton(
                             text: 'Set Limit',
-                            icon: FontAwesomeIcons.penToSquare.data,
+                            icon: AppIcons.edit,
                             variant: AppButtonVariant.outline,
                             size: AppButtonSize.small,
                             onPressed: _showSetLimitSheet,
@@ -1874,7 +1874,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     SizedBox(height: context.getRSize(10)),
                     AppButton(
                       text: 'Refund Cash',
-                      icon: FontAwesomeIcons.moneyBillTransfer.data,
+                      icon: AppIcons.transfer,
                       variant: AppButtonVariant.outline,
                       size: AppButtonSize.small,
                       onPressed: _showRefundCashSheet,
@@ -1907,17 +1907,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
           fontWeight: FontWeight.w700,
         ),
         tabs: [
-          Tab(
-            icon: Icon(FontAwesomeIcons.clockRotateLeft.data, size: 16),
+          const Tab(
+            icon: Icon(AppIcons.history, size: 16),
             text: 'Credits',
           ),
-          Tab(
-            icon: Icon(FontAwesomeIcons.fileLines.data, size: 16),
+          const Tab(
+            icon: Icon(AppIcons.document, size: 16),
             text: 'Orders',
           ),
           if (showCrates)
-            Tab(
-              icon: Icon(FontAwesomeIcons.boxOpen.data, size: 16),
+            const Tab(
+              icon: Icon(AppIcons.box, size: 16),
               text: 'Crates',
             ),
         ],
@@ -2015,7 +2015,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyState(
-            icon: FontAwesomeIcons.hourglass.data,
+            icon: AppIcons.waiting,
             message: 'No ledger entries yet',
             theme: theme,
           ),
@@ -2046,7 +2046,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyState(
-            icon: FontAwesomeIcons.filterCircleXmark.data,
+            icon: AppIcons.clearFilter,
             message: 'No transactions in this period',
             theme: theme,
           ),
@@ -2095,8 +2095,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         ),
                         child: Icon(
                           isCredit
-                              ? FontAwesomeIcons.arrowDown.data
-                              : FontAwesomeIcons.arrowUp.data,
+                              ? AppIcons.arrowDown
+                              : AppIcons.arrowUp,
                           color: color,
                           size: ctx.getRSize(16),
                         ),
@@ -2146,7 +2146,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           ),
                           tooltip: 'Void top-up',
                           icon: Icon(
-                            FontAwesomeIcons.arrowRotateLeft.data,
+                            AppIcons.undo,
                             size: ctx.getRSize(14),
                             color: danger,
                           ),
@@ -2174,7 +2174,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyState(
-            icon: FontAwesomeIcons.receipt.data,
+            icon: AppIcons.receipt,
             message: 'No orders placed yet',
             theme: theme,
           ),
@@ -2212,7 +2212,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          FontAwesomeIcons.receipt.data,
+                          AppIcons.receipt,
                           color: theme.colorScheme.primary,
                           size: ctx.getRSize(16),
                         ),
@@ -2367,7 +2367,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                FontAwesomeIcons.plus.data,
+                AppIcons.add,
                 color: theme.colorScheme.primary,
                 size: context.getRSize(16),
               ),
@@ -2397,7 +2397,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
               ),
             ),
             Icon(
-              FontAwesomeIcons.chevronRight.data,
+              AppIcons.chevronRight,
               size: context.getRSize(13),
               color: theme.colorScheme.onSurface.withAlpha(100),
             ),
@@ -2437,7 +2437,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                FontAwesomeIcons.boxOpen.data,
+                AppIcons.box,
                 color: color,
                 size: context.getRSize(16),
               ),

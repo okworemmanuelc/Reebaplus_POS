@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -408,7 +408,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final speedDialActions = <AppSpeedDialAction>[
       if (Gates.addProduct.allows(ref))
         AppSpeedDialAction(
-          icon: FontAwesomeIcons.tag.data,
+          icon: AppIcons.tag,
           label: 'Add ${lex.item}',
           description:
               'Create a ${lex.item.toLowerCase()} and set what’s on your shelf',
@@ -417,7 +417,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         ),
       if (Gates.receiveStock.allows(ref))
         AppSpeedDialAction(
-          icon: FontAwesomeIcons.truck.data,
+          icon: AppIcons.supplier,
           label: 'Receive Stock',
           description: 'Log a delivery from a supplier',
           onPressed: () => Navigator.of(context)
@@ -469,7 +469,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       elevation: 0,
       leading: context.isDesktop ? null : const MenuButton(),
       title: AppBarHeader(
-        icon: FontAwesomeIcons.boxesStacked.data,
+        icon: AppIcons.inventory,
         title: 'Inventory',
         subtitle: ref.watch(activeStoreLabelProvider),
       ),
@@ -534,7 +534,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context,
         'Total SKUs',
         '$totalItems',
-        FontAwesomeIcons.layerGroup.data,
+        AppIcons.category,
         Theme.of(context).colorScheme.primary,
         isActive: _stockFilter == 'all',
         onTap: () => setState(() {
@@ -546,7 +546,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context,
         'Low Stock',
         '$lowStock',
-        FontAwesomeIcons.triangleExclamation.data,
+        AppIcons.warning,
         AppColors.warning,
         isActive: _stockFilter == 'low',
         onTap: () => setState(() {
@@ -558,7 +558,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context,
         'Out of Stock',
         '$outOfStock',
-        FontAwesomeIcons.ban.data,
+        AppIcons.block,
         danger,
         isActive: _stockFilter == 'out',
         onTap: () => setState(() {
@@ -573,7 +573,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           context,
           'Total Crates',
           '${totalCrates.toInt()}',
-          FontAwesomeIcons.beerMugEmpty.data,
+          AppIcons.beerMug,
           success,
           isActive: _currentTab == _tabKeys.indexOf('crates'),
           onTap: () => setState(() {
@@ -587,7 +587,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context,
         'Near Expiry',
         '$nearExpiry',
-        FontAwesomeIcons.hourglassHalf.data,
+        AppIcons.pending,
         AppColors.warning,
         isActive: _stockFilter == 'expiry',
         onTap: () => setState(() {
@@ -852,7 +852,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       child: Row(
         children: [
           Icon(
-            FontAwesomeIcons.circleInfo.data,
+            AppIcons.infoCircle,
             size: context.getRSize(16),
             color: primary,
           ),
@@ -868,7 +868,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           ),
           IconButton(
             icon: Icon(
-              FontAwesomeIcons.xmark.data,
+              AppIcons.close,
               size: context.getRSize(16),
               color: primary,
             ),
@@ -891,7 +891,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           child: AppButton(
             text: 'Add Supplier',
             variant: AppButtonVariant.secondary,
-            icon: FontAwesomeIcons.plus.data,
+            icon: AppIcons.add,
             onPressed: () => SupplierFormSheet.show(context),
           ),
         ),
@@ -954,7 +954,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          FontAwesomeIcons.buildingColumns.data,
+                          AppIcons.bank,
                           color: Theme.of(context).colorScheme.primary,
                           size: context.getRSize(20),
                         ),
@@ -1131,7 +1131,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           border: Border.all(color: primary.withValues(alpha: 0.25)),
         ),
         child: Icon(
-          FontAwesomeIcons.tag.data,
+          AppIcons.tag,
           size: context.getRSize(16),
           color: primary,
         ),
@@ -1527,7 +1527,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 if (Gates.addManufacturer.allows(ref))
                   AppButton(
                     text: 'Add New',
-                    icon: FontAwesomeIcons.circlePlus.data,
+                    icon: AppIcons.addCircle,
                     variant: AppButtonVariant.ghost,
                     isFullWidth: false,
                     onPressed: () => AddManufacturerSheet.show(
@@ -1591,7 +1591,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             context,
             'Empty In Stock',
             totalEmpty.toString(),
-            FontAwesomeIcons.beerMugEmpty.data,
+            AppIcons.beerMug,
             AppColors.warning,
           ),
         ),
@@ -1601,7 +1601,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             context,
             'Full (Crate)',
             totalFull.toString(),
-            FontAwesomeIcons.wineBottle.data,
+            AppIcons.wineBottle,
             Theme.of(context).colorScheme.primary,
           ),
         ),
@@ -1698,7 +1698,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.industry.data,
+                      AppIcons.manufacturer,
                       color: Theme.of(context).colorScheme.secondary,
                       size: context.getRSize(16),
                     ),
@@ -1867,7 +1867,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         child: Column(
           children: [
             Icon(
-              FontAwesomeIcons.boxOpen.data,
+              AppIcons.box,
               size: context.getRSize(32),
               color: _border,
             ),

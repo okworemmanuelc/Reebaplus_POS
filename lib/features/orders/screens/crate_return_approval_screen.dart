@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -126,7 +126,7 @@ class _CrateReturnApprovalScreenState
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      FontAwesomeIcons.circleCheck.data,
+                      AppIcons.checkCircle,
                       color: Colors.green.withValues(alpha: 0.5),
                       size: context.getRSize(48),
                     ),
@@ -265,8 +265,8 @@ class _SubmissionBatchTile extends StatelessWidget {
                       color: Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(
-                      FontAwesomeIcons.box.data,
+                    child: const Icon(
+                      AppIcons.box,
                       size: 14,
                       color: Colors.orange,
                     ),
@@ -295,8 +295,8 @@ class _SubmissionBatchTile extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: Icon(
-                          FontAwesomeIcons.xmark.data,
+                        icon: const Icon(
+                          AppIcons.close,
                           color: Colors.red,
                           size: 18,
                         ),
@@ -305,8 +305,8 @@ class _SubmissionBatchTile extends StatelessWidget {
                             : () => onReject(item.returnRow.id),
                       ),
                       IconButton(
-                        icon: Icon(
-                          FontAwesomeIcons.check.data,
+                        icon: const Icon(
+                          AppIcons.check,
                           color: Colors.green,
                           size: 18,
                         ),

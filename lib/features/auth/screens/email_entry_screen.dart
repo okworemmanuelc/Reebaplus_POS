@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -504,8 +504,8 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          FaIcon(
-                            FontAwesomeIcons.google,
+                          Icon(
+                            AppIcons.googleBrand,
                             size: 20,
                             color: textColor.withValues(alpha: 0.8),
                           ),

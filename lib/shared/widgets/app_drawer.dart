@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -143,7 +143,7 @@ class AppDrawer extends ConsumerWidget {
                 IconButton(
                   // Lock — a quick lock back to the PIN screen, not a full
                   // logout.
-                  icon: const FaIcon(FontAwesomeIcons.lock, size: 18),
+                  icon: const Icon(AppIcons.lock, size: 18),
                   tooltip: 'Lock app',
                   color: Theme.of(
                     context,
@@ -354,7 +354,7 @@ class AppDrawer extends ConsumerWidget {
         _buildStorePicker(context, ref),
         _navItem(
           context,
-          FontAwesomeIcons.chartLine.data,
+          AppIcons.home,
           'Home',
           active: activeRoute == 'dashboard',
           onTap: () => _navigateTo(context, ref, 'dashboard'),
@@ -365,7 +365,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.makeSale.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.cashRegister.data,
+            AppIcons.pos,
             'Point of Sale',
             active: activeRoute == 'pos',
             onTap: () => _navigateTo(context, ref, 'pos'),
@@ -376,7 +376,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.viewInventory.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.boxesStacked.data,
+            AppIcons.inventory,
             'Inventory',
             active: activeRoute == 'inventory',
             onTap: () => _navigateTo(context, ref, 'inventory'),
@@ -384,7 +384,7 @@ class AppDrawer extends ConsumerWidget {
         // Orders — visible to all four roles (§27.3).
         _navItem(
           context,
-          FontAwesomeIcons.truckFast.data,
+          AppIcons.orders,
           'Orders',
           active: activeRoute == 'orders',
           onTap: () => _navigateTo(context, ref, 'orders'),
@@ -394,7 +394,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.viewCustomers.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.users.data,
+            AppIcons.customers,
             'Customers',
             active: activeRoute == 'customers',
             onTap: () => _navigateTo(context, ref, 'customers'),
@@ -405,7 +405,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.manageStaff.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.userGroup.data,
+            AppIcons.staff,
             'Staff Management',
             active: false,
             onTap: () => _pushRoute(context, ref, const StaffManagementScreen()),
@@ -415,7 +415,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.manageSuppliers.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.moneyBillWave.data,
+            AppIcons.supplier,
             'Supplier Accounts',
             active:
                 activeRoute == 'supplier_accounts' || activeRoute == 'payments',
@@ -428,7 +428,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.viewExpenses.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.fileInvoiceDollar.data,
+            AppIcons.expenses,
             'Expenses',
             active: activeRoute == 'expenses',
             onTap: () => _navigateTo(context, ref, 'expenses'),
@@ -442,7 +442,7 @@ class AppDrawer extends ConsumerWidget {
             id: SpotlightTargetId.drawerStoresItem,
             child: _navItem(
               context,
-              FontAwesomeIcons.store.data,
+              AppIcons.store,
               'Stores',
               active: activeRoute == 'store',
               onTap: () => _navigateTo(context, ref, 'store'),
@@ -456,7 +456,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.vanManage.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.truck.data,
+            AppIcons.supplier,
             'Van Sales',
             active: false,
             onTap: () =>
@@ -470,7 +470,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.viewActivityLogs.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.clockRotateLeft.data,
+            AppIcons.history,
             'Activity Logs',
             active: activeRoute == 'activity_logs',
             onTap: () => _navigateTo(context, ref, 'activity_logs'),
@@ -484,7 +484,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.manageSettings.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.gear.data,
+            AppIcons.settings,
             'CEO Settings',
             active: false,
             onTap: () => _pushRoute(context, ref, const SettingsScreen()),
@@ -496,7 +496,7 @@ class AppDrawer extends ConsumerWidget {
         if (isBelowCeo)
           _navItem(
             context,
-            FontAwesomeIcons.gear.data,
+            AppIcons.settings,
             'Settings',
             active: false,
             onTap: () => _pushRoute(context, ref, const StaffSettingsScreen()),
@@ -508,7 +508,7 @@ class AppDrawer extends ConsumerWidget {
         if (Gates.viewSyncIssues.allows(ref))
           _navItem(
             context,
-            FontAwesomeIcons.cloudArrowUp.data,
+            AppIcons.syncIssues,
             'Sync Issues',
             active: false,
             onTap: () => _pushRoute(context, ref, const SyncIssuesScreen()),
@@ -520,7 +520,7 @@ class AppDrawer extends ConsumerWidget {
         SizedBox(height: context.getRSize(12)),
         _navItem(
           context,
-          FontAwesomeIcons.rightFromBracket.data,
+          AppIcons.logout,
           'Log Out',
           active: false,
           outlined: true,
@@ -767,7 +767,7 @@ class AppDrawer extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    FontAwesomeIcons.store.data,
+                    AppIcons.store,
                     size: context.getRSize(15),
                     color: primary,
                   ),
@@ -801,7 +801,7 @@ class AppDrawer extends ConsumerWidget {
                 ),
                 SizedBox(width: context.getRSize(8)),
                 Icon(
-                  FontAwesomeIcons.chevronDown.data,
+                  AppIcons.chevronDown,
                   size: context.getRSize(13),
                   color: subtextColor,
                 ),
@@ -862,7 +862,7 @@ class AppDrawer extends ConsumerWidget {
                 ),
                 child: Center(
                   child: Icon(
-                    FontAwesomeIcons.palette.data,
+                    AppIcons.palette,
                     size: context.getRSize(14),
                     color: Colors.white,
                   ),
@@ -894,7 +894,7 @@ class AppDrawer extends ConsumerWidget {
                 ),
               ),
               Icon(
-                FontAwesomeIcons.chevronRight.data,
+                AppIcons.chevronRight,
                 size: context.getRSize(14),
                 color: Colors.white.withValues(alpha: 0.8),
               ),

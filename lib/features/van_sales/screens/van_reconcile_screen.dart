@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
@@ -62,10 +62,10 @@ class VanReconcileScreen extends ConsumerWidget {
     // Body guard (layer 2, hard rule #6): the hub hides the way in, but a live
     // revocation while this screen is open must empty it too.
     if (!Gates.vanManage.allows(ref)) {
-      return GlassyScaffold(
+      return const GlassyScaffold(
         title: 'Reconcile & close',
         body: _Empty(
-          icon: FontAwesomeIcons.lock.data,
+          icon: AppIcons.lock,
           title: 'No access',
           message: 'You no longer have access to Van Sales.',
         ),
@@ -177,7 +177,7 @@ class VanReconcileScreen extends ConsumerWidget {
                   ),
                 ),
                 icon: Icon(
-                  FontAwesomeIcons.arrowRotateLeft.data,
+                  AppIcons.undo,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Final return'),
@@ -192,7 +192,7 @@ class VanReconcileScreen extends ConsumerWidget {
                   driverName: driverName,
                 ),
                 icon: Icon(
-                  FontAwesomeIcons.moneyBillTransfer.data,
+                  AppIcons.transfer,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Final payment'),
@@ -217,7 +217,7 @@ class VanReconcileScreen extends ConsumerWidget {
                         owedKobo: position.shortageOwedKobo,
                       ),
                 icon: Icon(
-                  FontAwesomeIcons.magnifyingGlassMinus.data,
+                  AppIcons.zoomOut,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Write off shortage'),
@@ -236,7 +236,7 @@ class VanReconcileScreen extends ConsumerWidget {
                         owedKobo: position.damageOwedKobo,
                       ),
                 icon: Icon(
-                  FontAwesomeIcons.wineGlassEmpty.data,
+                  AppIcons.wineBottle,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Write off damage'),

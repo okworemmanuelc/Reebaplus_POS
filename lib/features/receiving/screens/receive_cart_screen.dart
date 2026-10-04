@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_checkout_screen.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/edit_receive_item_modal.dart';
@@ -66,7 +66,7 @@ class ReceiveCartScreen extends ConsumerWidget {
                 }
               },
               icon: Icon(
-                FontAwesomeIcons.trashCan.data,
+                AppIcons.delete,
                 color: Theme.of(context).colorScheme.error,
                 size: context.getRSize(16),
               ),
@@ -90,7 +90,7 @@ class ReceiveCartScreen extends ConsumerWidget {
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      FontAwesomeIcons.boxOpen.data,
+                      AppIcons.box,
                       size: context.getRSize(48),
                       color: primary.withValues(alpha: 0.6),
                     ),
@@ -138,7 +138,7 @@ class ReceiveCartScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.trash.data,
+                      AppIcons.delete,
                       color: t.colorScheme.onError,
                       size: context.getRSize(20),
                     ),

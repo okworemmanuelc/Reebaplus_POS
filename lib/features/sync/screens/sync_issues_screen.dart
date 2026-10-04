@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -420,7 +420,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.cloudArrowDown.data,
+                AppIcons.download,
                 size: 16,
                 color: t.colorScheme.primary,
               ),
@@ -548,14 +548,14 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
         children: [
           _healthRow(
             t,
-            FontAwesomeIcons.idBadge.data,
+            AppIcons.idBadge,
             'Local businessId',
             businessId?.toString() ?? '—',
           ),
           const SizedBox(height: 10),
           _healthRow(
             t,
-            FontAwesomeIcons.userCheck.data,
+            AppIcons.userVerified,
             'Cloud profile',
             profileText,
             valueColor: profileColor,
@@ -563,7 +563,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           const SizedBox(height: 10),
           _healthRow(
             t,
-            FontAwesomeIcons.key.data,
+            AppIcons.key,
             'JWT claim',
             claimText,
             valueColor: claimColor,
@@ -571,14 +571,14 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           const SizedBox(height: 10),
           _healthRow(
             t,
-            FontAwesomeIcons.clockRotateLeft.data,
+            AppIcons.history,
             'Pending in queue',
             pending.toString(),
           ),
           const SizedBox(height: 10),
           _healthRow(
             t,
-            FontAwesomeIcons.triangleExclamation.data,
+            AppIcons.warning,
             'Failed in queue',
             failed.toString(),
             valueColor: failed == 0 ? null : t.colorScheme.error,
@@ -586,7 +586,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           const SizedBox(height: 10),
           _healthRow(
             t,
-            FontAwesomeIcons.ghost.data,
+            AppIcons.ghost,
             'Orphaned (auto-archived)',
             orphaned.toString(),
             valueColor: orphaned == 0 ? null : t.colorScheme.error,
@@ -1188,7 +1188,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
               child: Row(
                 children: [
                   Icon(
-                    FontAwesomeIcons.tableCells.data,
+                    AppIcons.table,
                     size: 14,
                     color: t.colorScheme.primary,
                   ),

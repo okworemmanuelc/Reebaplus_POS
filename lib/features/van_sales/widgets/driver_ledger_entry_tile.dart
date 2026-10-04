@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -59,20 +59,20 @@ class DriverLedgerEntryTile extends StatelessWidget {
     switch (entry.type) {
       case kDriverLedgerTypeLoad:
       case kDriverLedgerTypeRestock:
-        return FontAwesomeIcons.boxesPacking.data;
+        return AppIcons.stockAdjustment;
       case kDriverLedgerTypeReturnGood:
-        return FontAwesomeIcons.arrowRotateLeft.data;
+        return AppIcons.undo;
       case kDriverLedgerTypePaymentCash:
       case kDriverLedgerTypePaymentTransfer:
-        return FontAwesomeIcons.moneyBillTransfer.data;
+        return AppIcons.transfer;
       case kDriverLedgerTypeShortageWriteoff:
-        return FontAwesomeIcons.magnifyingGlassMinus.data;
+        return AppIcons.zoomOut;
       case kDriverLedgerTypeDamageWriteoff:
-        return FontAwesomeIcons.wineGlassEmpty.data;
+        return AppIcons.wineBottle;
       case kDriverLedgerTypeRestatement:
-        return FontAwesomeIcons.penToSquare.data;
+        return AppIcons.edit;
       default:
-        return FontAwesomeIcons.rotateLeft.data;
+        return AppIcons.refresh;
     }
   }
 

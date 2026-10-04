@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -182,7 +182,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
           child: Row(
             children: [
               Icon(
-                FontAwesomeIcons.store.data,
+                AppIcons.store,
                 size: context.getRSize(14),
                 color: _subtext,
               ),
@@ -242,7 +242,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
                 hintText: 'Select a store',
                 value: _sourceStore,
                 prefixIcon: Icon(
-                  FontAwesomeIcons.store.data,
+                  AppIcons.store,
                   size: 14,
                   color: _subtext,
                 ),
@@ -273,7 +273,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
                 hintText: 'Select a store',
                 value: _destStore,
                 prefixIcon: Icon(
-                  FontAwesomeIcons.store.data,
+                  AppIcons.store,
                   size: 14,
                   color: _subtext,
                 ),
@@ -325,7 +325,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
                   labelText: 'Product',
                   onFieldSubmitted: (_) => onEditingComplete(),
                   prefixIcon: Icon(
-                    FontAwesomeIcons.boxesStacked.data,
+                    AppIcons.inventory,
                     size: 14,
                     color: _subtext,
                   ),
@@ -360,7 +360,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
 
             AppButton(
               text: _submitting ? 'Sending…' : 'Send Request',
-              icon: FontAwesomeIcons.paperPlane.data,
+              icon: AppIcons.send,
               onPressed: _submitting ? null : _submit,
               isFullWidth: true,
             ),

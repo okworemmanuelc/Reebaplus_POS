@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
@@ -401,7 +401,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                     : 'Who is taking it out?',
                 value: _driver,
                 prefixIcon: Icon(
-                  FontAwesomeIcons.userTie.data,
+                  AppIcons.managerRole,
                   size: 14,
                   color: _subtext,
                 ),
@@ -418,7 +418,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                     'out of?',
                 value: _sourceStore,
                 prefixIcon: Icon(
-                  FontAwesomeIcons.warehouse.data,
+                  AppIcons.warehouse,
                   size: 14,
                   color: _subtext,
                 ),
@@ -462,7 +462,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                   labelText: 'Add a ${lex.itemLower}',
                   onFieldSubmitted: (_) => onEditingComplete(),
                   prefixIcon: Icon(
-                    FontAwesomeIcons.boxesStacked.data,
+                    AppIcons.inventory,
                     size: 14,
                     color: _subtext,
                   ),
@@ -514,7 +514,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                   : _isRestock
                   ? 'Send Restock'
                   : 'Dispatch Load',
-              icon: FontAwesomeIcons.truckFast.data,
+              icon: AppIcons.vanDelivery,
               onPressed: _submitting ? null : _dispatch,
               isFullWidth: true,
             ),
@@ -551,7 +551,7 @@ class _FixedTripCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.userTie.data,
+                AppIcons.managerRole,
                 size: context.getRSize(12),
                 color: subtext,
               ),
@@ -570,7 +570,7 @@ class _FixedTripCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.warehouse.data,
+                AppIcons.warehouse,
                 size: context.getRSize(12),
                 color: subtext,
               ),
@@ -641,7 +641,7 @@ class _LineCard extends StatelessWidget {
               IconButton(
                 onPressed: onRemove,
                 icon: Icon(
-                  FontAwesomeIcons.xmark.data,
+                  AppIcons.close,
                   size: context.getRSize(14),
                 ),
                 tooltip: 'Remove',
@@ -706,7 +706,7 @@ class _LineCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.triangleExclamation.data,
+                  AppIcons.warning,
                   size: context.getRSize(12),
                   color: semantic.warning,
                 ),

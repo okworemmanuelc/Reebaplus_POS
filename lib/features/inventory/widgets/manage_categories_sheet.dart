@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -131,14 +131,14 @@ class _CategoryRow extends ConsumerWidget {
             ),
           ),
           _RowAction(
-            icon: FontAwesomeIcons.penToSquare.data,
+            icon: AppIcons.edit,
             tooltip: 'Rename',
             color: theme.colorScheme.primary,
             onTap: () => _rename(context, ref, category),
           ),
           SizedBox(width: context.getRSize(4)),
           _RowAction(
-            icon: FontAwesomeIcons.trashCan.data,
+            icon: AppIcons.delete,
             tooltip: 'Delete',
             color: theme.colorScheme.error,
             onTap: () => _confirmDelete(context, ref, category),

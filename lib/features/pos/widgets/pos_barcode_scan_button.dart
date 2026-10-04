@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -102,7 +102,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     // is a bottom-nav tab root whose visible bar already lifts the FAB clear of
     // the system nav (see AppFAB).
     return AppFAB(
-      icon: FontAwesomeIcons.barcode.data,
+      icon: AppIcons.barcode,
       tooltip: 'Scan barcode',
       onPressed: _scan,
       reserveBottomInset: false,

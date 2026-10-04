@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// What a permitted person chose to do with an unknown scanned barcode (#321).
@@ -113,7 +113,7 @@ class ScanUnknownChoiceSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: Icon(
-                    FontAwesomeIcons.barcode.data,
+                    AppIcons.barcode,
                     size: context.getRSize(20),
                     color: primary,
                   ),
@@ -173,7 +173,7 @@ class ScanUnknownChoiceSheet extends StatelessWidget {
             if (canAdd) ...[
               _ScanUnknownOption(
                 key: kScanUnknownAddNewKey,
-                icon: FontAwesomeIcons.squarePlus.data,
+                icon: AppIcons.addSquare,
                 title: 'Add as new product',
                 subtitle: 'Create a product with this barcode',
                 onTap: () => Navigator.pop(context, ScanUnknownChoice.addNew),
@@ -183,7 +183,7 @@ class ScanUnknownChoiceSheet extends StatelessWidget {
             if (canLink)
               _ScanUnknownOption(
                 key: kScanUnknownLinkKey,
-                icon: FontAwesomeIcons.link.data,
+                icon: AppIcons.link,
                 title: 'Link to an existing product',
                 subtitle: 'Save this barcode on a product you already have',
                 onTap: () =>
@@ -255,7 +255,7 @@ class _ScanUnknownOption extends StatelessWidget {
                 ),
               ),
               Icon(
-                FontAwesomeIcons.chevronRight.data,
+                AppIcons.chevronRight,
                 size: context.getRSize(13),
                 color: text.withValues(alpha: 0.4),
               ),

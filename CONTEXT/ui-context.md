@@ -321,7 +321,7 @@ All shared components live in `lib/shared/widgets/` (and
 ### `AppDropdown` (`app_dropdown.dart`)
 
 Same shape language as `AppInput` — radius `AppRadius.md`, filled, label
-above. Chevron: `FontAwesomeIcons.chevronDown`.
+above. Chevron: `AppIcons.chevronDown`.
 
 ### `AppFAB` (`lib/core/widgets/app_fab.dart`)
 
@@ -472,11 +472,15 @@ handles insets. See `CLAUDE.md` for the full platform-specific rule.
 
 ## Icon library
 
-| Library | Import | When to use |
-|---|---|---|
-| `font_awesome_flutter` | `FontAwesomeIcons.*` | **Default for all UI icons** — nav items, buttons, chevrons, status icons, action icons |
-| Material `Icons` | `Icons.*` | Only for system icons where no FontAwesome equivalent is wired up |
-| `cupertino_icons` | — | Bundled dependency only; not used directly in app UI |
+All UI icons are unified under `AppIcons` (`lib/core/theme/app_icons.dart`), backed by **Material Symbols Outlined (w400)** via `package:material_symbols_icons`.
 
-Always choose `FontAwesomeIcons` first. Fall back to `Icons` only when
-necessary, and note the fallback in a comment.
+Widgets must **never** reference an icon set package or icon class directly. Always resolve through `AppIcons`:
+
+| Access | Pattern | When to use |
+|---|---|---|
+| `AppIcons.<name>` | `Icon(AppIcons.<name>)` or `AppIcon(AppIcons.<name>)` | Default for all UI icons (nav items, buttons, chevrons, status, actions) |
+| `AppIcon(icon, filled: true)` | `AppIcon(AppIcons.<name>, filled: true)` | When a filled symbol variant is needed (e.g., active navigation states) |
+
+### Exceptions and compatibility:
+- **Google Brand Logo**: `AppIcons.googleBrand` holds a direct `IconData(0xf1a0, fontFamily: 'FontAwesomeBrands', fontPackage: 'font_awesome_flutter')` constant until replaced by an SVG asset in Wave 2 (TODO #346).
+- **Saved Codepoints**: Legacy FontAwesome codepoints persisted in the local SQLite database or cart lines (e.g. `kStoredIconBeerMug = 0xf0fc`, `kStoredIconBox = 0xf466`, `kStoredIconBolt = 0xf0e7`, `kStoredIconWineBottle = 0xf72f`) are translated on read to the corresponding `AppIcons` constant via `productIconFromCodePoint` (`lib/shared/utils/product_icon_helper.dart`).

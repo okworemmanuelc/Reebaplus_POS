@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -30,35 +30,35 @@ class _UserTipsModalState extends State<UserTipsModal> {
       'title': 'Quick Sale ⚡',
       'description':
           'Need to sell something not in your inventory? Use the Quick Sale button on the POS screen to manually enter an item name and price.',
-      'icon': FontAwesomeIcons.bolt,
+      'icon': AppIcons.quickSale,
       'color': blueMain,
     },
     {
       'title': 'Pricing Tiers 🏷️',
       'description':
           'Easily switch between Retail, Bulk, and Distributor prices using the dropdown at the top of the POS screen. Prices update automatically!',
-      'icon': FontAwesomeIcons.tag,
+      'icon': AppIcons.tag,
       'color': success,
     },
     {
       'title': 'Crate Management 🍺',
       'description':
           'Track empty crates returned by customers. Total crate availability is shown in the Inventory tab to help you manage supplier returns.',
-      'icon': FontAwesomeIcons.beerMugEmpty,
+      'icon': AppIcons.beerMug,
       'color': const Color(0xFFF59E0B),
     },
     {
       'title': 'Theme Toggle 🌓',
       'description':
           'Working late? Switch to Dark Mode from the Sidebar or sync with your system theme for a more comfortable experience.',
-      'icon': FontAwesomeIcons.moon,
+      'icon': AppIcons.darkMode,
       'color': const Color(0xFF6366F1),
     },
     {
       'title': 'Low Stock Alerts ⚠️',
       'description':
           'Keep an eye on the Notification Bell! It will alert you when products drop below their threshold so you never run out of stock.',
-      'icon': FontAwesomeIcons.triangleExclamation,
+      'icon': AppIcons.warning,
       'color': danger,
     },
   ];

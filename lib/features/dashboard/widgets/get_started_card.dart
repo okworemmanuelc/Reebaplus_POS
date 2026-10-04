@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -65,7 +65,7 @@ class GetStartedCard extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.rocket.data,
+                      AppIcons.rocket,
                       color: primary,
                       size: context.getRSize(18),
                     ),
@@ -102,7 +102,7 @@ class GetStartedCard extends ConsumerWidget {
                           .read(getStartedChecklistDismissedProvider.notifier)
                           .dismiss(),
                       icon: Icon(
-                        FontAwesomeIcons.xmark.data,
+                        AppIcons.close,
                         color: subtext,
                         size: context.getRSize(16),
                       ),
@@ -132,13 +132,13 @@ class GetStartedCard extends ConsumerWidget {
     final IconData iconData;
     final Color iconColor;
     if (step.done) {
-      iconData = FontAwesomeIcons.circleCheck.data;
+      iconData = AppIcons.checkCircle;
       iconColor = success;
     } else if (step.locked) {
-      iconData = FontAwesomeIcons.lock.data;
+      iconData = AppIcons.lock;
       iconColor = subtext.withValues(alpha: 0.35);
     } else {
-      iconData = FontAwesomeIcons.circle.data;
+      iconData = AppIcons.circle;
       iconColor = subtext.withValues(alpha: 0.5);
     }
 
@@ -183,7 +183,7 @@ class GetStartedCard extends ConsumerWidget {
           ),
           if (!step.done && !step.locked)
             Icon(
-              FontAwesomeIcons.chevronRight.data,
+              AppIcons.chevronRight,
               color: subtext,
               size: context.getRSize(14),
             ),

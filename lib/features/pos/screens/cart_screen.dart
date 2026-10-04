@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
@@ -528,7 +528,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                 variant: AppButtonVariant.secondary,
                                 isFullWidth: false,
                                 height: modalCtx.getRSize(36),
-                                icon: FontAwesomeIcons.userPlus.data,
+                                icon: AppIcons.userAdd,
                                 onPressed: () {
                                   Navigator.pop(modalCtx);
                                   AddCustomerSheet.show(
@@ -568,7 +568,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       child: Row(
                         children: [
                           Icon(
-                            FontAwesomeIcons.store.data,
+                            AppIcons.store,
                             size: modalCtx.getRSize(12),
                             color: _subtext,
                           ),
@@ -627,7 +627,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       },
                       hintText: 'Search customers...',
                       prefixIcon: Icon(
-                        FontAwesomeIcons.magnifyingGlass.data,
+                        AppIcons.search,
                         size: modalCtx.getRSize(16),
                         color: _subtext,
                       ),
@@ -719,8 +719,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
               ),
               child: Icon(
                 customer == null
-                    ? FontAwesomeIcons.userTag.data
-                    : FontAwesomeIcons.user.data,
+                    ? AppIcons.customerRole
+                    : AppIcons.user,
                 size: modalCtx.getRSize(16),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -743,7 +743,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     Row(
                       children: [
                         Icon(
-                          FontAwesomeIcons.nairaSign.data,
+                          AppIcons.naira,
                           size: modalCtx.getRSize(10),
                           color: customerCreditBalance == 0
                               ? success
@@ -767,7 +767,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
             ),
             if (isSelected)
               Icon(
-                FontAwesomeIcons.circleCheck.data,
+                AppIcons.checkCircle,
                 color: Theme.of(context).colorScheme.primary,
                 size: modalCtx.getRSize(18),
               ),
@@ -1037,7 +1037,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
           elevation: 0,
           leading: context.isDesktop ? null : const MenuButton(),
           title: AppBarHeader(
-            icon: FontAwesomeIcons.cartShopping.data,
+            icon: AppIcons.cart,
             title: 'Cart',
             subtitle: ref.watch(activeStoreLabelProvider),
           ),
@@ -1088,7 +1088,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         elevation: 0,
         leading: context.isDesktop ? null : const MenuButton(),
         title: AppBarHeader(
-          icon: FontAwesomeIcons.cartShopping.data,
+          icon: AppIcons.cart,
           title: 'Cart',
           subtitle: ref.watch(activeStoreLabelProvider),
         ),
@@ -1120,7 +1120,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                 child: Row(
                   children: [
                     Icon(
-                      FontAwesomeIcons.trashCan.data,
+                      AppIcons.delete,
                       color: Theme.of(context).colorScheme.error,
                       size: context.getRSize(13),
                     ),
@@ -1174,8 +1174,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       ),
                       child: Icon(
                         _activeCustomer == null
-                            ? FontAwesomeIcons.userTag.data
-                            : FontAwesomeIcons.user.data,
+                            ? AppIcons.customerRole
+                            : AppIcons.user,
                         size: context.getRSize(16),
                         color: Theme.of(context).colorScheme.primary,
                       ),
@@ -1197,7 +1197,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                           Row(
                             children: [
                               Icon(
-                                FontAwesomeIcons.nairaSign.data,
+                                AppIcons.naira,
                                 size: context.getRSize(11),
                                 color: customerCreditBalance == 0
                                     ? success
@@ -1273,7 +1273,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               child: Row(
                                 children: [
                                   Icon(
-                                    FontAwesomeIcons.circleInfo.data,
+                                    AppIcons.infoCircle,
                                     size: context.getRSize(16),
                                     color: Theme.of(context).colorScheme.primary,
                                   ),
@@ -1289,7 +1289,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                   ),
                                   IconButton(
                                     icon: Icon(
-                                      FontAwesomeIcons.xmark.data,
+                                      AppIcons.close,
                                       size: context.getRSize(16),
                                       color: Theme.of(context).colorScheme.primary,
                                     ),
@@ -1372,14 +1372,14 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                         ),
                                         child: Icon(
                                           item['icon'] == null
-                                              ? FontAwesomeIcons.box.data
+                                              ? AppIcons.box
                                               : item['icon'] is IconData
                                               ? item['icon'] as IconData
                                               : item['icon'] is int
                                               ? productIconFromCodePoint(
                                                   item['icon'] as int,
                                                 )
-                                              : FontAwesomeIcons.box.data,
+                                              : AppIcons.box,
                                           color: c,
                                           size: context.getRSize(22),
                                         ),
@@ -1634,9 +1634,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                         ),
                                                   ),
                                                   child: Icon(
-                                                    FontAwesomeIcons
-                                                        .beerMugEmpty
-                                                        .data,
+                                                    AppIcons.beerMug,
                                                     size: context.getRSize(14),
                                                     color: Theme.of(
                                                       context,
@@ -1780,9 +1778,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                           child: AppButton(
                                             text: 'Save Cart',
                                             variant: AppButtonVariant.outline,
-                                            icon: FontAwesomeIcons
-                                                .floppyDisk
-                                                .data,
+                                            icon: AppIcons.save,
                                             onPressed: _saveCurrentCart,
                                           ),
                                         ),
@@ -1791,9 +1787,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                           child: AppButton(
                                             text: 'Recall',
                                             variant: AppButtonVariant.outline,
-                                            icon: FontAwesomeIcons
-                                                .clockRotateLeft
-                                                .data,
+                                            icon: AppIcons.history,
                                             onPressed: _viewSavedCarts,
                                           ),
                                         ),
@@ -1804,7 +1798,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                     AppButton(
                                       text: 'Proceed to Checkout',
                                       variant: AppButtonVariant.primary,
-                                      icon: FontAwesomeIcons.checkToSlot.data,
+                                      icon: AppIcons.voteCheck,
                                       onPressed: _goToCheckout,
                                     ),
                                   ],
@@ -1851,7 +1845,7 @@ class _EmptyCartMessage extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    FontAwesomeIcons.cartArrowDown.data,
+                    AppIcons.cartAdd,
                     size: context.getRSize(48),
                     color: t.dividerColor,
                   ),
@@ -1868,7 +1862,7 @@ class _EmptyCartMessage extends StatelessWidget {
                   AppButton(
                     text: 'Recall',
                     variant: AppButtonVariant.outline,
-                    icon: FontAwesomeIcons.clockRotateLeft.data,
+                    icon: AppIcons.history,
                     isFullWidth: false,
                     onPressed: onRecall,
                   ),
@@ -1914,7 +1908,7 @@ class _CrateValueMissingBanner extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            FontAwesomeIcons.triangleExclamation.data,
+            AppIcons.warning,
             size: context.getRSize(14),
             color: warning,
           ),

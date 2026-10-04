@@ -5,7 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -244,7 +244,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       iconTheme: IconThemeData(color: textCol),
       leading: context.isDesktop ? null : const MenuButton(),
       title: AppBarHeader(
-        icon: FontAwesomeIcons.receipt.data,
+        icon: AppIcons.receipt,
         title: 'Orders',
         subtitle: ref.watch(activeStoreLabelProvider),
       ),
@@ -267,17 +267,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           fontWeight: FontWeight.bold,
           fontSize: context.getRFontSize(14),
         ),
-        tabs: [
+        tabs: const [
           Tab(
-            icon: Icon(FontAwesomeIcons.boxOpen.data, size: 16),
+            icon: Icon(AppIcons.box, size: 16),
             text: 'Pending',
           ),
           Tab(
-            icon: Icon(FontAwesomeIcons.clipboardCheck.data, size: 16),
+            icon: Icon(AppIcons.auditCheck, size: 16),
             text: 'Completed',
           ),
           Tab(
-            icon: Icon(FontAwesomeIcons.ban.data, size: 16),
+            icon: Icon(AppIcons.block, size: 16),
             text: 'Cancelled',
           ),
         ],
@@ -338,7 +338,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           fontSize: context.getRFontSize(13),
         ),
         prefixIcon: Icon(
-          FontAwesomeIcons.magnifyingGlass.data,
+          AppIcons.search,
           size: context.getRSize(15),
           color: subtextCol,
         ),
@@ -349,7 +349,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   setState(() => _searchQuery = '');
                 },
                 child: Icon(
-                  FontAwesomeIcons.xmark.data,
+                  AppIcons.close,
                   size: context.getRSize(14),
                   color: subtextCol,
                 ),
@@ -408,7 +408,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           vertical: context.getRSize(10),
         ),
         prefixIcon: Icon(
-          FontAwesomeIcons.calendarDay.data,
+          AppIcons.calendar,
           size: context.getRSize(13),
           color: subtextCol,
         ),
@@ -651,12 +651,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       IconData icon;
       String text;
       if (status == 'completed') {
-        icon = FontAwesomeIcons.clipboardCheck.data;
+        icon = AppIcons.auditCheck;
         text = _searchQuery.isNotEmpty
             ? 'No completed orders match "$_searchQuery"'
             : 'No completed orders';
       } else {
-        icon = FontAwesomeIcons.ban.data;
+        icon = AppIcons.block;
         text = _searchQuery.isNotEmpty
             ? 'No cancelled orders match "$_searchQuery"'
             : 'No cancelled orders';
@@ -755,17 +755,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       IconData icon;
       String text;
       if (status == 'pending') {
-        icon = FontAwesomeIcons.boxOpen.data;
+        icon = AppIcons.box;
         text = _searchQuery.isNotEmpty
             ? 'No pending orders match "$_searchQuery"'
             : 'No pending orders';
       } else if (status == 'completed') {
-        icon = FontAwesomeIcons.clipboardCheck.data;
+        icon = AppIcons.auditCheck;
         text = _searchQuery.isNotEmpty
             ? 'No completed orders match "$_searchQuery"'
             : 'No completed orders';
       } else {
-        icon = FontAwesomeIcons.ban.data;
+        icon = AppIcons.block;
         text = _searchQuery.isNotEmpty
             ? 'No cancelled orders match "$_searchQuery"'
             : 'No cancelled orders';
@@ -985,7 +985,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 ),
                 AppButton(
                   text: 'Issue Refund',
-                  icon: FontAwesomeIcons.rotateLeft.data,
+                  icon: AppIcons.refresh,
                   variant: AppButtonVariant.danger,
                   size: AppButtonSize.small,
                   onPressed: reason.isEmpty
@@ -1163,7 +1163,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                         Expanded(
                           child: AppButton(
                             text: 'Print',
-                            icon: FontAwesomeIcons.print.data,
+                            icon: AppIcons.print,
                             onPressed: () {
                               setModalState(() {
                                 reprintDate = DateTime.now();
@@ -1184,7 +1184,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                         Expanded(
                           child: AppButton(
                             text: 'Share',
-                            icon: FontAwesomeIcons.shareNodes.data,
+                            icon: AppIcons.share,
                             variant: AppButtonVariant.secondary,
                             onPressed: () async {
                               setModalState(() {
@@ -1734,7 +1734,7 @@ class _OrderCard extends ConsumerWidget {
                                           ),
                                         ),
                                         child: Icon(
-                                          FontAwesomeIcons.user.data,
+                                          AppIcons.user,
                                           size: context.getRSize(15),
                                           color: primary,
                                         ),
@@ -1787,7 +1787,7 @@ class _OrderCard extends ConsumerWidget {
                                   children: [
                                     IconButton(
                                       icon: Icon(
-                                        FontAwesomeIcons.motorcycle.data,
+                                        AppIcons.driver,
                                         size: context.getRSize(18),
                                         color: primary,
                                       ),
@@ -1850,7 +1850,7 @@ class _OrderCard extends ConsumerWidget {
                                     Row(
                                       children: [
                                         Icon(
-                                          FontAwesomeIcons.user.data,
+                                          AppIcons.user,
                                           size: context.getRSize(9),
                                           color: subtextCol,
                                         ),
@@ -2037,7 +2037,7 @@ class _OrderCard extends ConsumerWidget {
                                 Row(
                                   children: [
                                     Icon(
-                                      FontAwesomeIcons.tag.data,
+                                      AppIcons.tag,
                                       size: context.getRSize(11),
                                       color: success,
                                     ),
@@ -2066,7 +2066,7 @@ class _OrderCard extends ConsumerWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Icon(
-                                      FontAwesomeIcons.circleInfo.data,
+                                      AppIcons.infoCircle,
                                       size: context.getRSize(11),
                                       color: subtextCol,
                                     ),
@@ -2111,7 +2111,7 @@ class _OrderCard extends ConsumerWidget {
                                   Expanded(
                                     child: AppButton(
                                       text: 'Refund',
-                                      icon: FontAwesomeIcons.rotateLeft.data,
+                                      icon: AppIcons.refresh,
                                       variant: AppButtonVariant.danger,
                                       size: AppButtonSize.xsmall,
                                       onPressed: onRefund,
@@ -2123,7 +2123,7 @@ class _OrderCard extends ConsumerWidget {
                                   Expanded(
                                     child: AppButton(
                                       text: 'Confirm',
-                                      icon: FontAwesomeIcons.truckFast.data,
+                                      icon: AppIcons.vanDelivery,
                                       size: AppButtonSize.xsmall,
                                       onPressed: onMarkAsDelivered,
                                     ),
@@ -2158,7 +2158,7 @@ class _StatusBadge extends StatelessWidget {
     switch (status) {
       case 'completed':
         color = success;
-        icon = FontAwesomeIcons.check.data;
+        icon = AppIcons.check;
         label = 'DONE';
         break;
       // LEGACY ROWS ONLY (#196): `refunded` is a retired status — refunds have
@@ -2168,12 +2168,12 @@ class _StatusBadge extends StatelessWidget {
       // badging one "CANCELLED" would misstate what happened to the money.
       case 'refunded':
         color = blueMain;
-        icon = FontAwesomeIcons.rotateLeft.data;
+        icon = AppIcons.refresh;
         label = 'REFUNDED';
         break;
       default:
         color = danger;
-        icon = FontAwesomeIcons.ban.data;
+        icon = AppIcons.block;
         label = 'CANCELLED';
     }
 
@@ -2258,7 +2258,7 @@ class _CreditDebtBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.wallet.data,
+            AppIcons.creditBalance,
             size: context.getRSize(10),
             color: danger,
           ),

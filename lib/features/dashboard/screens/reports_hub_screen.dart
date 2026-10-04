@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -77,7 +77,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Approvals',
           subtitle: 'Stock, quick sales & crate deposits',
-          icon: FontAwesomeIcons.clipboardList.data,
+          icon: AppIcons.clipboardList,
           color: warningColor,
           badgeCount: pendingApprovals,
           onTap: () => Navigator.push(
@@ -94,7 +94,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Daily Reconciliation',
           subtitle: 'Day · Week · Month · Year',
-          icon: FontAwesomeIcons.clipboardCheck.data,
+          icon: AppIcons.auditCheck,
           color: primaryColor,
           onTap: () => Navigator.push(
             context,
@@ -108,7 +108,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Crate Deposits',
           subtitle: 'Held · Refunded · Kept',
-          icon: FontAwesomeIcons.beerMugEmpty.data,
+          icon: AppIcons.beerMug,
           color: secondaryColor,
           onTap: () => Navigator.push(
             context,
@@ -125,7 +125,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Supplier Accounts',
           subtitle: 'Balances · Paid · Received',
-          icon: FontAwesomeIcons.buildingColumns.data,
+          icon: AppIcons.bank,
           color: infoColor,
           onTap: () => Navigator.push(
             context,
@@ -140,7 +140,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Profit Report',
           subtitle: 'Margins & COGS',
-          icon: FontAwesomeIcons.chartPie.data,
+          icon: AppIcons.chartPie,
           color: successColor,
           onTap: () => Navigator.push(
             context,
@@ -318,7 +318,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                       )
                     else
                       Icon(
-                        FontAwesomeIcons.chevronRight.data,
+                        AppIcons.chevronRight,
                         size: math.max(11.0, context.getRSize(12.0)),
                         color: theme.colorScheme.onSurfaceVariant
                             .withValues(alpha: 0.35),

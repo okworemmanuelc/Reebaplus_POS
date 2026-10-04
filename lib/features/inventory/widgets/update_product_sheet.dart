@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
@@ -784,7 +784,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.penToSquare.data,
+                      AppIcons.edit,
                       color: Theme.of(context).colorScheme.primary,
                       size: 18,
                     ),
@@ -825,7 +825,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                                       ),
                                     )
                                   : Icon(
-                                      FontAwesomeIcons.image.data,
+                                      AppIcons.image,
                                       color:
                                           Theme.of(context).colorScheme.primary,
                                       size: 18,

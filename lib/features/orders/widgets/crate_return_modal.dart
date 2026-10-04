@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -347,7 +347,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
             children: [
               chip(
                 'Credit',
-                FontAwesomeIcons.wallet.data,
+                AppIcons.creditBalance,
                 !_refundAsCash,
                 () => setState(() => _refundAsCash = false),
               ),
@@ -360,7 +360,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
                 SizedBox(width: context.getRSize(10)),
                 chip(
                   'Cash',
-                  FontAwesomeIcons.moneyBill.data,
+                  AppIcons.cash,
                   _refundAsCash,
                   () => setState(() => _refundAsCash = true),
                 ),
@@ -416,7 +416,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
             child: Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.boxOpen.data,
+                  AppIcons.box,
                   color: Colors.orange,
                   size: context.getRSize(18),
                 ),
@@ -498,7 +498,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
                   flex: 2,
                   child: AppButton(
                     text: _saving ? 'Saving...' : 'Confirm',
-                    icon: FontAwesomeIcons.check.data,
+                    icon: AppIcons.check,
                     variant: AppButtonVariant.primary,
                     isLoading: _saving,
                     onPressed: _saving ? null : _confirm,
@@ -549,7 +549,7 @@ class _ManufacturerReturnTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              FontAwesomeIcons.industry.data,
+              AppIcons.manufacturer,
               size: context.getRSize(16),
               color: const Color(0xFFF5A623),
             ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -73,7 +73,7 @@ class _NotificationSettingsTileState
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              FontAwesomeIcons.bullhorn.data,
+              AppIcons.announcement,
               color: primary,
               size: context.getRSize(16),
             ),
@@ -139,7 +139,7 @@ class _NotificationSettingsTileState
             Theme.of(context).extension<AppSemanticColors>()?.success ??
                 Theme.of(context).colorScheme.primary;
         return Icon(
-          FontAwesomeIcons.circleCheck.data,
+          AppIcons.checkCircle,
           color: success,
           size: context.getRSize(18),
         );

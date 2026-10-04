@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
@@ -299,7 +299,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  FontAwesomeIcons.industry.data,
+                  AppIcons.manufacturer,
                   color: theme.colorScheme.secondary,
                   size: context.getRSize(16),
                 ),
@@ -390,7 +390,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                   AppButton(
                     key: const ValueKey(kManufacturerCountButtonKey),
                     text: 'Count',
-                    icon: FontAwesomeIcons.clipboardCheck.data,
+                    icon: AppIcons.auditCheck,
                     variant: AppButtonVariant.primary,
                     isFullWidth: false,
                     onPressed: () => CountManufacturerEmptiesSheet.show(
@@ -402,7 +402,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                   AppButton(
                     key: const ValueKey(kManufacturerRecordDamagedButtonKey),
                     text: 'Record damaged',
-                    icon: FontAwesomeIcons.triangleExclamation.data,
+                    icon: AppIcons.warning,
                     variant: AppButtonVariant.outline,
                     isFullWidth: false,
                     onPressed: () => RecordDamagedCratesSheet.show(
@@ -414,7 +414,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                   AppButton(
                     key: const ValueKey(kBuyCratesButtonKey),
                     text: 'Buy crates',
-                    icon: FontAwesomeIcons.cartPlus.data,
+                    icon: AppIcons.cartAdd,
                     variant: AppButtonVariant.outline,
                     isFullWidth: false,
                     onPressed: () =>
@@ -435,7 +435,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           title: 'In warehouse',
           countText: '${pos.inWarehouse.count} crates',
           moneyText: formatCurrency(pos.inWarehouse.moneyKobo / 100),
-          icon: FontAwesomeIcons.warehouse.data,
+          icon: AppIcons.warehouse,
           iconColor: theme.colorScheme.primary,
         ),
       ),
@@ -447,7 +447,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           title: 'Full crates in stock',
           countText: '${pos.fullCratesInStock.count} crates',
           moneyText: formatCurrency(pos.fullCratesInStock.moneyKobo / 100),
-          icon: FontAwesomeIcons.boxesStacked.data,
+          icon: AppIcons.inventory,
           iconColor: AppColors.success,
         ),
       ),
@@ -461,7 +461,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           moneyText: canSeeCustomerDepositMoney
               ? formatCurrency(pos.withCustomersOnDeposit.moneyKobo / 100)
               : null,
-          icon: FontAwesomeIcons.handHoldingDollar.data,
+          icon: AppIcons.settlement,
           iconColor: Colors.teal,
         ),
       ),
@@ -473,7 +473,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           title: 'With customers no deposit',
           countText: '${pos.withCustomersNoDeposit.count} crates',
           moneyText: formatCurrency(pos.withCustomersNoDeposit.moneyKobo / 100),
-          icon: FontAwesomeIcons.users.data,
+          icon: AppIcons.customers,
           iconColor: Colors.deepPurple,
         ),
       ),
@@ -487,7 +487,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           moneyText: pos.short.count > 0
               ? formatCurrency(pos.short.moneyKobo / 100)
               : null,
-          icon: FontAwesomeIcons.triangleExclamation.data,
+          icon: AppIcons.warning,
           iconColor: AppColors.warning,
           countColor: pos.short.count > 0 ? AppColors.warning : null,
           actions: [
@@ -495,7 +495,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
               AppButton(
                 key: const ValueKey(kManufacturerWriteOffButtonKey),
                 text: 'Write off',
-                icon: FontAwesomeIcons.circleMinus.data,
+                icon: AppIcons.removeCircle,
                 variant: AppButtonVariant.danger,
                 size: AppButtonSize.small,
                 isFullWidth: false,
@@ -508,7 +508,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
               AppButton(
                 key: const ValueKey(kManufacturerReverseWriteOffButtonKey),
                 text: 'Reverse write-off',
-                icon: FontAwesomeIcons.rotateLeft.data,
+                icon: AppIcons.refresh,
                 variant: AppButtonVariant.outline,
                 size: AppButtonSize.small,
                 isFullWidth: false,
@@ -528,7 +528,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           title: 'Damaged',
           countText: '${pos.damaged.count} crates',
           moneyText: formatCurrency(pos.damaged.moneyKobo / 100),
-          icon: FontAwesomeIcons.heartCrack.data,
+          icon: AppIcons.damaged,
           iconColor: theme.colorScheme.error,
           countColor: pos.damaged.count > 0 ? theme.colorScheme.error : null,
         ),
@@ -690,7 +690,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    FontAwesomeIcons.wineBottle.data,
+                    AppIcons.wineBottle,
                     size: context.getRSize(40),
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
                   ),
@@ -745,7 +745,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.wineBottle.data,
+                      AppIcons.wineBottle,
                       color: theme.colorScheme.primary,
                       size: context.getRSize(14),
                     ),
@@ -815,7 +815,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    FontAwesomeIcons.clockRotateLeft.data,
+                    AppIcons.history,
                     size: context.getRSize(40),
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
                   ),
@@ -885,8 +885,8 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                     ),
                     child: Icon(
                       isPositive
-                          ? FontAwesomeIcons.arrowDown.data
-                          : FontAwesomeIcons.arrowUp.data,
+                          ? AppIcons.arrowDown
+                          : AppIcons.arrowUp,
                       color: isPositive ? AppColors.success : theme.colorScheme.error,
                       size: context.getRSize(14),
                     ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -42,10 +42,10 @@ class DriverRunScreen extends ConsumerWidget {
     // Body guard (hard rule #6): a live revocation while this screen is open
     // must empty it, not just hide the way in.
     if (!Gates.vanSell.allows(ref)) {
-      return GlassyScaffold(
+      return const GlassyScaffold(
         title: 'My run',
         body: _Empty(
-          icon: FontAwesomeIcons.lock.data,
+          icon: AppIcons.lock,
           title: 'No access',
           message: 'You no longer have access to van sales.',
         ),
@@ -100,8 +100,8 @@ class DriverRunScreen extends ConsumerWidget {
           ),
           SizedBox(height: context.getRSize(12)),
           if (sales.isEmpty)
-            _Empty(
-              icon: FontAwesomeIcons.receipt.data,
+            const _Empty(
+              icon: AppIcons.receipt,
               title: 'No sales yet',
               message: 'Every sale you ring on this run will show here.',
             )

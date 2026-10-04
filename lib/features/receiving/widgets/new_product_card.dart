@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class NewProductCard extends StatelessWidget {
@@ -41,7 +41,7 @@ class NewProductCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  FontAwesomeIcons.plus.data,
+                  AppIcons.add,
                   color: Theme.of(context).colorScheme.primary,
                   size: context.getRSize(24),
                 ),

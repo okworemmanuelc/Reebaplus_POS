@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -51,10 +51,10 @@ class VanSalesHubScreen extends ConsumerWidget {
     // Body-guard (layer 2, hard rule #6): the drawer already hides the entry,
     // but a live revocation while the screen is open must empty it too.
     if (!Gates.vanManage.allows(ref)) {
-      return GlassyScaffold(
+      return const GlassyScaffold(
         title: 'Van Sales',
         body: _EmptyState(
-          icon: FontAwesomeIcons.lock.data,
+          icon: AppIcons.lock,
           title: 'No access',
           message: 'You no longer have access to Van Sales.',
         ),
@@ -68,8 +68,8 @@ class VanSalesHubScreen extends ConsumerWidget {
           : '${vans.length} ${vans.length == 1 ? 'van' : 'vans'} • '
                 '${openTrips.length} out',
       body: vans.isEmpty
-          ? _EmptyState(
-              icon: FontAwesomeIcons.truck.data,
+          ? const _EmptyState(
+              icon: AppIcons.supplier,
               title: 'No vans yet',
               message:
                   'Add a van in Settings → Stores, then load it for a driver '
@@ -225,7 +225,7 @@ class _DriversLink extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.userTie.data,
+                AppIcons.managerRole,
                 color: t.colorScheme.primary,
                 size: context.getRSize(16),
               ),
@@ -256,7 +256,7 @@ class _DriversLink extends StatelessWidget {
               ),
             ),
             Icon(
-              FontAwesomeIcons.chevronRight.data,
+              AppIcons.chevronRight,
               size: context.getRSize(13),
               color: subtext,
             ),
@@ -331,7 +331,7 @@ class _VanCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.truck.data,
+                AppIcons.supplier,
                 size: context.getRSize(16),
                 color: isOut ? semantic.warning : subtext,
               ),
@@ -350,19 +350,19 @@ class _VanCard extends StatelessWidget {
           SizedBox(height: context.getRSize(12)),
           if (isOut) ...[
             _DetailRow(
-              icon: FontAwesomeIcons.userTie.data,
+              icon: AppIcons.managerRole,
               label: driverName ?? 'Driver',
             ),
             SizedBox(height: context.getRSize(6)),
             _DetailRow(
-              icon: FontAwesomeIcons.calendarDay.data,
+              icon: AppIcons.calendar,
               label: 'Out since ${_formatDate(trip!.openedAt)}',
             ),
             SizedBox(height: context.getRSize(6)),
             // Negative = the driver owes. Shown as a plain "owes ₦X" rather
             // than a signed figure — a shop owner reads a debt, not a sign.
             _DetailRow(
-              icon: FontAwesomeIcons.scaleBalanced.data,
+              icon: AppIcons.balance,
               label: (driverBalanceKobo ?? 0) < 0
                   ? 'Owes ${formatCurrency(-(driverBalanceKobo ?? 0) / 100)}'
                   : (driverBalanceKobo ?? 0) == 0
@@ -381,7 +381,7 @@ class _VanCard extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: onRestock,
                     icon: Icon(
-                      FontAwesomeIcons.boxesPacking.data,
+                      AppIcons.stockAdjustment,
                       size: context.getRSize(14),
                     ),
                     label: const Text('Restock'),
@@ -392,7 +392,7 @@ class _VanCard extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: onReturn,
                     icon: Icon(
-                      FontAwesomeIcons.arrowRotateLeft.data,
+                      AppIcons.undo,
                       size: context.getRSize(14),
                     ),
                     label: const Text('Returns'),
@@ -409,7 +409,7 @@ class _VanCard extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: onPayments,
                 icon: Icon(
-                  FontAwesomeIcons.moneyBillTransfer.data,
+                  AppIcons.transfer,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Driver payments'),
@@ -423,7 +423,7 @@ class _VanCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: onReconcile,
                 icon: Icon(
-                  FontAwesomeIcons.flagCheckered.data,
+                  AppIcons.goal,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Reconcile & close'),
@@ -435,7 +435,7 @@ class _VanCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    FontAwesomeIcons.triangleExclamation.data,
+                    AppIcons.warning,
                     size: context.getRSize(12),
                     color: semantic.warning,
                   ),
@@ -460,7 +460,7 @@ class _VanCard extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: onLoad,
                 icon: Icon(
-                  FontAwesomeIcons.boxesPacking.data,
+                  AppIcons.stockAdjustment,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Load Van'),

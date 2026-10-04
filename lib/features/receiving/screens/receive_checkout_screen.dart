@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -512,7 +512,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                     value: _flowStoreId,
                     hintText: 'Select store',
                     prefixIcon: Icon(
-                      FontAwesomeIcons.store.data,
+                      AppIcons.store,
                       size: context.getRSize(16),
                       color: subtext,
                     ),
@@ -532,7 +532,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                   ),
                   SizedBox(height: context.getRSize(8)),
                   _TapField(
-                    icon: FontAwesomeIcons.truckField.data,
+                    icon: AppIcons.supplierDelivery,
                     text: _selectedSupplier?.name ?? 'Select supplier',
                     isPlaceholder: _selectedSupplier == null,
                     onTap: _pickSupplier,
@@ -560,7 +560,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                   _fieldLabel('DATE RECEIVED', subtext),
                   SizedBox(height: context.getRSize(8)),
                   _TapField(
-                    icon: FontAwesomeIcons.calendar.data,
+                    icon: AppIcons.calendar,
                     text: _formatDate(_dateReceived),
                     isPlaceholder: false,
                     onTap: _pickDate,
@@ -651,7 +651,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                     SizedBox(height: context.getRSize(24)),
                     Row(
                       children: [
-                        Icon(FontAwesomeIcons.wineBottle.data,
+                        Icon(AppIcons.wineBottle,
                             size: context.getRSize(14), color: subtext),
                         SizedBox(width: context.getRSize(8)),
                         _fieldLabel('CRATES WITH THIS DELIVERY', subtext),
@@ -883,12 +883,12 @@ class _TapField extends StatelessWidget {
                   customBorder: const CircleBorder(),
                   child: Padding(
                     padding: EdgeInsets.all(context.getRSize(4)),
-                    child: Icon(FontAwesomeIcons.xmark.data,
+                    child: Icon(AppIcons.close,
                         size: context.getRSize(14), color: subtext),
                   ),
                 )
               else
-                Icon(FontAwesomeIcons.chevronDown.data,
+                Icon(AppIcons.chevronDown,
                     size: context.getRSize(14), color: subtext),
             ],
           ),
@@ -960,7 +960,7 @@ class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
               autofocus: true,
               onChanged: (v) => setState(() => _query = v),
               hintText: 'Search suppliers...',
-              prefixIcon: Icon(FontAwesomeIcons.magnifyingGlass.data,
+              prefixIcon: Icon(AppIcons.search,
                   size: context.getRSize(16)),
             ),
             if (Gates.manageSuppliers.allows(ref)) ...[
@@ -969,7 +969,7 @@ class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
                 text: 'Add Supplier',
                 variant: AppButtonVariant.outline,
                 size: AppButtonSize.small,
-                icon: FontAwesomeIcons.plus.data,
+                icon: AppIcons.add,
                 onPressed: () async {
                   final navigator = Navigator.of(context);
                   final created = await SupplierFormSheet.show(context);

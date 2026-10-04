@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/utils/factory_barcode.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -32,7 +32,7 @@ class CatalogueReportLink extends StatelessWidget {
         child: TextButton.icon(
           onPressed: () => _open(context, code),
           icon: Icon(
-            FontAwesomeIcons.flag.data,
+            AppIcons.flag,
             size: context.getRSize(12),
             color: color,
           ),

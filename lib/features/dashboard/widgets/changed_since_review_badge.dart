@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
@@ -39,7 +39,7 @@ class ChangedSinceReviewBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(FontAwesomeIcons.arrowsRotate.data, size: 10, color: warn),
+          Icon(AppIcons.sync, size: 10, color: warn),
           SizedBox(width: context.getRSize(5)),
           // Flexible so a long label + amount ("Net cash movement − ₦2,400,000")
           // shrinks inside its line instead of overflowing it on a narrow phone.

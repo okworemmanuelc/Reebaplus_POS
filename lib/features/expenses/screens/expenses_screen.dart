@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -290,7 +290,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           ? AppFAB(
               heroTag: 'expenses_fab',
               onPressed: () => AddExpenseScreen.show(context),
-              icon: FontAwesomeIcons.plus.data,
+              icon: AppIcons.add,
               label: 'Add Expense',
             )
           : null,
@@ -368,7 +368,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               ],
             ),
             child: Icon(
-              FontAwesomeIcons.fileInvoiceDollar.data,
+              AppIcons.expenses,
               color: Colors.white,
               size: context.getRSize(16),
             ),
@@ -428,13 +428,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           fontWeight: FontWeight.bold,
           fontSize: context.getRFontSize(14),
         ),
-        tabs: [
+        tabs: const [
           Tab(
-            icon: Icon(FontAwesomeIcons.list.data, size: 16),
+            icon: Icon(AppIcons.list, size: 16),
             text: 'Expenses',
           ),
           Tab(
-            icon: Icon(FontAwesomeIcons.chartPie.data, size: 16),
+            icon: Icon(AppIcons.chartPie, size: 16),
             text: 'Stats',
           ),
         ],
@@ -498,7 +498,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              FontAwesomeIcons.store.data,
+                              AppIcons.store,
                               size: context.getRSize(10),
                               color: _subtext,
                             ),
@@ -624,7 +624,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           child: Row(
             children: [
               Icon(
-                FontAwesomeIcons.bullseye.data,
+                AppIcons.target,
                 size: context.getRSize(12),
                 color: _subtext,
               ),
@@ -647,7 +647,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
         if (isCeo)
           AppButton(
             text: 'Set budget',
-            icon: FontAwesomeIcons.bullseye.data,
+            icon: AppIcons.target,
             variant: AppButtonVariant.outline,
             size: AppButtonSize.xsmall,
             isFullWidth: false,
@@ -677,7 +677,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.bullseye.data,
+                  AppIcons.target,
                   size: context.getRSize(12),
                   color: isOver ? danger : success,
                 ),
@@ -710,7 +710,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                     child: Padding(
                       padding: EdgeInsets.all(context.getRSize(4)),
                       child: Icon(
-                        FontAwesomeIcons.penToSquare.data,
+                        AppIcons.edit,
                         size: context.getRSize(11),
                         color: _subtext,
                       ),
@@ -994,7 +994,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            FontAwesomeIcons.receipt.data,
+            AppIcons.receipt,
             size: context.getRSize(48),
             color: _border,
           ),
@@ -1056,7 +1056,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.clockRotateLeft.data,
+                AppIcons.history,
                 size: context.getRSize(13),
                 color: amberPrimaryDark,
               ),
@@ -1146,7 +1146,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               Expanded(
                 child: AppButton(
                   text: 'Reject',
-                  icon: FontAwesomeIcons.xmark.data,
+                  icon: AppIcons.close,
                   variant: AppButtonVariant.danger,
                   size: AppButtonSize.xsmall,
                   onPressed: () => _rejectExpense(exp),
@@ -1156,7 +1156,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               Expanded(
                 child: AppButton(
                   text: 'Approve',
-                  icon: FontAwesomeIcons.check.data,
+                  icon: AppIcons.check,
                   variant: AppButtonVariant.success,
                   size: AppButtonSize.xsmall,
                   onPressed: () => _approveExpense(exp),
@@ -1248,7 +1248,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 ),
                 AppButton(
                   text: 'Reject',
-                  icon: FontAwesomeIcons.xmark.data,
+                  icon: AppIcons.close,
                   variant: AppButtonVariant.danger,
                   size: AppButtonSize.small,
                   onPressed: r.isEmpty ? null : () => Navigator.pop(ctx, r),
@@ -1319,7 +1319,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             ),
             AppButton(
               text: 'Delete',
-              icon: FontAwesomeIcons.trash.data,
+              icon: AppIcons.delete,
               variant: AppButtonVariant.danger,
               size: AppButtonSize.small,
               onPressed: () => Navigator.pop(ctx, true),
@@ -1358,7 +1358,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     return PopupMenuButton<String>(
       icon: Icon(
-        FontAwesomeIcons.ellipsisVertical.data,
+        AppIcons.moreVertical,
         size: context.getRSize(14),
         color: _subtext,
       ),
@@ -1377,7 +1377,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             child: Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.penToSquare.data,
+                  AppIcons.edit,
                   size: context.getRSize(13),
                   color: _text,
                 ),
@@ -1392,7 +1392,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             child: Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.trash.data,
+                  AppIcons.delete,
                   size: context.getRSize(13),
                   color: danger,
                 ),
@@ -1619,7 +1619,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.bullseye.data,
+                  AppIcons.target,
                   size: context.getRSize(14),
                   color: color,
                 ),
@@ -1691,7 +1691,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.userTag.data,
+                  AppIcons.customerRole,
                   size: context.getRSize(14),
                   color: _subtext,
                 ),
@@ -1784,7 +1784,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.chartLine.data,
+                AppIcons.analytics,
                 color: Colors.white,
                 size: context.getRSize(16),
               ),
@@ -1845,19 +1845,19 @@ class _ExpenseCard extends StatelessWidget {
   IconData _getIconForCategory(String category) {
     switch (category.toLowerCase()) {
       case 'fuel':
-        return FontAwesomeIcons.gasPump.data;
+        return AppIcons.fuel;
       case 'salary':
-        return FontAwesomeIcons.users.data;
+        return AppIcons.customers;
       case 'rent':
-        return FontAwesomeIcons.building.data;
+        return AppIcons.building;
       case 'maintenance':
-        return FontAwesomeIcons.wrench.data;
+        return AppIcons.maintenance;
       case 'utilities':
-        return FontAwesomeIcons.bolt.data;
+        return AppIcons.quickSale;
       case 'supplies':
-        return FontAwesomeIcons.box.data;
+        return AppIcons.box;
       default:
-        return FontAwesomeIcons.fileInvoice.data;
+        return AppIcons.invoice;
     }
   }
 
@@ -1981,7 +1981,7 @@ class _ExpenseCard extends StatelessWidget {
                       Row(
                         children: [
                           Icon(
-                            FontAwesomeIcons.userPen.data,
+                            AppIcons.userEdit,
                             size: context.getRSize(10),
                             color: subtextCol,
                           ),
@@ -1997,7 +1997,7 @@ class _ExpenseCard extends StatelessWidget {
                               exp.reference!.isNotEmpty) ...[
                             SizedBox(width: context.getRSize(12)),
                             Icon(
-                              FontAwesomeIcons.hashtag.data,
+                              AppIcons.counter,
                               size: context.getRSize(10),
                               color: subtextCol,
                             ),
@@ -2023,7 +2023,7 @@ class _ExpenseCard extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              FontAwesomeIcons.store.data,
+                              AppIcons.store,
                               size: context.getRSize(10),
                               color: subtextCol,
                             ),

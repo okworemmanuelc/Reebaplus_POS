@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -300,7 +300,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       child: Row(
         children: [
           Icon(
-            FontAwesomeIcons.store.data,
+            AppIcons.store,
             size: context.getRSize(13),
             color: primary,
           ),
@@ -403,7 +403,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 ],
               ),
               child: Icon(
-                FontAwesomeIcons.fileInvoiceDollar.data,
+                AppIcons.expenses,
                 color: Colors.white,
                 size: context.getRSize(16),
               ),
@@ -464,7 +464,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     controller: _categoryCtrl,
                     hintText: 'Search or type a new category',
                     suffixIcon: Icon(
-                      FontAwesomeIcons.magnifyingGlass.data,
+                      AppIcons.search,
                       size: context.getRSize(14),
                       color: _subtext,
                     ),
@@ -575,7 +575,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                       text: DateFormat('MMM d, y').format(_selectedDate),
                     ),
                     suffixIcon: Icon(
-                      FontAwesomeIcons.calendar.data,
+                      AppIcons.calendar,
                       size: context.getRSize(16),
                       color: _subtext,
                     ),
@@ -634,8 +634,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                             Icon(
                               (_receiptFile == null &&
                                       _existingReceiptPath == null)
-                                  ? FontAwesomeIcons.fileArrowUp.data
-                                  : FontAwesomeIcons.fileCircleCheck.data,
+                                  ? AppIcons.exportFile
+                                  : AppIcons.fileApproved,
                               size: context.getRSize(18),
                               color:
                                   (_receiptFile == null &&

@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
@@ -156,7 +156,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
               if (isCeo && supplier != null)
                 IconButton(
                   icon: Icon(
-                    FontAwesomeIcons.penToSquare.data,
+                    AppIcons.edit,
                     color: _text,
                     size: context.getRSize(16),
                   ),
@@ -167,7 +167,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
               if (isCeo && supplier != null)
                 IconButton(
                   icon: Icon(
-                    FontAwesomeIcons.trashCan.data,
+                    AppIcons.delete,
                     color: danger,
                     size: context.getRSize(16),
                   ),
@@ -199,7 +199,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                     supplierId: supplier.id,
                     supplierName: supplier.name,
                   ),
-                  icon: FontAwesomeIcons.plus.data,
+                  icon: AppIcons.add,
                   label: 'Record Activity',
                 )
               : null,
@@ -398,7 +398,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 if ((s.phone ?? '').isNotEmpty || (s.address ?? '').isNotEmpty) ...[
                   SizedBox(height: context.getRSize(8)),
                   _InfoRow(
-                    icon: FontAwesomeIcons.phone.data,
+                    icon: AppIcons.phone,
                     text: [
                       if ((s.phone ?? '').isNotEmpty) s.phone!,
                       if ((s.email ?? '').isNotEmpty) s.email!,
@@ -409,7 +409,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 if ((s.address ?? '').isNotEmpty && s.address != 'N/A') ...[
                   SizedBox(height: context.getRSize(4)),
                   _InfoRow(
-                    icon: FontAwesomeIcons.locationDot.data,
+                    icon: AppIcons.location,
                     text: s.address!,
                     theme: theme,
                   ),
@@ -417,7 +417,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 if ((s.bankName ?? '').isNotEmpty || (s.bankAccountNumber ?? '').isNotEmpty) ...[
                   SizedBox(height: context.getRSize(4)),
                   _InfoRow(
-                    icon: FontAwesomeIcons.buildingColumns.data,
+                    icon: AppIcons.bank,
                     text: [
                       if ((s.bankName ?? '').isNotEmpty) s.bankName!,
                       if ((s.bankAccountNumber ?? '').isNotEmpty) s.bankAccountNumber!,
@@ -474,7 +474,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                     Row(
                       children: [
                         Icon(
-                          FontAwesomeIcons.wallet.data,
+                          AppIcons.creditBalance,
                           size: context.getRSize(14),
                           color: theme.colorScheme.primary,
                         ),
@@ -685,7 +685,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    FontAwesomeIcons.fileInvoiceDollar.data,
+                    AppIcons.bill,
                     size: context.getRSize(48),
                     color: theme.colorScheme.onSurface.withAlpha(40),
                   ),
@@ -1007,7 +1007,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                FontAwesomeIcons.boxesStacked.data,
+                AppIcons.inventory,
                 color: theme.colorScheme.primary,
                 size: context.getRSize(16),
               ),
@@ -1037,7 +1037,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
               ),
             ),
             Icon(
-              FontAwesomeIcons.chevronRight.data,
+              AppIcons.chevronRight,
               size: context.getRSize(13),
               color: _subtext,
             ),
@@ -1083,7 +1083,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                FontAwesomeIcons.moneyBillTransfer.data,
+                AppIcons.transfer,
                 color: success,
                 size: context.getRSize(16),
               ),
@@ -1114,7 +1114,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
               ),
             ),
             Icon(
-              FontAwesomeIcons.chevronRight.data,
+              AppIcons.chevronRight,
               size: context.getRSize(13),
               color: _subtext,
             ),
@@ -1510,7 +1510,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         Expanded(
           child: _crateStatTile(
             theme,
-            icon: FontAwesomeIcons.truckRampBox.data,
+            icon: AppIcons.receiving,
             label: 'Crates received',
             value: '$received',
             color: theme.colorScheme.primary,
@@ -1520,7 +1520,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         Expanded(
           child: _crateStatTile(
             theme,
-            icon: FontAwesomeIcons.rotateLeft.data,
+            icon: AppIcons.refresh,
             label: 'Crates returned',
             value: '$returned',
             color: success,
@@ -1605,7 +1605,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                FontAwesomeIcons.boxOpen.data,
+                AppIcons.box,
                 color: color,
                 size: context.getRSize(15),
               ),

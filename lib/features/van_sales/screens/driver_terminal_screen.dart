@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -124,7 +124,7 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
             IconButton(
               tooltip: 'My run',
               icon: Icon(
-                FontAwesomeIcons.receipt.data,
+                AppIcons.receipt,
                 size: context.getRSize(16),
               ),
               onPressed: () => Navigator.push(
@@ -316,7 +316,7 @@ class _SwapOnlyBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            FontAwesomeIcons.rotate.data,
+            AppIcons.rotate,
             size: context.getRSize(14),
             color: semantic.info,
           ),
@@ -392,7 +392,7 @@ class _StockLine extends StatelessWidget {
           IconButton(
             onPressed: units > 0 ? onRemove : null,
             icon: Icon(
-              FontAwesomeIcons.circleMinus.data,
+              AppIcons.removeCircle,
               size: context.getRSize(18),
             ),
           ),
@@ -409,7 +409,7 @@ class _StockLine extends StatelessWidget {
           IconButton(
             onPressed: units < onVan ? onAdd : null,
             icon: Icon(
-              FontAwesomeIcons.circlePlus.data,
+              AppIcons.addCircle,
               size: context.getRSize(18),
             ),
           ),
@@ -477,7 +477,7 @@ class _TakePaymentBar extends StatelessWidget {
                     child: const CircularProgressIndicator(strokeWidth: 2),
                   )
                 : Icon(
-                    FontAwesomeIcons.moneyBill1.data,
+                    AppIcons.cash,
                     size: context.getRSize(14),
                   ),
             label: const Text('Take cash'),
@@ -583,7 +583,7 @@ class _NoOpenTrip extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  FontAwesomeIcons.truck.data,
+                  AppIcons.supplier,
                   size: context.getRSize(44),
                   color: subtext,
                 ),
@@ -628,7 +628,7 @@ class _EmptyVan extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              FontAwesomeIcons.boxOpen.data,
+              AppIcons.box,
               size: context.getRSize(40),
               color: subtext,
             ),

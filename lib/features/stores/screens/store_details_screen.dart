@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -123,7 +123,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: AppBarHeader(
-          icon: FontAwesomeIcons.store.data,
+          icon: AppIcons.store,
           title: _store.name,
           subtitle: _store.location ?? 'Main Storage',
         ),
@@ -148,7 +148,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
               if (canRequest) ...[
                 AppButton(
                   text: 'Request Stock',
-                  icon: FontAwesomeIcons.handHoldingDollar.data,
+                  icon: AppIcons.settlement,
                   variant: AppButtonVariant.secondary,
                   isFullWidth: true,
                   onPressed: () =>
@@ -186,7 +186,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
           child: Row(
             children: [
               Icon(
-                FontAwesomeIcons.circleInfo.data,
+                AppIcons.infoCircle,
                 size: rSize(context, 16),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -211,7 +211,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
         if (canRequest)
           AppButton(
             text: 'Request Stock from this store',
-            icon: FontAwesomeIcons.handHoldingDollar.data,
+            icon: AppIcons.settlement,
             isFullWidth: true,
             onPressed: () =>
                 _openRequestScreen(fixedSourceStoreId: widget.store.id),
@@ -319,13 +319,13 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
         _buildStatCard(
           'Products',
           activeProducts.toString(),
-          FontAwesomeIcons.boxesStacked.data,
+          AppIcons.inventory,
           AppColors.success,
         ),
         _buildStatCard(
           'Low Stock',
           lowStock.toString(),
-          FontAwesomeIcons.triangleExclamation.data,
+          AppIcons.warning,
           AppColors.danger,
         ),
         GestureDetector(
@@ -341,7 +341,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
           child: _buildStatCard(
             'Customers',
             customersCount.toString(),
-            FontAwesomeIcons.users.data,
+            AppIcons.customers,
             const Color(0xFF06B6D4),
           ),
         ),
@@ -426,7 +426,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              FontAwesomeIcons.boxesStacked.data,
+              AppIcons.inventory,
               color: AppColors.success,
               size: rSize(context, 14),
             ),
@@ -547,7 +547,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
         _actionTile(
           'View Inventory',
           'Check and manage stock',
-          FontAwesomeIcons.boxesStacked.data,
+          AppIcons.inventory,
           Theme.of(context).colorScheme.primary,
           () {
             // §12.1: focus the app-wide active store on this store, then open

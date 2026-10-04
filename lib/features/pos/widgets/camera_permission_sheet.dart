@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -83,7 +83,7 @@ class CameraPermissionSheet extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  FontAwesomeIcons.camera.data,
+                  AppIcons.camera,
                   color: primary,
                   size: context.getRSize(24),
                 ),
@@ -117,7 +117,7 @@ class CameraPermissionSheet extends StatelessWidget {
             AppButton(
               key: kCameraPermissionOpenSettingsKey,
               text: 'Open settings',
-              icon: FontAwesomeIcons.gear.data,
+              icon: AppIcons.settings,
               onPressed: () => Navigator.pop(context, true),
             ),
             SizedBox(height: context.getRSize(8)),

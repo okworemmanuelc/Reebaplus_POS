@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -114,7 +114,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         onPressed: () => Navigator.pop(context),
       ),
       title: AppBarHeader(
-        icon: FontAwesomeIcons.user.data,
+        icon: AppIcons.user,
         title: user.name,
         subtitle: roleName.toUpperCase(),
       ),
@@ -151,14 +151,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               if (subAccess.badgeLabel != null)
                 ProfilePill(
                   icon: subAccess == SubscriptionAccess.active
-                      ? FontAwesomeIcons.crown.data
-                      : FontAwesomeIcons.solidClock.data,
+                      ? AppIcons.owner
+                      : AppIcons.time,
                   label: subAccess.badgeLabel!,
                   color: subAccess == SubscriptionAccess.active
                       ? Theme.of(context).colorScheme.primary
                       : const Color(0xFFF59E0B),
                 ),
-              ProfilePill(icon: FontAwesomeIcons.store.data, label: storeName),
+              ProfilePill(icon: AppIcons.store, label: storeName),
             ],
           ),
           SizedBox(height: context.getRSize(24)),
@@ -168,22 +168,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             title: 'Account Details',
             rows: [
               ProfileInfoRow(
-                icon: FontAwesomeIcons.store.data,
+                icon: AppIcons.store,
                 label: 'Store',
                 value: storeName,
               ),
               ProfileInfoRow(
-                icon: FontAwesomeIcons.envelope.data,
+                icon: AppIcons.email,
                 label: 'Email',
                 value: user.email ?? 'Not provided',
               ),
               ProfileInfoRow(
-                icon: FontAwesomeIcons.fingerprint.data,
+                icon: AppIcons.biometrics,
                 label: 'Biometrics',
                 value: user.biometricEnabled ? 'Enabled' : 'Disabled',
               ),
               ProfileInfoRow(
-                icon: FontAwesomeIcons.calendarDay.data,
+                icon: AppIcons.calendar,
                 label: 'Member Since',
                 value:
                     '${user.createdAt.day}/${user.createdAt.month}/${user.createdAt.year}',
@@ -198,7 +198,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           AppButton(
             text: 'Edit Profile',
             variant: AppButtonVariant.outline,
-            icon: FontAwesomeIcons.penToSquare.data,
+            icon: AppIcons.edit,
             onPressed: () {
               final u = ref.read(authProvider).currentUser;
               if (u == null) return;
@@ -214,7 +214,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             AppButton(
               text: 'Delete Business',
               variant: AppButtonVariant.danger,
-              icon: FontAwesomeIcons.triangleExclamation.data,
+              icon: AppIcons.warning,
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => const DeleteBusinessScreen(),
@@ -226,7 +226,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             AppButton(
               text: 'Leave / delete my account',
               variant: AppButtonVariant.danger,
-              icon: FontAwesomeIcons.rightFromBracket.data,
+              icon: AppIcons.logout,
               onPressed: _confirmAndResign,
             ),
           ],
@@ -254,19 +254,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ProfileStat(
         label: 'Total Orders',
         value: orders.length.toString(),
-        icon: FontAwesomeIcons.receipt.data,
+        icon: AppIcons.receipt,
         color: Theme.of(context).colorScheme.primary,
       ),
       ProfileStat(
         label: 'Completed',
         value: completed.length.toString(),
-        icon: FontAwesomeIcons.checkDouble.data,
+        icon: AppIcons.checkDouble,
         color: AppColors.success,
       ),
       ProfileStat(
         label: 'Sales Volume',
         value: formatCurrency(totalSales),
-        icon: FontAwesomeIcons.nairaSign.data,
+        icon: AppIcons.naira,
         color: const Color(0xFFA855F7),
       ),
     ];

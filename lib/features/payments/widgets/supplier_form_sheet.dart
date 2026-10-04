@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -367,7 +367,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  FontAwesomeIcons.buildingColumns.data,
+                  AppIcons.bank,
                   color: Colors.white,
                   size: context.getRSize(20),
                 ),
