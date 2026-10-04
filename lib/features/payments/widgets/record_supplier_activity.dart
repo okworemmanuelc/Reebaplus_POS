@@ -1,7 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -76,7 +76,7 @@ void showSupplierActivityChooser(
             ),
             SizedBox(height: ctx.getRSize(20)),
             _ChooserTile(
-              icon: FontAwesomeIcons.fileInvoiceDollar.data,
+              icon: AppIcons.expenses,
               color: danger,
               title: 'Invoice Total',
               subtitle: 'Goods received — increases what you owe',
@@ -91,7 +91,7 @@ void showSupplierActivityChooser(
             ),
             SizedBox(height: ctx.getRSize(12)),
             _ChooserTile(
-              icon: FontAwesomeIcons.moneyBillTransfer.data,
+              icon: AppIcons.transfer,
               color: success,
               title: 'Record Payment',
               subtitle: 'Money paid — reduces what you owe',
@@ -395,7 +395,7 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
                           SizedBox(height: context.getRSize(16)),
                           _formHeader(
                             context,
-                            icon: FontAwesomeIcons.fileInvoiceDollar.data,
+                            icon: AppIcons.expenses,
                             color: danger,
                             title: 'Invoice Total',
                             subtitle: widget.supplierName,
@@ -444,7 +444,7 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
                               ).format(_dateReceived),
                             ),
                             suffixIcon: Icon(
-                              FontAwesomeIcons.calendar.data,
+                              AppIcons.calendar,
                               size: context.getRSize(16),
                               color: sSubtext,
                             ),
@@ -671,7 +671,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                           SizedBox(height: context.getRSize(16)),
                           _formHeader(
                             context,
-                            icon: FontAwesomeIcons.moneyBillTransfer.data,
+                            icon: AppIcons.transfer,
                             color: success,
                             title: 'Record Payment',
                             subtitle:
@@ -765,7 +765,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                               text: DateFormat('MMM d, y').format(_paidOn),
                             ),
                             suffixIcon: Icon(
-                              FontAwesomeIcons.calendar.data,
+                              AppIcons.calendar,
                               size: context.getRSize(16),
                               color: sSubtext,
                             ),
@@ -843,8 +843,8 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
               children: [
                 Icon(
                   _receipt == null
-                      ? FontAwesomeIcons.paperclip.data
-                      : FontAwesomeIcons.solidFileLines.data,
+                      ? AppIcons.attachment
+                      : AppIcons.document,
                   size: context.getRSize(16),
                   color: _receipt == null
                       ? sSubtext
@@ -932,7 +932,7 @@ Widget _recordStoreBanner(BuildContext context, String label) {
     child: Row(
       children: [
         Icon(
-          FontAwesomeIcons.store.data,
+          AppIcons.store,
           size: context.getRSize(13),
           color: primary,
         ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -207,7 +207,7 @@ class _VanWriteOffSheetState extends ConsumerState<VanWriteOffSheet> {
                           Row(
                             children: [
                               Icon(
-                                FontAwesomeIcons.handHoldingDollar.data,
+                                AppIcons.settlement,
                                 size: context.getRSize(18),
                                 color: semantic.warning,
                               ),

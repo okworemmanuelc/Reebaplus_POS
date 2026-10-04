@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -219,7 +219,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
           IconButton(
             tooltip: 'Export CSV',
             icon: Icon(
-              FontAwesomeIcons.fileCsv.data,
+              AppIcons.fileCsv,
               size: 18,
               color: colorScheme.onSurface,
             ),
@@ -279,7 +279,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.chartLine.data,
+            AppIcons.analytics,
             size: 48,
             color: Theme.of(
               context,
@@ -327,8 +327,8 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
             children: [
               Icon(
                 isProfitMode
-                    ? FontAwesomeIcons.chartLine.data
-                    : FontAwesomeIcons.nairaSign.data,
+                    ? AppIcons.analytics
+                    : AppIcons.naira,
                 color: color,
                 size: context.getRSize(18),
               ),

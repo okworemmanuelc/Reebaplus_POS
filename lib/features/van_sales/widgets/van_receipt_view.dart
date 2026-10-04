@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
@@ -152,7 +152,7 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
               child: OutlinedButton.icon(
                 onPressed: _printing ? null : () => unawaited(_print()),
                 icon: Icon(
-                  FontAwesomeIcons.print.data,
+                  AppIcons.print,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Print'),
@@ -163,7 +163,7 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
               child: OutlinedButton.icon(
                 onPressed: () => unawaited(_share()),
                 icon: Icon(
-                  FontAwesomeIcons.shareNodes.data,
+                  AppIcons.share,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Share'),

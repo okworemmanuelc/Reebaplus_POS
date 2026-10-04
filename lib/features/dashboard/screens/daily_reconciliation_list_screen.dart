@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -175,7 +175,7 @@ class _DailyReconciliationListScreenState
               IconButton(
                 tooltip: 'Export CSV',
                 icon: Icon(
-                  FontAwesomeIcons.fileCsv.data,
+                  AppIcons.fileCsv,
                   size: 18,
                   color: primary,
                 ),
@@ -295,7 +295,7 @@ class _DailyReconciliationListScreenState
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.clipboardCheck.data,
+            AppIcons.auditCheck,
             size: 40,
             color: theme.hintColor.withValues(alpha: 0.5),
           ),

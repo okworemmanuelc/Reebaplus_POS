@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -124,7 +124,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              FontAwesomeIcons.store.data,
+                              AppIcons.store,
                               color: Theme.of(context).colorScheme.primary,
                               size: rSize(ctx, 18),
                             ),
@@ -309,7 +309,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              FontAwesomeIcons.penToSquare.data,
+                              AppIcons.edit,
                               color: Theme.of(context).colorScheme.primary,
                               size: rSize(ctx, 18),
                             ),
@@ -562,7 +562,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
         elevation: 0,
         leading: context.isDesktop ? null : const MenuButton(),
         title: AppBarHeader(
-          icon: FontAwesomeIcons.store.data,
+          icon: AppIcons.store,
           title: 'Stores',
           subtitle: ref.watch(activeStoreLabelProvider),
         ),
@@ -645,7 +645,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              FontAwesomeIcons.store.data,
+              AppIcons.store,
               size: rSize(context, 40),
               color: Theme.of(
                 context,
@@ -802,7 +802,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.store.data,
+                      AppIcons.store,
                       color: Theme.of(context).colorScheme.primary,
                       size: rSize(context, 20),
                     ),
@@ -849,7 +849,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                     ),
                   ),
                   Icon(
-                    FontAwesomeIcons.chevronRight.data,
+                    AppIcons.chevronRight,
                     size: rSize(context, 13),
                     color: _subtext,
                   ),
@@ -868,7 +868,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
               children: [
                 Expanded(
                   child: _statCell(
-                    icon: FontAwesomeIcons.boxesStacked.data,
+                    icon: AppIcons.inventory,
                     label: 'Total Units',
                     value: totalStock.toString(),
                     color: Theme.of(context).colorScheme.primary,
@@ -877,7 +877,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                 Container(width: 1, height: 36, color: _strongBorder),
                 Expanded(
                   child: _statCell(
-                    icon: FontAwesomeIcons.tag.data,
+                    icon: AppIcons.tag,
                     label: 'Products',
                     value: productCount.toString(),
                     color: AppColors.success,
@@ -902,7 +902,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                 children: [
                   Expanded(
                     child: _actionButton(
-                      icon: FontAwesomeIcons.penToSquare.data,
+                      icon: AppIcons.edit,
                       color: Theme.of(context).colorScheme.primary,
                       label: 'Edit',
                       onTap: widget.onEdit,
@@ -911,7 +911,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                   Container(width: 1, height: 36, color: _strongBorder),
                   Expanded(
                     child: _actionButton(
-                      icon: FontAwesomeIcons.trash.data,
+                      icon: AppIcons.delete,
                       color: Theme.of(context).colorScheme.error,
                       label: 'Delete',
                       onTap: widget.onDelete,

@@ -5,7 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -99,7 +99,7 @@ class ProductGrid extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                FontAwesomeIcons.magnifyingGlass.data,
+                AppIcons.search,
                 size: context.getRSize(48),
                 color: subtextCol.withValues(alpha: 0.3),
               ),
@@ -475,7 +475,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      FontAwesomeIcons.circleInfo.data,
+                      AppIcons.infoCircle,
                       size: context.getRSize(10),
                       color: Colors.white,
                     ),
@@ -621,7 +621,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                   ),
                   if (isLowStock)
                     Icon(
-                      FontAwesomeIcons.triangleExclamation.data,
+                      AppIcons.warning,
                       size: context.getRSize(12),
                       color: Theme.of(context).colorScheme.error,
                     ),
@@ -754,7 +754,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                         children: [
                           if (isLowStock) ...[
                             Icon(
-                              FontAwesomeIcons.triangleExclamation.data,
+                              AppIcons.warning,
                               size: context.getRSize(12),
                               color: Theme.of(context).colorScheme.error,
                             ),

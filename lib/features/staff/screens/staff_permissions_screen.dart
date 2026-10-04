@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permission_dependencies.dart';
@@ -306,7 +306,7 @@ class _StaffPermissionsScreenState
             const SizedBox(height: 4),
             AppButton(
               text: 'Restore defaults',
-              icon: FontAwesomeIcons.arrowRotateLeft.data,
+              icon: AppIcons.undo,
               variant: AppButtonVariant.outline,
               onPressed: overrides.isEmpty
                   ? null

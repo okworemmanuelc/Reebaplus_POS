@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -105,8 +105,8 @@ Future<void> showStorePickerSheet(
                         children: [
                           Icon(
                             o.id == null
-                                ? FontAwesomeIcons.layerGroup.data
-                                : FontAwesomeIcons.store.data,
+                                ? AppIcons.category
+                                : AppIcons.store,
                             size: context.getRSize(15),
                             color: selected ? primary : subtextColor,
                           ),
@@ -142,7 +142,7 @@ Future<void> showStorePickerSheet(
                           ),
                           if (selected)
                             Icon(
-                              FontAwesomeIcons.check.data,
+                              AppIcons.check,
                               size: context.getRSize(14),
                               color: primary,
                             ),

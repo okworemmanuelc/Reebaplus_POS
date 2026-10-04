@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 
@@ -337,7 +337,7 @@ class _AppDropdownState<T> extends FormFieldState<T> {
                               ),
                       ),
                       Icon(
-                        _isOpen ? FontAwesomeIcons.chevronUp.data : FontAwesomeIcons.chevronDown.data,
+                        _isOpen ? AppIcons.chevronUp : AppIcons.chevronDown,
                         size: 13,
                         color: subtextColor,
                       ),

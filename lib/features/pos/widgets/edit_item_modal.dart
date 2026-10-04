@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
@@ -355,7 +355,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: Icon(
-                    FontAwesomeIcons.pills.data,
+                    AppIcons.pharmacy,
                     size: context.getRSize(20),
                     color: primary,
                   ),
@@ -425,7 +425,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               child: Row(
                 children: [
                   _qtyBtn(
-                    FontAwesomeIcons.minus.data,
+                    AppIcons.minus,
                     () => _updateQty(-1),
                     color: Colors.red,
                   ),
@@ -463,7 +463,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                   ),
                   SizedBox(width: context.getRSize(12)),
                   _qtyBtn(
-                    FontAwesomeIcons.plus.data,
+                    AppIcons.add,
                     () => _updateQty(1),
                     color: Colors.green,
                   ),
@@ -610,7 +610,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                     child: AppButton(
                       text: 'Remove',
                       variant: AppButtonVariant.danger,
-                      icon: FontAwesomeIcons.trashCan.data,
+                      icon: AppIcons.delete,
                       height: context.getRSize(56),
                       onPressed: () {
                         ref.read(cartProvider).removeItem(widget.item['name']);
@@ -781,7 +781,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
         child: Row(
           children: [
             Icon(
-              FontAwesomeIcons.lock.data,
+              AppIcons.lock,
               size: context.getRSize(14),
               color: text.withValues(alpha: 0.45),
             ),

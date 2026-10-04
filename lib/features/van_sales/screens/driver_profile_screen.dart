@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -364,7 +364,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                 Row(
                   children: [
                     Icon(
-                      FontAwesomeIcons.scaleBalanced.data,
+                      AppIcons.balance,
                       size: context.getRSize(14),
                       color: t.colorScheme.primary,
                     ),
@@ -533,10 +533,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
   }) {
     if (trips.isEmpty) {
       return [
-        SliverFillRemaining(
+        const SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyTab(
-            icon: FontAwesomeIcons.truck.data,
+            icon: AppIcons.supplier,
             message: 'No trips in this period',
           ),
         ),
@@ -561,10 +561,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
   List<Widget> _salesTabSlivers({required List<OrderWithItems> sales}) {
     if (sales.isEmpty) {
       return [
-        SliverFillRemaining(
+        const SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyTab(
-            icon: FontAwesomeIcons.receipt.data,
+            icon: AppIcons.receipt,
             message: 'No road sales in this period',
           ),
         ),
@@ -613,10 +613,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
   }) {
     if (entries.isEmpty) {
       return [
-        SliverFillRemaining(
+        const SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyTab(
-            icon: FontAwesomeIcons.fileInvoiceDollar.data,
+            icon: AppIcons.expenses,
             message: 'No account activity in this period',
           ),
         ),
@@ -916,15 +916,15 @@ class _Header extends StatelessWidget {
                 if ((user.phone ?? '').isNotEmpty) ...[
                   SizedBox(height: context.getRSize(6)),
                   _InfoRow(
-                    icon: FontAwesomeIcons.phone.data,
+                    icon: AppIcons.phone,
                     text: user.phone!,
                   ),
                 ],
                 SizedBox(height: context.getRSize(4)),
-                _InfoRow(icon: FontAwesomeIcons.truck.data, text: _vans),
+                _InfoRow(icon: AppIcons.supplier, text: _vans),
                 SizedBox(height: context.getRSize(4)),
                 _InfoRow(
-                  icon: FontAwesomeIcons.calendarDay.data,
+                  icon: AppIcons.calendar,
                   text: joinedAt == null
                       ? 'No trips yet'
                       : 'Driving since ${DateFormat('d MMM y').format(joinedAt!)}',
@@ -1020,7 +1020,7 @@ class _TripRow extends ConsumerWidget {
               Row(
                 children: [
                   Icon(
-                    FontAwesomeIcons.truck.data,
+                    AppIcons.supplier,
                     size: context.getRSize(14),
                     color: isOpen ? semantic.warning : subtext,
                   ),
@@ -1140,7 +1140,7 @@ class _SaleRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  FontAwesomeIcons.receipt.data,
+                  AppIcons.receipt,
                   size: context.getRSize(16),
                   color: counted ? semantic.success : subtext,
                 ),

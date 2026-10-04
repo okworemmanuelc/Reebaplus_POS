@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -86,7 +86,7 @@ class PushPermissionSheet extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  FontAwesomeIcons.bullhorn.data,
+                  AppIcons.announcement,
                   color: theme.colorScheme.primary,
                   size: context.getRSize(24),
                 ),
@@ -114,7 +114,7 @@ class PushPermissionSheet extends StatelessWidget {
               SizedBox(height: context.getRSize(28)),
               AppButton(
                 text: 'Turn on',
-                icon: FontAwesomeIcons.bell.data,
+                icon: AppIcons.notification,
                 onPressed: () => Navigator.pop(context, true),
               ),
               SizedBox(height: context.getRSize(8)),

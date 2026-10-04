@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -257,7 +257,7 @@ class _CountManufacturerEmptiesSheetState
                     borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
                   ),
                   child: Icon(
-                    FontAwesomeIcons.clipboardCheck.data,
+                    AppIcons.auditCheck,
                     size: context.getRSize(16),
                     color: theme.colorScheme.primary,
                   ),
@@ -403,8 +403,8 @@ class _CountManufacturerEmptiesSheetState
                   children: [
                     Icon(
                       (counted != null && _expectedEmpties != null && counted < _expectedEmpties!)
-                          ? FontAwesomeIcons.triangleExclamation.data
-                          : FontAwesomeIcons.circleInfo.data,
+                          ? AppIcons.warning
+                          : AppIcons.infoCircle,
                       size: context.getRSize(14),
                       color: (counted != null && _expectedEmpties != null && counted < _expectedEmpties!)
                           ? AppColors.warning

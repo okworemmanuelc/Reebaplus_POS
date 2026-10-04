@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
@@ -254,7 +254,7 @@ class _SharedValues extends StatelessWidget {
       height: size,
       color: theme.dividerColor.withValues(alpha: 0.3),
       child: Icon(
-        FontAwesomeIcons.image.data,
+        AppIcons.image,
         size: context.getRSize(20),
         color: theme.textTheme.bodySmall?.color,
       ),

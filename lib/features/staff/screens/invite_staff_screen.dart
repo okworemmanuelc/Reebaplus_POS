@@ -4,7 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -294,7 +294,7 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
             labelText: 'Email',
             hintText: 'name@example.com',
             keyboardType: TextInputType.emailAddress,
-            prefixIcon: Icon(FontAwesomeIcons.envelope.data, size: 16),
+            prefixIcon: const Icon(AppIcons.email, size: 16),
             validator: (v) {
               final s = (v ?? '').trim();
               if (s.isEmpty) return 'Enter an email';
@@ -338,7 +338,7 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
           SizedBox(height: context.getRSize(24)),
           AppButton(
             text: 'Generate code',
-            icon: FontAwesomeIcons.ticket.data,
+            icon: AppIcons.discount,
             isLoading: _generating,
             onPressed: _generating ? null : _generate,
           ),
@@ -390,7 +390,7 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
             Expanded(
               child: AppButton(
                 text: 'Copy',
-                icon: FontAwesomeIcons.copy.data,
+                icon: AppIcons.copy,
                 variant: AppButtonVariant.secondary,
                 onPressed: _copyCode,
               ),
@@ -399,7 +399,7 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
             Expanded(
               child: AppButton(
                 text: 'SMS',
-                icon: FontAwesomeIcons.commentSms.data,
+                icon: AppIcons.sms,
                 variant: AppButtonVariant.outline,
                 onPressed: _shareSms,
               ),
@@ -408,7 +408,7 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
             Expanded(
               child: AppButton(
                 text: 'WhatsApp',
-                icon: FontAwesomeIcons.whatsapp.data,
+                icon: AppIcons.whatsapp,
                 variant: AppButtonVariant.outline,
                 onPressed: _shareWhatsApp,
               ),
@@ -526,7 +526,7 @@ class _RoleSelectionCard extends StatelessWidget {
                             right: context.getRSize(8),
                           ),
                           child: Icon(
-                            FontAwesomeIcons.circleCheck.data,
+                            AppIcons.checkCircle,
                             size: context.getRSize(12),
                             color: isSelected
                                 ? primaryColor

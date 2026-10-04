@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/shared/models/notification.dart';
@@ -45,9 +45,9 @@ void main() {
     testWidgets('alert → megaphone + error colour', (tester) async {
       await pumpCard(tester, notif('console_broadcast', severity: 'alert'));
 
-      expect(find.byIcon(FontAwesomeIcons.bullhorn.data), findsOneWidget);
+      expect(find.byIcon(AppIcons.announcement), findsOneWidget);
       expect(
-        iconWidget(tester, FontAwesomeIcons.bullhorn.data).color,
+        iconWidget(tester, AppIcons.announcement).color,
         theme.colorScheme.error,
       );
     });
@@ -55,9 +55,9 @@ void main() {
     testWidgets('warning → megaphone + warning colour', (tester) async {
       await pumpCard(tester, notif('console_broadcast', severity: 'warning'));
 
-      expect(find.byIcon(FontAwesomeIcons.bullhorn.data), findsOneWidget);
+      expect(find.byIcon(AppIcons.announcement), findsOneWidget);
       expect(
-        iconWidget(tester, FontAwesomeIcons.bullhorn.data).color,
+        iconWidget(tester, AppIcons.announcement).color,
         semantic.warning,
       );
     });
@@ -65,9 +65,9 @@ void main() {
     testWidgets('info → megaphone + info colour', (tester) async {
       await pumpCard(tester, notif('console_broadcast', severity: 'info'));
 
-      expect(find.byIcon(FontAwesomeIcons.bullhorn.data), findsOneWidget);
+      expect(find.byIcon(AppIcons.announcement), findsOneWidget);
       expect(
-        iconWidget(tester, FontAwesomeIcons.bullhorn.data).color,
+        iconWidget(tester, AppIcons.announcement).color,
         semantic.info,
       );
     });
@@ -81,10 +81,10 @@ void main() {
     // never appears (regression guard for the other notification types).
     await pumpCard(tester, notif('new_order', severity: 'alert'));
 
-    expect(find.byIcon(FontAwesomeIcons.bullhorn.data), findsNothing);
-    expect(find.byIcon(FontAwesomeIcons.receipt.data), findsOneWidget);
+    expect(find.byIcon(AppIcons.announcement), findsNothing);
+    expect(find.byIcon(AppIcons.receipt), findsOneWidget);
     expect(
-      iconWidget(tester, FontAwesomeIcons.receipt.data).color,
+      iconWidget(tester, AppIcons.receipt).color,
       semantic.success,
     );
   });

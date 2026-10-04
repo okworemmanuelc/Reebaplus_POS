@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -260,7 +260,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           IconButton(
             tooltip: 'Export CSV',
             icon: Icon(
-              FontAwesomeIcons.fileCsv.data,
+              AppIcons.fileCsv,
               size: 18,
               color: context.primaryColor,
             ),
@@ -350,7 +350,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            FontAwesomeIcons.circleInfo.data,
+            AppIcons.infoCircle,
             size: 15,
             color: theme.hintColor,
           ),
@@ -376,7 +376,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.chartLine.data,
+            AppIcons.analytics,
             size: 40,
             color: theme.hintColor.withValues(alpha: 0.5),
           ),
@@ -408,7 +408,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         children: [
           Row(
             children: [
-              Icon(FontAwesomeIcons.chartLine.data, color: color, size: 16),
+              Icon(AppIcons.analytics, color: color, size: 16),
               const SizedBox(width: 8),
               Text(
                 'Gross Profit',

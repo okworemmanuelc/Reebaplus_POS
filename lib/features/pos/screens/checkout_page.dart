@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -485,8 +485,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   ),
                   child: Icon(
                     _isWalkIn
-                        ? FontAwesomeIcons.userTag.data
-                        : FontAwesomeIcons.user.data,
+                        ? AppIcons.customerRole
+                        : AppIcons.user,
                     size: context.getRSize(16),
                     color: Theme.of(context).colorScheme.primary,
                   ),
@@ -544,7 +544,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             text: 'Confirm Payment',
             variant: AppButtonVariant.primary,
             isLoading: _isProcessing,
-            icon: FontAwesomeIcons.check.data,
+            icon: AppIcons.check,
             onPressed: _confirmPayment,
           ),
         ],
@@ -583,7 +583,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            FontAwesomeIcons.triangleExclamation.data,
+            AppIcons.warning,
             size: context.getRSize(14),
             color: warning,
           ),
@@ -754,7 +754,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              FontAwesomeIcons.beerMugEmpty.data,
+              AppIcons.beerMug,
               size: context.getRSize(14),
               color: Theme.of(context).colorScheme.primary,
             ),
@@ -820,7 +820,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                FontAwesomeIcons.beerMugEmpty.data,
+                AppIcons.beerMug,
                 size: context.getRSize(14),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -862,7 +862,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ),
             SizedBox(width: context.getRSize(8)),
             Icon(
-              FontAwesomeIcons.penToSquare.data,
+              AppIcons.edit,
               size: context.getRSize(13),
               color: _subtext,
             ),
@@ -955,7 +955,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     ctrl.text = (fullKobo ~/ 100).toString();
                   },
                   icon: Icon(
-                    FontAwesomeIcons.wandMagicSparkles.data,
+                    AppIcons.magic,
                     size: context.getRSize(13),
                   ),
                   label: Text('Use full (${formatCurrency(fullKobo / 100.0)})'),
@@ -1417,7 +1417,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            FontAwesomeIcons.print.data,
+            AppIcons.print,
             size: context.getRSize(16),
             color: _onPrimary,
           ),
@@ -1463,7 +1463,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               Expanded(
                 child: _receiptButton(
                   'Print Receipt',
-                  FontAwesomeIcons.print.data,
+                  AppIcons.print,
                   Theme.of(context).colorScheme.primary,
                   _printReceipt,
                 ),
@@ -1472,7 +1472,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               Expanded(
                 child: _receiptButton(
                   'Share Receipt',
-                  FontAwesomeIcons.shareNodes.data,
+                  AppIcons.share,
                   success,
                   _shareReceipt,
                 ),
@@ -1753,7 +1753,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             Expanded(
               child: _methodChip(
                 'Cash / Transfer',
-                FontAwesomeIcons.moneyBill.data,
+                AppIcons.cash,
                 _mode == PayMode.cashTransfer,
                 () => setState(() => _mode = PayMode.cashTransfer),
               ),
@@ -1763,7 +1763,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               Expanded(
                 child: _methodChip(
                   'Pay with Credit',
-                  FontAwesomeIcons.wallet.data,
+                  AppIcons.creditBalance,
                   _mode == PayMode.wallet,
                   () => setState(() => _mode = PayMode.wallet),
                 ),
@@ -1855,7 +1855,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         Expanded(
           child: _tenderSegment(
             'Cash',
-            FontAwesomeIcons.moneyBill.data,
+            AppIcons.cash,
             _tender == 'cash',
             () => setState(() => _tender = 'cash'),
           ),
@@ -1864,7 +1864,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         Expanded(
           child: _tenderSegment(
             'Transfer',
-            FontAwesomeIcons.arrowRightArrowLeft.data,
+            AppIcons.swap,
             _tender == 'transfer',
             () => setState(() => _tender = 'transfer'),
           ),
@@ -2166,7 +2166,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         child: Row(
           children: [
             Icon(
-              FontAwesomeIcons.triangleExclamation.data,
+              AppIcons.warning,
               size: context.getRSize(14),
               color: danger,
             ),
@@ -2216,7 +2216,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.fileInvoiceDollar.data,
+                AppIcons.expenses,
                 size: context.getRSize(18),
                 color: active ? _primary : _subtext,
               ),
@@ -2322,7 +2322,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ? rawIcon
         : rawIcon is int
         ? productIconFromCodePoint(rawIcon)
-        : FontAwesomeIcons.box.data;
+        : AppIcons.box;
 
     return Padding(
       padding: EdgeInsets.symmetric(

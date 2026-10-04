@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/models/notification.dart';
@@ -189,7 +189,7 @@ class NotificationsModal extends ConsumerWidget {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.bell.data,
+                AppIcons.notification,
                 size: context.getRSize(20),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -225,7 +225,7 @@ class NotificationsModal extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            FontAwesomeIcons.bellSlash.data,
+            AppIcons.notificationOff,
             size: context.getRSize(48),
             color: Theme.of(context).dividerColor,
           ),
@@ -366,7 +366,7 @@ class NotificationCard extends ConsumerWidget {
         title: Row(
           children: [
             Icon(
-              FontAwesomeIcons.penToSquare.data,
+              AppIcons.edit,
               size: 16,
               color:
                   Theme.of(ctx).extension<AppSemanticColors>()?.warning ??
@@ -415,52 +415,52 @@ class NotificationCard extends ConsumerWidget {
   IconData _getIconForType(String type) {
     switch (type) {
       case 'console_broadcast':
-        return FontAwesomeIcons.bullhorn.data;
+        return AppIcons.announcement;
       case 'new_order':
-        return FontAwesomeIcons.receipt.data;
+        return AppIcons.receipt;
       case 'low_stock':
-        return FontAwesomeIcons.triangleExclamation.data;
+        return AppIcons.warning;
       case 'large_expense':
-        return FontAwesomeIcons.fileInvoiceDollar.data;
+        return AppIcons.expenses;
       case 'new_delivery':
-        return FontAwesomeIcons.truckRampBox.data;
+        return AppIcons.receiving;
       case 'failed_transaction':
-        return FontAwesomeIcons.circleExclamation.data;
+        return AppIcons.alertCircle;
       case 'product_update':
-        return FontAwesomeIcons.penToSquare.data;
+        return AppIcons.edit;
       case 'crate_short_return':
-        return FontAwesomeIcons.boxOpen.data;
+        return AppIcons.box;
       case 'crate_return_approved':
-        return FontAwesomeIcons.circleCheck.data;
+        return AppIcons.checkCircle;
       case 'crate_return_rejected':
-        return FontAwesomeIcons.circleXmark.data;
+        return AppIcons.cancelCircle;
       case 'stock_approval.requested':
-        return FontAwesomeIcons.clipboardList.data;
+        return AppIcons.clipboardList;
       case 'stock_approval.approved':
-        return FontAwesomeIcons.circleCheck.data;
+        return AppIcons.checkCircle;
       case 'stock_approval.rejected':
-        return FontAwesomeIcons.circleXmark.data;
+        return AppIcons.cancelCircle;
       // #212 (PRD #203) — the crate-deposit money leg awaiting a manager.
       case 'crate_deposit.requested':
-        return FontAwesomeIcons.moneyBillTransfer.data;
+        return AppIcons.transfer;
       case 'crate_deposit.confirmed':
-        return FontAwesomeIcons.circleCheck.data;
+        return AppIcons.checkCircle;
       case 'crate_deposit.rejected':
-        return FontAwesomeIcons.circleXmark.data;
+        return AppIcons.cancelCircle;
       case 'staff.invited':
-        return FontAwesomeIcons.userPlus.data;
+        return AppIcons.userAdd;
       case 'staff.suspended':
-        return FontAwesomeIcons.userSlash.data;
+        return AppIcons.userSuspended;
       case 'staff.reactivated':
-        return FontAwesomeIcons.userCheck.data;
+        return AppIcons.userVerified;
       case 'staff.role_changed':
-        return FontAwesomeIcons.userGear.data;
+        return AppIcons.userSettings;
       case 'staff.profile_updated':
-        return FontAwesomeIcons.userPen.data;
+        return AppIcons.userEdit;
       case 'sale_rejected':
-        return FontAwesomeIcons.triangleExclamation.data;
+        return AppIcons.warning;
       default:
-        return FontAwesomeIcons.bell.data;
+        return AppIcons.notification;
     }
   }
 
@@ -557,7 +557,7 @@ class NotificationCard extends ConsumerWidget {
         title: Row(
           children: [
             Icon(
-              FontAwesomeIcons.triangleExclamation.data,
+              AppIcons.warning,
               size: 16,
               color: Theme.of(ctx).colorScheme.error,
             ),

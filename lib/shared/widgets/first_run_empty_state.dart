@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
@@ -44,7 +44,7 @@ class FirstRunEmptyState extends ConsumerWidget {
 
       case FirstRunSurfaceState.createStoreCta:
         return _EmptyMessage(
-          icon: FontAwesomeIcons.store.data,
+          icon: AppIcons.store,
           title: 'No stores yet',
           subtitle: 'Create a store to start adding products and selling.',
           subtext: subtext,
@@ -52,7 +52,7 @@ class FirstRunEmptyState extends ConsumerWidget {
             constraints: BoxConstraints(maxWidth: context.getRSize(280)),
             child: AppButton(
               text: 'Create a store',
-              icon: FontAwesomeIcons.plus.data,
+              icon: AppIcons.add,
               onPressed: () {
                 Navigator.of(context).popUntil((route) => route.isFirst);
                 NavigationService().setIndex(NavigationService.storesTab);
@@ -63,7 +63,7 @@ class FirstRunEmptyState extends ConsumerWidget {
 
       case FirstRunSurfaceState.neutralEmpty:
         return _EmptyMessage(
-          icon: FontAwesomeIcons.boxOpen.data,
+          icon: AppIcons.box,
           title: 'No ${lex.itemPluralLower} yet',
           subtitle: 'A manager can add them.',
           subtext: subtext,
@@ -71,7 +71,7 @@ class FirstRunEmptyState extends ConsumerWidget {
 
       case FirstRunSurfaceState.addProductCta:
         return _EmptyMessage(
-          icon: FontAwesomeIcons.boxOpen.data,
+          icon: AppIcons.box,
           title: 'No ${lex.itemPluralLower} yet',
           subtitle: 'Add your first ${lex.itemLower} to start selling.',
           subtext: subtext,
@@ -79,7 +79,7 @@ class FirstRunEmptyState extends ConsumerWidget {
             constraints: BoxConstraints(maxWidth: context.getRSize(280)),
             child: AppButton(
               text: 'Add your first ${lex.itemLower}',
-              icon: FontAwesomeIcons.plus.data,
+              icon: AppIcons.add,
               onPressed: () => Navigator.of(context).push(
                 // Direct (non-receive) mode — the Fast-Add form (#30).
                 MaterialPageRoute(builder: (_) => const AddProductScreen()),

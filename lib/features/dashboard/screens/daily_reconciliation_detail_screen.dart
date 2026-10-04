@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -339,7 +339,7 @@ class _DailyReconciliationDetailScreenState
           IconButton(
             tooltip: 'Export CSV',
             icon: Icon(
-              FontAwesomeIcons.fileCsv.data,
+              AppIcons.fileCsv,
               size: 18,
               color: context.primaryColor,
             ),
@@ -446,7 +446,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Sales summary',
-      FontAwesomeIcons.chartLine.data,
+      AppIcons.analytics,
       context.primaryColor,
       [
         _line(context, theme, 'Items sold', fmtNumber(d.itemsSold)),
@@ -526,7 +526,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Profit & Loss',
-      FontAwesomeIcons.chartPie.data,
+      AppIcons.chartPie,
       netColor,
       [
         _line(
@@ -717,7 +717,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Van sales',
-      FontAwesomeIcons.truck.data,
+      AppIcons.supplier,
       semantic.info,
       [
         _line(
@@ -776,7 +776,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Cash flow (business-wide)',
-      FontAwesomeIcons.moneyBillWave.data,
+      AppIcons.payments,
       netColor,
       [
         _line(context, theme, 'Cash sales',
@@ -904,7 +904,7 @@ class _DailyReconciliationDetailScreenState
         context,
         theme,
         'Stock & shrinkage',
-        FontAwesomeIcons.boxesStacked.data,
+        AppIcons.inventory,
         Colors.blueAccent,
         [
           _line(
@@ -948,7 +948,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Stock reconciliation (at cost)',
-      FontAwesomeIcons.scaleBalanced.data,
+      AppIcons.balance,
       Colors.blueAccent,
       [
         if (d.hasStockFlow) ...[
@@ -1073,7 +1073,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Business worth right now (point-in-time)',
-      FontAwesomeIcons.vault.data,
+      AppIcons.lock,
       positionColor,
       [
         _line(context, theme, 'Inventory on hand (at cost)', '+ ${formatCurrency(d.inventoryOnHandKobo / 100.0)}'),
@@ -1131,7 +1131,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Debts & expenses',
-      FontAwesomeIcons.moneyBillWave.data,
+      AppIcons.payments,
       Colors.redAccent,
       [
         _line(
@@ -1157,7 +1157,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Empty crates (held now)',
-      FontAwesomeIcons.boxOpen.data,
+      AppIcons.box,
       theme.colorScheme.primary,
       [
         if (d.manufacturerEmpties.isEmpty)
@@ -1215,7 +1215,7 @@ class _DailyReconciliationDetailScreenState
       context,
       theme,
       'Crate money with suppliers (business-wide)',
-      FontAwesomeIcons.handHoldingDollar.data,
+      AppIcons.settlement,
       successColor,
       [
         if (rollup.bySupplier.isEmpty)
@@ -1384,7 +1384,7 @@ class _DailyReconciliationDetailScreenState
             key: const ValueKey(kReconCrateWriteOffButtonKey),
             onPressed: () => CrateShortageWriteOffSheet.show(context),
             icon: Icon(
-              FontAwesomeIcons.circleMinus.data,
+              AppIcons.removeCircle,
               size: context.getRSize(14),
             ),
             label: const Text('Write off missing crates'),
@@ -1625,8 +1625,8 @@ class _DailyReconciliationDetailScreenState
         children: [
           Icon(
             changed
-                ? FontAwesomeIcons.clockRotateLeft.data
-                : FontAwesomeIcons.circleCheck.data,
+                ? AppIcons.history
+                : AppIcons.checkCircle,
             size: 15,
             color: accent,
           ),

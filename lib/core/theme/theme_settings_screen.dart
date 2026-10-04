@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 
@@ -40,21 +40,21 @@ class ThemeSettingsScreen extends StatelessWidget {
               ),
               SizedBox(height: context.getRSize(12)),
               _ModeTile(
-                icon: FontAwesomeIcons.sun.data,
+                icon: AppIcons.lightMode,
                 label: 'Light',
                 isActive: themeController.themeMode == ThemeMode.light,
                 onTap: () => themeController.setTheme(ThemeMode.light),
               ),
               SizedBox(height: context.getRSize(8)),
               _ModeTile(
-                icon: FontAwesomeIcons.moon.data,
+                icon: AppIcons.darkMode,
                 label: 'Dark',
                 isActive: themeController.themeMode == ThemeMode.dark,
                 onTap: () => themeController.setTheme(ThemeMode.dark),
               ),
               SizedBox(height: context.getRSize(8)),
               _ModeTile(
-                icon: FontAwesomeIcons.desktop.data,
+                icon: AppIcons.terminal,
                 label: 'System',
                 isActive: themeController.themeMode == ThemeMode.system,
                 onTap: () => themeController.setTheme(ThemeMode.system),

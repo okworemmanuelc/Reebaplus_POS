@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
@@ -38,10 +38,10 @@ class DriversListScreen extends ConsumerWidget {
     return Guarded.screen(
       gate: Gates.vanManage,
       builder: (context) => const _DriversListBody(),
-      denied: GlassyScaffold(
+      denied: const GlassyScaffold(
         title: 'Drivers',
         body: _Empty(
-          icon: FontAwesomeIcons.lock.data,
+          icon: AppIcons.lock,
           title: 'No access',
           message: 'You no longer have access to Van Sales.',
         ),
@@ -70,8 +70,8 @@ class _DriversListBody extends ConsumerWidget {
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   SizedBox(height: context.getRSize(100)),
-                  _Empty(
-                    icon: FontAwesomeIcons.userTie.data,
+                  const _Empty(
+                    icon: AppIcons.managerRole,
                     title: 'No drivers yet',
                     message:
                         'Invite a staff member with the Driver role, then load '
@@ -151,7 +151,7 @@ class _DriverRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.userTie.data,
+                AppIcons.managerRole,
                 color: t.colorScheme.primary,
                 size: context.getRSize(20),
               ),

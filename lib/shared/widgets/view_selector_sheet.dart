@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class ViewSelectorSheet extends StatelessWidget {
@@ -58,7 +58,7 @@ class ViewSelectorSheet extends StatelessWidget {
           SizedBox(height: context.getRSize(24)),
           _buildOption(
             context: context,
-            icon: FontAwesomeIcons.list.data,
+            icon: AppIcons.list,
             label: 'List View',
             isSelected: currentIsList,
             onTap: () => onSelect(true, currentColumns),
@@ -67,7 +67,7 @@ class ViewSelectorSheet extends StatelessWidget {
             SizedBox(height: context.getRSize(12)),
             _buildOption(
               context: context,
-              icon: FontAwesomeIcons.tableCells.data,
+              icon: AppIcons.table,
               label: 'Grid View',
               isSelected: !currentIsList,
               onTap: () => onSelect(false, currentColumns),
@@ -76,7 +76,7 @@ class ViewSelectorSheet extends StatelessWidget {
             SizedBox(height: context.getRSize(12)),
             _buildOption(
               context: context,
-              icon: FontAwesomeIcons.tableCellsLarge.data,
+              icon: AppIcons.grid,
               label: '2 Columns Grid',
               isSelected: !currentIsList && currentColumns == 2,
               onTap: () => onSelect(false, 2),
@@ -85,7 +85,7 @@ class ViewSelectorSheet extends StatelessWidget {
               SizedBox(height: context.getRSize(12)),
               _buildOption(
                 context: context,
-                icon: FontAwesomeIcons.tableCells.data,
+                icon: AppIcons.table,
                 label: '3 Columns Grid',
                 isSelected: !currentIsList && currentColumns == 3,
                 onTap: () => onSelect(false, 3),

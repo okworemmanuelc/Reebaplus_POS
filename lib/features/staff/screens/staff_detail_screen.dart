@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -787,13 +787,13 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   pills: [
                     ProfilePill(
                       icon: suspended
-                          ? FontAwesomeIcons.userSlash.data
-                          : FontAwesomeIcons.circleCheck.data,
+                          ? AppIcons.userSuspended
+                          : AppIcons.checkCircle,
                       label: suspended ? 'Suspended' : 'Active',
                       color: suspended ? subtext : t.colorScheme.primary,
                     ),
                     ProfilePill(
-                      icon: FontAwesomeIcons.store.data,
+                      icon: AppIcons.store,
                       label: _storeSummary(assignedStoreNames),
                     ),
                   ],
@@ -806,7 +806,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       value: _totalSalesKobo == null
                           ? '…'
                           : _ordersCount.toString(),
-                      icon: FontAwesomeIcons.receipt.data,
+                      icon: AppIcons.receipt,
                       color: t.colorScheme.primary,
                     ),
                     ProfileStat(
@@ -814,7 +814,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       value: _totalSalesKobo == null
                           ? '…'
                           : formatCurrency(_totalSalesKobo! / 100.0),
-                      icon: FontAwesomeIcons.sackDollar.data,
+                      icon: AppIcons.moneyBag,
                       color: const Color(0xFFA855F7),
                     ),
                     ProfileStat(
@@ -822,7 +822,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       value: _totalSalesKobo == null
                           ? '…'
                           : _stockTransactionsCount.toString(),
-                      icon: FontAwesomeIcons.boxesStacked.data,
+                      icon: AppIcons.inventory,
                       color: const Color(0xFFF59E0B),
                     ),
                     ProfileStat(
@@ -830,7 +830,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       value: _totalSalesKobo == null
                           ? '…'
                           : _quickSalesCount.toString(),
-                      icon: FontAwesomeIcons.bolt.data,
+                      icon: AppIcons.quickSale,
                       color: const Color(0xFF10B981),
                     ),
                     ProfileStat(
@@ -838,7 +838,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       value: _totalSalesKobo == null
                           ? '…'
                           : formatCurrency(_totalExpensesKobo / 100.0),
-                      icon: FontAwesomeIcons.moneyBillTrendUp.data,
+                      icon: AppIcons.profit,
                       color: const Color(0xFFEF4444),
                     ),
                   ],
@@ -871,7 +871,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   if (Gates.changeStaffRole.allows(ref)) ...[
                     AppButton(
                       text: 'Change role',
-                      icon: FontAwesomeIcons.userGear.data,
+                      icon: AppIcons.userSettings,
                       variant: AppButtonVariant.secondary,
                       onPressed: () =>
                           _changeRole(membership, role, roleOptions),
@@ -882,8 +882,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                     AppButton(
                       text: suspended ? 'Reactivate' : 'Suspend',
                       icon: suspended
-                          ? FontAwesomeIcons.userCheck.data
-                          : FontAwesomeIcons.userSlash.data,
+                          ? AppIcons.userVerified
+                          : AppIcons.userSuspended,
                       variant: suspended
                           ? AppButtonVariant.success
                           : AppButtonVariant.danger,
@@ -894,7 +894,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   if (Gates.staffRemove.allows(ref))
                     AppButton(
                       text: 'Remove',
-                      icon: FontAwesomeIcons.userXmark.data,
+                      icon: AppIcons.userRemove,
                       variant: AppButtonVariant.danger,
                       onPressed: () => _removeStaff(membership, user),
                     ),
@@ -917,7 +917,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   ) {
     final rows = <ProfileInfoRow>[
       ProfileInfoRow(
-        icon: FontAwesomeIcons.store.data,
+        icon: AppIcons.store,
         label: 'Assigned store${assignedStoreNames.length == 1 ? '' : 's'}',
         value: assignedStoreNames.isEmpty
             ? (onEditStores == null ? '—' : 'Unassigned')
@@ -925,12 +925,12 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         onTap: onEditStores,
       ),
       ProfileInfoRow(
-        icon: FontAwesomeIcons.envelope.data,
+        icon: AppIcons.email,
         label: 'Email',
         value: user.email ?? '—',
       ),
       ProfileInfoRow(
-        icon: FontAwesomeIcons.clock.data,
+        icon: AppIcons.time,
         label: 'Last login',
         value: membership.lastLoginAt == null
             ? 'Never logged in'
@@ -961,7 +961,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       }
       rows.add(
         ProfileInfoRow(
-          icon: FontAwesomeIcons.userShield.data,
+          icon: AppIcons.userPermissions,
           label: 'Permission access',
           value: state,
           valueColor: stateColor,

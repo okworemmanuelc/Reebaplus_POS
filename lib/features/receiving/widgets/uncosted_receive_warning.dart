@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -47,7 +47,7 @@ class UncostedReceiveWarning extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            FontAwesomeIcons.triangleExclamation.data,
+            AppIcons.warning,
             size: context.getRSize(16),
             color: semantic.warning,
           ),

@@ -4,7 +4,7 @@ import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -547,7 +547,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              FontAwesomeIcons.store.data,
+              AppIcons.store,
               size: context.getRSize(48),
               color: subtextCol.withValues(alpha: 0.5),
             ),
@@ -565,7 +565,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
               onPressed: () =>
                   showStorePickerSheet(context, ref, isDismissible: false),
               icon: Icon(
-                FontAwesomeIcons.store.data,
+                AppIcons.store,
                 size: context.getRSize(14),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -627,7 +627,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       child: Row(
         children: [
           Icon(
-            FontAwesomeIcons.circleInfo.data,
+            AppIcons.infoCircle,
             size: context.getRSize(16),
             color: primary,
           ),
@@ -643,7 +643,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           ),
           IconButton(
             icon: Icon(
-              FontAwesomeIcons.xmark.data,
+              AppIcons.close,
               size: context.getRSize(16),
               color: primary,
             ),
@@ -674,7 +674,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       elevation: 0,
       leading: context.isDesktop ? null : const MenuButton(),
       title: AppBarHeader(
-        icon: FontAwesomeIcons.beerMugEmpty.data,
+        icon: AppIcons.beerMug,
         title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
         subtitle: _controller!.currentStoreName ?? 'Point of Sale',
         truncateTitleWithReveal: true,
@@ -682,7 +682,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       actions: [
         IconButton(
           icon: Icon(
-            _isListView ? FontAwesomeIcons.list.data : FontAwesomeIcons.borderAll.data,
+            _isListView ? AppIcons.list : AppIcons.grid,
             size: 18,
             color: subtextCol,
           ),
@@ -786,7 +786,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           ),
         ),
         child: Icon(
-          FontAwesomeIcons.bolt.data,
+          AppIcons.quickSale,
           size: context.getRSize(18),
           color: Theme.of(context).colorScheme.primary,
         ),
@@ -818,7 +818,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         hintText:
             'Search ${ref.watch(industryLexiconProvider).itemPluralLower}...',
         prefixIcon: Icon(
-          FontAwesomeIcons.magnifyingGlass.data,
+          AppIcons.search,
           size: context.getRSize(16),
         ),
       ),

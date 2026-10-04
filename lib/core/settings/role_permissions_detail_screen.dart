@@ -17,7 +17,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 const _kMaxDiscount = 'max_discount_percent';
 const _kMaxExpenseKobo = 'max_expense_approval_kobo';
@@ -563,7 +563,7 @@ class _RolePermissionsDetailScreenState
       const SizedBox(height: 4),
       AppButton(
         text: 'Restore store defaults',
-        icon: FontAwesomeIcons.arrowRotateLeft.data,
+        icon: AppIcons.undo,
         variant: AppButtonVariant.outline,
         onPressed: overrides.isEmpty
             ? null

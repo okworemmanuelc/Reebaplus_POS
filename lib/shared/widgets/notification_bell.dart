@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/notifications_modal.dart';
@@ -28,7 +28,7 @@ class NotificationBell extends ConsumerWidget {
                 Container(
                   padding: EdgeInsets.all(context.getRSize(8)),
                   child: Icon(
-                    FontAwesomeIcons.bell.data,
+                    AppIcons.notification,
                     size: context.getRSize(20),
                     color: t.colorScheme.primary,
                   ),

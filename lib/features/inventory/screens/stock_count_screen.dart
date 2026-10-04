@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -215,7 +215,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      FontAwesomeIcons.clipboardList.data,
+                      AppIcons.clipboardList,
                       size: context.getRSize(16),
                       color: Theme.of(context).colorScheme.primary,
                     ),
@@ -291,7 +291,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              FontAwesomeIcons.circleCheck.data,
+                              AppIcons.checkCircle,
                               size: context.getRSize(36),
                               color: success.withValues(alpha: 0.6),
                             ),
@@ -755,7 +755,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     Row(
                       children: [
                         Icon(
-                          FontAwesomeIcons.triangleExclamation.data,
+                          AppIcons.warning,
                           size: context.getRSize(16),
                           color: danger,
                         ),
@@ -908,7 +908,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      FontAwesomeIcons.clockRotateLeft.data,
+                      AppIcons.history,
                       size: context.getRSize(16),
                       color: Theme.of(context).colorScheme.primary,
                     ),
@@ -933,7 +933,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          FontAwesomeIcons.clockRotateLeft.data,
+                          AppIcons.history,
                           size: context.getRSize(36),
                           color: _border,
                         ),
@@ -993,7 +993,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
-                            FontAwesomeIcons.clipboardCheck.data,
+                            AppIcons.auditCheck,
                             size: context.getRSize(14),
                             color: Theme.of(context).colorScheme.primary,
                           ),
@@ -1176,7 +1176,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.store.data,
+                AppIcons.store,
                 size: context.getRSize(11),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -1366,7 +1366,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.store.data,
+                  AppIcons.store,
                   size: context.getRSize(10),
                   color: _subtext,
                 ),
@@ -1387,7 +1387,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             IconButton(
               key: const Key('stock_count_record_damages_button'),
               icon: Icon(
-                FontAwesomeIcons.triangleExclamation.data,
+                AppIcons.warning,
                 color: _text,
                 size: context.getRSize(16),
               ),
@@ -1396,7 +1396,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             ),
           IconButton(
             icon: Icon(
-              FontAwesomeIcons.clockRotateLeft.data,
+              AppIcons.history,
               color: _text,
               size: context.getRSize(16),
             ),
@@ -1435,7 +1435,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          FontAwesomeIcons.boxOpen.data,
+                          AppIcons.box,
                           size: context.getRSize(48),
                           color: _subtext.withValues(alpha: 0.4),
                         ),
@@ -1460,7 +1460,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           : AppFAB(
               heroTag: 'save_count_fab',
               onPressed: _confirmAndSave,
-              icon: FontAwesomeIcons.floppyDisk.data,
+              icon: AppIcons.save,
               label: 'Save Count',
             ),
     );

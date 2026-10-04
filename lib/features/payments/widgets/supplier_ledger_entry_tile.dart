@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -34,10 +34,10 @@ class SupplierLedgerEntryTile extends StatelessWidget {
 
   IconData get _icon {
     if (entry.referenceType == 'invoice') {
-      return FontAwesomeIcons.fileInvoiceDollar.data;
+      return AppIcons.expenses;
     }
-    if (entry.referenceType == 'void') return FontAwesomeIcons.rotateLeft.data;
-    return FontAwesomeIcons.moneyBillTransfer.data;
+    if (entry.referenceType == 'void') return AppIcons.refresh;
+    return AppIcons.transfer;
   }
 
   String get _friendlyRefType {
@@ -130,7 +130,7 @@ class SupplierLedgerEntryTile extends StatelessWidget {
                           if (hasReceipt) ...[
                             SizedBox(width: context.getRSize(6)),
                             Icon(
-                              FontAwesomeIcons.paperclip.data,
+                              AppIcons.attachment,
                               size: context.getRSize(11),
                               color: subtext,
                             ),

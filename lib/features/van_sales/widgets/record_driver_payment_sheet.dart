@@ -1,7 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -305,7 +305,7 @@ class _RecordDriverPaymentSheetState
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
-            FontAwesomeIcons.moneyBillTransfer.data,
+            AppIcons.transfer,
             color: accent,
             size: context.getRSize(20),
           ),
@@ -355,7 +355,7 @@ class _RecordDriverPaymentSheetState
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.store.data,
+                AppIcons.store,
                 size: context.getRSize(13),
                 color: primary,
               ),
@@ -377,7 +377,7 @@ class _RecordDriverPaymentSheetState
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.scaleBalanced.data,
+                  AppIcons.balance,
                   size: context.getRSize(13),
                   color: balanceKobo < 0
                       ? Theme.of(context).colorScheme.error
@@ -442,8 +442,8 @@ class _RecordDriverPaymentSheetState
               children: [
                 Icon(
                   _receipt == null
-                      ? FontAwesomeIcons.paperclip.data
-                      : FontAwesomeIcons.solidFileLines.data,
+                      ? AppIcons.attachment
+                      : AppIcons.document,
                   size: context.getRSize(16),
                   color: _receipt == null
                       ? _subtext

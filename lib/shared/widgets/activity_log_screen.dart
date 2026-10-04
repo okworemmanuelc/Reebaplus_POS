@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
@@ -127,7 +127,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                 ],
               ),
               child: Icon(
-                FontAwesomeIcons.clockRotateLeft.data,
+                AppIcons.history,
                 color: Theme.of(context).colorScheme.onPrimary,
                 size: context.getRSize(16),
               ),
@@ -270,7 +270,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              FontAwesomeIcons.clockRotateLeft.data,
+              AppIcons.history,
               size: context.getRSize(48),
               color: subtextCol.withValues(alpha: 0.5),
             ),
@@ -312,21 +312,21 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     final scheme = Theme.of(context).colorScheme;
     final semantic = Theme.of(context).extension<AppSemanticColors>();
     final actionLower = log.action.toLowerCase();
-    IconData icon = FontAwesomeIcons.bolt.data;
+    IconData icon = AppIcons.quickSale;
     Color iconColor = scheme.primary;
 
     if (actionLower.contains('order') ||
         actionLower.contains('pos') ||
         actionLower.contains('sale')) {
-      icon = FontAwesomeIcons.cashRegister.data;
+      icon = AppIcons.pos;
       iconColor = semantic?.success ?? success;
     } else if (actionLower.contains('inventory') ||
         actionLower.contains('stock') ||
         actionLower.contains('delivery')) {
-      icon = FontAwesomeIcons.boxesStacked.data;
+      icon = AppIcons.inventory;
       iconColor = semantic?.warning ?? const Color(0xFFF59E0B); // amber
     } else if (actionLower.contains('customer')) {
-      icon = FontAwesomeIcons.user.data;
+      icon = AppIcons.user;
       iconColor = const Color(0xFF8B5CF6); // purple
     }
 

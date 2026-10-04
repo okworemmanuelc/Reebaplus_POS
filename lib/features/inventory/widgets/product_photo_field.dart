@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -60,7 +60,7 @@ class ProductPhotoField extends StatelessWidget {
       );
     } else {
       preview = Icon(
-        FontAwesomeIcons.image.data,
+        AppIcons.image,
         size: context.getRSize(26),
         color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
       );

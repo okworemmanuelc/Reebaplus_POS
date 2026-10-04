@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/result.dart';
 
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
@@ -644,7 +644,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.trashCan.data,
+                AppIcons.delete,
                 size: context.getRSize(18),
                 color: Theme.of(context).colorScheme.error,
               ),
@@ -818,7 +818,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // (restock) or the Stock keeper's Update Stock modal, never inline.
             _infoRow(
               context,
-              FontAwesomeIcons.cubesStacked.data,
+              AppIcons.crates,
               'Total Quantity',
               '${_liveStock.toStringAsFixed(_liveStock % 1 == 0 ? 0 : 1)}'
                   '${_selectedUnit != null ? ' ${_selectedUnit!}' : ''}',
@@ -828,7 +828,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Description / subtitle
             _infoRow(
               context,
-              FontAwesomeIcons.alignLeft.data,
+              AppIcons.description,
               'Description',
               _editMode ? '' : _subtitleController.text,
               const Color(0xFF06B6D4),
@@ -839,7 +839,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _divider(context),
             _infoRow(
               context,
-              FontAwesomeIcons.industry.data,
+              AppIcons.manufacturer,
               'Manufacturer',
               '',
               const Color(0xFF6366F1),
@@ -887,7 +887,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               _divider(context),
               _infoRow(
                 context,
-                FontAwesomeIcons.truck.data,
+                AppIcons.supplier,
                 'Supplier',
                 '',
                 const Color(0xFF0EA5E9),
@@ -926,7 +926,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Category Dropdown
             _infoRow(
               context,
-              FontAwesomeIcons.tag.data,
+              AppIcons.tag,
               'Category',
               '',
               success,
@@ -956,7 +956,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Product Unit Dropdown
             _infoRow(
               context,
-              FontAwesomeIcons.box.data,
+              AppIcons.box,
               'Product Unit',
               '',
               const Color(0xFFF59E0B),
@@ -987,7 +987,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Low Stock Alert
             _infoRow(
               context,
-              FontAwesomeIcons.triangleExclamation.data,
+              AppIcons.warning,
               'Low Stock Alert',
               '',
               const Color(0xFFEF4444),
@@ -1002,7 +1002,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Size dropdown
             _infoRow(
               context,
-              FontAwesomeIcons.layerGroup.data,
+              AppIcons.category,
               'Size',
               '',
               const Color(0xFF8B5CF6),
@@ -1026,7 +1026,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Expiry date (editable)
             _infoRow(
               context,
-              FontAwesomeIcons.calendarXmark.data,
+              AppIcons.calendarCancel,
               'Expiry Date',
               '',
               const Color(0xFFF59E0B),
@@ -1036,7 +1036,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Allow fractional sales
             _infoRow(
               context,
-              FontAwesomeIcons.divide.data,
+              AppIcons.divide,
               'Allow fractional sales',
               '',
               const Color(0xFF6366F1),
@@ -1051,7 +1051,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Track empty crate returns
             _infoRow(
               context,
-              FontAwesomeIcons.recycle.data,
+              AppIcons.recycle,
               'Track empty crates',
               '',
               const Color(0xFF14B8A6),
@@ -1067,7 +1067,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               // Empty Crate Value — shared at the manufacturer level (§16.5)
               _infoRow(
                 context,
-                FontAwesomeIcons.circleDollarToSlot.data,
+                AppIcons.deposit,
                 'Empty Crate Value',
                 '',
                 const Color(0xFF14B8A6),
@@ -1085,7 +1085,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               // Empty Crates — manufacturer total (read-only)
               _infoRow(
                 context,
-                FontAwesomeIcons.beerMugEmpty.data,
+                AppIcons.beerMug,
                 'Empty Crates',
                 _emptyCrateStock?.toString() ?? '0',
                 const Color(0xFFF59E0B),
@@ -1104,7 +1104,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             if (_canEditBuying) ...[
               _infoRow(
                 context,
-                FontAwesomeIcons.dollarSign.data,
+                AppIcons.price,
                 'Buying Price',
                 '',
                 const Color(0xFFF59E0B),
@@ -1114,7 +1114,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ],
             _infoRow(
               context,
-              FontAwesomeIcons.tag.data,
+              AppIcons.tag,
               'Retailer Price',
               '',
               Theme.of(context).colorScheme.primary,
@@ -1123,7 +1123,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _divider(context),
             _infoRow(
               context,
-              FontAwesomeIcons.users.data,
+              AppIcons.customers,
               'Wholesaler Price',
               '',
               const Color(0xFF8B5CF6),
@@ -1132,7 +1132,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _divider(context),
             _infoRow(
               context,
-              FontAwesomeIcons.chartLine.data,
+              AppIcons.analytics,
               'Total Stock Value',
               formatCurrency(totalStockValue),
               Theme.of(context).colorScheme.primary,
@@ -1560,7 +1560,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     return _infoCard(context, [
       _infoRow(
         context,
-        FontAwesomeIcons.calendarDay.data,
+        AppIcons.calendar,
         'Date',
         _fmtDate(d.date),
         Theme.of(context).colorScheme.primary,
@@ -1568,7 +1568,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       _divider(context),
       _infoRow(
         context,
-        FontAwesomeIcons.truckFast.data,
+        AppIcons.vanDelivery,
         'Quantity Received',
         '${d.quantity} units',
         const Color(0xFF6366F1),
@@ -1576,7 +1576,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       _divider(context),
       _infoRow(
         context,
-        FontAwesomeIcons.dollarSign.data,
+        AppIcons.price,
         'Price Per Unit',
         formatCurrency(d.unitPriceKobo / 100),
         const Color(0xFFF59E0B),
@@ -1584,7 +1584,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       _divider(context),
       _infoRow(
         context,
-        FontAwesomeIcons.receipt.data,
+        AppIcons.receipt,
         'Total Delivery Cost',
         formatCurrency(d.totalKobo / 100),
         success,

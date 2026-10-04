@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/native.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -48,7 +48,7 @@ void main() {
         'subtitle': '600ml',
         'price': 1000.0,
         'qty': 2.0,
-        'icon': FontAwesomeIcons.beerMugEmpty,
+        'icon': AppIcons.beerMug,
         'color': '#3B82F6',
       },
       {

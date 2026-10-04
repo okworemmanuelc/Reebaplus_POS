@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -41,10 +41,10 @@ class DriverPaymentsScreen extends ConsumerWidget {
     // Body guard (layer 2, hard rule #6): the hub already hides the way in, but
     // a live revocation while this screen is open must empty it too.
     if (!Gates.vanManage.allows(ref)) {
-      return GlassyScaffold(
+      return const GlassyScaffold(
         title: 'Driver Payments',
         body: _Empty(
-          icon: FontAwesomeIcons.lock.data,
+          icon: AppIcons.lock,
           title: 'No access',
           message: 'You no longer have access to Van Sales.',
         ),
@@ -86,7 +86,7 @@ class DriverPaymentsScreen extends ConsumerWidget {
                     ),
                   ),
                   icon: Icon(
-                    FontAwesomeIcons.moneyBillTransfer.data,
+                    AppIcons.transfer,
                     size: context.getRSize(14),
                   ),
                   label: const Text('Record payment'),
@@ -113,8 +113,8 @@ class DriverPaymentsScreen extends ConsumerWidget {
           ),
           SizedBox(height: context.getRSize(12)),
           if (entries.isEmpty)
-            _Empty(
-              icon: FontAwesomeIcons.receipt.data,
+            const _Empty(
+              icon: AppIcons.receipt,
               title: 'Nothing recorded yet',
               message: 'Loads and payments on this trip will show here.',
             )

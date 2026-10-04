@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -79,7 +79,7 @@ class VanCloseBarrier extends StatelessWidget {
                 // is caught (ADR 0002 layer 3).
                 onPressed: isBlocked ? null : allow(onClose),
                 icon: Icon(
-                  FontAwesomeIcons.flagCheckered.data,
+                  AppIcons.goal,
                   size: context.getRSize(14),
                 ),
                 label: const Text('Confirm & close trip'),
@@ -122,7 +122,7 @@ class _PendingSalesWarning extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            FontAwesomeIcons.cloudArrowUp.data,
+            AppIcons.syncIssues,
             size: context.getRSize(16),
             color: semantic.warning,
           ),

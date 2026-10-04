@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -193,7 +193,7 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                             onPressed: () => Navigator.pop(context),
                             tooltip: 'Back',
                             icon: Icon(
-                              FontAwesomeIcons.arrowLeft.data,
+                              AppIcons.arrowBack,
                               color: _text,
                               size: context.getRSize(18),
                             ),
@@ -225,7 +225,7 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                               ],
                             ),
                             child: Icon(
-                              FontAwesomeIcons.penToSquare.data,
+                              AppIcons.edit,
                               color: Colors.white,
                               size: context.getRSize(18),
                             ),

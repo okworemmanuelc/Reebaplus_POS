@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
+import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 
 /// Quick Sale modal (master plan §12.3). For a CEO/Manager it adds straight to
 /// the cart. For a role below Manager ([requireApproval] true, §12.3.1) "Send
@@ -103,7 +104,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
     'name': name,
     'subtitle': 'Quick Sale',
     'price': priceNaira,
-    'icon': FontAwesomeIcons.bolt.data.codePoint,
+    'icon': kStoredIconBolt,
     'color': null,
     'category': 'Other',
   };
@@ -298,7 +299,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
             controller: _nameCtrl,
             labelText: 'Item Name',
             prefixIcon: Icon(
-              FontAwesomeIcons.tag.data,
+              AppIcons.tag,
               size: context.getRSize(16),
             ),
           ),
@@ -307,7 +308,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
             controller: _qtyCtrl,
             labelText: 'Quantity',
             prefixIcon: Icon(
-              FontAwesomeIcons.cubes.data,
+              AppIcons.crates,
               size: context.getRSize(16),
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -319,7 +320,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
             labelText: 'Price Per Unit ($activeCurrencySymbol)',
             hintText: 'e.g. 500',
             prefixIcon: Icon(
-              FontAwesomeIcons.nairaSign.data,
+              AppIcons.naira,
               size: context.getRSize(16),
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -330,7 +331,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.circleInfo.data,
+                  AppIcons.infoCircle,
                   size: context.getRSize(13),
                   color: widget.subtextCol,
                 ),
@@ -360,7 +361,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
         FadeTransition(
           opacity: Tween<double>(begin: 0.35, end: 1.0).animate(_pulseAnim),
           child: Icon(
-            FontAwesomeIcons.hourglassHalf.data,
+            AppIcons.pending,
             size: context.getRSize(34),
             color: Theme.of(context).colorScheme.primary,
           ),
@@ -394,7 +395,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
           child: Row(
             children: [
               Icon(
-                FontAwesomeIcons.bolt.data,
+                AppIcons.quickSale,
                 size: context.getRSize(14),
                 color: Theme.of(context).colorScheme.primary,
               ),

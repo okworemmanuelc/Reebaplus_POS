@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'package:reebaplus_pos/features/pos/services/camera_permission.dart';
@@ -181,7 +181,7 @@ class ScannerErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Material fallback icon — font_awesome_flutter has no camera-slash glyph.
+    // Material fallback icon.
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -203,7 +203,7 @@ class ScannerErrorView extends StatelessWidget {
               const SizedBox(height: 24),
               AppButton(
                 text: 'Open settings',
-                icon: FontAwesomeIcons.gear.data,
+                icon: AppIcons.settings,
                 isFullWidth: false,
                 onPressed: onOpenSettings,
               ),

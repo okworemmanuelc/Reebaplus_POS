@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -376,7 +376,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           elevation: 0,
           leading: context.isDesktop ? null : const MenuButton(),
           title: AppBarHeader(
-            icon: FontAwesomeIcons.chartLine.data,
+            icon: AppIcons.analytics,
             title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
             subtitle: ref.watch(activeStoreLabelProvider),
           ),
@@ -537,7 +537,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                FontAwesomeIcons.fileContract.data,
+                AppIcons.terms,
                 size: context.getRSize(16),
                 color: context.primaryColor,
               ),
@@ -663,7 +663,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           label: 'Total Sales',
           value: formatCurrency(sales),
           subtitle: 'Generated from ${formatPeriodLabel(_selectedPeriod)} transactions',
-          icon: FontAwesomeIcons.nairaSign.data,
+          icon: AppIcons.naira,
           color: Theme.of(context).colorScheme.primary,
           trend: sales > 0 ? 'Active' : 'No sales',
           isNeutral: true,
@@ -681,7 +681,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               : 'Add buying prices to '
                     '${ref.watch(industryLexiconProvider).itemPluralLower} to '
                     'see profit',
-          icon: FontAwesomeIcons.chartLine.data,
+          icon: AppIcons.analytics,
           color: profit != null
               ? (profit >= 0 ? success : danger)
               : Theme.of(context).colorScheme.primary,
@@ -701,7 +701,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           label: 'Pending Orders',
           value: pending.toString(),
           subtitle: 'Orders awaiting fulfillment',
-          icon: FontAwesomeIcons.clock.data,
+          icon: AppIcons.time,
           color: AppColors.warning,
           trend: pending > 0 ? 'Attention' : 'Clear',
           isNeutral: true,
@@ -719,7 +719,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           label: 'Total Expenses',
           value: formatCurrency(expenses),
           subtitle: 'Including operations & staff',
-          icon: FontAwesomeIcons.fileInvoiceDollar.data,
+          icon: AppIcons.expenseReport,
           color: Theme.of(context).colorScheme.error,
           trend: expenses > 0 ? 'Recorded' : 'None',
           isPositive: false,
@@ -742,7 +742,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           label: 'Stock Value',
           value: formatCurrency(_totalStockValue),
           subtitle: 'Estimated inventory worth',
-          icon: FontAwesomeIcons.boxesStacked.data,
+          icon: AppIcons.inventory,
           color: Theme.of(context).colorScheme.primary,
           trend: 'Live',
           isNeutral: true,
@@ -815,7 +815,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Icon(
-                        FontAwesomeIcons.boxesStacked.data,
+                        AppIcons.inventory,
                         color: color,
                         size: context.getRSize(24),
                       ),
@@ -1040,10 +1040,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }) {
     final trendColor = isNeutral ? _subtext : (isPositive ? success : danger);
     final trendIcon = isNeutral
-        ? FontAwesomeIcons.circleExclamation.data
+        ? AppIcons.alertCircle
         : (isPositive
-              ? FontAwesomeIcons.arrowUp.data
-              : FontAwesomeIcons.arrowDown.data);
+              ? AppIcons.arrowUp
+              : AppIcons.arrowDown);
 
     final innerContent = Padding(
       padding: EdgeInsets.all(context.spacingM),
@@ -1165,7 +1165,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(FontAwesomeIcons.wallet.data, color: color, size: context.getRSize(18)),
+                child: Icon(AppIcons.creditBalance, color: color, size: context.getRSize(18)),
               ),
               SizedBox(width: context.spacingM),
               Text(

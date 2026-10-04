@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -55,7 +55,7 @@ class PaymentsScreen extends ConsumerWidget {
           ? AppFAB(
               heroTag: 'suppliers_fab',
               onPressed: () => SupplierFormSheet.show(context),
-              icon: FontAwesomeIcons.plus.data,
+              icon: AppIcons.add,
               label: 'Add Supplier',
             )
           : null,
@@ -135,7 +135,7 @@ class PaymentsScreen extends ConsumerWidget {
               ],
             ),
             child: Icon(
-              FontAwesomeIcons.moneyBillWave.data,
+              AppIcons.payments,
               color: Colors.white,
               size: context.getRSize(16),
             ),
@@ -307,7 +307,7 @@ class _TransactionHistoryLink extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.receipt.data,
+                AppIcons.receipt,
                 color: primary,
                 size: context.getRSize(16),
               ),
@@ -404,7 +404,7 @@ class _SupplierRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.buildingColumns.data,
+                AppIcons.bank,
                 color: Theme.of(context).colorScheme.primary,
                 size: context.getRSize(20),
               ),

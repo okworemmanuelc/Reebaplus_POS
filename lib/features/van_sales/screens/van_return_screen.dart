@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
@@ -189,10 +189,10 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
 
     // Body guard (layer 2, hard rule #6).
     if (!Gates.vanManage.allows(ref)) {
-      return GlassyScaffold(
+      return const GlassyScaffold(
         title: 'Record Return',
         body: _Empty(
-          icon: FontAwesomeIcons.lock.data,
+          icon: AppIcons.lock,
           title: 'No access',
           message: 'You no longer have access to Van Sales.',
         ),
@@ -256,7 +256,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
                   labelText: 'Add a ${lex.itemLower} coming back',
                   onFieldSubmitted: (_) => onEditingComplete(),
                   prefixIcon: Icon(
-                    FontAwesomeIcons.boxesStacked.data,
+                    AppIcons.inventory,
                     size: 14,
                     color: _subtext,
                   ),
@@ -292,7 +292,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
               gate: Gates.vanManage,
               builder: (context, allow) => AppButton(
                 text: _submitting ? 'Recording…' : 'Record Return',
-                icon: FontAwesomeIcons.arrowRotateLeft.data,
+                icon: AppIcons.undo,
                 onPressed: _submitting ? null : allow(_submit),
                 isFullWidth: true,
               ),
@@ -348,7 +348,7 @@ class _CountItYourselfNote extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            FontAwesomeIcons.clipboardCheck.data,
+            AppIcons.auditCheck,
             size: context.getRSize(14),
             color: semantic.info,
           ),
@@ -419,7 +419,7 @@ class _ReturnLineCard extends StatelessWidget {
               IconButton(
                 onPressed: onRemove,
                 icon: Icon(
-                  FontAwesomeIcons.xmark.data,
+                  AppIcons.close,
                   size: context.getRSize(14),
                 ),
                 tooltip: 'Remove',

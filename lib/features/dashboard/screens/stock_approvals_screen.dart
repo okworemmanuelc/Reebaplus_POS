@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -122,7 +122,7 @@ class _EmptyState extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.clipboardCheck.data,
+            AppIcons.auditCheck,
             size: 40,
             color: Theme.of(context).hintColor,
           ),
@@ -547,7 +547,7 @@ class _QuickSaleApprovalCardState
               color: _accent.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(FontAwesomeIcons.bolt.data, color: _accent, size: 18),
+            child: Icon(AppIcons.quickSale, color: _accent, size: 18),
           ),
           title: Text(
             r.itemName,
@@ -851,7 +851,7 @@ class _CrateDepositApprovalCardState
               shape: BoxShape.circle,
             ),
             child: Icon(
-              FontAwesomeIcons.moneyBillTransfer.data,
+              AppIcons.transfer,
               color: _accent,
               size: 18,
             ),

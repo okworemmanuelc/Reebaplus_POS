@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -149,7 +149,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
         elevation: 0,
         title: const Text('Scan barcode'),
         leading: IconButton(
-          icon: Icon(FontAwesomeIcons.xmark.data),
+          icon: const Icon(AppIcons.close),
           tooltip: 'Close scanner',
           onPressed: () => Navigator.of(context).pop(),
         ),
@@ -183,7 +183,7 @@ class _TorchButton extends StatelessWidget {
       valueListenable: camera.torch,
       builder: (context, isOn, _) {
         if (isOn == null) return const SizedBox.shrink();
-        // Material icons — font_awesome_flutter has no bolt-slash glyph.
+        // Material icons.
         return IconButton(
           icon: Icon(isOn ? Icons.flash_on : Icons.flash_off),
           tooltip: isOn ? 'Turn torch off' : 'Turn torch on',

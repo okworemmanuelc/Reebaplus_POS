@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -157,7 +157,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
                 ),
               );
             },
-            icon: FontAwesomeIcons.userPlus.data,
+            icon: AppIcons.userAdd,
             label: 'Invite new staff',
           );
         },
@@ -207,10 +207,10 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
           fontWeight: FontWeight.bold,
           fontSize: context.getRFontSize(14),
         ),
-        tabs: [
-          Tab(icon: Icon(FontAwesomeIcons.users.data, size: 16), text: 'Staff'),
+        tabs: const [
+          Tab(icon: Icon(AppIcons.customers, size: 16), text: 'Staff'),
           Tab(
-            icon: Icon(FontAwesomeIcons.ticket.data, size: 16),
+            icon: Icon(AppIcons.discount, size: 16),
             text: 'Invites',
           ),
         ],
@@ -243,7 +243,7 @@ class _SearchField extends StatelessWidget {
           hintText: hint,
           hintStyle: TextStyle(color: subtext, fontSize: 14),
           prefixIcon: Icon(
-            FontAwesomeIcons.magnifyingGlass.data,
+            AppIcons.search,
             size: 14,
             color: subtext,
           ),
@@ -391,8 +391,8 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
               children: rows.isEmpty
                   ? [
                       SizedBox(height: context.getRSize(120)),
-                      _EmptyState(
-                        icon: FontAwesomeIcons.users.data,
+                      const _EmptyState(
+                        icon: AppIcons.customers,
                         label: 'No staff found',
                       ),
                     ]
@@ -596,7 +596,7 @@ class _StaffCard extends StatelessWidget {
             ),
             if (row.manageable || row.isSelf)
               Icon(
-                FontAwesomeIcons.chevronRight.data,
+                AppIcons.chevronRight,
                 size: context.getRSize(13),
                 color: subtext,
               ),
@@ -748,8 +748,8 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: [
                       SizedBox(height: context.getRSize(120)),
-                      _EmptyState(
-                        icon: FontAwesomeIcons.ticket.data,
+                      const _EmptyState(
+                        icon: AppIcons.discount,
                         label: 'No pending invites',
                       ),
                     ],
@@ -827,24 +827,24 @@ class _InviteCard extends StatelessWidget {
             ),
             SizedBox(height: context.getRSize(8)),
             _InviteMeta(
-              icon: FontAwesomeIcons.envelope.data,
+              icon: AppIcons.email,
               text: invite.email,
             ),
             SizedBox(height: context.getRSize(4)),
             _InviteMeta(
-              icon: FontAwesomeIcons.userPen.data,
+              icon: AppIcons.userEdit,
               text:
                   '${generatedBy ?? 'Unknown'} • ${DateFormat('MMM d, y').format(invite.createdAt)}',
             ),
             SizedBox(height: context.getRSize(4)),
-            _InviteMeta(icon: FontAwesomeIcons.clock.data, text: daysLabel),
+            _InviteMeta(icon: AppIcons.time, text: daysLabel),
             SizedBox(height: context.getRSize(12)),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: onRevoke,
                 icon: Icon(
-                  FontAwesomeIcons.ban.data,
+                  AppIcons.block,
                   size: 13,
                   color: t.colorScheme.error,
                 ),
