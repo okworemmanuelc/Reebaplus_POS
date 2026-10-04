@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 
@@ -37,7 +38,7 @@ class ComingSoonScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
         children: [
           Icon(
-            Icons.hourglass_empty_rounded,
+            AppIcons.waiting,
             size: 56,
             color: Theme.of(
               context,

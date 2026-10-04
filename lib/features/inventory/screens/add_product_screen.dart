@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
@@ -1378,7 +1379,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   child: Row(
                     children: [
                       const Icon(
-                        Icons.error_outline,
+                        AppIcons.alertCircle,
                         color: Colors.red,
                         size: 18,
                       ),
@@ -1396,7 +1397,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                       GestureDetector(
                         onTap: () => setState(() => _errorMessage = null),
                         child: const Icon(
-                          Icons.close,
+                          AppIcons.close,
                           color: Colors.red,
                           size: 16,
                         ),
@@ -1433,7 +1434,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   child: Row(
                     children: [
                       const Icon(
-                        Icons.inventory_2_outlined,
+                        AppIcons.inventory,
                         color: Colors.green,
                         size: 18,
                       ),
@@ -1467,7 +1468,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                       ),
                       GestureDetector(
                         onTap: _clearExistingProduct,
-                        child: Icon(Icons.close, size: 18, color: subtext),
+                        child: Icon(AppIcons.close, size: 18, color: subtext),
                       ),
                     ],
                   ),
@@ -1479,7 +1480,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   controller: _nameCtrl,
                   labelText: '${_lexicon.item} Name *',
                   hintText: _nameHint,
-                  prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                  prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
                   onChanged: _onNameChanged,
                 ),
                 if (_isNameFromCatalogue) const CatalogueFilledNote(),
@@ -1511,12 +1512,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   controller: _categoryCtrl,
                   labelText: '${_lexicon.category.toUpperCase()} *',
                   hintText: 'Search or type category name…',
-                  prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                  prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
                   onChanged: _onCategoryChanged,
                   suffixIcon: _selectedCategory != null
                       ? GestureDetector(
                           onTap: _clearCategory,
-                          child: Icon(Icons.close, size: 16, color: subtext),
+                          child: Icon(AppIcons.close, size: 16, color: subtext),
                         )
                       : null,
                 ),
@@ -1531,7 +1532,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                       for (final name in _lexicon.starterCategories)
                         _suggestionTile(
                           label: name,
-                          icon: Icons.add_circle_outline,
+                          icon: AppIcons.addCircle,
                           textColor: textColor,
                           card: card,
                           border: border,
@@ -1566,7 +1567,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                           ))
                         _suggestionTile(
                           label: 'Create "${_categoryCtrl.text.trim()}"',
-                          icon: Icons.add_circle_outline,
+                          icon: AppIcons.addCircle,
                           textColor: Theme.of(context).colorScheme.primary,
                           card: card,
                           border: border,
@@ -1698,12 +1699,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   controller: _manufacturerCtrl,
                   labelText: 'MANUFACTURER (optional)',
                   hintText: 'Search or type manufacturer name…',
-                  prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                  prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
                   onChanged: _onManufacturerChanged,
                   suffixIcon: _selectedManufacturer != null
                       ? GestureDetector(
                           onTap: _clearManufacturer,
-                          child: Icon(Icons.close, size: 16, color: subtext),
+                          child: Icon(AppIcons.close, size: 16, color: subtext),
                         )
                       : null,
                 ),
@@ -1729,7 +1730,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                           ))
                         _suggestionTile(
                           label: 'Create "${_manufacturerCtrl.text.trim()}"',
-                          icon: Icons.add_circle_outline,
+                          icon: AppIcons.addCircle,
                           textColor: Theme.of(context).colorScheme.primary,
                           card: card,
                           border: border,
@@ -1782,12 +1783,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     controller: _supplierCtrl,
                     labelText: 'SUPPLIER (optional)',
                     hintText: 'Search supplier name…',
-                    prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                    prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
                     onChanged: _onSupplierChanged,
                     suffixIcon: _selectedSupplier != null
                         ? GestureDetector(
                             onTap: _clearSupplier,
-                            child: Icon(Icons.close, size: 16, color: subtext),
+                            child: Icon(AppIcons.close, size: 16, color: subtext),
                           )
                         : null,
                   ),
@@ -1813,7 +1814,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                             ))
                           _suggestionTile(
                             label: 'Create "${_supplierCtrl.text.trim()}"',
-                            icon: Icons.add_circle_outline,
+                            icon: AppIcons.addCircle,
                             textColor: Theme.of(context).colorScheme.primary,
                             card: card,
                             border: border,
@@ -1921,7 +1922,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         controller: _nameCtrl,
         labelText: '${_lexicon.item} Name *',
         hintText: _nameHint,
-        prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+        prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
         onChanged: _onNameChanged,
       ),
       _fieldHelper('Include the size or key detail in the name.', subtext),
@@ -1975,12 +1976,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         controller: _categoryCtrl,
         labelText: _lexicon.category,
         hintText: 'Search or type category name…',
-        prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+        prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
         onChanged: _onCategoryChanged,
         suffixIcon: _selectedCategory != null
             ? GestureDetector(
                 onTap: _clearCategory,
-                child: Icon(Icons.close, size: 16, color: subtext),
+                child: Icon(AppIcons.close, size: 16, color: subtext),
               )
             : null,
       ),
@@ -1999,12 +2000,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           controller: _manufacturerCtrl,
           labelText: 'Manufacturer (optional)',
           hintText: 'Search or type manufacturer name…',
-          prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+          prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
           onChanged: _onManufacturerChanged,
           suffixIcon: _selectedManufacturer != null
               ? GestureDetector(
                   onTap: _clearManufacturer,
-                  child: Icon(Icons.close, size: 16, color: subtext),
+                  child: Icon(AppIcons.close, size: 16, color: subtext),
                 )
               : null,
         ),
@@ -2162,12 +2163,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         controller: _supplierCtrl,
         labelText: 'Supplier',
         hintText: 'Search supplier name…',
-        prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+        prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
         onChanged: _onSupplierChanged,
         suffixIcon: _selectedSupplier != null
             ? GestureDetector(
                 onTap: _clearSupplier,
-                child: Icon(Icons.close, size: 16, color: subtext),
+                child: Icon(AppIcons.close, size: 16, color: subtext),
               )
             : null,
       ),
@@ -2244,7 +2245,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             padding: const EdgeInsets.only(top: 6, left: 4),
             child: Row(
               children: [
-                Icon(Icons.warning_amber_rounded, size: 14, color: error),
+                Icon(AppIcons.warning, size: 14, color: error),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -2276,7 +2277,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           ),
           const Spacer(),
           Icon(
-            _showMoreDetails ? Icons.expand_less : Icons.expand_more,
+            _showMoreDetails ? AppIcons.chevronUp : AppIcons.chevronDown,
             size: 22,
             color: subtext,
           ),
@@ -2305,7 +2306,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               ))
             _suggestionTile(
               label: 'Create "${_categoryCtrl.text.trim()}"',
-              icon: Icons.add_circle_outline,
+              icon: AppIcons.addCircle,
               textColor: Theme.of(context).colorScheme.primary,
               card: card,
               border: border,
@@ -2339,7 +2340,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           ))
         _suggestionTile(
           label: 'Create "${_manufacturerCtrl.text.trim()}"',
-          icon: Icons.add_circle_outline,
+          icon: AppIcons.addCircle,
           textColor: Theme.of(context).colorScheme.primary,
           card: card,
           border: border,
@@ -2370,7 +2371,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               ))
             _suggestionTile(
               label: 'Create "${_supplierCtrl.text.trim()}"',
-              icon: Icons.add_circle_outline,
+              icon: AppIcons.addCircle,
               textColor: Theme.of(context).colorScheme.primary,
               card: card,
               border: border,
@@ -2409,7 +2410,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ),
         child: Row(
           children: [
-            Icon(Icons.event_outlined, size: 18, color: subtext),
+            Icon(AppIcons.event, size: 18, color: subtext),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -2424,7 +2425,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             if (hasDate)
               GestureDetector(
                 onTap: () => setState(() => _expiryDate = null),
-                child: Icon(Icons.close, size: 16, color: subtext),
+                child: Icon(AppIcons.close, size: 16, color: subtext),
               ),
           ],
         ),
@@ -2464,7 +2465,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     required Color card,
     required Color border,
     required VoidCallback onTap,
-    IconData icon = Icons.person_outline,
+    IconData icon = AppIcons.user,
   }) {
     return InkWell(
       onTap: onTap,

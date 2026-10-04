@@ -229,7 +229,7 @@ class AppDrawer extends ConsumerWidget {
                                   )
                                 else
                                   Icon(
-                                    Icons.error_outline,
+                                    AppIcons.alertCircle,
                                     size: 12,
                                     color: accent,
                                   ),

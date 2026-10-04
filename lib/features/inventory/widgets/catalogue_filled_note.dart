@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// The note under an Add Product field that the shared barcode catalogue
@@ -23,7 +24,7 @@ class CatalogueFilledNote extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, size: context.getRSize(14), color: color),
+          Icon(AppIcons.infoCircle, size: context.getRSize(14), color: color),
           SizedBox(width: context.getRSize(6)),
           Expanded(
             child: Text(

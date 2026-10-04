@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -150,8 +151,8 @@ class _CrateMoneyArrangementSectionState
             children: [
               Icon(
                 isSelected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
+                    ? AppIcons.radioButtonChecked
+                    : AppIcons.radioButtonUnchecked,
                 size: 18,
                 color: isSelected ? scheme.primary : _subtext,
               ),

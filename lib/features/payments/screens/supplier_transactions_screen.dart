@@ -175,7 +175,7 @@ class _SupplierTransactionsScreenState
                 : Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
+              icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: 20),
               onPressed: () => Navigator.pop(context),
             ),
             title: Text(

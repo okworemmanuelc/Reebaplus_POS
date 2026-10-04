@@ -70,4 +70,34 @@ void main() {
           'Violations found:\n${violations.join('\n')}',
     );
   });
+
+  test('no direct references to Icons.* outside app_icons.dart', () {
+    final pattern = RegExp(r'(?<![A-Za-z_])Icons\.');
+    final violations = <String>[];
+
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+
+      final normalizedPath = entity.path.replaceAll(r'\', '/');
+      if (normalizedPath == allowedAppIconsPath) continue;
+
+      final lines = entity.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        if (pattern.hasMatch(line)) {
+          violations.add('$normalizedPath:${i + 1}: ${line.trim()}');
+        }
+      }
+    }
+
+    expect(
+      violations,
+      isEmpty,
+      reason:
+          'Material Icons.* must not be used directly in lib/ outside of $allowedAppIconsPath.\n'
+          'Use AppIcons instead.\n'
+          'Violations found:\n${violations.join('\n')}',
+    );
+  });
 }
+

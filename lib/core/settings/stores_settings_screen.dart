@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -219,7 +220,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
                     for (final store in _stores) ...[
                       _LocationCard(
                         nameLabel: 'Store name',
-                        nameIcon: Icons.store_rounded,
+                        nameIcon: AppIcons.store,
                         nameController: _nameControllers[store.id]!,
                         addressController: _addressControllers[store.id]!,
                         saving: _saving.contains(store.id),
@@ -229,7 +230,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
                     ],
                     OutlinedButton.icon(
                       onPressed: () => _addLocation(isVan: false),
-                      icon: const Icon(Icons.add_rounded),
+                      icon: const Icon(AppIcons.add),
                       label: const Text('Add a store'),
                     ),
                   ],
@@ -254,7 +255,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
                     for (final van in _vans) ...[
                       _LocationCard(
                         nameLabel: 'Van name',
-                        nameIcon: Icons.local_shipping_rounded,
+                        nameIcon: AppIcons.supplier,
                         nameController: _nameControllers[van.id]!,
                         addressController: _addressControllers[van.id]!,
                         saving: _saving.contains(van.id),
@@ -275,7 +276,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
                       ),
                     OutlinedButton.icon(
                       onPressed: () => _addLocation(isVan: true),
-                      icon: const Icon(Icons.add_rounded),
+                      icon: const Icon(AppIcons.add),
                       label: const Text('Add a van'),
                     ),
                   ],
@@ -328,7 +329,7 @@ class _LocationCard extends StatelessWidget {
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Address',
-              prefixIcon: Icons.location_on_rounded,
+              prefixIcon: AppIcons.location,
             ),
           ),
           const SizedBox(height: 16),
@@ -442,8 +443,8 @@ class _AddLocationSheetState extends State<_AddLocationSheet> {
                 context,
                 label: isVan ? 'Van name' : 'Store name',
                 prefixIcon: isVan
-                    ? Icons.local_shipping_rounded
-                    : Icons.store_rounded,
+                    ? AppIcons.supplier
+                    : AppIcons.store,
               ),
               validator: (v) => (v == null || v.trim().isEmpty)
                   ? (isVan ? 'Give the van a name' : 'Give the store a name')
@@ -460,7 +461,7 @@ class _AddLocationSheetState extends State<_AddLocationSheet> {
                 label: isVan
                     ? 'Plate number or route (optional)'
                     : 'Address (optional)',
-                prefixIcon: Icons.location_on_rounded,
+                prefixIcon: AppIcons.location,
               ),
             ),
             SizedBox(height: context.getRSize(24)),

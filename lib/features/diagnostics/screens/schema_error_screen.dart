@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
 
 /// Refuse-to-boot screen shown when [SchemaAudit] detects unhealable schema
@@ -28,7 +29,7 @@ class SchemaErrorScreen extends StatelessWidget {
               children: [
                 const SizedBox(height: 16),
                 const Icon(
-                  Icons.warning_amber_rounded,
+                  AppIcons.warning,
                   size: 56,
                   color: Colors.amber,
                 ),
@@ -117,7 +118,7 @@ class SchemaErrorScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           OutlinedButton.icon(
-                            icon: const Icon(Icons.copy, size: 16),
+                            icon: const Icon(AppIcons.copy, size: 16),
                             label: const Text('Copy report path'),
                             onPressed: () {
                               Clipboard.setData(

@@ -150,7 +150,7 @@ class ViewSelectorSheet extends StatelessWidget {
             ),
             if (isSelected)
               Icon(
-                Icons.check_circle_rounded,
+                AppIcons.checkCircle,
                 size: context.getRSize(20),
                 color: primaryCol,
               ),

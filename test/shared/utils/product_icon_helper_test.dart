@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 
 void main() {
@@ -39,14 +40,7 @@ void main() {
     test('Quick Sale line stores 0xf0e7 and renders AppIcons.quickSale', () {
       expect(kStoredIconBolt, 0xf0e7);
 
-      final quickSaleLine = <String, dynamic>{
-        'name': 'Custom Item',
-        'subtitle': 'Quick Sale',
-        'price': 500.0,
-        'icon': kStoredIconBolt,
-        'color': null,
-        'category': 'Other',
-      };
+      final quickSaleLine = buildQuickSaleProduct('Custom Item', 500.0);
 
       expect(quickSaleLine['icon'], 0xf0e7);
       expect(

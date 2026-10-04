@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
 
@@ -29,7 +30,7 @@ void main() {
       await tester.pumpWidget(_host(const []));
 
       expect(find.byType(AppFAB), findsNothing);
-      expect(find.byIcon(Icons.add), findsNothing);
+      expect(find.byIcon(AppIcons.add), findsNothing);
       expect(find.text('Add Product'), findsNothing);
       expect(find.text('Receive Stock'), findsNothing);
     });
@@ -39,7 +40,7 @@ void main() {
       var tapped = 0;
       await tester.pumpWidget(_host([
         AppSpeedDialAction(
-          icon: Icons.local_shipping,
+          icon: AppIcons.supplier,
           label: 'Receive Stock',
           description: 'Log a delivery from a supplier',
           onPressed: () => tapped++,
@@ -49,7 +50,7 @@ void main() {
       // A single labelled direct FAB — no "+" toggle, no expansion.
       expect(find.byType(AppFAB), findsOneWidget);
       expect(find.text('Receive Stock'), findsOneWidget);
-      expect(find.byIcon(Icons.add), findsNothing);
+      expect(find.byIcon(AppIcons.add), findsNothing);
       // Its one-line description only ever shows in the expanded menu.
       expect(find.text('Log a delivery from a supplier'), findsNothing);
 
@@ -63,13 +64,13 @@ void main() {
       var received = 0;
       await tester.pumpWidget(_host([
         AppSpeedDialAction(
-          icon: Icons.sell,
+          icon: AppIcons.tag,
           label: 'Add Product',
           description: 'Create a product and set what is on your shelf',
           onPressed: () => added++,
         ),
         AppSpeedDialAction(
-          icon: Icons.local_shipping,
+          icon: AppIcons.supplier,
           label: 'Receive Stock',
           description: 'Log a delivery from a supplier',
           onPressed: () => received++,
@@ -78,12 +79,12 @@ void main() {
 
       // Collapsed: a single "+" toggle, no labels, no direct AppFAB.
       expect(find.byType(AppFAB), findsNothing);
-      expect(find.byIcon(Icons.add), findsOneWidget);
+      expect(find.byIcon(AppIcons.add), findsOneWidget);
       expect(find.text('Add Product'), findsNothing);
       expect(find.text('Receive Stock'), findsNothing);
 
       // Expand: both labelled options with their one-line descriptions.
-      await tester.tap(find.byIcon(Icons.add));
+      await tester.tap(find.byIcon(AppIcons.add));
       await tester.pumpAndSettle();
       expect(find.text('Add Product'), findsOneWidget);
       expect(find.text('Receive Stock'), findsOneWidget);
@@ -106,20 +107,20 @@ void main() {
       var chose = 0;
       await tester.pumpWidget(_host([
         AppSpeedDialAction(
-          icon: Icons.sell,
+          icon: AppIcons.tag,
           label: 'Add Product',
           description: 'Create a product',
           onPressed: () => chose++,
         ),
         AppSpeedDialAction(
-          icon: Icons.local_shipping,
+          icon: AppIcons.supplier,
           label: 'Receive Stock',
           description: 'Log a delivery',
           onPressed: () => chose++,
         ),
       ]));
 
-      await tester.tap(find.byIcon(Icons.add));
+      await tester.tap(find.byIcon(AppIcons.add));
       await tester.pumpAndSettle();
       expect(find.text('Add Product'), findsOneWidget);
 
@@ -131,3 +132,4 @@ void main() {
     });
   });
 }
+

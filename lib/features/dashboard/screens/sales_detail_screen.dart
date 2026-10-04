@@ -191,7 +191,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
+            AppIcons.arrowBackIosNew,
             size: 18,
             color: colorScheme.onSurface,
           ),

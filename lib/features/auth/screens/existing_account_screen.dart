@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -129,7 +130,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
               Align(
                 alignment: Alignment.topLeft,
                 child: IconButton(
-                  icon: Icon(Icons.arrow_back_ios, color: textColor, size: 20),
+                  icon: Icon(AppIcons.arrowBackIos, color: textColor, size: 20),
                   onPressed: _loading
                       ? null
                       : () => Navigator.of(context).pop(),
@@ -208,7 +209,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                     color: primary.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.business_rounded, color: primary, size: 26),
+                  child: Icon(AppIcons.business, color: primary, size: 26),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -263,7 +264,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                         ),
                       )
                     : Icon(
-                        Icons.chevron_right,
+                        AppIcons.chevronRight,
                         color: textColor.withValues(alpha: 0.3),
                       ),
               ],

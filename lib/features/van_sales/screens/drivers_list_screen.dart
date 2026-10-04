@@ -205,7 +205,7 @@ class _DriverRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: subtext, size: context.getRSize(20)),
+            Icon(AppIcons.chevronRight, color: subtext, size: context.getRSize(20)),
           ],
         ),
       ),

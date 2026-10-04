@@ -593,7 +593,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
-            Icons.arrow_back_ios_new,
+            AppIcons.arrowBackIosNew,
             size: context.getRSize(18),
             color: Colors.white,
           ),
@@ -624,7 +624,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                _editMode ? Icons.close : Icons.edit,
+                _editMode ? AppIcons.close : AppIcons.edit,
                 size: context.getRSize(18),
                 color: Colors.white,
               ),
@@ -722,7 +722,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 ),
                               ),
                               child: Icon(
-                                Icons.edit,
+                                AppIcons.edit,
                                 color: Colors.white,
                                 size: context.getRSize(12),
                               ),
@@ -1188,7 +1188,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.lock_outline,
+                  AppIcons.lock,
                   size: context.getRSize(14),
                   color: _subtext,
                 ),
@@ -1905,7 +1905,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           if (_editMode) ...[
             SizedBox(width: context.getRSize(6)),
             Icon(
-              Icons.calendar_month,
+              AppIcons.calendarMonth,
               size: context.getRSize(16),
               color: Theme.of(context).colorScheme.primary,
             ),
@@ -1915,7 +1915,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 child: Padding(
                   padding: EdgeInsets.only(left: context.getRSize(4)),
                   child: Icon(
-                    Icons.close,
+                    AppIcons.close,
                     size: context.getRSize(14),
                     color: _subtext,
                   ),

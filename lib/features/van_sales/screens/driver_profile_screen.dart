@@ -1038,7 +1038,7 @@ class _TripRow extends ConsumerWidget {
                     ),
                   ),
                   Icon(
-                    Icons.chevron_right,
+                    AppIcons.chevronRight,
                     size: context.getRSize(18),
                     color: subtext,
                   ),

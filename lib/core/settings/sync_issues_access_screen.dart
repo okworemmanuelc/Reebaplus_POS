@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -86,7 +87,7 @@ class _RoleToggle extends ConsumerWidget {
     final hasView = grants.any((g) => g.permissionKey == _kSyncView);
 
     return SettingsTile(
-      icon: Icons.cloud_sync_rounded,
+      icon: AppIcons.cloudSync,
       title: role.name,
       subtitle: isCeo ? 'Always on' : 'Can open Sync Issues',
       trailing: Switch(

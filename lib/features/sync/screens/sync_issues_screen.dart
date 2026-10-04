@@ -483,7 +483,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                       height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.refresh, size: 16),
+                  : const Icon(AppIcons.refresh, size: 16),
               label: Text(_retryingDeferred ? 'Retrying…' : 'Retry pull'),
             ),
           ),
@@ -1204,7 +1204,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                     ),
                   ),
                   Icon(
-                    _auditExpanded ? Icons.expand_less : Icons.expand_more,
+                    _auditExpanded ? AppIcons.chevronUp : AppIcons.chevronDown,
                     color: t.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ],
@@ -1249,7 +1249,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                   const SizedBox(height: 12),
                   ElevatedButton.icon(
                     onPressed: _auditRunning ? null : _runAudit,
-                    icon: const Icon(Icons.play_arrow, size: 16),
+                    icon: const Icon(AppIcons.play, size: 16),
                     label: Text(_auditRunning ? 'Running…' : 'Run audit'),
                   ),
                   const SizedBox(height: 12),

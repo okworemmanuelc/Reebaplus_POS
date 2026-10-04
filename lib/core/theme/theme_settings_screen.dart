@@ -125,7 +125,7 @@ class _ModeTile extends StatelessWidget {
               ),
               if (isActive)
                 Icon(
-                  Icons.check_circle,
+                  AppIcons.checkCircle,
                   size: context.getRSize(20),
                   color: primary,
                 ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -82,7 +83,7 @@ class _ReceiptPrinterSettingsScreenState
       title: 'Receipt printer',
       actions: [
         IconButton(
-          icon: const Icon(Icons.refresh_rounded),
+          icon: const Icon(AppIcons.refresh),
           tooltip: 'Refresh printers',
           onPressed: _loading ? null : _load,
         ),
@@ -153,7 +154,7 @@ class _ReceiptPrinterSettingsScreenState
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  Icons.print_rounded,
+                  AppIcons.print,
                   color: t.colorScheme.primary,
                   size: 20,
                 ),

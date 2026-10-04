@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 /// Friendly, calm fallback shown in place of a crash (master plan §33.2).
 ///
@@ -36,7 +37,7 @@ class ErrorFallback extends StatelessWidget {
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.error_outline_rounded, size: 40, color: _icon),
+        const Icon(AppIcons.alertCircle, size: 40, color: _icon),
         const SizedBox(height: 12),
         Text(
           message,

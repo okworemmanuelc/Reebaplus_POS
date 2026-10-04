@@ -179,7 +179,7 @@ class _ChooserTile extends StatelessWidget {
               ),
             ),
             Icon(
-              Icons.chevron_right,
+              AppIcons.chevronRight,
               color: subtext,
               size: context.getRSize(20),
             ),
@@ -867,7 +867,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                   GestureDetector(
                     onTap: () => setState(() => _receipt = null),
                     child: Icon(
-                      Icons.close,
+                      AppIcons.close,
                       size: context.getRSize(18),
                       color: sSubtext,
                     ),

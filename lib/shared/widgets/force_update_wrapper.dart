@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 class ForceUpdateWrapper extends StatefulWidget {
   final Widget child;
@@ -73,7 +74,7 @@ class _ForceUpdateWrapperState extends State<ForceUpdateWrapper> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(
-                          Icons.update_rounded,
+                          AppIcons.update,
                           size: 80,
                           color: Colors.white,
                         ),

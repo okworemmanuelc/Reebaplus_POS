@@ -185,7 +185,7 @@ class _TorchButton extends StatelessWidget {
         if (isOn == null) return const SizedBox.shrink();
         // Material icons.
         return IconButton(
-          icon: Icon(isOn ? Icons.flash_on : Icons.flash_off),
+          icon: Icon(isOn ? AppIcons.flashOn : AppIcons.flashOff),
           tooltip: isOn ? 'Turn torch off' : 'Turn torch on',
           onPressed: () => unawaited(camera.toggleTorch()),
         );

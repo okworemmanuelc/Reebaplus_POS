@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/shared/widgets/screen_cover.dart';
@@ -46,7 +47,7 @@ class AppSpeedDialFab extends StatefulWidget {
   const AppSpeedDialFab({
     super.key,
     required this.actions,
-    this.toggleIcon = Icons.add,
+    this.toggleIcon = AppIcons.add,
     this.reserveBottomInset = true,
   });
 

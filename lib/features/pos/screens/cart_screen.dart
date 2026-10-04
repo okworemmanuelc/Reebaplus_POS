@@ -324,7 +324,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(modalCtx),
-                      icon: Icon(Icons.close, color: _subtext),
+                      icon: Icon(AppIcons.close, color: _subtext),
                     ),
                   ],
                 ),
@@ -372,7 +372,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                           ),
                           trailing: IconButton(
                             icon: const Icon(
-                              Icons.delete_outline,
+                              AppIcons.delete,
                               color: Colors.red,
                             ),
                             onPressed: () async {
@@ -549,7 +549,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                             ],
                             IconButton(
                               onPressed: () => Navigator.pop(modalCtx),
-                              icon: Icon(Icons.close, color: _subtext),
+                              icon: Icon(AppIcons.close, color: _subtext),
                             ),
                           ],
                         ),

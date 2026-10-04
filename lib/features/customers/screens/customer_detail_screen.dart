@@ -371,8 +371,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                             children: [
                               Icon(
                                 isSel
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
+                                    ? AppIcons.radioButtonChecked
+                                    : AppIcons.radioButtonUnchecked,
                                 size: ctx.getRSize(20),
                                 color: isSel
                                     ? accent
@@ -401,7 +401,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     SizedBox(height: ctx.getRSize(24)),
                     AmberButton(
                       label: 'Add Credit',
-                      icon: Icons.add,
+                      icon: AppIcons.add,
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         final amount = parseCurrency(amountCtrl.text);
@@ -651,8 +651,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                               children: [
                                 Icon(
                                   isSel
-                                      ? Icons.radio_button_checked
-                                      : Icons.radio_button_unchecked,
+                                      ? AppIcons.radioButtonChecked
+                                      : AppIcons.radioButtonUnchecked,
                                   size: ctx.getRSize(20),
                                   color: isSel
                                       ? accent
@@ -874,7 +874,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
               SizedBox(height: ctx.getRSize(24)),
               AmberButton(
                 label: 'Save Limit',
-                icon: Icons.check,
+                icon: AppIcons.check,
                 onPressed: () async {
                   if (!formKey.currentState!.validate()) return;
                   final amount = parseCurrency(limitCtrl.text);
@@ -1403,7 +1403,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
           elevation: 0,
           leading: IconButton(
             icon: Icon(
-              Icons.arrow_back_ios_new,
+              AppIcons.arrowBackIosNew,
               size: context.getRSize(20),
               color: theme.colorScheme.onSurface,
             ),
@@ -2564,7 +2564,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 SizedBox(height: ctx.getRSize(24)),
                 AmberButton(
                   label: 'Record Return',
-                  icon: Icons.check,
+                  icon: AppIcons.check,
                   onPressed: () async {
                     if (!formKey.currentState!.validate()) return;
                     final mfrId = selectedId!;

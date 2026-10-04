@@ -420,7 +420,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                     label: widget.lockedEmail
                         ? 'Email (from invite)'
                         : 'Email Address',
-                    prefixIcon: Icons.email_outlined,
+                    prefixIcon: AppIcons.email,
                   ),
                 ),
               ),

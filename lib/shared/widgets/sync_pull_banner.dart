@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 import 'package:reebaplus_pos/core/providers/manual_refresh.dart';
@@ -293,7 +294,7 @@ class _RetryCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: scheme.error),
+            Icon(AppIcons.cloudOff, size: 40, color: scheme.error),
             const SizedBox(height: 16),
             Text(
               "Couldn't reach your store",
@@ -381,7 +382,7 @@ class _SuccessPill extends StatelessWidget {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_rounded, size: 15, color: green),
+            Icon(AppIcons.checkCircle, size: 15, color: green),
             SizedBox(width: 6),
             Text(
               'Synced',

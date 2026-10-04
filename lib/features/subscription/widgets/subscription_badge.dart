@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
@@ -28,8 +29,8 @@ class SubscriptionBadge extends ConsumerWidget {
         ? Theme.of(context).colorScheme.primary
         : const Color(0xFFF59E0B);
     final icon = isPro
-        ? Icons.workspace_premium_rounded
-        : Icons.schedule_rounded;
+        ? AppIcons.premium
+        : AppIcons.time;
 
     return Container(
       padding: EdgeInsets.symmetric(

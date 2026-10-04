@@ -94,20 +94,8 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       _qtyCtrl.text.isNotEmpty &&
       _priceCtrl.text.isNotEmpty;
 
-  // Keep every value JSON-serializable: a Quick Sale line lands in the cart and
-  // a held cart is persisted via `jsonEncode` (§13.5). Store the bolt as its int
-  // codepoint (mirrors a real product's `iconCodePoint`; resolved back by
-  // [productIconFromCodePoint]) and leave `color` null — the cart/checkout
-  // readers fall back to the theme primary for a null colour, so the look is
-  // unchanged. A raw `IconData`/`Color` here would throw on `jsonEncode`.
-  Map<String, dynamic> _buildProduct(String name, double priceNaira) => {
-    'name': name,
-    'subtitle': 'Quick Sale',
-    'price': priceNaira,
-    'icon': kStoredIconBolt,
-    'color': null,
-    'category': 'Other',
-  };
+  Map<String, dynamic> _buildProduct(String name, double priceNaira) =>
+      buildQuickSaleProduct(name, priceNaira);
 
   // Direct add (CEO/Manager): unchanged behaviour.
   void _addToCart() {
@@ -443,3 +431,20 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
     ),
   ];
 }
+
+/// Keep every value JSON-serializable: a Quick Sale line lands in the cart and
+/// a held cart is persisted via `jsonEncode` (§13.5). Store the bolt as its int
+/// codepoint (mirrors a real product's `iconCodePoint`; resolved back by
+/// [productIconFromCodePoint]) and leave `color` null — the cart/checkout
+/// readers fall back to the theme primary for a null colour, so the look is
+/// unchanged. A raw `IconData`/`Color` here would throw on `jsonEncode`.
+@visibleForTesting
+Map<String, dynamic> buildQuickSaleProduct(String name, double priceNaira) => {
+  'name': name,
+  'subtitle': 'Quick Sale',
+  'price': priceNaira,
+  'icon': kStoredIconBolt,
+  'color': null,
+  'category': 'Other',
+};
+

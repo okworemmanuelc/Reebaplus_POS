@@ -374,7 +374,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(
-            Icons.arrow_back_ios_new,
+            AppIcons.arrowBackIosNew,
             size: context.getRSize(20),
             color: _text,
           ),
@@ -1718,7 +1718,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         child: Row(
           children: [
             Icon(
-              on ? Icons.check_box : Icons.check_box_outline_blank,
+              on ? AppIcons.checkBox : AppIcons.checkBoxOutlineBlank,
               size: context.getRSize(22),
               color: on ? _primary : _subtext,
             ),
@@ -2259,7 +2259,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               ),
               child: active
                   ? Icon(
-                      Icons.check,
+                      AppIcons.check,
                       size: context.getRSize(14),
                       color: _onPrimary,
                     )

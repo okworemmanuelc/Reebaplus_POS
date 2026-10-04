@@ -114,7 +114,7 @@ class _UserTipsModalState extends State<UserTipsModal> {
                   IconButton(
                     onPressed: () => Navigator.pop(context),
                     icon: Icon(
-                      Icons.close,
+                      AppIcons.close,
                       color:
                           Theme.of(context).textTheme.bodySmall?.color ??
                           Theme.of(context).iconTheme.color!,

@@ -1015,7 +1015,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                           ),
                         ),
                         trailing: Icon(
-                          Icons.chevron_right,
+                          AppIcons.chevronRight,
                           color: _subtext,
                           size: context.getRSize(20),
                         ),
@@ -1317,7 +1317,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           backgroundColor: _surface,
           elevation: 0,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
+            icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
@@ -1348,7 +1348,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         backgroundColor: _surface,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
+          icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(

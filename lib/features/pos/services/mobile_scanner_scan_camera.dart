@@ -188,7 +188,7 @@ class ScannerErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.no_photography, color: Colors.white, size: 40),
+            const Icon(AppIcons.noPhotography, color: Colors.white, size: 40),
             const SizedBox(height: 16),
             Text(
               isPermissionDenied

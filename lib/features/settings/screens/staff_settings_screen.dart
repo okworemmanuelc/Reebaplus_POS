@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -69,7 +70,7 @@ class StaffSettingsScreen extends ConsumerWidget {
         ),
         children: [
           SettingsTile(
-            icon: Icons.person_rounded,
+            icon: AppIcons.user,
             title: 'Profile',
             subtitle: 'Edit your name and avatar',
             trailing: _chevron(context),
@@ -82,7 +83,7 @@ class StaffSettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           SettingsTile(
-            icon: Icons.lock_rounded,
+            icon: AppIcons.lock,
             title: 'Change PIN',
             subtitle: 'Update your unlock PIN',
             trailing: _chevron(context),
@@ -92,7 +93,7 @@ class StaffSettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           SettingsTile(
-            icon: Icons.print_rounded,
+            icon: AppIcons.print,
             title: 'Receipt printer',
             subtitle: 'Paper size for each printer (58mm or 80mm)',
             trailing: _chevron(context),
@@ -104,7 +105,7 @@ class StaffSettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           SettingsTile(
-            icon: Icons.brightness_6_rounded,
+            icon: AppIcons.themeMode,
             title: 'Display',
             subtitle: 'Light & dark mode',
             trailing: _chevron(context),
@@ -118,7 +119,7 @@ class StaffSettingsScreen extends ConsumerWidget {
   }
 
   Widget _chevron(BuildContext context) => Icon(
-    Icons.chevron_right,
+    AppIcons.chevronRight,
     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
   );
 }

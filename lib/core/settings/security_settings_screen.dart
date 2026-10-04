@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -158,7 +159,7 @@ class _SecuritySettingsScreenState
                   _autoLockCard(context),
                   const SizedBox(height: 16),
                   SettingsTile(
-                    icon: Icons.fingerprint_rounded,
+                    icon: AppIcons.biometrics,
                     title: 'Biometric login',
                     subtitle: 'Use fingerprint or Face ID on this device',
                     trailing: Switch(
@@ -190,7 +191,7 @@ class _SecuritySettingsScreenState
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  Icons.lock_clock_rounded,
+                  AppIcons.lockClock,
                   color: t.colorScheme.primary,
                   size: 20,
                 ),

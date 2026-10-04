@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
@@ -332,7 +333,7 @@ class FirstRunRailTourView extends ConsumerWidget {
       caption: 'Your store is ready',
       blocking: true,
       content: _TourCard(
-        icon: Icons.check_circle_rounded,
+        icon: AppIcons.checkCircle,
         title: '$storeName is ready.',
         body: 'Next, add something to sell.',
         primaryLabel: 'Add a product',
@@ -515,7 +516,7 @@ class _ScrollHintState extends State<_ScrollHint>
         child: child,
       ),
       child: Icon(
-        Icons.keyboard_double_arrow_down_rounded,
+        AppIcons.keyboardDoubleArrowDown,
         color: Colors.white.withValues(alpha: 0.85),
         size: context.getRSize(30),
       ),

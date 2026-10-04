@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -114,7 +115,7 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded, color: error),
+                      Icon(AppIcons.warning, color: error),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -152,7 +153,7 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
             AppButton(
               text: 'Delete Business',
               variant: AppButtonVariant.danger,
-              icon: Icons.delete_forever_rounded,
+              icon: AppIcons.deleteForever,
               isLoading: _deleting,
               onPressed: _deleting ? null : () => _confirmDelete(business.id),
             ),

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
 import 'package:reebaplus_pos/features/dashboard/controllers/first_run_tour_controller.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
@@ -529,13 +530,13 @@ void main() {
                 reserveBottomInset: false,
                 actions: [
                   AppSpeedDialAction(
-                    icon: Icons.sell,
+                    icon: AppIcons.tag,
                     label: 'Add Product',
                     description: 'Create a product and set what’s on your shelf',
                     onPressed: () {},
                   ),
                   AppSpeedDialAction(
-                    icon: Icons.local_shipping,
+                    icon: AppIcons.supplier,
                     label: 'Receive Stock',
                     description: 'Log a delivery from a supplier',
                     onPressed: () {},
@@ -552,7 +553,7 @@ void main() {
       // The "+" is a speed dial; its options open into an Overlay the pointer
       // renders above, so the caption and its "Not now" landed straight across
       // both of them.
-      await tester.tap(find.byIcon(Icons.add));
+      await tester.tap(find.byIcon(AppIcons.add));
       await tester.pumpAndSettle();
 
       expect(find.text('Add Product'), findsOneWidget);

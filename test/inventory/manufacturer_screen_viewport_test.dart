@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/manufacturer_screen.dart';
 
@@ -435,8 +436,8 @@ void main() {
       );
 
       // Strictly NO edit/delete buttons
-      expect(find.byIcon(Icons.edit), findsNothing);
-      expect(find.byIcon(Icons.delete), findsNothing);
+      expect(find.byIcon(AppIcons.edit), findsNothing);
+      expect(find.byIcon(AppIcons.delete), findsNothing);
 
       await disposeScreen(tester);
     });

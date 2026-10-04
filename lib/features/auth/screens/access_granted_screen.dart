@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -264,7 +265,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                                 children: [
                                   _buildDetailCard(
                                     context,
-                                    icon: Icons.business_rounded,
+                                    icon: AppIcons.business,
                                     label: 'Business',
                                     value: details['businessName']!,
                                     textColor: textColor,
@@ -272,7 +273,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                                   const SizedBox(height: 12),
                                   _buildDetailCard(
                                     context,
-                                    icon: Icons.location_on_rounded,
+                                    icon: AppIcons.location,
                                     label: 'Location',
                                     value: details['locationName']!,
                                     textColor: textColor,
@@ -365,7 +366,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                     ],
                   ),
                   child: Icon(
-                    Icons.check_rounded,
+                    AppIcons.check,
                     color: successColor,
                     size: 48,
                   ),

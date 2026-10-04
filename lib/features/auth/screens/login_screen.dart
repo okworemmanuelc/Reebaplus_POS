@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -655,7 +656,7 @@ class SuccessOverlay extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(color: avatarColor, width: 3),
                   ),
-                  child: Icon(Icons.check_rounded, size: 52, color: avatarColor),
+                  child: Icon(AppIcons.check, size: 52, color: avatarColor),
                 ),
               ),
               const SizedBox(height: 24),
@@ -857,7 +858,7 @@ class _PinPad extends StatelessWidget {
                       decoration: AppDecorations.authInputDecoration(
                         context,
                         label: 'Email Address',
-                        prefixIcon: Icons.email_outlined,
+                        prefixIcon: AppIcons.email,
                       ),
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
@@ -946,7 +947,7 @@ class _PinPad extends StatelessWidget {
             onBackspace: onBackspace,
             leadingKey: biometricsAvailable && onBiometrics != null
                 ? PinKey(
-                    icon: Icons.fingerprint_rounded,
+                    icon: AppIcons.biometrics,
                     onTap: onBiometrics!,
                   )
                 : null,
@@ -1022,7 +1023,7 @@ class _PinPad extends StatelessWidget {
                 decoration: AppDecorations.authInputDecoration(
                   context,
                   label: 'Email Address',
-                  prefixIcon: Icons.email_outlined,
+                  prefixIcon: AppIcons.email,
                 ),
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
@@ -1069,7 +1070,7 @@ class _PinPad extends StatelessWidget {
                 onBackspace: onBackspace,
                 leadingKey: biometricsAvailable && onBiometrics != null
                     ? PinKey(
-                        icon: Icons.fingerprint_rounded,
+                        icon: AppIcons.biometrics,
                         onTap: onBiometrics!,
                       )
                     : null,
