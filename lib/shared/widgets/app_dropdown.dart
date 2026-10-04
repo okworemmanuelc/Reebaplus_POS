@@ -1,8 +1,6 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 
 class AppDropdown<T> extends FormField<T> {
   final T? currentValue;
@@ -132,9 +130,7 @@ class _AppDropdownState<T> extends FormFieldState<T> {
   OverlayEntry _createOverlayEntry(Size size, bool openUpwards) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final dropdownColor = isDark
-        ? theme.colorScheme.surface.withValues(alpha: 0.7)
-        : theme.colorScheme.surface.withValues(alpha: 0.85);
+    final dropdownColor = theme.colorScheme.surface;
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.1)
         : theme.colorScheme.primary.withValues(alpha: 0.1);
@@ -181,15 +177,13 @@ class _AppDropdownState<T> extends FormFieldState<T> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: dropdownColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: borderColor, width: 1.5),
-                      ),
-                      child: ListView(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: dropdownColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: borderColor, width: 1.5),
+                    ),
+                    child: ListView(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         shrinkWrap: true,
                         children: widget.items.map((item) {
@@ -229,7 +223,6 @@ class _AppDropdownState<T> extends FormFieldState<T> {
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -280,18 +273,15 @@ class _AppDropdownState<T> extends FormFieldState<T> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: OptimizedBackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              fallbackBuilder: (context, child) => child,
-              // The whole surface is the tap target (the GestureDetector above),
-              // so this control may never render below the 48dp Material /
-              // WCAG 2.5.5 floor — at ANY viewport, not just a short one. The
-              // padding alone gave 43dp in portrait and 40dp in landscape.
-              // Unconditional by design: a tap target does not compress. The
-              // constraint sits outside the keyed Container so the hit area, the
-              // painted surface and the size `_openDropdown` measures for the
-              // overlay all agree.
-              child: ConstrainedBox(
+            // The whole surface is the tap target (the GestureDetector above),
+            // so this control may never render below the 48dp Material /
+            // WCAG 2.5.5 floor — at ANY viewport, not just a short one. The
+            // padding alone gave 43dp in portrait and 40dp in landscape.
+            // Unconditional by design: a tap target does not compress. The
+            // constraint sits outside the keyed Container so the hit area, the
+            // painted surface and the size `_openDropdown` measures for the
+            // overlay all agree.
+            child: ConstrainedBox(
                 constraints: const BoxConstraints(
                   minHeight: kMinInteractiveDimension,
                 ),
@@ -344,7 +334,6 @@ class _AppDropdownState<T> extends FormFieldState<T> {
                     ],
                   ),
                 ),
-              ),
             ),
           ),
         ),

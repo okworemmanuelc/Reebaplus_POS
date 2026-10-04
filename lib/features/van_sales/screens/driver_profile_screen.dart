@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,7 +24,6 @@ import 'package:reebaplus_pos/features/van_sales/widgets/van_sale_receipt_sheet.
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
 const kDriverTripRowKeyPrefix = 'driver-trip-row-';
@@ -165,7 +163,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
     return ColoredBox(
       color: t.scaffoldBackgroundColor,
       child: Container(
-        decoration: AppDecorations.glassyBackground(context),
+        decoration: AppDecorations.pageBackground(context),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
@@ -485,10 +483,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: OptimizedBackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          fallbackBuilder: (context, child) => child,
-          child: TabBar(
+        child: TabBar(
             controller: _tabController,
             isScrollable: true,
             tabAlignment: TabAlignment.center,
@@ -522,7 +517,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
             ],
           ),
         ),
-      ),
     );
   }
 

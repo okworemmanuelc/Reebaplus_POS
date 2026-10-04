@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+
 /// Theme-aware primary text colour for auth / onboarding screens. Adapts to
 /// light/dark mode and to the active accent via [ColorScheme.onSurface], so
 /// content (titles, labels, typed input text) is always legible on the
@@ -38,58 +41,66 @@ class AppDecorations {
     );
   }
 
-  /// Full-screen "glassy" page background (§10.1). A subtle primary-tinted
-  /// gradient over the scaffold background.
-  ///
-  /// IMPORTANT: every gradient stop is OPAQUE. In a [BoxDecoration], when a
-  /// `gradient` is set the `color` field is ignored entirely — so a gradient
-  /// whose stops use a translucent `primary.withValues(alpha: …)` paints a
-  /// partly see-through page. When such a page is pushed over another, the
-  /// previous screen bleeds through (the "leftover/ghost previous screen"
-  /// glitch). We composite each tint over [scaffoldBackgroundColor] with
-  /// [Color.alphaBlend] so the look is unchanged but the fill is solid.
-  static BoxDecoration glassyBackground(BuildContext context) {
+  /// Full-screen page background. A vertical gradient from the scaffold
+  /// background to the scheme's background fade. Both stops are fully opaque.
+  static BoxDecoration pageBackground(BuildContext context) {
     final theme = Theme.of(context);
     final bg = theme.scaffoldBackgroundColor;
-    final primary = theme.colorScheme.primary;
+    final fade =
+        theme.extension<AppSchemeColors>()?.backgroundFade ??
+        AppSchemeColors.fadeFrom(
+          brightness: theme.brightness,
+          background: bg,
+          primary: theme.colorScheme.primary,
+        );
     return BoxDecoration(
       gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          bg,
-          Color.alphaBlend(primary.withValues(alpha: 0.05), bg),
-          Color.alphaBlend(primary.withValues(alpha: 0.12), bg),
-        ],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [bg, fade],
       ),
     );
   }
 
-  /// Surface card decoration — adapts to current theme.
+  /// Flat card decoration with soft shadow and hairline border.
+  static BoxDecoration card(
+    BuildContext context, {
+    double? radius,
+  }) {
+    final theme = Theme.of(context);
+    final isLight = theme.brightness == Brightness.light;
+    final schemeColors = theme.extension<AppSchemeColors>();
+    final cardFill =
+        schemeColors?.cardFill ??
+        theme.colorScheme.surface.withValues(alpha: isLight ? 0.90 : 0.72);
+    final cardShadow =
+        schemeColors?.cardShadow ??
+        Colors.black.withValues(alpha: isLight ? 0.05 : 0.25);
+    return BoxDecoration(
+      color: cardFill,
+      borderRadius: BorderRadius.circular(radius ?? AppSpacing.borderRadiusXL),
+      border: Border.all(color: theme.dividerColor, width: 1),
+      boxShadow: [
+        BoxShadow(
+          color: cardShadow,
+          blurRadius: 12,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    );
+  }
+
+  /// Surface card decoration — delegates to [card] for the flat-with-soft-fade look.
   static BoxDecoration surfaceCard(
     BuildContext context, {
     double radius = 20,
-  }) => BoxDecoration(
-    color: Theme.of(context).colorScheme.surface,
-    borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: Theme.of(context).dividerColor),
-  );
+  }) => card(context, radius: radius);
 
-  /// Glass card decoration for auth/onboarding screens.
-  static BoxDecoration glassCard(BuildContext context, {double radius = 16}) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return BoxDecoration(
-      color: isDark
-          ? Colors.white.withValues(alpha: 0.1)
-          : Colors.black.withValues(alpha: 0.05),
-      borderRadius: BorderRadius.circular(radius),
-      border: Border.all(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.2)
-            : Colors.black.withValues(alpha: 0.1),
-      ),
-    );
-  }
+  /// Glass card decoration for auth/onboarding screens — delegates to [card].
+  static BoxDecoration glassCard(
+    BuildContext context, {
+    double radius = 16,
+  }) => card(context, radius: radius);
 
   /// Theme-aware input decoration for auth/onboarding fields.
   static InputDecoration authInputDecoration(

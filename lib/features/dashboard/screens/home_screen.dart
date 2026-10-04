@@ -367,7 +367,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final theme = Theme.of(context);
 
     return Container(
-      decoration: AppDecorations.glassyBackground(context),
+      decoration: AppDecorations.pageBackground(context),
       child: SharedScaffold(
         activeRoute: 'dashboard',
         backgroundColor: Colors.transparent,

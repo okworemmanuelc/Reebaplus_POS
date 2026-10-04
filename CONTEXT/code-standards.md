@@ -260,6 +260,10 @@ All visual values — colours, spacing, radii, typography — are resolved throu
 - Always use semantic identifiers from `AppIcons` (`lib/core/theme/app_icons.dart`). If a new icon is needed, add a semantic mapping to `AppIcons` first.
 - Use `AppIcon(icon, {size, color, filled})` or `Icon(icon, ...)` with an `AppIcons.*` constant.
 
+### Backgrounds and cards
+
+- Use `AppDecorations.pageBackground(context)` for full-screen backgrounds and `AppDecorations.card(context)` for cards; never build your own page gradient; never use `BackdropFilter` (enforced by static ban test).
+
 ### Inline styles
 
 - No inline `style:` overrides on `Text`, `Container`, or `DecoratedBox` widgets outside of the theme. If a style recurs more than once, it becomes a token or a named widget.

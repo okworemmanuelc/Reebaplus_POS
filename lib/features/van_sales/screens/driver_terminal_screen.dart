@@ -108,7 +108,7 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
     );
 
     return Container(
-      decoration: AppDecorations.glassyBackground(context),
+      decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -501,7 +501,7 @@ class _ReceiptView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: AppDecorations.glassyBackground(context),
+      decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -563,7 +563,7 @@ class _NoOpenTrip extends ConsumerWidget {
         : ref.watch(driverBalanceProvider(userId)).valueOrNull ?? 0;
 
     return Container(
-      decoration: AppDecorations.glassyBackground(context),
+      decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(

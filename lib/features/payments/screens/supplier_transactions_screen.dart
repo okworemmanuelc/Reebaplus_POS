@@ -166,7 +166,7 @@ class _SupplierTransactionsScreenState
     return ColoredBox(
       color: _bg,
       child: Container(
-        decoration: AppDecorations.glassyBackground(context),
+        decoration: AppDecorations.pageBackground(context),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(

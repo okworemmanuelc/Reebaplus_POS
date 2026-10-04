@@ -60,7 +60,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final storeFilter = ref.watch(lockedStoreProvider).value;
 
     return Container(
-      decoration: AppDecorations.glassyBackground(context),
+      decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),

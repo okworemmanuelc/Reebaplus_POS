@@ -252,7 +252,7 @@ Reference them by name — never write a raw `BorderRadius.circular(14)`.
 | `AppRadius.inputAuth` | 10px | Auth / onboarding input fields (`authInputDecoration`) |
 | `AppRadius.sm` | 12px | `AppDecorations.primaryGradient` container default |
 | `AppRadius.md` | 14px | `AppButton`, `AppInput`, `AppDropdown`, avatar buttons |
-| `AppRadius.lg` | 16px | `AppFAB`, glass cards (`glassCard`) |
+| `AppRadius.lg` | 16px | `AppFAB`, legacy `glassCard` |
 | `AppRadius.xl` | 20px | Cards (`CardTheme`), chips, `surfaceCard`, most bottom sheets |
 | `AppRadius.xxl` | 28px | Notifications modal top corners |
 
@@ -344,24 +344,33 @@ match `AppButton`'s success gradient.
 
 | Helper | Returns | Restricted to |
 |---|---|---|
+| `AppDecorations.pageBackground(context)` | `BoxDecoration` with vertical opaque background fade (`scaffoldBackgroundColor` → `backgroundFade`) | Screen roots |
+| `AppDecorations.card(context, {radius})` | `BoxDecoration` flat card (`cardFill`, `dividerColor` border, `cardShadow`) | General use |
 | `AppDecorations.primaryGradient(context)` | `BoxDecoration` with primary gradient, radius `AppRadius.sm` | General use |
-| `AppDecorations.surfaceCard(context)` | `BoxDecoration` with `colorScheme.surface`, radius `AppRadius.xl` | General use |
-| `AppDecorations.glassCard(context)` | Frosted-glass `BoxDecoration` | Auth screens only |
+| `AppDecorations.surfaceCard(context)` | `BoxDecoration` (delegates to `card`) | Legacy callers |
+| `AppDecorations.glassCard(context)` | `BoxDecoration` (delegates to `card`) | Legacy callers |
 | `AppDecorations.authInputDecoration(context, ...)` | `InputDecoration` with radius `AppRadius.inputAuth` (10px) | Auth / onboarding screens only |
 
 ---
 
-## Glassy & Modernistic UI Standard (New Global Standard)
+## Flat with a soft fade (Global UI Standard)
 
-The app is actively migrating to a modern, premium "Glassy" design language. When building or upgrading screens, strictly adhere to these visual principles:
+The app uses the "flat with a soft fade" design standard (PRD #346; issue #351), replacing the earlier Glassy/blur look. When building or upgrading screens, strictly adhere to these visual principles:
 
-1. **Gradient Backgrounds**: Replaces flat `Scaffold` backgrounds. Wrap the screen's body or the `Scaffold` in a `Container` with a `LinearGradient`:
-   `theme.scaffoldBackgroundColor` → `primary.withValues(alpha: 0.05)` → `primary.withValues(alpha: 0.12)`. Set the inner `Scaffold` to `backgroundColor: Colors.transparent`.
-2. **Scroll-Reactive AppBars**: `AppBar`s must start transparent and dynamically darken/dim when scrolling. Use a `NotificationListener<ScrollUpdateNotification>` to track scroll offset (`pixels > 10`) and update the `AppBar`'s `backgroundColor` to `theme.colorScheme.surface.withValues(alpha: 0.8)`. Always use `elevation: 0`.
-3. **Glassy Cards**: Replace standard flat cards and `AppDecorations.surfaceCard` with a frosted-glass widget (e.g., `_GlassyCard`) leveraging `ClipRRect`, `BackdropFilter(sigmaX: 12, sigmaY: 12)`, and faint borders (`primary.withValues(alpha: 0.05)`). Wrap inner content with `Material(type: MaterialType.transparency)` to preserve `InkWell` ripples.
-4. **Subtle Outlines & Dividers**: Minimise harsh dividing lines. Set `TabBar`'s `dividerColor: Colors.transparent` and keep card borders ultra-faint.
-5. **Grid-Like Stats Layouts**: Avoid vertical lists for secondary stats. Refactor into side-by-side expanded grids using `Row` to maximise space efficiency inside Glassy containers.
-6. **Generous Spacing**: Ensure generous gaps between major components using `context.getRSize()` (e.g., a top margin of `getRSize(24)` below the AppBar).
+1. **Opaque Page Fade**: Every screen body or `Scaffold` wrapper uses `AppDecorations.pageBackground(context)` — a vertical `LinearGradient` from `theme.scaffoldBackgroundColor` (top) to `AppSchemeColors.backgroundFade` (bottom). Both gradient stops are **strictly 100% opaque** so previous screens never show through during route transitions. Never build your own custom page gradient.
+2. **Solid Top Bars**: `AppBar`s are always solid `colorScheme.surface`, with `elevation: 0`, `scrolledUnderElevation: 0`, `surfaceTintColor: Colors.transparent`, a 1px hairline bottom divider (`dividerColor`), and a soft `topBarShadow` shadow. AppBars never change color or blur on scroll.
+3. **Flat Cards**: Use `AppDecorations.card(context, {radius})` or `GlassyCard`. The card recipe uses:
+   - Fill: `AppSchemeColors.cardFill` (slightly see-through: white @ 0.90 light / `#111827` @ 0.72 dark in Blue Classic);
+   - Border: `Border.all(color: theme.dividerColor, width: 1)`;
+   - Shadow: `BoxShadow(color: AppSchemeColors.cardShadow, blurRadius: 12, offset: Offset(0, 2))`;
+   - Radius: `AppSpacing.borderRadiusXL` (20px) default.
+4. **No Blur Anywhere**: `BackdropFilter` and `ImageFilter.blur` are banned across `lib/` (enforced by `no_backdrop_blur_ban_test.dart`). The sole allowed exception is `lib/features/auth/widgets/auth_background.dart` on sign-in screens pending the Wave 2 Auth redesign.
+5. **Theme-Level Sheets and Dialogs**: Modal sheets and dialogs are styled centrally in `ThemeData`:
+   - `bottomSheetTheme`: `backgroundColor = surface`, `surfaceTintColor = transparent`, `modalBarrierColor = scrim` (black @ 0.35 light / 0.55 dark), `shape = RoundedRectangleBorder(top: 24px)`, `dragHandleColor = dividerColor`, `dragHandleSize = 36×4`. (`showDragHandle` is false; existing hand-drawn handles remain until Wave 2).
+   - `dialogTheme`: `backgroundColor = surface`, `surfaceTintColor = transparent`, `barrierColor = scrim`, `shape = RoundedRectangleBorder(radius: 20px)`.
+6. **Subtle Outlines & Dividers**: Use `theme.dividerColor` for borders and dividers; set `TabBar`'s `dividerColor: Colors.transparent`.
+7. **Grid-Like Stats Layouts**: Avoid vertical lists for secondary stats. Refactor into side-by-side expanded grids using `Row` to maximise space efficiency inside cards.
+8. **Generous Spacing**: Ensure generous gaps between major components using `context.getRSize()` (e.g., a top margin of `getRSize(24)` below the AppBar).
 
 ---
 

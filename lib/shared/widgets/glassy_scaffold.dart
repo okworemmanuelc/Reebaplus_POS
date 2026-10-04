@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
-/// A reusable Scaffold wrapper that implements the "Glassy & Modernistic UI Standard" (§10.1+).
-/// Features a gradient background and a scroll-reactive AppBar that dims when the user scrolls.
-class GlassyScaffold extends StatefulWidget {
+/// Legacy scaffold wrapper retained under this name for compatibility.
+/// Features a flat page background and a solid AppBar with a hairline border and soft shadow.
+class GlassyScaffold extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget body;
@@ -23,39 +25,33 @@ class GlassyScaffold extends StatefulWidget {
   });
 
   @override
-  State<GlassyScaffold> createState() => _GlassyScaffoldState();
-}
-
-class _GlassyScaffoldState extends State<GlassyScaffold> {
-  double _scrollOffset = 0;
-
-  @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final isScrolled = _scrollOffset > 10;
+    final topBarShadow =
+        t.extension<AppSchemeColors>()?.topBarShadow ?? Colors.transparent;
 
     return Container(
-      decoration: AppDecorations.glassyBackground(context),
+      decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: widget.subtitle == null
+          title: subtitle == null
               ? Text(
-                  widget.title,
+                  title,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 )
               : Column(
-                  crossAxisAlignment: widget.centerTitle
+                  crossAxisAlignment: centerTitle
                       ? CrossAxisAlignment.center
                       : CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      widget.title,
+                      title,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      widget.subtitle!,
+                      subtitle!,
                       style: TextStyle(
                         fontSize: context.getRFontSize(11),
                         color: t.colorScheme.primary,
@@ -66,28 +62,30 @@ class _GlassyScaffoldState extends State<GlassyScaffold> {
                     ),
                   ],
                 ),
-          centerTitle: widget.centerTitle,
-          actions: widget.actions,
-          backgroundColor: isScrolled
-              ? t.colorScheme.surface.withValues(alpha: 0.8)
-              : Colors.transparent,
+          centerTitle: centerTitle,
+          actions: actions,
+          backgroundColor: t.colorScheme.surface,
           elevation: 0,
+          scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
-          bottom: widget.bottom,
+          bottom: bottom,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              color: t.colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(color: t.dividerColor, width: 1),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: topBarShadow,
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+          ),
         ),
-        body: NotificationListener<ScrollUpdateNotification>(
-          onNotification: (notif) {
-            if (notif.metrics.axis == Axis.vertical) {
-              if ((_scrollOffset > 10) != (notif.metrics.pixels > 10)) {
-                setState(() => _scrollOffset = notif.metrics.pixels);
-              } else {
-                _scrollOffset = notif.metrics.pixels;
-              }
-            }
-            return false;
-          },
-          child: widget.body,
-        ),
+        body: body,
       ),
     );
   }
