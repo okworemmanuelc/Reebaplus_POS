@@ -39,3 +39,7 @@ The five canonical triage roles map to identically-named labels (`needs-triage`,
 ### Domain docs
 
 Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root (created lazily by the domain-modeling skills). See `docs/agents/domain.md`.
+
+### POS Parity Drift Guard
+
+Any PR that changes a database table, column, status value, or money calculation rule MUST open a `pos-parity` issue in `okworemmanuelc/reebaplus-web` (the web console shares the same Supabase database and must remain POS-faithful).
