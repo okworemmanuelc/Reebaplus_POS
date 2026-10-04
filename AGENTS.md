@@ -24,3 +24,4 @@ Before implementing, making any architectural decision, starting any work, or re
 - Never `git checkout` a file to discard changes; re-edit or stash.
 - Verify `flutter analyze` passes with zero errors and zero warnings before committing.
 - Never run `coderabbit review` (or `coderabbit review --agent`); leave all CodeRabbit invocations to the user as it posts code to an external service.
+- **POS parity rule**: Any PR that changes a database table, column, status value, or money calculation rule MUST open a `pos-parity` issue in `okworemmanuelc/reebaplus-web` (the web console shares the same Supabase database and must remain POS-faithful).
