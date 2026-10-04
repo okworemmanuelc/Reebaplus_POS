@@ -34,7 +34,7 @@ class SupplierLedgerEntryTile extends StatelessWidget {
 
   IconData get _icon {
     if (entry.referenceType == 'invoice') {
-      return AppIcons.expenses;
+      return AppIcons.bill;
     }
     if (entry.referenceType == 'void') return AppIcons.refresh;
     return AppIcons.transfer;

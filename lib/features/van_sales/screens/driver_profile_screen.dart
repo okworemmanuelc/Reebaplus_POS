@@ -616,7 +616,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
         const SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyTab(
-            icon: AppIcons.expenses,
+            icon: AppIcons.bill,
             message: 'No account activity in this period',
           ),
         ),

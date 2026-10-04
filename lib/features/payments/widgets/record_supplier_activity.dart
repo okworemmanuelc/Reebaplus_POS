@@ -76,7 +76,7 @@ void showSupplierActivityChooser(
             ),
             SizedBox(height: ctx.getRSize(20)),
             _ChooserTile(
-              icon: AppIcons.expenses,
+              icon: AppIcons.bill,
               color: danger,
               title: 'Invoice Total',
               subtitle: 'Goods received — increases what you owe',
@@ -395,7 +395,7 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
                           SizedBox(height: context.getRSize(16)),
                           _formHeader(
                             context,
-                            icon: AppIcons.expenses,
+                            icon: AppIcons.bill,
                             color: danger,
                             title: 'Invoice Total',
                             subtitle: widget.supplierName,

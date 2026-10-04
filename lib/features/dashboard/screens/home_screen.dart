@@ -719,7 +719,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           label: 'Total Expenses',
           value: formatCurrency(expenses),
           subtitle: 'Including operations & staff',
-          icon: AppIcons.expenseReport,
+          icon: AppIcons.bill,
           color: Theme.of(context).colorScheme.error,
           trend: expenses > 0 ? 'Recorded' : 'None',
           isPositive: false,

@@ -20,6 +20,7 @@ abstract final class AppIcons {
   // --- Commerce ---
   static const IconData balance = Symbols.scale;
   static const IconData bank = Symbols.account_balance;
+  static const IconData bill = Symbols.request_quote;
   static const IconData cart = Symbols.shopping_cart;
   static const IconData cartAdd = Symbols.add_shopping_cart;
   static const IconData cash = Symbols.payments;
@@ -27,7 +28,6 @@ abstract final class AppIcons {
   static const IconData creditCard = Symbols.credit_card;
   static const IconData deposit = Symbols.savings;
   static const IconData discount = Symbols.confirmation_number;
-  static const IconData expenseReport = Symbols.request_quote;
   static const IconData expenses = Symbols.payments;
   static const IconData invoice = Symbols.receipt;
   static const IconData moneyBag = Symbols.savings;

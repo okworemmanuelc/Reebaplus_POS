@@ -2216,7 +2216,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                AppIcons.expenses,
+                AppIcons.bill,
                 size: context.getRSize(18),
                 color: active ? _primary : _subtext,
               ),

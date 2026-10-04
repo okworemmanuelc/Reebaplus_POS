@@ -685,7 +685,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    AppIcons.expenses,
+                    AppIcons.bill,
                     size: context.getRSize(48),
                     color: theme.colorScheme.onSurface.withAlpha(40),
                   ),
