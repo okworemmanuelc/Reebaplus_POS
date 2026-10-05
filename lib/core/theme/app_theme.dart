@@ -2214,4 +2214,44 @@ extension AppTextStyles on BuildContext {
     fontSize: getRFontSize(monoBaseSize),
     fontWeight: FontWeight.w400,
   );
+
+  // The DM Sans weight roles of PRD #346 decision 2, at a caller-chosen base
+  // size (scaled with getRFontSize). Added for the shared parts (#352 PR 2) so
+  // they never build a raw TextStyle. Colour is left unset.
+
+  /// 700 — prices, totals, names, card titles, buttons, badges, big figures.
+  TextStyle boldStyle(double base) => TextStyle(
+    fontFamily: appFontFamily,
+    fontSize: getRFontSize(base),
+    fontWeight: FontWeight.w700,
+  );
+
+  /// 600 — blue subtitles, chips, nav labels, "Subtotal"-style labels.
+  TextStyle semiBoldStyle(double base) => TextStyle(
+    fontFamily: appFontFamily,
+    fontSize: getRFontSize(base),
+    fontWeight: FontWeight.w600,
+  );
+
+  /// 500 — typed input, normal drawer items.
+  TextStyle mediumStyle(double base) => TextStyle(
+    fontFamily: appFontFamily,
+    fontSize: getRFontSize(base),
+    fontWeight: FontWeight.w500,
+  );
+
+  /// 400 — helper text and captions.
+  TextStyle regularStyle(double base) => TextStyle(
+    fontFamily: appFontFamily,
+    fontSize: getRFontSize(base),
+    fontWeight: FontWeight.w400,
+  );
+
+  /// 800 — screen titles, business name, the raised "POS" label, at a
+  /// caller-chosen base ([screenTitleStyle] is this at 18).
+  TextStyle extraBoldStyle(double base) => TextStyle(
+    fontFamily: appFontFamily,
+    fontSize: getRFontSize(base),
+    fontWeight: FontWeight.w800,
+  );
 }

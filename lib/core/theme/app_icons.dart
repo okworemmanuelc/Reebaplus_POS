@@ -211,6 +211,13 @@ abstract final class AppIcons {
   static const IconData box = Symbols.package_2;
   static const IconData quickSale = Symbols.bolt;
   static const IconData wineBottle = Symbols.wine_bar;
+  // Category keyword icons for product tiles (#352 PR 2, PRD #346).
+  static const IconData waterDrop = Symbols.water_drop;
+  static const IconData softDrinkCup = Symbols.local_drink;
+  /// Malt. Material Symbols has no can glyph; the mockup draws a mug, so this
+  /// is `coffee` (a handled mug), distinct from the beer mug.
+  static const IconData maltCan = Symbols.coffee;
+  static const IconData trendingDown = Symbols.trending_down;
 
   // --- Brand ---
   // TODO(#346): replace with an SVG asset when font_awesome_flutter is removed after Wave 2.

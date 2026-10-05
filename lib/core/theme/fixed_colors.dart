@@ -64,6 +64,10 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
   /// Malt tile fill.
   final Color maltTile;
 
+  /// Text and icons on a SOLID fixed pill, e.g. the PRO tag (white in both
+  /// brightnesses; #352 PR 2).
+  final Color onSolid;
+
   const AppFixedColors({
     required this.danger,
     required this.dangerTint,
@@ -79,6 +83,7 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
     required this.neutralIcon,
     required this.neutralTile,
     required this.maltTile,
+    required this.onSolid,
   });
 
   /// The fixed set for every light theme.
@@ -97,6 +102,7 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
     neutralIcon: fixedNeutralInkLight,
     neutralTile: fixedNeutralInkLight.withValues(alpha: 0.08),
     maltTile: fixedMalt.withValues(alpha: 0.20),
+    onSolid: fixedOnSolid,
   );
 
   /// The fixed set for every dark theme.
@@ -115,6 +121,7 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
     neutralIcon: fixedNeutralInkDark,
     neutralTile: Colors.white.withValues(alpha: 0.08),
     maltTile: fixedMalt.withValues(alpha: 0.16),
+    onSolid: fixedOnSolid,
   );
 
   @override
@@ -133,6 +140,7 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
     Color? neutralIcon,
     Color? neutralTile,
     Color? maltTile,
+    Color? onSolid,
   }) {
     return AppFixedColors(
       danger: danger ?? this.danger,
@@ -149,6 +157,7 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
       neutralIcon: neutralIcon ?? this.neutralIcon,
       neutralTile: neutralTile ?? this.neutralTile,
       maltTile: maltTile ?? this.maltTile,
+      onSolid: onSolid ?? this.onSolid,
     );
   }
 
@@ -170,6 +179,7 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
       neutralIcon: Color.lerp(neutralIcon, other.neutralIcon, t)!,
       neutralTile: Color.lerp(neutralTile, other.neutralTile, t)!,
       maltTile: Color.lerp(maltTile, other.maltTile, t)!,
+      onSolid: Color.lerp(onSolid, other.onSolid, t)!,
     );
   }
 }

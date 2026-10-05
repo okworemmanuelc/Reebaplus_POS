@@ -12,8 +12,8 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 /// customer, the cart total and a chevron.
 ///
 /// Pure display: the frame decides when it shows and what a tap does (open the
-/// Cart tab under 600dp wide, open the cart panel at 600dp+). Its restyle into
-/// a shared part is PR 2 of #352.
+/// Cart tab under 600dp wide, open the cart panel at 600dp+). One of the
+/// shared parts (#352 PR 2); the frame (`MainLayout`) is its only user so far.
 class ViewCartBar extends StatelessWidget {
   const ViewCartBar({
     super.key,

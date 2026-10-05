@@ -174,3 +174,4 @@ const Color fixedInfo = Color(0xFF3B82F6);
 const Color fixedNeutralInkLight = Color(0xFF0B1220); // stout / neutral icon
 const Color fixedNeutralInkDark = Color(0xFFE2E8F0);
 const Color fixedMalt = Color(0xFF60A5FA);
+const Color fixedOnSolid = Color(0xFFFFFFFF); // text on a solid fixed pill (#352)
