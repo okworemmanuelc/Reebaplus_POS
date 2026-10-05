@@ -5,6 +5,7 @@ library;
 export 'cart_line.dart';
 export 'category_chip.dart';
 export 'category_visual.dart';
+export 'fly_to_cart.dart';
 export 'icon_tile.dart';
 export 'product_tile.dart';
 export 'profile_card.dart';

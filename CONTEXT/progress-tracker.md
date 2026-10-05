@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #352 PR 3: Redesign Wave 0 ④ — shared fly-to-cart helper (2026-10-05)
+Branch `feat/redesign-w0-fly-to-cart-352` off `main` (after PR #366). Completes #352 (Wave 0 done). **No Drift/cloud/sync change, no new packages.** RELEASE FREEZE ON.
+- `lib/shared/widgets/redesign/fly_to_cart.dart`: `flyToTarget()`, `FlyTarget`, `FlyTargetRegistry`, `FlyTargetId { cart }`, `FlyToCartFlight`, `kFlyToCartDuration` (620ms). The old POS particle's values are kept exactly (see ui-context "Fly-to-cart").
+- Targets: the Cart `FrameNavItem` (`flyTarget: FlyTargetId.cart`, so both bar and rail icons register, priority 0) and the cart panel's header (`CartScreen` wraps its `AppBarHeader` in a `FlyTarget` only when `onClosePanel` is set, priority 1, landing on the icon tile at the left).
+- POS (`product_grid.dart`): the fixed point `Offset(width × 0.9, height − 28)`, the per-tile `AnimationController` and `OverlayEntry` are gone; `_handleTap` adds, then `flyToTarget`. The particle now draws in the ROOT overlay (it used to draw in the POS tab's overlay, under the bottom bar). Add-to-cart, toasts and long-press unchanged.
+- Receive Stock deliberately not wired (Wave 2 A); the helper is target-agnostic.
+- Tests: `test/shared/redesign/fly_to_cart_test.dart` (12): lands on the target and removes its entry; no target / reduced motion → no flight but the add happens; source unmount mid-flight; cancel twice; priority + Offstage resolution; in MainLayout: 390×844 bottom-bar Cart, 844×390 rail Cart, 800×1280 rail Cart → panel header after View Cart, 1280×800 panel header, a real POS tile tap adds + flies + cleans up.
+
 ### Issue #352 PR 2: Redesign Wave 0 ④ — shared parts library (2026-10-05)
 Branch `feat/redesign-w0-shared-parts-352` off `main` (after PR #364), worktree `../drinkPosApp-wt-352`. **No Drift/cloud/sync change, no new packages.** RELEASE FREEZE ON. Screens do not adopt the parts yet (Waves 1/2); the frame keeps using the View Cart bar.
 - **Parts** in `lib/shared/widgets/redesign/` (barrel `redesign.dart`): `ScreenHeader` + `HeaderBell`, `StatCard`, `TagPill` + `StatusPill`, `IconTile`, `ProductTile`, `categoryVisual()`, `CategoryChip`, `CartLine` + `QuantityStepper`, `ViewCartBar` (moved from `frame/`, unchanged), `SettingsRow`, `ProfileCard`, `SectionHeader`. Listed with use cases in ui-context.md "Shared parts".
