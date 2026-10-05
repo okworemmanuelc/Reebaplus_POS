@@ -75,7 +75,7 @@ class AppDrawer extends ConsumerWidget {
       child: _buildHeader(context, ref),
     );
     final systemBottom = context.deviceBottomPadding;
-    final screenHeight = MediaQuery.sizeOf(context).height;
+    final screenHeight = context.screenHeight;
 
     // A pop-over drawer at every size (#352); the permanent desktop sidebar
     // is gone. The Surface runs under a left cutout; the content stays clear.
