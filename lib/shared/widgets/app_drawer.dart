@@ -74,13 +74,8 @@ class AppDrawer extends ConsumerWidget {
       ),
       child: _buildHeader(context, ref),
     );
-    final footer = DrawerFooter(
-      bottomPadding: context.deviceBottomPadding,
-      onDisplay: isBelowCeo
-          ? null
-          : () => _pushRoute(context, ref, const ThemeSettingsScreen()),
-      onLogOut: () => _logOut(context, ref),
-    );
+    final systemBottom = context.deviceBottomPadding;
+    final screenHeight = MediaQuery.sizeOf(context).height;
 
     // A pop-over drawer at every size (#352); the permanent desktop sidebar
     // is gone. The Surface runs under a left cutout; the content stays clear.
@@ -92,8 +87,26 @@ class AppDrawer extends ConsumerWidget {
           padding: EdgeInsets.only(left: insets.left),
           child: LayoutBuilder(
             builder: (context, constraints) {
+              // The footer clears the system navigation inset only where the
+              // drawer actually reaches it. Under 600dp on a tab root the
+              // drawer ends at the top of the bottom bar, which already
+              // clears the inset, so subtract what the drawer stops short of
+              // the screen's bottom edge (the drawer starts at the top).
+              final shortOfBottom = screenHeight - constraints.maxHeight;
+              final bottomPadding = (systemBottom - shortOfBottom).clamp(
+                0.0,
+                systemBottom,
+              );
+              final footer = DrawerFooter(
+                bottomPadding: bottomPadding,
+                onDisplay: isBelowCeo
+                    ? null
+                    : () =>
+                          _pushRoute(context, ref, const ThemeSettingsScreen()),
+                onLogOut: () => _logOut(context, ref),
+              );
               final available =
-                  constraints.maxHeight - insets.top - insets.bottom;
+                  constraints.maxHeight - insets.top - bottomPadding;
               final pinHeader = available >= _kPinnedHeaderMinHeight;
               final list = _buildNavList(
                 context,
