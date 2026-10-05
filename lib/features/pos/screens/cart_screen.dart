@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/frame/cart_panel.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
@@ -1089,6 +1090,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final customerCreditBalance = activeBalanceKobo / 100.0;
     final isOwe = customerCreditBalance < 0;
 
+    final header = AppBarHeader(
+      icon: AppIcons.cart,
+      title: 'Cart',
+      subtitle: ref.watch(activeStoreLabelProvider),
+    );
     return SharedScaffold(
       activeRoute: 'cart',
       backgroundColor: _bg,
@@ -1096,11 +1102,18 @@ class _CartScreenState extends ConsumerState<CartScreen>
         backgroundColor: _surface,
         elevation: 0,
         leading: context.isRailLayout ? null : const MenuButton(),
-        title: AppBarHeader(
-          icon: AppIcons.cart,
-          title: 'Cart',
-          subtitle: ref.watch(activeStoreLabelProvider),
-        ),
+        // In the frame's cart panel the header is where fly-to-cart lands
+        // (#352 PR 3), ahead of the rail's Cart item; its icon tile sits at
+        // the header's left edge.
+        title: widget.onClosePanel == null
+            ? header
+            : FlyTarget(
+                id: FlyTargetId.cart,
+                priority: 1,
+                anchor: Alignment.centerLeft,
+                anchorOffset: Offset(context.getRSize(16), 0),
+                child: header,
+              ),
         actions: [
           const NotificationBell(),
           if (cartItems.isNotEmpty)

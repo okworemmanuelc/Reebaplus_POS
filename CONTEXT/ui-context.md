@@ -448,7 +448,33 @@ adopt them in Waves 1 and 2; only the frame uses one so far (View Cart bar).
 | `ViewCartBar` | `view_cart_bar.dart` | The gradient "View Cart" bar (count, items · customer, total, chevron). Used by `MainLayout`. |
 | `SettingsRow` | `settings_row.dart` | Settings / menu row card: icon tile, title, subtitle, chevron; whole card taps. |
 | `ProfileCard` | `profile_card.dart` | Settings profile card: gradient initial tile, business name (800), person, tags. |
+| `flyToTarget()`, `FlyTarget`, `FlyTargetRegistry` | `fly_to_cart.dart` | The fly-to-cart animation and its landing targets (see below). |
 | `SectionHeader` | `section_header.dart` | "Performance Overview · Analytics for the selected period": ExtraBold title, muted subtitle that wraps under it when narrow. |
+
+### Fly-to-cart (`fly_to_cart.dart`, #352 PR 3)
+
+`flyToTarget(context, target: FlyTargetId.cart)` flies a 30dp primary circle
+with a cart icon from the tapped widget to the cart target **that is showing**:
+the bottom-bar Cart item (under 600dp), the rail Cart item (600dp+, panel
+closed), or the cart panel's header (fixed panel at 1024dp+, or the slide-in
+when open). Targets are widgets wrapped in `FlyTarget(id:, priority:)`;
+`FlyTargetRegistry.resolve` picks the highest-priority one that is mounted,
+painted (not `Offstage`) and on screen — never a screen coordinate. The
+panel header registers at priority 1, the nav Cart item at 0.
+
+- **Feel (unchanged from the old POS particle):** 620ms; position eased with
+  `Curves.easeIn`; x straight, y with an upward arc of `−110·sin(π·t)` on the
+  raw progress; scale 1 → 0.35; opaque until 82%, then fades out; 0.55 primary
+  glow (blur 10, spread 1).
+- **Never blocks the add:** no target showing, reduced motion
+  (`MediaQuery.disableAnimations`) or no overlay → no flight, silently. It
+  draws in the root overlay in its own `OverlayEntry` (owns its controller,
+  removes itself on landing), so the source may unmount mid-flight. The
+  returned `FlyToCartFlight` can `cancel()`; POS cancels a tile's previous
+  flight on a new tap and on dispose, as before.
+- **A new destination** (Receive Stock's receiving cart, Wave 2 A): add a
+  `FlyTargetId` value, wrap its button in a `FlyTarget` with that id, and call
+  `flyToTarget(context, target: thatId)` after the add.
 
 **Text weights for parts.** `AppTextStyles` (`app_theme.dart`) gained
 `boldStyle(base)` (700), `semiBoldStyle(base)` (600), `mediumStyle(base)` (500),

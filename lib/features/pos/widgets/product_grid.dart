@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +14,7 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 
 /// Key prefix on every product tile, so a test can find the *complete* tiles
 /// the cashier can actually reach (issue #259 / PRD #239). The two-assertion
@@ -223,16 +223,13 @@ class _ProductCard extends ConsumerStatefulWidget {
   ConsumerState<_ProductCard> createState() => _ProductCardState();
 }
 
-class _ProductCardState extends ConsumerState<_ProductCard>
-    with TickerProviderStateMixin {
-  AnimationController? _flingCtrl;
-  OverlayEntry? _overlayEntry;
+class _ProductCardState extends ConsumerState<_ProductCard> {
+  /// This tile's flight to the cart, if one is in the air (#352 PR 3).
+  FlyToCartFlight? _flight;
 
   @override
   void dispose() {
-    _flingCtrl?.dispose();
-    _overlayEntry?.remove();
-    _overlayEntry = null;
+    _flight?.cancel();
     super.dispose();
   }
 
@@ -263,95 +260,11 @@ class _ProductCardState extends ConsumerState<_ProductCard>
   void _handleTap() {
     // Fire product logic immediately
     widget.onTap();
-    // Then launch fling particle
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-    final source = renderBox.localToGlobal(
-      Offset(renderBox.size.width / 2, renderBox.size.height / 3),
-    );
-    _launchFling(source);
-  }
-
-  void _launchFling(Offset source) {
-    // Clean up any previous animation
-    _flingCtrl?.stop();
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-    _flingCtrl?.dispose();
-
-    final screenSize = MediaQuery.of(context).size;
-    // Cart icon is the 5th (last) item in the 5-item bottom nav bar.
-    final target = Offset(screenSize.width * 0.9, screenSize.height - 28.0);
-
-    _flingCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 620),
-    );
-
-    _overlayEntry = OverlayEntry(
-      builder: (_) => AnimatedBuilder(
-        animation: _flingCtrl!,
-        builder: (_, __) {
-          final raw = _flingCtrl!.value;
-          final t = Curves.easeIn.transform(raw);
-
-          // X: linear from source to target
-          final x = lerpDouble(source.dx, target.dx, t)!;
-          // Y: parabolic arc (goes up first, then drops to target)
-          final yBase = lerpDouble(source.dy, target.dy, t)!;
-          final arc = -110.0 * sin(pi * raw); // upward arc
-          final y = yBase + arc;
-
-          final scale = lerpDouble(1.0, 0.35, t)!;
-          final opacity = raw > 0.82
-              ? ((1.0 - raw) / 0.18).clamp(0.0, 1.0)
-              : 1.0;
-
-          return Positioned(
-            left: x - 15,
-            top: y - 15,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: opacity,
-                child: Transform.scale(
-                  scale: scale,
-                  child: Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.primary.withValues(alpha: 0.55),
-                          blurRadius: 10,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      AppIcons.cart,
-                      color: Colors.white,
-                      size: 15,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-
-    Overlay.of(context).insert(_overlayEntry!);
-    _flingCtrl!.forward().then((_) {
-      if (mounted) {
-        _overlayEntry?.remove();
-        _overlayEntry = null;
-      }
-    });
+    // Then fly a particle to whichever cart target is showing — the bottom-bar
+    // Cart, the rail Cart, or the open cart panel's header (#352 PR 3). A
+    // tile tapped again replaces its own flight, as before.
+    _flight?.cancel();
+    _flight = flyToTarget(context, target: FlyTargetId.cart);
   }
 
   @override

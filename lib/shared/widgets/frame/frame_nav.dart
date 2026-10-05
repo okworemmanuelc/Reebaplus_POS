@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 
 /// One destination of the app frame's main navigation (#352).
@@ -24,6 +25,7 @@ class FrameNavItem {
     required this.label,
     this.raised = false,
     this.badgeCount = 0,
+    this.flyTarget,
   });
 
   /// Index into MainLayout's tab list (0 Home, 1 POS, 2 Stock, 3 Orders,
@@ -38,6 +40,10 @@ class FrameNavItem {
 
   /// Red count badge on the icon; hidden at 0.
   final int badgeCount;
+
+  /// When set, this item's icon is a landing spot for fly-to-cart flights
+  /// (the Cart item, #352 PR 3).
+  final FlyTargetId? flyTarget;
 }
 
 /// Key of the item for [tabIndex] on the bottom bar or the rail.
@@ -79,12 +85,14 @@ class _NavIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fixed = Theme.of(context).extension<AppFixedColors>();
-    return Badge(
+    final badge = Badge(
       label: Text(item.badgeCount.toString()),
       isLabelVisible: item.badgeCount > 0,
       backgroundColor: fixed?.danger ?? Theme.of(context).colorScheme.error,
       child: AppIcon(item.icon, filled: selected, color: color, size: size),
     );
+    final target = item.flyTarget;
+    return target == null ? badge : FlyTarget(id: target, child: badge);
   }
 }
 
