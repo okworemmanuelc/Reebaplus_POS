@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 import '../helpers/drawer_harness.dart';
@@ -28,6 +31,23 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ScreenTestEnvironment env;
+
+  // Home starts a connectivity listener; the plugin has no test
+  // implementation, so answer "online over wifi" instead of throwing.
+  setUpAll(() {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+      (call) async => <String>['wifi'],
+    );
+    messenger.setMockStreamHandler(
+      const EventChannel('dev.fluttercommunity.plus/connectivity_status'),
+      MockStreamHandler.inline(
+        onListen: (arguments, events) => events.success(<String>['wifi']),
+      ),
+    );
+  });
 
   setUp(() async {
     env = await setupScreenTestEnvironment(
@@ -284,6 +304,97 @@ void main() {
         reason: 'the footer Surface runs under the bottom inset',
       );
       expectTapTargets(tester);
+      expect(tester.takeException(), isNull);
+      await disposeScreen(tester);
+    });
+  });
+
+  group('in the real frame', () {
+    Future<void> pumpFrame(
+      WidgetTester tester,
+      Size size,
+      EdgeInsets insets,
+    ) async {
+      tester.view.viewPadding = FakeViewPadding(
+        left: insets.left,
+        top: insets.top,
+        right: insets.right,
+        bottom: insets.bottom,
+      );
+      addTearDown(tester.view.resetViewPadding);
+      NavigationService()
+        ..beginSessionLanding()
+        ..setIndex(NavigationService.homeTab);
+      await pumpScreen(
+        tester,
+        env: env,
+        size: size,
+        padding: insets,
+        screen: const MainLayout(),
+        bottomNavHeight: 0,
+        grantedKeys: kDrawerCeoGrants,
+        overrides: [firstRunTourStopProvider.overrideWithValue(TourStop.none)],
+        // The push-notification soft ask would sit over the frame.
+        sharedPreferences: const {
+          'push_soft_ask_shown_v1': true,
+          'hint_pos_gestures': 2,
+        },
+        settle: false,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('sideways 844x390, nav bar right: the rail menu opens the '
+        'drawer and its footer is inside the safe area', (tester) async {
+      const insets = EdgeInsets.only(top: 24, right: 48);
+      const size = Size(844, 390);
+      await pumpFrame(tester, size, insets);
+      await tester.tap(find.byKey(const Key('frame-rail-menu')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      for (final key in [
+        AppDrawerKeys.header,
+        AppDrawerKeys.display,
+        AppDrawerKeys.logOut,
+      ]) {
+        expectInsideSafeArea(
+          tester,
+          find.byKey(key),
+          size,
+          insets,
+          what: '$key',
+        );
+      }
+      expect(find.byKey(const Key('drawer-selected-item')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('upright 390x844, 48dp bottom inset, on a tab root: the drawer '
+        'stops at the bottom bar and adds no second inset', (tester) async {
+      const insets = EdgeInsets.only(top: 24, bottom: 48);
+      const size = Size(390, 844);
+      await pumpFrame(tester, size, insets);
+      NavigationService().openDrawer();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      final bar = tester.getRect(find.byKey(const Key('main-bottom-nav')));
+      final footer = tester.getRect(find.byKey(AppDrawerKeys.footer));
+      final logOut = tester.getRect(find.byKey(AppDrawerKeys.logOut));
+      expect(footer.bottom, lessThanOrEqualTo(bar.top + 0.01));
+      expect(
+        footer.bottom - logOut.bottom,
+        lessThan(insets.bottom),
+        reason: 'the bottom bar already clears the navigation inset',
+      );
+      expectInsideSafeArea(
+        tester,
+        find.byKey(AppDrawerKeys.logOut),
+        size,
+        insets,
+        what: 'Log Out',
+      );
       expect(tester.takeException(), isNull);
       await disposeScreen(tester);
     });
