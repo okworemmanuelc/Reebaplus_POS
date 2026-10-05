@@ -186,6 +186,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         backgroundColor: Colors.transparent,
         appBar: _SettingsAppBar(
           storeLabel: ref.watch(activeStoreLabelProvider),
+          // The theme's bar height, grown when the scaled header tile would
+          // touch its edges (tablets and wide screens).
+          height: math.max(
+            kToolbarHeight + 12,
+            context.getRSize(44) + context.getRSize(16),
+          ),
         ),
         body: !canManage
             ? const SettingsNoAccess()
@@ -297,12 +303,13 @@ class _GroupTitle extends StatelessWidget {
 /// tile, "CEO Settings", the active store in primary and the live bell — the
 /// shared [ScreenHeader] inside an `AppBar`, as its doc describes.
 class _SettingsAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _SettingsAppBar({required this.storeLabel});
+  const _SettingsAppBar({required this.storeLabel, required this.height});
 
   final String storeLabel;
+  final double height;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 12);
+  Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context) {
