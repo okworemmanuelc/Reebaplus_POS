@@ -23,7 +23,7 @@ import 'package:reebaplus_pos/shared/widgets/sync_pull_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/frame/cart_panel.dart';
 import 'package:reebaplus_pos/shared/widgets/frame/frame_nav.dart';
-import 'package:reebaplus_pos/shared/widgets/frame/view_cart_bar.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/view_cart_bar.dart';
 import 'package:reebaplus_pos/shared/widgets/push_permission_sheet.dart';
 import 'package:reebaplus_pos/features/dashboard/controllers/first_run_tour_controller.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';

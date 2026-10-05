@@ -52,6 +52,7 @@ List<Color> _fixedValues(AppFixedColors f) => [
   f.neutralIcon,
   f.neutralTile,
   f.maltTile,
+  f.onSolid,
 ];
 
 void main() {
@@ -102,6 +103,7 @@ void main() {
       _expectColour(f.neutralIcon, _hex(0x0B1220), 'neutralIcon');
       _expectColour(f.neutralTile, _hex(0x0B1220, 0.08), 'neutralTile');
       _expectColour(f.maltTile, _hex(0x60A5FA, 0.20), 'maltTile');
+      _expectColour(f.onSolid, _hex(0xFFFFFF, 1.0), 'onSolid');
     });
 
     test('dark values equal the colour sheet', () {
@@ -120,6 +122,7 @@ void main() {
       _expectColour(f.neutralIcon, _hex(0xE2E8F0), 'neutralIcon');
       _expectColour(f.neutralTile, _hex(0xFFFFFF, 0.08), 'neutralTile');
       _expectColour(f.maltTile, _hex(0x60A5FA, 0.16), 'maltTile');
+      _expectColour(f.onSolid, _hex(0xFFFFFF, 1.0), 'onSolid');
     });
   });
 

@@ -121,6 +121,7 @@ rows), Credit/Debt boxes and product-tile tints. Access:
 | Token | Light | Dark | Usage |
 |---|---|---|---|
 | `danger` | `#EF4444` | `#EF4444` | Clear, Log Out, remove, count badges |
+| `onSolid` | `#FFFFFF` | `#FFFFFF` | Text on a solid fixed pill (PRO), count-badge text (#352) |
 | `dangerTint` | `#EF4444` @ 0.10 | `#EF4444` @ 0.14 | Pale danger fill |
 | `dangerOutline` | `#EF4444` @ 0.35 | `#EF4444` @ 0.45 | Clear button border |
 | `warning` | `#FFB020` | `#FFB020` | Crates, pending, low stock |
@@ -424,6 +425,39 @@ Full responsive rules — the two-curve scale, `_kComfortableHeight`, and the
 form-factor-vs-available-width split — land here in Phase 9; see
 `docs/adr/0025-two-curve-responsive-scale.md` and
 `docs/design/responsive-layout-plan.md` in the meantime.
+
+## Shared parts (`lib/shared/widgets/redesign/`, #352 PR 2)
+
+The redesign's building blocks. Import the barrel
+`package:reebaplus_pos/shared/widgets/redesign/redesign.dart`. Every part takes
+**plain data** (strings, numbers, enums, callbacks — never a provider), has
+48dp+ tap targets, survives text scale 1.3 at 360dp, and has a light + dark
+gallery golden in `test/redesign/goldens/parts_<part>_<theme>.png`. Screens
+adopt them in Waves 1 and 2; only the frame uses one so far (View Cart bar).
+
+| Part | File | Use for |
+|---|---|---|
+| `ScreenHeader` (+ `HeaderBell`) | `screen_header.dart` | The content of a screen's top bar: gradient icon tile, ExtraBold title, primary subtitle, actions. Put it in an `AppBar` title / sliver header. `HeaderBell(count:, onPressed:)` is a plain bell with a badge; screens may pass the live `NotificationBell` instead. |
+| `StatCard` | `stat_card.dart` | Home figure cards: icon tile, muted title + status pill, big figure, one-line subtitle. Optional `onTap`. |
+| `TagPill`, `StatusPill` | `tag_pill.dart` | PRO / CEO / status words in fixed colours (`TagPillTone`). `StatusPill` adds the mockup's ↑ / ↓ / ⓘ icon per tone. Display only. |
+| `IconTile` (`IconTileTone`) | `icon_tile.dart` | The pale rounded square with a filled icon (stat cards, settings rows, cart lines). Fixed tone pairs, or explicit colours. |
+| `ProductTile` (`StockLevel`) | `product_tile.dart` | POS / Receive Stock grid tile: photo first, else category tint + keyword icon; name, size·pack, price, stock pill; cart-count badge and primary border; out of stock dims and ignores taps. |
+| `categoryVisual()` / `CategoryVisual` | `category_visual.dart` | The pure tile rule: keyword → icon + colour (stout/malt/beer·lager/water/energy/soft drink·soda·juice/wine·spirit), else a stable code-unit-sum hash into the fixed palette; null/blank → neutral + box. Unit-tested. |
+| `CategoryChip` | `category_chip.dart` | Category filter chip with a dot coloured by `categoryVisual`; null category = "All". |
+| `CartLine`, `QuantityStepper` | `cart_line.dart` | Cart line card: icon tile, name, "qty × price", total, size·pack, stepper (− becomes a red delete at the last unit). Caller resolves the icon (today: `productIconFromCodePoint`). |
+| `ViewCartBar` | `view_cart_bar.dart` | The gradient "View Cart" bar (count, items · customer, total, chevron). Used by `MainLayout`. |
+| `SettingsRow` | `settings_row.dart` | Settings / menu row card: icon tile, title, subtitle, chevron; whole card taps. |
+| `ProfileCard` | `profile_card.dart` | Settings profile card: gradient initial tile, business name (800), person, tags. |
+| `SectionHeader` | `section_header.dart` | "Performance Overview · Analytics for the selected period": ExtraBold title, muted subtitle that wraps under it when narrow. |
+
+**Text weights for parts.** `AppTextStyles` (`app_theme.dart`) gained
+`boldStyle(base)` (700), `semiBoldStyle(base)` (600), `mediumStyle(base)` (500),
+`regularStyle(base)` (400) and `extraBoldStyle(base)` (800) — the PRD #346
+decision 2 roles at a chosen base size, scaled with `getRFontSize` — so parts
+never build a raw `TextStyle`.
+
+**Fixed colours.** `AppFixedColors.onSolid` (white, both brightnesses) is the
+text on a solid fixed pill (PRO).
 
 ## Layout patterns
 
