@@ -7,6 +7,17 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #368: Redesign Wave 1 — Drawer (2026-10-05)
+Branch `feat/redesign-w1-drawer` off `main` (after PR #367), worktree `../drinkPosApp-wt-368`. Parent PRD #346. **No Drift/cloud/sync change, no new packages.** RELEASE FREEZE ON. Shared parts in `lib/shared/widgets/redesign/` untouched.
+- `app_drawer.dart` keeps every item, gate, order, dialog and the lock / log-out flows; it now lays out header · hairline · scrolling list · pinned footer. Drawing moved to `app_drawer_parts.dart` (plain data): `DrawerHeaderBlock`, `DrawerSyncBanner`, `DrawerStoreRow`, `DrawerNavTile`, `DrawerFooter`, `appDrawerWidth`, `AppDrawerKeys`. Uses `TagPill`, `IconTile`.
+- Header: business logo (`currentBusinessLogoPathProvider`) else gradient initial — replaces the placeholder `assets/images/logo.svg`; business name + "Tap logo to open profile"; bordered lock; new ✕ closes. PRO solid / FREE TRIAL amber / role info pills; "Terminal 01" mono.
+- Sync banner: pending-only now reads "N record(s) waiting to sync" (mockup); "Offline — N queued", "N failed", "Syncing N · M failed" unchanged; amber (`warning*`) or red (`danger*`) when failures. The spinner became a static icon.
+- Log Out and Display moved from the list into the pinned footer (Display still CEO / role-resolving only). `SubscriptionBadge` deleted (its only caller was the drawer; the tag is a `TagPill` now).
+- Width `getRSize(328)` ≤ 84% of the screen (+ left inset); was Material's default 304. Header scrolls with the list below 560dp of height. Footer bottom inset = `deviceBottomPadding` minus how far the drawer stops short of the screen bottom.
+- New `AppIcons.unfoldMore`, `AppIcons.syncProblem`.
+- Tests: `test/shared/app_drawer_test.dart` (24: safe area at 844×390 / 915×412 / 800×360 with top 24 + right 48, left cutout, 390×844 bottom 48; inside the real MainLayout sideways + upright; text scale 1.3 at 360×740 and 844×390; tap targets ≥ 48; width; tags; banner states + gate; store picker; item order per role; Log Out dialog). Goldens `test/redesign/drawer_golden_test.dart` → 10 PNGs `drawer_<size>_<theme>.png` incl. `844x390_insets`.
+- **Open**: at 800dp+ shortest side the ADR 0025 scale (spacing ×1.5, type ×1.35) makes the drawer 492dp and its list short at 1280×800 (the mockup draws 1× sizes); "Tap logo to open profile" wraps at 390dp. Shared-part candidates: compact `SettingsRow` density (Display card), a danger-outline button.
+
 ### Issue #352 PR 3: Redesign Wave 0 ④ — shared fly-to-cart helper (2026-10-05)
 Branch `feat/redesign-w0-fly-to-cart-352` off `main` (after PR #366). Completes #352 (Wave 0 done). **No Drift/cloud/sync change, no new packages.** RELEASE FREEZE ON.
 - `lib/shared/widgets/redesign/fly_to_cart.dart`: `flyToTarget()`, `FlyTarget`, `FlyTargetRegistry`, `FlyTargetId { cart }`, `FlyToCartFlight`, `kFlyToCartDuration` (620ms). The old POS particle's values are kept exactly (see ui-context "Fly-to-cart").
