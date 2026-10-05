@@ -159,6 +159,14 @@ void main() {
         );
       }
       expect(_header('Danger zone'), findsOneWidget);
+      // Every group label is the mockup's muted group style.
+      final headers = tester.widgetList<SectionHeader>(
+        find.byType(SectionHeader),
+      );
+      expect(headers, hasLength(_groups.length + 1));
+      for (final h in headers) {
+        expect(h.variant, SectionHeaderVariant.group, reason: h.title);
+      }
       expect(
         tester.widget<SettingsRow>(_row('Delete Business')).tone,
         IconTileTone.danger,

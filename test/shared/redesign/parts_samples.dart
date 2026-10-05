@@ -235,4 +235,12 @@ final Map<String, List<Widget> Function(BuildContext)> partGalleries = {
     ),
     SectionHeader(title: 'Business'),
   ],
+  // #369: the muted group label over a list of rows (CEO Settings).
+  'section_header_group': (context) => const [
+    SectionHeader(title: 'Business', variant: SectionHeaderVariant.group),
+    SectionHeader(
+      title: 'Access & Security',
+      variant: SectionHeaderVariant.group,
+    ),
+  ],
 };

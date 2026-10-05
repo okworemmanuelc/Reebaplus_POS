@@ -1,9 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 import 'parts_samples.dart';
@@ -318,5 +321,152 @@ void main() {
     final title = tester.getRect(find.text('Performance Overview'));
     final sub = tester.getRect(find.text('Analytics for the selected period'));
     expect(sub.top, greaterThanOrEqualTo(title.bottom - 1));
+  });
+
+  testWidgets('SectionHeader group variant: SemiBold 15, muted; default '
+      'unchanged', (tester) async {
+    await pump(
+      tester,
+      (_) => const Column(
+        children: [
+          SectionHeader(title: 'Default'),
+          SectionHeader(title: 'Group', variant: SectionHeaderVariant.group),
+        ],
+      ),
+    );
+    final context = tester.element(find.text('Group'));
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall!.color;
+    final group = tester.widget<Text>(find.text('Group')).style!;
+    expect(group.fontWeight, FontWeight.w600);
+    expect(group.fontSize, context.getRFontSize(15));
+    expect(group.color, muted);
+    final standard = tester.widget<Text>(find.text('Default')).style!;
+    expect(standard.fontWeight, FontWeight.w800);
+    expect(standard.fontSize, context.getRFontSize(17));
+    expect(standard.color, t.colorScheme.onSurface);
+    expect(
+      const SectionHeader(title: 'x').variant,
+      SectionHeaderVariant.standard,
+    );
+  });
+
+  // A 1x1 opaque PNG.
+  final pixel = Uint8List.fromList(const [
+    0x89,
+    0x50,
+    0x4E,
+    0x47,
+    0x0D,
+    0x0A,
+    0x1A,
+    0x0A,
+    0x00,
+    0x00,
+    0x00,
+    0x0D,
+    0x49,
+    0x48,
+    0x44,
+    0x52,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x08,
+    0x06,
+    0x00,
+    0x00,
+    0x00,
+    0x1F,
+    0x15,
+    0xC4,
+    0x89,
+    0x00,
+    0x00,
+    0x00,
+    0x0D,
+    0x49,
+    0x44,
+    0x41,
+    0x54,
+    0x78,
+    0x9C,
+    0x63,
+    0xF8,
+    0xCF,
+    0xC0,
+    0xF0,
+    0x1F,
+    0x00,
+    0x05,
+    0x00,
+    0x01,
+    0xFF,
+    0x89,
+    0x99,
+    0x3D,
+    0x1D,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x49,
+    0x45,
+    0x4E,
+    0x44,
+    0xAE,
+    0x42,
+    0x60,
+    0x82,
+  ]);
+
+  testWidgets('ProfileCard: no logo shows the initial', (tester) async {
+    await pump(tester, (_) => const ProfileCard(title: 'Stallion Global'));
+    expect(find.text('S'), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+  });
+
+  testWidgets('ProfileCard: a logo fills the tile instead of the initial', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      (_) => ProfileCard(title: 'Stallion Global', logo: MemoryImage(pixel)),
+    );
+    await tester.runAsync(() async {
+      await precacheImage(
+        MemoryImage(pixel),
+        tester.element(find.byType(ProfileCard)),
+      );
+    });
+    await tester.pump();
+    final image = find.byType(Image);
+    expect(image, findsOneWidget);
+    expect(find.text('S'), findsNothing);
+    final context = tester.element(image);
+    final edge = context.getRSize(56);
+    expect(tester.getSize(image), Size(edge, edge));
+  });
+
+  testWidgets('ProfileCard: a logo that fails to load falls back to the '
+      'initial', (tester) async {
+    await pump(
+      tester,
+      (_) => ProfileCard(
+        title: 'Stallion Global',
+        logo: MemoryImage(Uint8List.fromList(const [1, 2, 3])),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    expect(find.text('S'), findsOneWidget);
+    tester.takeException();
   });
 }

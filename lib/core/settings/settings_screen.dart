@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -179,6 +178,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final gap = context.getRSize(12);
     final groupGap = context.getRSize(24);
+    // The mockup's group-label spacing: 16 above a label, 10 below it.
+    final labelAbove = context.getRSize(16);
+    final labelBelow = context.getRSize(10);
 
     return Container(
       decoration: AppDecorations.pageBackground(context),
@@ -242,10 +244,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                             ),
                           for (final g in groups) ...[
-                            SizedBox(height: groupGap),
-                            _GroupTitle(title: g.title),
-                            for (final e in g.entries) ...[
-                              SizedBox(height: gap),
+                            SizedBox(height: labelAbove),
+                            SectionHeader(
+                              title: g.title,
+                              variant: SectionHeaderVariant.group,
+                            ),
+                            SizedBox(height: labelBelow),
+                            for (final (i, e) in g.entries.indexed) ...[
+                              if (i > 0) SizedBox(height: gap),
                               SettingsRow(
                                 icon: e.icon,
                                 tone: e.tone,
@@ -256,9 +262,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ],
                           ],
                           if (showDangerZone) ...[
-                            SizedBox(height: groupGap),
-                            const _GroupTitle(title: 'Danger zone'),
-                            SizedBox(height: gap),
+                            SizedBox(height: labelAbove),
+                            const SectionHeader(
+                              title: 'Danger zone',
+                              variant: SectionHeaderVariant.group,
+                            ),
+                            SizedBox(height: labelBelow),
                             SettingsRow(
                               key: const Key('settings-delete-business'),
                               icon: AppIcons.deleteForever,
@@ -284,19 +293,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _open(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
-}
-
-/// A group's [SectionHeader], indented a little to sit over the row cards.
-class _GroupTitle extends StatelessWidget {
-  const _GroupTitle({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(left: context.getRSize(4)),
-    child: SectionHeader(title: title),
-  );
 }
 
 /// The solid top bar (flat with a soft fade): back arrow, the gradient gear
@@ -388,8 +384,7 @@ class _LiveBell extends ConsumerWidget {
 /// name, the signed-in person, the PRO / FREE TRIAL tag (the drawer's §32
 /// rule: `SubscriptionAccess.badgeLabel`) and the role tag. Display only.
 ///
-/// When the business has a logo it is drawn over the card's initial tile (the
-/// shared part has no image slot — a candidate for one).
+/// The business logo, when set, fills the card's tile instead of the initial.
 class _BusinessProfileCard extends ConsumerWidget {
   const _BusinessProfileCard();
 
@@ -403,6 +398,7 @@ class _BusinessProfileCard extends ConsumerWidget {
     final subLabel = access.badgeLabel;
 
     final card = ProfileCard(
+      logo: logoPath == null ? null : FileImage(File(logoPath)),
       key: const Key('settings-profile-card'),
       title: businessName,
       subtitle: userName,
@@ -417,35 +413,7 @@ class _BusinessProfileCard extends ConsumerWidget {
         if (role != null) (label: role.name, tone: TagPillTone.info),
       ],
     );
-    if (logoPath == null) return card;
-
-    // Same geometry as ProfileCard's tile: 14 padding, 56 edge, centred.
-    final edge = context.getRSize(56);
-    return Stack(
-      children: [
-        card,
-        Positioned(
-          left: context.getRSize(14),
-          top: 0,
-          bottom: 0,
-          child: IgnorePointer(
-            child: Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
-                child: Image.file(
-                  File(logoPath),
-                  width: edge,
-                  height: edge,
-                  fit: BoxFit.cover,
-                  // A broken file leaves the initial tile showing.
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    return card;
   }
 }
 

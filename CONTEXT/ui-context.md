@@ -454,9 +454,9 @@ width. Under the cap the gutter is `getRSize(16)`, as in the mockup.
 | `CartLine`, `QuantityStepper` | `cart_line.dart` | Cart line card: icon tile, name, "qty × price", total, size·pack, stepper (− becomes a red delete at the last unit). Caller resolves the icon (today: `productIconFromCodePoint`). |
 | `ViewCartBar` | `view_cart_bar.dart` | The gradient "View Cart" bar (count, items · customer, total, chevron). Used by `MainLayout`. |
 | `SettingsRow` | `settings_row.dart` | Settings / menu row card: icon tile, title, subtitle, chevron; whole card taps. |
-| `ProfileCard` | `profile_card.dart` | Settings profile card: gradient initial tile, business name (800), person, tags. |
+| `ProfileCard` | `profile_card.dart` | Settings profile card: gradient initial tile (or the business `logo`, an optional `ImageProvider` that falls back to the initial if it fails, #369), business name (800), person, tags. |
 | `flyToTarget()`, `FlyTarget`, `FlyTargetRegistry` | `fly_to_cart.dart` | The fly-to-cart animation and its landing targets (see below). |
-| `SectionHeader` | `section_header.dart` | "Performance Overview · Analytics for the selected period": ExtraBold title, muted subtitle that wraps under it when narrow. |
+| `SectionHeader` | `section_header.dart` | "Performance Overview · Analytics for the selected period": ExtraBold title, muted subtitle that wraps under it when narrow. `variant: SectionHeaderVariant.group` (#369) = the muted group label over a list of rows (SemiBold 15, `textTheme.bodySmall` colour; 16 above, 10 below in CEO Settings). |
 
 ### Fly-to-cart (`fly_to_cart.dart`, #352 PR 3)
 
