@@ -15,6 +15,7 @@ abstract final class AppIcons {
   static const IconData chevronRight = Symbols.chevron_right;
   static const IconData chevronUp = Symbols.expand_less;
   static const IconData close = Symbols.close;
+  static const IconData unfoldMore = Symbols.unfold_more;
   static const IconData home = Symbols.dashboard;
   static const IconData keyboardArrowDown = Symbols.keyboard_arrow_down;
   static const IconData keyboardArrowUp = Symbols.keyboard_arrow_up;
@@ -93,6 +94,7 @@ abstract final class AppIcons {
   static const IconData pending = Symbols.hourglass_top;
   static const IconData premium = Symbols.workspace_premium;
   static const IconData syncIssues = Symbols.cloud_upload;
+  static const IconData syncProblem = Symbols.sync_problem;
   static const IconData target = Symbols.adjust;
   static const IconData voteCheck = Symbols.how_to_vote;
   static const IconData waiting = Symbols.hourglass_empty;
@@ -214,6 +216,7 @@ abstract final class AppIcons {
   // Category keyword icons for product tiles (#352 PR 2, PRD #346).
   static const IconData waterDrop = Symbols.water_drop;
   static const IconData softDrinkCup = Symbols.local_drink;
+
   /// Malt. Material Symbols has no can glyph; the mockup draws a mug, so this
   /// is `coffee` (a handled mug), distinct from the beer mug.
   static const IconData maltCan = Symbols.coffee;
