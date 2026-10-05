@@ -69,7 +69,7 @@ class AppDrawer extends ConsumerWidget {
       padding: EdgeInsets.fromLTRB(
         context.getRSize(isInList ? 4 : 18),
         insets.top + context.getRSize(16),
-        isInList ? 0 : context.getRSize(8),
+        isInList ? 0 : side,
         context.getRSize(16),
       ),
       child: _buildHeader(context, ref),

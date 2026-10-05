@@ -15,12 +15,12 @@ import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 // providers and gates and decides what shows; these only draw it.
 
 /// The drawer's width before the left system inset: the mockups' ~328dp
-/// (phone: 656 of 780px at 2x; wide: 655 of 2560px at 2x), never more than
-/// [kAppDrawerMaxWidthFraction] of the screen. A share of the window, not a
-/// scaled spacing value — the same rule as the cart panel's width.
-const double kAppDrawerMaxWidth = 328;
+/// (phone: 656 of 780px at 2x; wide: 655 of 2560px at 2x), scaled with
+/// `getRSize` like everything inside it (so a tablet's larger type still
+/// fits), and never more than [kAppDrawerMaxWidthFraction] of the screen.
+const double kAppDrawerBaseWidth = 328;
 
-/// See [kAppDrawerMaxWidth]; the phone mockup's drawer is 84% of the screen.
+/// See [kAppDrawerBaseWidth]; the phone mockup's drawer is 84% of the screen.
 const double kAppDrawerMaxWidthFraction = 0.84;
 
 /// The drawer's width at the current size, including the left system inset
@@ -28,7 +28,8 @@ const double kAppDrawerMaxWidthFraction = 0.84;
 /// under while its content stays clear of it.
 double appDrawerWidth(BuildContext context) {
   final share = context.screenWidth * kAppDrawerMaxWidthFraction;
-  final base = share < kAppDrawerMaxWidth ? share : kAppDrawerMaxWidth;
+  final scaled = context.getRSize(kAppDrawerBaseWidth);
+  final base = share < scaled ? share : scaled;
   return base + MediaQuery.paddingOf(context).left;
 }
 
@@ -109,21 +110,23 @@ class DrawerHeaderBlock extends StatelessWidget {
                     businessName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: context.screenTitleStyle.copyWith(color: onSurface),
+                    style: context
+                        .extraBoldStyle(16)
+                        .copyWith(color: onSurface),
                   ),
                   Text(
                     'Tap logo to open profile',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: context
-                        .semiBoldStyle(12)
+                        .semiBoldStyle(11)
                         .copyWith(color: t.colorScheme.primary),
                   ),
                 ],
               ),
             ),
             if (onLock != null) ...[
-              SizedBox(width: context.getRSize(8)),
+              SizedBox(width: context.getRSize(4)),
               _LockButton(onPressed: onLock!),
             ],
             IconButton(
@@ -183,7 +186,7 @@ class _BusinessTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final edge = context
-        .getRSize(56)
+        .getRSize(52)
         .clamp(kMinInteractiveDimension, double.infinity);
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
     final trimmed = businessName.trim();
@@ -578,18 +581,94 @@ class DrawerFooter extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (onDisplay != null) ...[
-              SettingsRow(
-                key: AppDrawerKeys.display,
-                icon: AppIcons.darkMode,
-                tone: IconTileTone.info,
-                title: 'Display',
-                subtitle: 'Light & dark mode',
-                onTap: onDisplay!,
-              ),
+              _DisplayCard(onTap: onDisplay!),
               SizedBox(height: context.getRSize(10)),
             ],
             _LogOutButton(onPressed: onLogOut),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The Display card: moon tile, "Display", "Light & dark mode", chevron. The
+/// mockup's card is denser than `SettingsRow` (a ~36dp tile in a ~56dp card,
+/// against the part's fixed 48dp tile and 14dp padding), and the footer is
+/// pinned, so its height comes out of the list on a sideways phone. Candidate
+/// for a compact density on the shared `SettingsRow`.
+class _DisplayCard extends StatelessWidget {
+  const _DisplayCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    return DecoratedBox(
+      key: AppDrawerKeys.display,
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusL,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: context.getRSize(12),
+                vertical: context.getRSize(9),
+              ),
+              child: Row(
+                children: [
+                  const IconTile(
+                    icon: AppIcons.darkMode,
+                    tone: IconTileTone.info,
+                    size: 38,
+                  ),
+                  SizedBox(width: context.getRSize(12)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Display',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context
+                              .boldStyle(15)
+                              .copyWith(color: t.colorScheme.onSurface),
+                        ),
+                        Text(
+                          'Light & dark mode',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: context
+                              .regularStyle(12.5)
+                              .copyWith(color: muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(8)),
+                  AppIcon(
+                    AppIcons.chevronRight,
+                    color: muted,
+                    size: context.getRSize(20),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -610,7 +689,7 @@ class _LogOutButton extends StatelessWidget {
         Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
     final height = context
-        .getRSize(54)
+        .getRSize(50)
         .clamp(kMinInteractiveDimension, double.infinity);
     return SizedBox(
       key: AppDrawerKeys.logOut,

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer_parts.dart';
@@ -313,15 +314,20 @@ void main() {
   });
 
   group('width', () {
-    testWidgets('84% of a phone, the mockup width (328) on wide screens', (
-      tester,
-    ) async {
+    testWidgets('84% of a narrow phone; the mockup width (328), scaled, on '
+        'wider screens', (tester) async {
       await pumpOpenDrawer(tester, env: env, size: const Size(360, 740));
       expect(tester.getSize(find.byType(Drawer)).width, closeTo(302.4, 0.01));
       await disposeScreen(tester);
 
-      await pumpOpenDrawer(tester, env: env, size: const Size(1280, 800));
-      expect(tester.getSize(find.byType(Drawer)).width, kAppDrawerMaxWidth);
+      final context = await pumpOpenDrawer(
+        tester,
+        env: env,
+        size: const Size(1280, 800),
+      );
+      final scaled = context.getRSize(kAppDrawerBaseWidth);
+      expect(scaled, greaterThan(kAppDrawerBaseWidth));
+      expect(tester.getSize(find.byType(Drawer)).width, closeTo(scaled, 0.01));
       await disposeScreen(tester);
     });
   });
