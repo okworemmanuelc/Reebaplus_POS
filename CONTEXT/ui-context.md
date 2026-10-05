@@ -433,7 +433,14 @@ The redesign's building blocks. Import the barrel
 **plain data** (strings, numbers, enums, callbacks — never a provider), has
 48dp+ tap targets, survives text scale 1.3 at 360dp, and has a light + dark
 gallery golden in `test/redesign/goldens/parts_<part>_<theme>.png`. Screens
-adopt them in Waves 1 and 2; only the frame uses one so far (View Cart bar).
+adopt them in Waves 1 and 2: the frame (View Cart bar) and CEO Settings (#369:
+`ScreenHeader` in an `AppBar`, `ProfileCard`, `SectionHeader`, `SettingsRow`)
+so far.
+
+**Settings-style lists on wide screens (#369).** A list of cards (settings
+rows, a profile card, a search card) caps its content at 720dp
+(`kSettingsMaxContentWidth`) and centres it; the top bar still spans the full
+width. Under the cap the gutter is `getRSize(16)`, as in the mockup.
 
 | Part | File | Use for |
 |---|---|---|
