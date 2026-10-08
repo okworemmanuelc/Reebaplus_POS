@@ -273,8 +273,11 @@ Reference them by name — never write a raw `BorderRadius.circular(14)`.
 ## Spacing scale
 
 There are no static spacing constants. All spacing scales from a **375 px
-baseline** via `context.getRSize(basePixels)`, clamped to **0.8×–1.5×** for
-narrow and wide screens.
+baseline** via `context.getRSize(basePixels)`, clamped to **0.85× (0.84× in
+a short viewport) – 1.15×**; type (`getRFontSize`) is clamped to **0.90×–1.15×**.
+The 1.15 ceiling (since #372, was 1.50 spacing / 1.35 type) sits just above the
+largest phone (430dp / 375 = 1.147), so phones are unaffected and tablets / wide
+screens draw at about the mockups' 1× (ADR 0025, "Amendment, #372").
 
 Do not write raw pixel values in `EdgeInsets`, `SizedBox`, or `Gap`. Always
 wrap in `context.getRSize(n)`.

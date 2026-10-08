@@ -239,3 +239,51 @@ knife-edge, but the brief asked for one value.
 **Harness.** `test/helpers/screen_harness.dart` now models the frame each screen really
 gets: a bottom bar under 600dp wide, the rail's width (`navRailWidth` + 1dp divider) and no
 bottom bar at 600dp+. The sweep at 800×360 therefore measures screens beside the rail.
+
+
+## Amendment, #372 (2026-10-08): ceilings 1.50/1.35 → 1.15
+
+**What.** In `lib/core/utils/responsive.dart`, `_kSpacingCeiling` is now **1.15** (was
+1.50) and `_kFontCeiling` is now **1.15** (was 1.35). The floors are unchanged (spacing
+0.85 comfortable / 0.84 short, type 0.90). This supersedes PRD #346 decision 2's
+"getRFontSize scaling stays" **for the ceilings only**; the curves, floors and breakpoints
+stay as above.
+
+**Why.** Every tablet and wide screen hit the old ceilings, so on big screens the app drew
+spacing at ×1.50 and type at ×1.35. The redesign's tablet (800×1280) and wide (1280×800)
+mockups are drawn at about 1× sizes, so big screens came out ~1.5× the mockup: at 1280×800
+the drawer showed 2 nav items before scrolling where the mockup shows ~8. Owner decision
+2026-10-08: cap.
+
+**Why 1.15.** The largest phones are about 430dp shortest side (430 / 375 = 1.147), so no
+phone reaches 1.15 and **no phone's scale changes** — pinned by
+`test/utils/responsive_test.dart` ("Ceiling 1.15 leaves every phone unchanged"), which
+checks 360, 375, 390, 412 and 430dp against the old ceilings, and by the phone goldens
+(390×844, 844×390), which pass byte-for-byte without regeneration. Tablets and wide screens
+land close to the mockups' 1×. One global ceiling, not a step at 600dp: a step there would
+make a 580dp foldable bigger than a 600dp tablet.
+
+**What changed on screen** (big screens only):
+
+| | Before | After |
+|---|---|---|
+| Scale at 744–1366dp shortest side (spacing / type) | 1.50 / 1.35 | 1.15 / 1.15 |
+| Drawer nav items visible at 1280×800 (CEO, before scrolling) | 2 | 5 |
+| Drawer width (`appDrawerWidth`, `getRSize(328)`) at 800dp+ | 492dp | 377.2dp |
+| Side-rail width (`navRailWidth`, `getRSize(80).clamp(72, 96)`) at 800dp+ | 96dp (clamped from 120) | 92dp (the 96 cap no longer binds) |
+
+The mockup's ~8 drawer items are drawn at 1× (328dp wide); at 1.15 the header, store row
+and footer grow too, so 5 items fit. The 16 goldens at 800×1280 and 1280×800 in
+`test/redesign/goldens/` (drawer, frame Home/POS, CEO Settings; light + dark) were
+regenerated; nothing else moved.
+
+**Re-checked, no change needed.** `navRailWidth` (92dp still clears the 72dp floor; the
+POS tile is `railWidth × 0.72` = 66dp ≥ 48dp); `appDrawerWidth` (min of `getRSize(328)` and
+84% of the screen — the scaled term still wins at 800dp+); `kSettingsMaxContentWidth` (a
+fixed 720dp cap, still binds at 1280 and is unaffected at 800); POS grid columns
+(`ProductGrid.columnsFor` uses the raw available width / 180, not the scale; the cell height
+`getRSize(210)` shrinks with the text it holds); `isTablet` / `isDesktop` (one remaining
+caller, `view_selector_sheet.dart`, picks options and multiplies no sizes). The PRD #239
+sweep (`VIEWPORT_SWEEP=1`, 800×360 beside the rail — a phone, so its scale is unchanged)
+still reads 140 lines, 0 LOUD, 0 SILENT, with the same 13 ERROR verdicts / 10 entries
+failing on missing plugins as before.

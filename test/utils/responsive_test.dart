@@ -125,12 +125,12 @@ void main() {
       expect(context.isShortViewport, isTrue);
     });
 
-    testWidgets('tablet109Portrait (820x1180): spacing 1.50, font 1.35',
+    testWidgets('tablet109Portrait (820x1180): spacing 1.15, font 1.15 (#372)',
         (tester) async {
       final context = await pumpWithViewport(tester, size: tablet109Portrait);
 
-      expect(context.getRSize(100), closeTo(150.0, 0.01));
-      expect(context.getRFontSize(100), closeTo(135.0, 0.01));
+      expect(context.getRSize(100), closeTo(115.0, 0.01));
+      expect(context.getRFontSize(100), closeTo(115.0, 0.01));
       expect(rSize(context, 100), closeTo(context.getRSize(100), 0.0001));
       expect(rFontSize(context, 100), closeTo(context.getRFontSize(100), 0.0001));
 
@@ -141,12 +141,12 @@ void main() {
       expect(context.isShortViewport, isFalse);
     });
 
-    testWidgets('tablet109Landscape (1180x820): spacing 1.50, font 1.35',
+    testWidgets('tablet109Landscape (1180x820): spacing 1.15, font 1.15 (#372)',
         (tester) async {
       final context = await pumpWithViewport(tester, size: tablet109Landscape);
 
-      expect(context.getRSize(100), closeTo(150.0, 0.01));
-      expect(context.getRFontSize(100), closeTo(135.0, 0.01));
+      expect(context.getRSize(100), closeTo(115.0, 0.01));
+      expect(context.getRFontSize(100), closeTo(115.0, 0.01));
       expect(rSize(context, 100), closeTo(context.getRSize(100), 0.0001));
       expect(rFontSize(context, 100), closeTo(context.getRFontSize(100), 0.0001));
 
@@ -157,12 +157,12 @@ void main() {
       expect(context.isShortViewport, isFalse);
     });
 
-    testWidgets('tabletMiniPortrait (744x1133): spacing 1.50, font 1.35',
+    testWidgets('tabletMiniPortrait (744x1133): spacing 1.15, font 1.15 (#372)',
         (tester) async {
       final context = await pumpWithViewport(tester, size: tabletMiniPortrait);
 
-      expect(context.getRSize(100), closeTo(150.0, 0.01));
-      expect(context.getRFontSize(100), closeTo(135.0, 0.01));
+      expect(context.getRSize(100), closeTo(115.0, 0.01));
+      expect(context.getRFontSize(100), closeTo(115.0, 0.01));
       expect(rSize(context, 100), closeTo(context.getRSize(100), 0.0001));
       expect(rFontSize(context, 100), closeTo(context.getRFontSize(100), 0.0001));
 
@@ -173,12 +173,12 @@ void main() {
       expect(context.isShortViewport, isFalse);
     });
 
-    testWidgets('tabletMiniLandscape (1133x744): spacing 1.50, font 1.35',
+    testWidgets('tabletMiniLandscape (1133x744): spacing 1.15, font 1.15 (#372)',
         (tester) async {
       final context = await pumpWithViewport(tester, size: tabletMiniLandscape);
 
-      expect(context.getRSize(100), closeTo(150.0, 0.01));
-      expect(context.getRFontSize(100), closeTo(135.0, 0.01));
+      expect(context.getRSize(100), closeTo(115.0, 0.01));
+      expect(context.getRFontSize(100), closeTo(115.0, 0.01));
       expect(rSize(context, 100), closeTo(context.getRSize(100), 0.0001));
       expect(rFontSize(context, 100), closeTo(context.getRFontSize(100), 0.0001));
 
@@ -189,12 +189,12 @@ void main() {
       expect(context.isShortViewport, isFalse);
     });
 
-    testWidgets('tabletProPortrait (1024x1366): spacing 1.50, font 1.35',
+    testWidgets('tabletProPortrait (1024x1366): spacing 1.15, font 1.15 (#372)',
         (tester) async {
       final context = await pumpWithViewport(tester, size: tabletProPortrait);
 
-      expect(context.getRSize(100), closeTo(150.0, 0.01));
-      expect(context.getRFontSize(100), closeTo(135.0, 0.01));
+      expect(context.getRSize(100), closeTo(115.0, 0.01));
+      expect(context.getRFontSize(100), closeTo(115.0, 0.01));
       expect(rSize(context, 100), closeTo(context.getRSize(100), 0.0001));
       expect(rFontSize(context, 100), closeTo(context.getRFontSize(100), 0.0001));
 
@@ -205,12 +205,12 @@ void main() {
       expect(context.isShortViewport, isFalse);
     });
 
-    testWidgets('tabletProLandscape (1366x1024): spacing 1.50, font 1.35',
+    testWidgets('tabletProLandscape (1366x1024): spacing 1.15, font 1.15 (#372)',
         (tester) async {
       final context = await pumpWithViewport(tester, size: tabletProLandscape);
 
-      expect(context.getRSize(100), closeTo(150.0, 0.01));
-      expect(context.getRFontSize(100), closeTo(135.0, 0.01));
+      expect(context.getRSize(100), closeTo(115.0, 0.01));
+      expect(context.getRFontSize(100), closeTo(115.0, 0.01));
       expect(rSize(context, 100), closeTo(context.getRSize(100), 0.0001));
       expect(rFontSize(context, 100), closeTo(context.getRFontSize(100), 0.0001));
 
@@ -220,6 +220,37 @@ void main() {
       expect(context.isDesktop, isTrue);
       expect(context.isShortViewport, isFalse);
     });
+  });
+
+  group('Ceiling 1.15 leaves every phone unchanged (#372)', () {
+    // The ceilings before #372: spacing 1.50, type 1.35. Every phone width
+    // below must compute the same scale under the old ceilings and the new
+    // 1.15 ones, so phone screens (and their goldens) cannot move.
+    const oldSpacingCeiling = 1.50;
+    const oldFontCeiling = 1.35;
+    const phones = <Size>[
+      Size(360, 800),
+      Size(375, 812),
+      Size(390, 844),
+      Size(412, 915),
+      Size(430, 932),
+    ];
+
+    for (final size in phones) {
+      testWidgets('${size.width.toInt()}dp shortest side: scale identical',
+          (tester) async {
+        final context = await pumpWithViewport(tester, size: size);
+
+        // Every phone here is taller than 700dp, so raw = shortestSide / 375.
+        final raw = size.shortestSide / 375.0;
+        final oldSpacing = raw.clamp(0.85, oldSpacingCeiling);
+        final oldFont = raw.clamp(0.90, oldFontCeiling);
+
+        expect(raw, lessThan(1.15));
+        expect(context.getRSize(100), closeTo(100 * oldSpacing, 1e-9));
+        expect(context.getRFontSize(100), closeTo(100 * oldFont, 1e-9));
+      });
+    }
   });
 
   group('Responsive breakpoints (Section 3)', () {
