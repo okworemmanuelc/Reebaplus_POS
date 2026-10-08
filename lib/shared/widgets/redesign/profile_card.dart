@@ -21,6 +21,7 @@ class ProfileCard extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.tags = const [],
+    this.logo,
     this.onTap,
   });
 
@@ -30,6 +31,10 @@ class ProfileCard extends StatelessWidget {
   /// The signed-in person's name.
   final String? subtitle;
   final List<ProfileTag> tags;
+
+  /// The business logo, drawn in the tile instead of the initial (#369).
+  /// Null, or an image that fails to load, shows the initial.
+  final ImageProvider? logo;
   final VoidCallback? onTap;
 
   @override
@@ -40,6 +45,12 @@ class ProfileCard extends StatelessWidget {
         ? '?'
         : title.trim().characters.first.toUpperCase();
     final edge = context.getRSize(56);
+    final initialText = Text(
+      initial,
+      style: context
+          .extraBoldStyle(24)
+          .copyWith(color: t.colorScheme.onPrimary),
+    );
     final content = Padding(
       padding: EdgeInsets.all(context.getRSize(14)),
       child: Row(
@@ -52,12 +63,20 @@ class ProfileCard extends StatelessWidget {
               context,
               radius: AppSpacing.borderRadiusL,
             ),
-            child: Text(
-              initial,
-              style: context
-                  .extraBoldStyle(24)
-                  .copyWith(color: t.colorScheme.onPrimary),
-            ),
+            child: logo == null
+                ? initialText
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(
+                      AppSpacing.borderRadiusL,
+                    ),
+                    child: Image(
+                      image: logo!,
+                      width: edge,
+                      height: edge,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Center(child: initialText),
+                    ),
+                  ),
           ),
           SizedBox(width: context.getRSize(14)),
           Expanded(

@@ -433,7 +433,14 @@ The redesign's building blocks. Import the barrel
 **plain data** (strings, numbers, enums, callbacks — never a provider), has
 48dp+ tap targets, survives text scale 1.3 at 360dp, and has a light + dark
 gallery golden in `test/redesign/goldens/parts_<part>_<theme>.png`. Screens
-adopt them in Waves 1 and 2; only the frame uses one so far (View Cart bar).
+adopt them in Waves 1 and 2: the frame (View Cart bar) and CEO Settings (#369:
+`ScreenHeader` in an `AppBar`, `ProfileCard`, `SectionHeader`, `SettingsRow`)
+so far.
+
+**Settings-style lists on wide screens (#369).** A list of cards (settings
+rows, a profile card, a search card) caps its content at 720dp
+(`kSettingsMaxContentWidth`) and centres it; the top bar still spans the full
+width. Under the cap the gutter is `getRSize(16)`, as in the mockup.
 
 | Part | File | Use for |
 |---|---|---|
@@ -447,9 +454,9 @@ adopt them in Waves 1 and 2; only the frame uses one so far (View Cart bar).
 | `CartLine`, `QuantityStepper` | `cart_line.dart` | Cart line card: icon tile, name, "qty × price", total, size·pack, stepper (− becomes a red delete at the last unit). Caller resolves the icon (today: `productIconFromCodePoint`). |
 | `ViewCartBar` | `view_cart_bar.dart` | The gradient "View Cart" bar (count, items · customer, total, chevron). Used by `MainLayout`. |
 | `SettingsRow` | `settings_row.dart` | Settings / menu row card: icon tile, title, subtitle, chevron; whole card taps. |
-| `ProfileCard` | `profile_card.dart` | Settings profile card: gradient initial tile, business name (800), person, tags. |
+| `ProfileCard` | `profile_card.dart` | Settings profile card: gradient initial tile (or the business `logo`, an optional `ImageProvider` that falls back to the initial if it fails, #369), business name (800), person, tags. |
 | `flyToTarget()`, `FlyTarget`, `FlyTargetRegistry` | `fly_to_cart.dart` | The fly-to-cart animation and its landing targets (see below). |
-| `SectionHeader` | `section_header.dart` | "Performance Overview · Analytics for the selected period": ExtraBold title, muted subtitle that wraps under it when narrow. |
+| `SectionHeader` | `section_header.dart` | "Performance Overview · Analytics for the selected period": ExtraBold title, muted subtitle that wraps under it when narrow. `variant: SectionHeaderVariant.group` (#369) = the muted group label over a list of rows (SemiBold 15, `textTheme.bodySmall` colour; 16 above, 10 below in CEO Settings). |
 
 ### Fly-to-cart (`fly_to_cart.dart`, #352 PR 3)
 
