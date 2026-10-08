@@ -154,7 +154,6 @@ below.
 | Success button | `Color.lerp(Colors.green.shade600, Colors.white, 0.1)` → `Colors.green.shade600` (`#43A047`, same as `AppFixedColors.light.green`) | top-left → bottom-right | Built into `AppButton` success variant |
 | Disabled button | `Colors.grey.shade400` → `Colors.grey.shade500` | top-left → bottom-right | Built into `AppButton` / `AppFAB` disabled state |
 | Amber glow line | `transparent` → `colorScheme.primary` → `transparent` | horizontal, 2px height | `AmberGlowLine` widget |
-| Drawer header | `scaffoldBackgroundColor` → `roleAccentColor.withValues(alpha:0.3)` | top-left → bottom-right | Built into `AppDrawer` header; `roleAccentColor` is resolved per role inside `AppDrawer` |
 
 ---
 
@@ -549,12 +548,21 @@ Settings — full tab roots on the same per-tab `Navigator` machinery.
 
 ### `AppDrawer`
 
+`lib/shared/widgets/app_drawer.dart` reads the providers and gates;
+`app_drawer_parts.dart` draws (plain data + callbacks). Restyled to
+`phone-drawer-dark.png` / `wide-drawer-*.png` in #368.
+
 | Section | Detail |
 |---|---|
-| Presentation | A pop-over `Drawer` at every size (#352) |
-| Selected item | Solid primary-gradient bar + white filled icon + chevron (#352); idle items unchanged until the Wave 1 drawer restyle |
-| Header | 56×56px logo avatar (radius `AppRadius.md`), role badge, sync status badge |
-| Header background | Gradient: `scaffoldBackgroundColor` → `roleAccentColor @ 30% alpha` |
+| Presentation | A pop-over `Drawer` at every size (#352), solid `colorScheme.surface` |
+| Width | `appDrawerWidth`: `getRSize(328)` (the mockups' 328dp, scaled like its content), at most 84% of the screen, plus the left system inset (the Surface runs under a cutout; the content is padded clear of it) |
+| Header | Business tile (business logo from `currentBusinessLogoPathProvider`, else the primary-gradient initial; taps open Profile), business name (800), primary "Tap logo to open profile", lock in a bordered Surface-2 square, ✕ (closes); person's name (700); `TagPill`s — PRO `solidInfo` / FREE TRIAL `warning` (same `badgeLabel` rule), role `info`; "Terminal 01" in `monoStyle` |
+| Sync banner | `DrawerSyncBanner`: `warningTint` fill + `warningOutline` border + `warning` icon while records wait; `danger*` once something failed. Same signals, gate (`Gates.viewSyncIssues`) and tap (Sync Issues); hidden when nothing is waiting |
+| Store picker | `DrawerStoreRow`: card, filled primary store icon, "Store" over the name, up/down chevron (`AppIcons.unfoldMore`); shown only with 2+ stores |
+| Items | `DrawerNavTile`: idle = outlined muted icon + Medium label; selected = `primaryButtonGradient` bar, white filled icon, Bold white label, chevron (every size). Hairline between the main and admin groups |
+| Footer | Pinned under the list with a hairline above: the compact Display card (moon `IconTile` info, CEO / role still resolving only) and a full-width Log Out outlined in `AppFixedColors.danger` |
+| Short windows | Under 560dp of height (after insets, measured from the drawer's own constraints) the header scrolls with the list; the footer stays pinned |
+| Bottom inset | The footer adds `deviceBottomPadding` minus however far the drawer stops short of the screen's bottom (under 600dp on a tab root the drawer ends at the bottom bar, which already clears the inset) |
 | Nav list | Permission-gated; items not permitted to the current role are omitted entirely (hide-don't-block) |
 
 ### Bottom sheets
