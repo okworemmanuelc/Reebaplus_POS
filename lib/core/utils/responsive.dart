@@ -12,10 +12,20 @@ const double _kComfortableHeight = 700.0;
 const double _kShortViewportHeight = 500.0;
 
 /// Upper clamp for spacing (padding, gaps, heights).
-const double _kSpacingCeiling = 1.50;
+///
+/// 1.15 since #372 (was 1.50). The largest phones are about 430dp shortest
+/// side (430 / 375 = 1.147), so no phone reaches it and phone scale is
+/// unchanged; tablets and wide screens land near the 1x sizes the redesign
+/// mockups are drawn at instead of 1.5x. One global ceiling, no step at 600dp,
+/// so a 580dp foldable is never bigger than a 600dp tablet. See ADR 0025
+/// ("Amendment, #372").
+const double _kSpacingCeiling = 1.15;
 
 /// Upper clamp for typography (prevents text ballooning on large tablets).
-const double _kFontCeiling = 1.35;
+///
+/// 1.15 since #372 (was 1.35), the same value as [_kSpacingCeiling] so boxes
+/// and text stop growing together on big screens. See ADR 0025.
+const double _kFontCeiling = 1.15;
 
 /// Lower clamp for typography (keeps text legible even at highest density).
 const double _kFontFloor = 0.90;
@@ -76,7 +86,9 @@ double _rawScale(Size size) {
 double _calcSpacingScale(Size size) {
   final raw = _rawScale(size);
   final isShort = size.height < _kShortViewportHeight;
-  final spacingFloor = isShort ? _kSpacingFloorShort : _kSpacingFloorComfortable;
+  final spacingFloor = isShort
+      ? _kSpacingFloorShort
+      : _kSpacingFloorComfortable;
   return raw.clamp(spacingFloor, _kSpacingCeiling);
 }
 
@@ -86,18 +98,20 @@ double _calcFontScale(Size size) {
 }
 
 /// Scales [baseSize] relative to the device's form factor and vertical room.
-/// Uses the typography curve (floored at 0.90, ceiling at 1.35).
+/// Uses the typography curve (floored at 0.90, ceiling at 1.15).
 double rFontSize(BuildContext context, double baseSize) =>
     context.getRFontSize(baseSize);
 
 /// Returns a fraction of the screen width.
 double rWidth(BuildContext context, double fraction) {
-  return (MediaQuery.maybeOf(context)?.size.width ?? _kFallbackSize.width) * fraction;
+  return (MediaQuery.maybeOf(context)?.size.width ?? _kFallbackSize.width) *
+      fraction;
 }
 
 /// Returns a fraction of the screen height.
 double rHeight(BuildContext context, double fraction) {
-  return (MediaQuery.maybeOf(context)?.size.height ?? _kFallbackSize.height) * fraction;
+  return (MediaQuery.maybeOf(context)?.size.height ?? _kFallbackSize.height) *
+      fraction;
 }
 
 /// Scales a fixed pixel value by the responsive spacing curve.
@@ -145,15 +159,16 @@ extension ResponsiveHelper on BuildContext {
 
   /// Width of the app frame's side rail (#352): the spacing curve applied to
   /// 80dp, held between 72dp (room for a 48dp tap target and a nav label on a
-  /// sideways phone) and 96dp (a tablet's 1.5x scale would otherwise make it a
-  /// sidebar). Only meaningful when [isRailLayout].
+  /// sideways phone) and 96dp (kept as a guard; since #372 the 1.15 ceiling
+  /// gives 92dp at most, so the 96dp cap no longer binds). Only meaningful when
+  /// [isRailLayout].
   double get navRailWidth => getRSize(80).clamp(72.0, 96.0);
 
-  /// Scales a base font size relative to form factor and height (capped 0.90 - 1.35).
+  /// Scales a base font size relative to form factor and height (capped 0.90 - 1.15).
   double getRFontSize(double baseSize) =>
       baseSize * _calcFontScale(_screenSize);
 
-  /// Scales a fixed pixel value by the spacing curve (capped 0.84/0.85 - 1.50).
+  /// Scales a fixed pixel value by the spacing curve (capped 0.84/0.85 - 1.15).
   double getRSize(double basePixels) =>
       basePixels * _calcSpacingScale(_screenSize);
 
@@ -181,7 +196,8 @@ extension ResponsiveHelper on BuildContext {
   /// Use this for every `showModalBottomSheet` `maxHeight`, never bare
   /// [getRHeight] — see `docs/design/responsive-layout-plan.md` §10 gap 6 for
   /// the sites still to migrate.
-  double sheetMaxHeight(double fraction) => screenHeight *
+  double sheetMaxHeight(double fraction) =>
+      screenHeight *
       (isShortViewport && fraction < _kShortSheetFloor
           ? _kShortSheetFloor
           : fraction);

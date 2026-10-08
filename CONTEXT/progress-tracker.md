@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #372: Redesign Wave 1 — cap tablet & wide scaling to 1.15 (2026-10-08)
+Branch `feat/redesign-w1-scale-cap-372` off `main` (after PR #371), worktree `../drinkPosApp-wt-372`. Parent PRD #346; must merge before the Home, POS and Cart agents start. **No Drift/cloud/sync change, no new packages, no shared-part edits.** RELEASE FREEZE ON.
+- `responsive.dart`: `_kSpacingCeiling` 1.50 → **1.15**, `_kFontCeiling` 1.35 → **1.15**; floors unchanged. ADR 0025 "Amendment, #372" (supersedes PRD #346 decision 2 for the ceilings only); ui-context "Spacing scale" updated.
+- Phones unchanged (largest ≈ 430dp → 1.147): new test group checks 360/375/390/412/430dp against the old ceilings; all 390×844 and 844×390 goldens pass byte-for-byte without regeneration. Tablet cases in `responsive_test.dart` now expect 1.15 / 1.15.
+- Big screens: drawer at 1280×800 shows 5 nav items (was 2; mockup ~8 at 1×), drawer 492 → 377.2dp, rail 96 → 92dp. Regenerated the 16 `drawer_*`, `frame_home_*`, `frame_pos_*`, `settings_ceo_*` goldens at 800×1280 and 1280×800.
+- Re-checked `navRailWidth`, `appDrawerWidth`, the 720dp settings cap, POS grid columns, `isTablet`/`isDesktop` callers: nothing broke, no fixes. Sweep (`VIEWPORT_SWEEP=1`): 140 lines, 0 LOUD, 0 SILENT (same 10 plugin-error entries).
+
 ### Issue #368: Redesign Wave 1 — Drawer (2026-10-05)
 Branch `feat/redesign-w1-drawer` off `main` (after PR #367), worktree `../drinkPosApp-wt-368`. Parent PRD #346. **No Drift/cloud/sync change, no new packages.** RELEASE FREEZE ON. Shared parts in `lib/shared/widgets/redesign/` untouched.
 - `app_drawer.dart` keeps every item, gate, order, dialog and the lock / log-out flows; it now lays out header · hairline · scrolling list · pinned footer. Drawing moved to `app_drawer_parts.dart` (plain data): `DrawerHeaderBlock`, `DrawerSyncBanner`, `DrawerStoreRow`, `DrawerNavTile`, `DrawerFooter`, `appDrawerWidth`, `AppDrawerKeys`. Uses `TagPill`, `IconTile`.
