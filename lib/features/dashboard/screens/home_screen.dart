@@ -2,17 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
-import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -21,11 +18,11 @@ import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/get_started_card.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/home_parts.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/reports_attention.dart';
@@ -33,8 +30,8 @@ import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -50,9 +47,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // Store filter (null = All). Follows the §12.1 nav-drawer store picker via
   // `lockedStoreProvider`; no per-screen store dropdown.
   String? _selectedStoreId;
-
-  // Scroll reactivity state
-  bool _isScrolled = false;
 
   // Total SKUs card expand state (§11.5 — Cashier/Stock keeper).
   bool _skusExpanded = false;
@@ -74,11 +68,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   StreamSubscription? _expensesSub;
   StreamSubscription? _customersSub;
   StreamSubscription? _inventorySub;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _subtext =>
-      Theme.of(context).textTheme.bodySmall?.color ??
-      Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
 
   @override
   void initState() {
@@ -364,250 +353,177 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final staffSalesList = staffSalesMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    final theme = Theme.of(context);
+    final showReports = isCeo || isManager;
+    // Sideways phones, tablets and wide screens carry the period + Reports
+    // pills in the top bar (`phone-landscape-home-dark.png`); an upright phone
+    // keeps them in the period header above the cards.
+    final pillsInBar = context.isRailLayout;
+    final nameMap = {for (final u in _staffList) u.id: u};
 
     return Container(
       decoration: AppDecorations.pageBackground(context),
       child: SharedScaffold(
         activeRoute: 'dashboard',
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: _isScrolled ? theme.colorScheme.surface.withValues(alpha: 0.8) : Colors.transparent,
-          elevation: 0,
-          leading: context.isRailLayout ? null : const MenuButton(),
-          title: AppBarHeader(
-            icon: AppIcons.analytics,
-            title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
-            subtitle: ref.watch(activeStoreLabelProvider),
-          ),
-          actions: [
-            const NotificationBell(),
-            SizedBox(width: context.getRSize(8)),
-          ],
+        appBar: HomeTopBar(
+          title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
+          storeLabel: ref.watch(activeStoreLabelProvider),
+          height: homeTopBarHeight(context),
+          leading: context.isRailLayout
+              ? null
+              : const SizedBox.square(
+                  dimension: kMinInteractiveDimension,
+                  child: MenuButton(),
+                ),
+          periodActions: pillsInBar
+              ? [_buildPeriodPill(), if (showReports) _buildReportsPill()]
+              : const [],
         ),
         body: ref.watch(zeroStoresEmptySurfaceProvider)
             ? const FirstRunEmptyState()
-            : NotificationListener<ScrollUpdateNotification>(
-          onNotification: (notif) {
-            if (notif.metrics.pixels > 10 && !_isScrolled) {
-              setState(() => _isScrolled = true);
-            } else if (notif.metrics.pixels <= 10 && _isScrolled) {
-              setState(() => _isScrolled = false);
-            }
-            return false;
-          },
-          child: AppRefreshWrapper(
-            child: ListView(
-              padding: EdgeInsets.all(
-                context.spacingM,
-              ).copyWith(
-                top: context.getRSize(24),
-                bottom: context.spacingM + context.bottomInset,
+            : SafeArea(
+                // Side insets (a cutout, a sideways nav bar); under MainLayout
+                // they are already removed, so this is a no-op there.
+                top: false,
+                bottom: false,
+                child: AppRefreshWrapper(
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      context.getRSize(16),
+                      context.getRSize(16),
+                      context.getRSize(16),
+                      context.spacingM + context.bottomInset,
+                    ),
+                    children: [
+                      // Get-started checklist (Home tab only, CEO only — issue
+                      // #31). Self-hides for every other case, so it costs zero
+                      // height when not applicable.
+                      const GetStartedCard(),
+                      _buildPeriodHeader(
+                        showReports: showReports,
+                        withPills: !pillsInBar,
+                      ),
+                      // The quick-actions row (#362) slots in directly here,
+                      // between the period header and the cards.
+                      SizedBox(height: context.getRSize(16)),
+                      HomeCardGrid(
+                        cardsFor: (columns) => _buildCards(
+                          columns: columns,
+                          sales: totalSales,
+                          pending: pendingOrdersCount,
+                          profit: netProfit,
+                          credit: totalCredit,
+                          debt: totalDebt,
+                          expenses: totalExpenses,
+                          filteredOrders: salesOrders,
+                          inScope: inScope,
+                          showTotalSales: showTotalSales,
+                          showNetProfit: showNetProfit,
+                          showPending: showPending,
+                          showExpenses: showExpenses,
+                          showStockValue: showStockValue,
+                          showTotalSkus: showTotalSkus,
+                          showCreditBalance: showCreditBalance,
+                        ),
+                      ),
+                      if (showStaffSales)
+                        _buildStaffSalesSection(staffSalesList, nameMap),
+                      SizedBox(height: context.spacingL),
+                    ],
+                  ),
+                ),
               ),
-              children: [
-                // Get-started checklist (Home tab only, CEO only — issue #31).
-                // Self-hides for every other case, so it costs zero height when
-                // not applicable.
-                const GetStartedCard(),
-                _buildPeriodHeader(showReports: isCeo || isManager),
-                SizedBox(height: context.getRSize(24)),
-            _buildMetricsList(
-              sales: totalSales,
-              pending: pendingOrdersCount,
-              profit: netProfit,
-              credit: totalCredit,
-              debt: totalDebt,
-              expenses: totalExpenses,
-              filteredOrders: salesOrders,
-              inScope: inScope,
-              staffSalesList: staffSalesList,
-              showTotalSales: showTotalSales,
-              showNetProfit: showNetProfit,
-              showPending: showPending,
-              showExpenses: showExpenses,
-              showStockValue: showStockValue,
-              showTotalSkus: showTotalSkus,
-              showCreditBalance: showCreditBalance,
-              showStaffSales: showStaffSales,
-            ),
-            SizedBox(height: context.spacingL),
-          ],
-        ),
-      ),
-        ),
       ),
     );
   }
 
-  Widget _buildPeriodHeader({required bool showReports}) {
-    if (context.isPhone) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Performance Overview',
-            style: context.bodyLarge.copyWith(
-              fontWeight: FontWeight.bold,
-              color: _text,
-            ),
-          ),
-          SizedBox(height: context.getRSize(2)),
-          Text(
-            'Analytics for the selected period',
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              color: _subtext,
-            ),
-          ),
-          SizedBox(height: context.getRSize(16)),
+  /// "Performance Overview · Analytics for the selected period". On an
+  /// upright phone the period + Reports pills sit under it ([withPills]); in
+  /// the rail layout they are in the top bar and this is the one-line header.
+  Widget _buildPeriodHeader({
+    required bool showReports,
+    required bool withPills,
+  }) {
+    return Column(
+      key: HomeKeys.periodHeader,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeader(
+          title: 'Performance Overview',
+          subtitle: 'Analytics for the selected period',
+        ),
+        if (withPills) ...[
+          SizedBox(height: context.getRSize(12)),
+          // §12.1: the store is chosen in the nav-drawer picker; Home just
+          // shows the period filter here.
           Row(
             children: [
-              _buildPeriodDropdown(),
+              Flexible(child: _buildPeriodPill()),
               if (showReports) ...[
                 SizedBox(width: context.getRSize(12)),
-                Expanded(child: _buildReportButton()),
+                Expanded(child: _buildReportsPill()),
               ],
             ],
           ),
         ],
-      );
-    } else {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Performance Overview',
-                    style: context.bodyLarge.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: _text,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    'Analytics for the selected period',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                    ),
-                  ),
-                ],
-              ),
-              if (showReports) _buildReportButton(),
-            ],
-          ),
-          SizedBox(height: context.getRSize(12)),
-          // §12.1: the store is chosen in the nav-drawer picker; Home just shows
-          // the period filter here now.
-          Row(children: [Flexible(child: _buildPeriodDropdown())]),
-        ],
-      );
-    }
+      ],
+    );
   }
 
-  Widget _buildReportButton() {
+  Widget _buildReportsPill() {
     // Attention dot (issue #119): a single dot — no number — lights when this
     // viewer has pending approvals OR an un-reviewed daily stock count. The
     // button itself is already CEO/Manager-gated (showReports); the dot clears
     // when they open Daily Reconciliation. The in-hub Approvals card keeps its
     // own numeric badge.
-    final showDot = ref.watch(reportsAttentionDotProvider);
-    return Material(
-      color: context.primaryColor.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(context.radiusM),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const ReportsHubScreen()),
-          );
-        },
-        borderRadius: BorderRadius.circular(context.radiusM),
-        child: Container(
-          height: context.getRSize(48),
-          alignment: Alignment.center,
-          padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                AppIcons.terms,
-                size: context.getRSize(16),
-                color: context.primaryColor,
-              ),
-              SizedBox(width: context.getRSize(8)),
-              Text(
-                'Reports',
-                style: TextStyle(
-                  color: context.primaryColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: context.getRFontSize(14),
-                ),
-              ),
-              if (showDot) ...[
-                SizedBox(width: context.getRSize(6)),
-                Container(
-                  width: context.getRSize(8),
-                  height: context.getRSize(8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+    return HomeReportsPill(
+      showDot: ref.watch(reportsAttentionDotProvider),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ReportsHubScreen()),
+        );
+      },
     );
   }
 
-  Widget _buildPeriodDropdown() {
-    final options =
-        datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
+  Widget _buildPeriodPill() {
+    final options = datePeriodLabelsForRole(
+      managerUp: Gates.seeExtendedDateRanges.allows(ref),
+    );
     final isCustom = _selectedPeriod.startsWith('Custom:');
     final dropdownValue = isCustom ? 'Custom' : _selectedPeriod;
-    final selected = options.contains(dropdownValue) ? dropdownValue : options.first;
+    final selected = options.contains(dropdownValue)
+        ? dropdownValue
+        : options.first;
 
-    return SizedBox(
-      width: context.getRSize(140),
-      child: AppDropdown<String>(
-        value: selected,
-        items: options
-            .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-            .toList(),
-        onChanged: (v) async {
-          if (v == 'Custom') {
-            final range = await showDateRangePicker(
-              context: context,
-              firstDate: DateTime(2020),
-              lastDate: DateTime.now().add(const Duration(days: 365)),
-              initialDateRange: _customRange,
-              builder: (context, child) => Theme(
-                data: Theme.of(context),
-                child: child!,
-              ),
-            );
-            if (range != null) {
-              setState(() {
-                _customRange = range;
-                _selectedPeriod = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
-              });
-            }
-          } else if (v != null) {
+    return HomePeriodPill(
+      label: selected,
+      options: options,
+      onSelected: (v) async {
+        if (v == 'Custom') {
+          final range = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2020),
+            lastDate: DateTime.now().add(const Duration(days: 365)),
+            initialDateRange: _customRange,
+            builder: (context, child) =>
+                Theme(data: Theme.of(context), child: child!),
+          );
+          if (range != null) {
             setState(() {
-              _selectedPeriod = v;
-              _customRange = null;
+              _customRange = range;
+              _selectedPeriod =
+                  'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
             });
           }
-        },
-      ),
+        } else {
+          setState(() {
+            _selectedPeriod = v;
+            _customRange = null;
+          });
+        }
+      },
     );
   }
 
@@ -630,7 +546,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildMetricsList({
+  /// The visible stat cards in the mockup's order (Sales, Profit, Pending,
+  /// Expenses, Stock Value, Credits, Total SKUs). Cards are gated by role
+  /// (§11.4) and hidden while their data loads, so neither leaves a gap.
+  List<Widget> _buildCards({
+    required int columns,
     required double sales,
     required int pending,
     required double? profit,
@@ -639,7 +559,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required double expenses,
     required List<OrderWithItems> filteredOrders,
     required bool Function(String? storeId) inScope,
-    required List<MapEntry<String, double>> staffSalesList,
     required bool showTotalSales,
     required bool showNetProfit,
     required bool showPending,
@@ -647,34 +566,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required bool showStockValue,
     required bool showTotalSkus,
     required bool showCreditBalance,
-    required bool showStaffSales,
   }) {
-    // Cards are gated by role (§11.4). Build a list so hidden/loading cards
-    // leave no gap; a single spacer is inserted between visible cards.
     final cards = <Widget>[];
-    void add(Widget card) {
-      if (cards.isNotEmpty) cards.add(SizedBox(height: context.spacingM));
-      cards.add(card);
-    }
 
     if (showTotalSales && !_ordersLoading) {
-      add(
-        _robustMetricCard(
-          label: 'Total Sales',
+      cards.add(
+        StatCard(
+          key: HomeKeys.sales,
+          title: 'Total Sales',
           value: formatCurrency(sales),
-          subtitle: 'Generated from ${formatPeriodLabel(_selectedPeriod)} transactions',
+          subtitle:
+              'Generated from ${formatPeriodLabel(_selectedPeriod)} transactions',
           icon: AppIcons.naira,
-          color: Theme.of(context).colorScheme.primary,
-          trend: sales > 0 ? 'Active' : 'No sales',
-          isNeutral: true,
+          tone: IconTileTone.info,
+          pillLabel: sales > 0 ? 'Active' : 'No sales',
+          pillTone: homeTrendTone(isNeutral: true),
           onTap: () => _openSalesDetail(filteredOrders, 'sales', inScope),
         ),
       );
     }
     if (showNetProfit && !(_ordersLoading || _expensesLoading)) {
-      add(
-        _robustMetricCard(
-          label: 'Net Profit',
+      cards.add(
+        StatCard(
+          key: HomeKeys.profit,
+          title: 'Net Profit',
           value: profit != null ? formatCurrency(profit) : '—',
           subtitle: profit != null
               ? 'Revenue minus cost of goods & expenses'
@@ -682,13 +597,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     '${ref.watch(industryLexiconProvider).itemPluralLower} to '
                     'see profit',
           icon: AppIcons.analytics,
-          color: profit != null
-              ? (profit >= 0 ? success : danger)
-              : Theme.of(context).colorScheme.primary,
-          trend: profit != null
+          // Same colour rule as before: none yet → info, ≥ 0 → green, < 0 →
+          // red.
+          tone: profit != null
+              ? (profit >= 0 ? IconTileTone.green : IconTileTone.danger)
+              : IconTileTone.info,
+          pillLabel: profit != null
               ? (profit >= 0 ? 'Positive' : 'Negative')
               : 'N/A',
-          isPositive: profit == null || profit >= 0,
+          pillTone: homeTrendTone(isPositive: profit == null || profit >= 0),
           onTap: profit != null
               ? () => _openSalesDetail(filteredOrders, 'profit', inScope)
               : null,
@@ -696,15 +613,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
     if (showPending && !_ordersLoading) {
-      add(
-        _robustMetricCard(
-          label: 'Pending Orders',
+      cards.add(
+        StatCard(
+          key: HomeKeys.pending,
+          title: 'Pending Orders',
           value: pending.toString(),
           subtitle: 'Orders awaiting fulfillment',
           icon: AppIcons.time,
-          color: AppColors.warning,
-          trend: pending > 0 ? 'Attention' : 'Clear',
-          isNeutral: true,
+          tone: IconTileTone.warning,
+          pillLabel: pending > 0 ? 'Attention' : 'Clear',
+          pillTone: homeTrendTone(isNeutral: true),
           onTap: () {
             Navigator.of(
               context,
@@ -714,16 +632,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
     if (showExpenses && !_expensesLoading) {
-      add(
-        _robustMetricCard(
-          label: 'Total Expenses',
+      cards.add(
+        StatCard(
+          key: HomeKeys.expenses,
+          title: 'Total Expenses',
           value: formatCurrency(expenses),
           subtitle: 'Including operations & staff',
           icon: AppIcons.bill,
-          color: Theme.of(context).colorScheme.error,
-          trend: expenses > 0 ? 'Recorded' : 'None',
-          isPositive: false,
-          inverted: true,
+          tone: IconTileTone.danger,
+          pillLabel: expenses > 0 ? 'Recorded' : 'None',
+          pillTone: homeTrendTone(isPositive: false),
           onTap: () {
             // Home and Expenses share the canonical chip set (§30.11), so the
             // selected period passes straight through.
@@ -737,37 +655,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
     if (showStockValue && !_inventoryLoading) {
-      add(
-        _robustMetricCard(
-          label: 'Stock Value',
+      cards.add(
+        StatCard(
+          key: HomeKeys.stockValue,
+          title: 'Stock Value',
           value: formatCurrency(_totalStockValue),
           subtitle: 'Estimated inventory worth',
           icon: AppIcons.inventory,
-          color: Theme.of(context).colorScheme.primary,
-          trend: 'Live',
-          isNeutral: true,
+          tone: IconTileTone.info,
+          pillLabel: 'Live',
+          pillTone: homeTrendTone(isNeutral: true),
           onTap: () => ref.read(navigationProvider).setIndex(2),
         ),
       );
     }
-    if (showTotalSkus && !_inventoryLoading) {
-      add(_buildTotalSkusCard());
-    }
     if (showCreditBalance && !_customersLoading) {
-      add(_buildCreditsBalanceCard(credit, debt));
+      cards.add(
+        HomeCreditsCard(
+          key: HomeKeys.credits,
+          credit: formatCurrency(credit),
+          debt: formatCurrency(debt),
+          compact: columns > 1,
+          onTap: () {
+            Navigator.of(context).push(slideLeftRoute(const CustomersScreen()));
+          },
+        ),
+      );
     }
-
-    return Column(
-      children: [
-        ...cards,
-        if (showStaffSales) _buildStaffSalesSection(staffSalesList),
-      ],
-    );
+    if (showTotalSkus && !_inventoryLoading) {
+      cards.add(_buildTotalSkusCard());
+    }
+    return cards;
   }
 
   /// §11.5 — Total SKUs, expandable, grouped by manufacturer. Cashier/Stock
-  /// keeper only. Closed shows the SKU count; expanded lists per-manufacturer
-  /// counts.
+  /// keeper only. Closed shows the SKU count; open lists per-manufacturer
+  /// counts under the card.
   Widget _buildTotalSkusCard() {
     final totalSkus = _inventoryItems.length;
     final manufacturers =
@@ -784,144 +707,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final grouped = counts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    final color = Theme.of(context).colorScheme.primary;
-    return GlassyCard(
-      radius: context.radiusL,
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(context.radiusL),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(context.radiusL),
-              onTap: () => setState(() => _skusExpanded = !_skusExpanded),
-              child: Padding(
-                padding: EdgeInsets.all(context.spacingM),
-                child: Row(
-                  children: [
-                    Container(
-                      width: context.getRSize(56),
-                      height: context.getRSize(56),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            color.withValues(alpha: 0.1),
-                            color.withValues(alpha: 0.05),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        AppIcons.inventory,
-                        color: color,
-                        size: context.getRSize(24),
-                      ),
-                    ),
-                    SizedBox(width: context.spacingM),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Total SKUs',
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(13),
-                              color: _subtext,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(height: context.getRSize(2)),
-                          Text(
-                            '$totalSkus',
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(22),
-                              fontWeight: FontWeight.w900,
-                              color: _text,
-                            ),
-                          ),
-                          SizedBox(height: context.getRSize(2)),
-                          Text(
-                            'Tap to see breakdown by manufacturer',
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(12),
-                              color: _subtext.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      _skusExpanded
-                          ? AppIcons.keyboardArrowUp
-                          : AppIcons.keyboardArrowDown,
-                      color: _subtext,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          if (_skusExpanded) ...[
-            Divider(height: 1, color: _border.withValues(alpha: 0.05)),
-            // Nothing to list while the first download is still running: an
-            // empty catalogue says nothing about the business yet (#313).
-            if (grouped.isEmpty && ref.watch(firstDownloadInProgressProvider))
-              const SizedBox.shrink()
-            else if (grouped.isEmpty)
-              Padding(
-                padding: EdgeInsets.all(context.spacingM),
-                child: Text(
-                  'No ${ref.watch(industryLexiconProvider).itemPluralLower} yet',
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: context.getRFontSize(13),
-                  ),
-                ),
-              )
-            else
-              for (int i = 0; i < grouped.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: _border.withValues(alpha: 0.05)),
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: context.spacingM,
-                    vertical: context.getRSize(10),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          grouped[i].key,
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.w600,
-                            color: _text,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        '${grouped[i].value}',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(14),
-                          fontWeight: FontWeight.w800,
-                          color: _text,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-          ],
-        ],
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final card = StatCard(
+      title: 'Total SKUs',
+      value: '$totalSkus',
+      subtitle: 'Tap to see breakdown by manufacturer',
+      icon: AppIcons.inventory,
+      tone: IconTileTone.neutral,
+      onTap: () => setState(() => _skusExpanded = !_skusExpanded),
+      trailing: AppIcon(
+        _skusExpanded ? AppIcons.keyboardArrowUp : AppIcons.keyboardArrowDown,
+        color: muted,
+        size: context.getRSize(24),
       ),
+    );
+    if (!_skusExpanded) return KeyedSubtree(key: HomeKeys.skus, child: card);
+    return Column(
+      key: HomeKeys.skus,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        card,
+        SizedBox(height: context.getRSize(8)),
+        HomeSkuBreakdown(
+          rows: grouped,
+          // Nothing to list while the first download is still running: an
+          // empty catalogue says nothing about the business yet (#313).
+          emptyText: ref.watch(firstDownloadInProgressProvider)
+              ? null
+              : 'No ${ref.watch(industryLexiconProvider).itemPluralLower} yet',
+        ),
+      ],
     );
   }
 
   Widget _buildStaffSalesSection(
     List<MapEntry<String, double>> staffSalesList,
+    Map<String, UserData> nameMap,
   ) {
     if (_ordersLoading) {
       return const SizedBox.shrink();
@@ -932,334 +755,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return const SizedBox.shrink();
     }
 
-    final nameMap = {for (final u in _staffList) u.id: u};
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(height: context.spacingL),
-        Text(
-          'Staff Sales',
-          style: context.bodyLarge.copyWith(
-            fontWeight: FontWeight.bold,
-            color: _text,
-          ),
-        ),
-        SizedBox(height: context.spacingS),
-        GlassyCard(
-          radius: context.radiusL,
-          padding: EdgeInsets.zero,
-          child: staffSalesList.isEmpty
-              ? Padding(
-                  padding: EdgeInsets.all(context.spacingM),
-                  child: Text(
-                    'No staff sales recorded for this period',
-                    style: TextStyle(
-                      color: _subtext,
-                      fontSize: context.getRFontSize(13),
-                    ),
-                  ),
-                )
-              : Column(
-                  children: [
-                    for (int i = 0; i < staffSalesList.length; i++) ...[
-                      if (i > 0) Divider(height: 1, color: _border.withValues(alpha: 0.05)),
-                      _buildStaffRow(staffSalesList[i], nameMap),
-                    ],
-                  ],
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStaffRow(
-    MapEntry<String, double> entry,
-    Map<String, UserData> nameMap,
-  ) {
-    final user = nameMap[entry.key];
-    final name = user?.name ?? 'Unknown Staff';
-    final colorHex = user?.avatarColor ?? '#3B82F6';
-    final color = Color(int.parse(colorHex.replaceFirst('#', '0xFF')));
-
     return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.spacingM,
-        vertical: context.getRSize(10),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: context.getRSize(18),
-            backgroundColor: color.withValues(alpha: 0.15),
-            child: Text(
-              name[0].toUpperCase(),
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.bold,
-                fontSize: context.getRFontSize(14),
-              ),
-            ),
-          ),
-          SizedBox(width: context.spacingM),
-          Expanded(
-            child: Text(
-              name,
-              style: TextStyle(
-                fontSize: context.getRFontSize(14),
-                fontWeight: FontWeight.w600,
-                color: _text,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text(
-            formatCurrency(entry.value),
-            style: TextStyle(
-              fontSize: context.getRFontSize(14),
-              fontWeight: FontWeight.w800,
-              color: _text,
-            ),
-          ),
+      padding: EdgeInsets.only(top: context.spacingL),
+      child: HomeStaffSalesSection(
+        emptyText: 'No staff sales recorded for this period',
+        rows: [
+          for (final entry in staffSalesList)
+            _staffRow(entry, nameMap[entry.key]),
         ],
       ),
     );
   }
 
-  Widget _robustMetricCard({
-    required String label,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required String trend,
-    bool isPositive = true,
-    bool isNeutral = false,
-    bool inverted = false,
-    VoidCallback? onTap,
-  }) {
-    final trendColor = isNeutral ? _subtext : (isPositive ? success : danger);
-    final trendIcon = isNeutral
-        ? AppIcons.alertCircle
-        : (isPositive
-              ? AppIcons.arrowUp
-              : AppIcons.arrowDown);
-
-    final innerContent = Padding(
-      padding: EdgeInsets.all(context.spacingM),
-      child: Row(
-        children: [
-          Container(
-            width: context.getRSize(56),
-            height: context.getRSize(56),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  color.withValues(alpha: 0.1),
-                  color.withValues(alpha: 0.05),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(icon, color: color, size: context.getRSize(24)),
-          ),
-          SizedBox(width: context.spacingM),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    color: _subtext,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(2)),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(22),
-                    fontWeight: FontWeight.w900,
-                    color: _text,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(2)),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext.withValues(alpha: 0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(10),
-              vertical: context.getRSize(6),
-            ),
-            decoration: BoxDecoration(
-              color: trendColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(trendIcon, color: trendColor, size: context.getRSize(10)),
-                SizedBox(width: context.getRSize(4)),
-                Text(
-                  trend,
-                  style: TextStyle(
-                    color: trendColor,
-                    fontSize: context.getRFontSize(11),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return GlassyCard(
-      radius: context.radiusL,
-      padding: EdgeInsets.zero,
-      child: onTap != null
-          ? InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(context.radiusL),
-              child: innerContent,
-            )
-          : innerContent,
+  HomeStaffRow _staffRow(MapEntry<String, double> entry, UserData? user) {
+    final colorHex = user?.avatarColor ?? '#3B82F6';
+    return (
+      name: user?.name ?? 'Unknown Staff',
+      color: Color(int.parse(colorHex.replaceFirst('#', '0xFF'))),
+      amount: formatCurrency(entry.value),
     );
   }
+}
 
-  Widget _buildCreditsBalanceCard(double credit, double debt) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme.primary;
-
-    final innerContent = Padding(
-      padding: EdgeInsets.all(context.spacingM),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: context.getRSize(40),
-                height: context.getRSize(40),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      color.withValues(alpha: 0.1),
-                      color.withValues(alpha: 0.05),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(AppIcons.creditBalance, color: color, size: context.getRSize(18)),
-              ),
-              SizedBox(width: context.spacingM),
-              Text(
-                'Customer Credits Balance',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  color: _text,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Icon(AppIcons.chevronRight, color: _subtext, size: 20),
-            ],
-          ),
-          SizedBox(height: context.spacingM),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(context.spacingS),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Credit',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(12),
-                          color: _subtext,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        formatCurrency(credit),
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(16),
-                          fontWeight: FontWeight.bold,
-                          color: _text,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(width: context.spacingM),
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(context.spacingS),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.error.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Debt',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(12),
-                          color: _subtext,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        formatCurrency(debt),
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(16),
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-
-    return GlassyCard(
-      radius: context.radiusL,
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(slideLeftRoute(const CustomersScreen()));
-        },
-        borderRadius: BorderRadius.circular(context.radiusL),
-        child: innerContent,
-      ),
-    );
-  }
+/// The status pill's tone for a stat card's trend, by the same flags the old
+/// card used: neutral trends ("Active", "Clear", "Live") are grey with "!",
+/// a positive trend green with ↑, anything else red with ↓ ("None").
+TagPillTone homeTrendTone({bool isNeutral = false, bool isPositive = true}) {
+  if (isNeutral) return TagPillTone.neutral;
+  return isPositive ? TagPillTone.green : TagPillTone.danger;
 }

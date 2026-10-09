@@ -25,6 +25,7 @@ class StatCard extends StatelessWidget {
     this.pillLabel,
     this.pillTone = TagPillTone.neutral,
     this.onTap,
+    this.trailing,
   });
 
   final IconData icon;
@@ -37,6 +38,10 @@ class StatCard extends StatelessWidget {
   final String? pillLabel;
   final TagPillTone pillTone;
   final VoidCallback? onTap;
+
+  /// Optional widget after the text column (e.g. an expand chevron on a card
+  /// that opens a breakdown, #374). Nothing is drawn there when null.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +97,10 @@ class StatCard extends StatelessWidget {
               ],
             ),
           ),
+          if (trailing != null) ...[
+            SizedBox(width: context.getRSize(8)),
+            trailing!,
+          ],
         ],
       ),
     );

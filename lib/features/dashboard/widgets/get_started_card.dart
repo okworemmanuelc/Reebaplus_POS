@@ -30,8 +30,7 @@ class GetStartedCard extends ConsumerWidget {
     final doneCount = state.steps.where((s) => s.done).length;
     final total = state.steps.length;
     final theme = Theme.of(context);
-    final subtext =
-        theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
+    final subtext = theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
     final primary = context.primaryColor;
 
     final canDismiss = state.steps
@@ -97,7 +96,11 @@ class GetStartedCard extends ConsumerWidget {
                   if (canDismiss)
                     IconButton(
                       tooltip: 'Dismiss',
-                      visualDensity: VisualDensity.compact,
+                      // A 48dp target (#374); compact density drew it at 40.
+                      constraints: const BoxConstraints(
+                        minWidth: kMinInteractiveDimension,
+                        minHeight: kMinInteractiveDimension,
+                      ),
                       onPressed: () => ref
                           .read(getStartedChecklistDismissedProvider.notifier)
                           .dismiss(),
@@ -125,8 +128,7 @@ class GetStartedCard extends ConsumerWidget {
   ) {
     final meta = _metaFor(step.id, ref.watch(industryLexiconProvider).item);
     final theme = Theme.of(context);
-    final subtext =
-        theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
+    final subtext = theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
     final title = step.optional ? '${meta.title} (optional)' : meta.title;
 
     final IconData iconData;
@@ -146,11 +148,7 @@ class GetStartedCard extends ConsumerWidget {
       padding: EdgeInsets.symmetric(vertical: context.getRSize(8)),
       child: Row(
         children: [
-          Icon(
-            iconData,
-            color: iconColor,
-            size: context.getRSize(20),
-          ),
+          Icon(iconData, color: iconColor, size: context.getRSize(20)),
           SizedBox(width: context.spacingM),
           Expanded(
             child: Column(
@@ -210,16 +208,16 @@ class GetStartedCard extends ConsumerWidget {
         ref.read(navigationProvider).setIndex(NavigationService.storesTab);
       case GetStartedStepId.addProduct:
         // Add Product opens in direct (non-receive) mode — the fast form.
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const AddProductScreen()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const AddProductScreen()));
       case GetStartedStepId.makeSale:
         // Jump to the POS tab (index 1) to ring up the first order.
         ref.read(navigationProvider).setIndex(1);
       case GetStartedStepId.inviteTeam:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const InviteStaffScreen()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const InviteStaffScreen()));
     }
   }
 

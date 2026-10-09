@@ -435,9 +435,10 @@ The redesign's building blocks. Import the barrel
 **plain data** (strings, numbers, enums, callbacks — never a provider), has
 48dp+ tap targets, survives text scale 1.3 at 360dp, and has a light + dark
 gallery golden in `test/redesign/goldens/parts_<part>_<theme>.png`. Screens
-adopt them in Waves 1 and 2: the frame (View Cart bar) and CEO Settings (#369:
+adopt them in Waves 1 and 2: the frame (View Cart bar), CEO Settings (#369:
 `ScreenHeader` in an `AppBar`, `ProfileCard`, `SectionHeader`, `SettingsRow`)
-so far.
+and Home (#374: `ScreenHeader` + `HeaderBell`, `StatCard` + `StatusPill`,
+`IconTile`, `SectionHeader`) so far.
 
 **Settings-style lists on wide screens (#369).** A list of cards (settings
 rows, a profile card, a search card) caps its content at 720dp
@@ -447,7 +448,7 @@ width. Under the cap the gutter is `getRSize(16)`, as in the mockup.
 | Part | File | Use for |
 |---|---|---|
 | `ScreenHeader` (+ `HeaderBell`) | `screen_header.dart` | The content of a screen's top bar: gradient icon tile, ExtraBold title, primary subtitle, actions. Put it in an `AppBar` title / sliver header. `HeaderBell(count:, onPressed:)` is a plain bell with a badge; screens may pass the live `NotificationBell` instead. |
-| `StatCard` | `stat_card.dart` | Home figure cards: icon tile, muted title + status pill, big figure, one-line subtitle. Optional `onTap`. |
+| `StatCard` | `stat_card.dart` | Home figure cards: icon tile, muted title + status pill, big figure, one-line subtitle. Optional `onTap`; optional `trailing` widget after the text (#374: Total SKUs' expand chevron). |
 | `TagPill`, `StatusPill` | `tag_pill.dart` | PRO / CEO / status words in fixed colours (`TagPillTone`). `StatusPill` adds the mockup's ↑ / ↓ / ⓘ icon per tone. Display only. |
 | `IconTile` (`IconTileTone`) | `icon_tile.dart` | The pale rounded square with a filled icon (stat cards, settings rows, cart lines). Fixed tone pairs, or explicit colours. |
 | `ProductTile` (`StockLevel`) | `product_tile.dart` | POS / Receive Stock grid tile: photo first, else category tint + keyword icon; name, size·pack, price, stock pill; cart-count badge and primary border; out of stock dims and ignores taps. |
@@ -538,6 +539,15 @@ falls home to that same landing tab.
 **Drawer-accessed destinations (not in the bar/rail):** Customers, Payments,
 Expenses, Stores, Suppliers, Staff, Reports, Activity Log, Settings, CEO
 Settings — full tab roots on the same per-tab `Navigator` machinery.
+
+### Home (`home_screen.dart` + `dashboard/widgets/home_parts.dart`, #374)
+
+- **Top bar**: solid Surface `AppBar` (hairline + `topBarShadow`, as CEO Settings) with `ScreenHeader` — trending-up tile, business name, active store, live `HeaderBell`; the menu button (48dp) only under 600dp. No scroll-reactive colour.
+- **Period + Reports**: a "Today ⌄" outlined pill (calendar icon; a `PopupMenuButton` with the same period list; Custom opens the date range picker) and "Reports" as a `primaryTint` pill with the `AppFixedColors.danger` attention dot. In the rail layout (600dp+: sideways phones, tablets, wide) both sit in the top bar before the bell and "Performance Overview · Analytics for the selected period" (`SectionHeader`) is one line above the cards; on an upright phone they sit in a row under that header. The quick-actions row (#362) goes directly under the header.
+- **Cards**: `StatCard` per figure in the order Sales, Profit, Pending, Expenses, Stock Value, Credits, Total SKUs. Columns from the width the cards really get (`homeGridColumns`): 3 at 1024dp+ or sideways at 600dp+, 2 at 600–1023 upright (or sideways 480–599), else 1. Rows share a height (`IntrinsicHeight`); gated or loading cards leave no gap.
+- **Trend pills**: neutral flags ("Active"/"No sales", "Attention"/"Clear", "Live") → `TagPillTone.neutral` "!"; positive → `green` ↑; otherwise `danger` ↓ (`homeTrendTone`).
+- **Customer Credits**: single column = full card (wallet tile, title, chevron, Credit `infoTint` / Debt `dangerTint` boxes); grid cell = compact title + "Credit and debt", **values kept** (the card opens Customers, which lists per-customer balances, not these totals).
+- **Staff Sales**: `SectionHeader` + one flat card, full width under the grid.
 
 ### App bar
 

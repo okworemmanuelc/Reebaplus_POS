@@ -7,6 +7,17 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #374: Redesign Wave 1 — Home restyle to the mockups (2026-10-09)
+Branch `feat/redesign-w1-home` off `main` (after PR #373), worktree `../drinkPosApp-wt-374`. Parent PRD #346; part 1 of 2 (quick actions = #362, after this merges). **No Drift/cloud/sync change, no money/calculation change, no new packages.** RELEASE FREEZE ON.
+- `home_screen.dart` keeps every stream, filter, calculation, gate, tap and dialog; only the drawing changed. New `lib/features/dashboard/widgets/home_parts.dart` (plain data): `HomeTopBar`, `HomeLiveBell`, `HomePeriodPill`, `HomeReportsPill`, `HomeCardGrid` + `homeGridColumns`, `HomeCreditsCard`, `HomeSkuBreakdown`, `HomeStaffSalesSection`, `homeTopBarHeight`, `HomeKeys`. `homeTrendTone` lives in the screen file.
+- Top bar: solid bar + `ScreenHeader` (was transparent, tinted on scroll). Period + Reports pills in the bar at 600dp+ (sideways, tablet, wide), in the period header on an upright phone. The period dropdown is now a `PopupMenuButton` pill (same list, Custom → date range picker).
+- Cards: `StatCard` + `StatusPill` + fixed `IconTile` tones (Sales info, Profit green/red/info by the old colour rule, Pending warning, Expenses danger, Stock Value info, **Total SKUs neutral**). Order now Sales, Profit, Pending, Expenses, Stock Value, **Credits, Total SKUs** (Credits used to come after SKUs). Trend labels/flags unchanged (Net Profit "N/A" keeps the old positive flag → green ↑).
+- Columns 1/2/3 from the measured width (see ui-context "Home"). Credits grid form keeps both values (tap opens Customers, which has no totals).
+- **Shared-part edit (additive)**: `StatCard.trailing` (optional, default null) for the SKUs expand chevron; all `parts_*` goldens unchanged.
+- `GetStartedCard`: only the dismiss button's tap target (compact 40dp → 48dp); otherwise untouched (its `GlassyCard` already draws the flat card).
+- Tests: `test/dashboard/home_screen_test.dart` (34). Goldens `test/redesign/home_golden_test.dart` → 10 `home_<size>[_insets]_<theme>.png`; regenerated the 10 `frame_home_*`. Sweep (`VIEWPORT_SWEEP=1`): 140 lines, 0 LOUD, 0 SILENT (same 13 ERROR / 10 plugin-error entries as before).
+- **Open / shared-part candidates**: a live `HeaderBell` wrapper (CEO Settings and Home each have one), the period pill and Reports pill, a compact `StatCard` density — at 844×390 three columns ellipsize the longer titles ("Pending Ord…") where the mockup fits them.
+
 ### Issue #372: Redesign Wave 1 — cap tablet & wide scaling to 1.15 (2026-10-08)
 Branch `feat/redesign-w1-scale-cap-372` off `main` (after PR #371), worktree `../drinkPosApp-wt-372`. Parent PRD #346; must merge before the Home, POS and Cart agents start. **No Drift/cloud/sync change, no new packages, no shared-part edits.** RELEASE FREEZE ON.
 - `responsive.dart`: `_kSpacingCeiling` 1.50 → **1.15**, `_kFontCeiling` 1.35 → **1.15**; floors unchanged. ADR 0025 "Amendment, #372" (supersedes PRD #346 decision 2 for the ceilings only); ui-context "Spacing scale" updated.
