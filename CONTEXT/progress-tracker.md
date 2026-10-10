@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #362 PR 2: Home quick actions — Stock Transfer tile (2026-10-10)
+Branch `feat/redesign-w1-home-quick-actions-2` off `main` 84a267aa (after PR #376), worktree `../drinkPosApp-wt-362b`. Part of #362; PR 2 of 4. **No Drift/cloud/sync/permission/status/money change, no new packages; `main_layout.dart`, `frame/`, `responsive.dart` untouched (#377 in flight).** RELEASE FREEZE ON.
+- Resolver: `QuickAction.stockTransfer` between Add Expense and Receive Stock; visible when `Gates.requestStoreTransfer` and `storeCount >= 2`. The count is passed in (resolver stays pure): Home gives `withoutVans(allStoresProvider)` — the list Request Stock's source picker uses, business-wide, live (a new store shows the tile without a restart).
+- Tile: `info` / `infoTint`, `AppIcons.transfer`, "Stock Transfer"; opens `RequestStockScreen` with a `MaterialPageRoute` like `store_details_screen.dart`: `fixedDestStoreId: lockedStoreId` (null under All Stores).
+- `RequestStockScreen` contract relaxed from exactly one to **at most one** fixed store (assert + doc only). Neither fixed → both dropdowns (already there), the sole-selectable-store destination auto-fill still applies, vans excluded, source ≠ destination enforced; existing callers unchanged.
+- Tests: `quick_actions_test.dart` 17 (role table with two stores, 0/1/2/3 stores, revocation, order); new `test/stores/request_stock_screen_test.dart` (3: ctor accepts none/one not both; neither fixed → both pickers, no van, ends differ, submit writes a pending `stock_transfers` row; dest fixed → locked as before); `home_screen_test.dart` +8 (one store none → second store live; van does not count; per role with two stores; locked → "Deliver to" fixed + Back; All Stores → both pickers; fit tests now with 4 tiles, scrolling only under 600dp). Goldens: all 10 `home_*` regenerated (sample business gains a second store "Lekki" → 4 tiles); new `request_stock_neither_fixed_390x844_{light,dark}`.
+
 ### Issue #362 PR 1: Redesign Wave 1 — Home quick actions row (2026-10-10)
 Branch `feat/redesign-w1-home-quick-actions-1` off `main` d1aff714 (after PR #375), worktree `../drinkPosApp-wt-362`. Part of #362 (absorbs PRD #270); PR 1 of 4. **No Drift/cloud/sync/permission change, no new packages.** RELEASE FREEZE ON.
 - **Purple fixed pair**: `AppFixedColors.purple` / `purpleTint` (light `#7C3AED` on `#F3EEFF`, dark `#A78BFA` on `#241B3D`), base constants in `colors.dart`, through `copyWith` / `lerp`, pinned in `theme_colours_test.dart`.

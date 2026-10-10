@@ -20,6 +20,8 @@ import 'package:reebaplus_pos/features/dashboard/widgets/home_parts.dart';
 import 'package:reebaplus_pos/features/expenses/screens/add_expense_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
+import 'package:reebaplus_pos/features/stores/screens/request_stock_screen.dart';
+import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
@@ -73,8 +75,11 @@ const _cardKeys = [
 ];
 
 // Roles with their seeded keys for the quick-action tiles (#362):
-// expenses.create, stock.add / products.add, stock.adjust.
+// stores.request_transfer, expenses.create, stock.add / products.add,
+// stock.adjust. The harness business has ONE store, so Stock Transfer only
+// appears where a test adds a second.
 const _quickKeys = {
+  'stores.request_transfer',
   'expenses.create',
   'stock.add',
   'products.add',
@@ -264,6 +269,22 @@ void main() {
             ),
           );
     }
+  }
+
+  /// A second (or van) location in the harness business.
+  Future<String> addStore(String name, {bool van = false}) async {
+    final id = UuidV7.generate();
+    await env.db
+        .into(env.db.stores)
+        .insert(
+          StoresCompanion.insert(
+            id: Value(id),
+            businessId: env.businessId,
+            name: name,
+            kind: van ? const Value(kStoreKindVan) : const Value.absent(),
+          ),
+        );
+    return id;
   }
 
   List<Key> visibleCards() => [
@@ -891,6 +912,112 @@ void main() {
       });
     }
 
+    group('Stock Transfer', () {
+      bool shown() =>
+          find.byKey(HomeKeys.quickStockTransfer).evaluate().isNotEmpty;
+
+      testWidgets('one store: no tile; a second store adds it live', (
+        tester,
+      ) async {
+        await pumpHome(tester, role: _ceoQ);
+        expect(shown(), isFalse);
+        await tester.runAsync(() => addStore('Ikeja'));
+        await deliver(tester);
+        expect(shown(), isTrue);
+        // Second in the fixed order.
+        expect(
+          tester.getTopLeft(find.byKey(HomeKeys.quickStockTransfer)).dx,
+          greaterThan(
+            tester.getTopLeft(find.byKey(HomeKeys.quickAddExpense)).dx,
+          ),
+        );
+        expect(
+          tester.getTopLeft(find.byKey(HomeKeys.quickStockTransfer)).dx,
+          lessThan(
+            tester.getTopLeft(find.byKey(HomeKeys.quickReceiveStock)).dx,
+          ),
+        );
+        await disposeScreen(tester);
+      });
+
+      testWidgets('a van does not count as a second store', (tester) async {
+        await addStore('Van 1', van: true);
+        await pumpHome(tester, role: _ceoQ);
+        expect(shown(), isFalse);
+        await disposeScreen(tester);
+      });
+
+      for (final (name, role, expected) in [
+        ('CEO', _ceoQ, true),
+        ('Manager', _managerQ, true),
+        ('Cashier', _cashier, false),
+        ('Stock keeper', _stockKeeperQ, false),
+      ]) {
+        testWidgets('two stores, $name: ${expected ? 'shown' : 'hidden'}', (
+          tester,
+        ) async {
+          await addStore('Ikeja');
+          await pumpHome(tester, role: role);
+          expect(shown(), expected);
+          await disposeScreen(tester);
+        });
+      }
+
+      testWidgets('store locked: "Deliver to" fixed; Back returns Home', (
+        tester,
+      ) async {
+        await addStore('Ikeja');
+        await pumpHome(tester, role: _ceoQ);
+        await tester.tap(find.byKey(HomeKeys.quickStockTransfer));
+        await deliver(tester);
+        final screen = _widgetOf<RequestStockScreen>(
+          find.byType(RequestStockScreen),
+        );
+        expect(screen.fixedDestStoreId, env.storeId);
+        expect(screen.fixedSourceStoreId, isNull);
+        expect(find.text('Deliver to store'), findsOneWidget);
+        expect(
+          find.ancestor(
+            of: find.text('Deliver to store'),
+            matching: find.byWidgetPredicate((w) => w is FormField),
+          ),
+          findsNothing,
+        );
+        tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+        await deliver(tester);
+        expect(find.byType(RequestStockScreen), findsNothing);
+        expect(find.byKey(HomeKeys.quickActions), findsOneWidget);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('All Stores: neither end fixed, both pickers', (
+        tester,
+      ) async {
+        await addStore('Ikeja');
+        await pumpHome(tester, role: _ceoQ);
+        NavigationService().setLockedStore(null);
+        await deliver(tester);
+        await tester.tap(find.byKey(HomeKeys.quickStockTransfer));
+        await deliver(tester);
+        final screen = _widgetOf<RequestStockScreen>(
+          find.byType(RequestStockScreen),
+        );
+        expect(screen.fixedDestStoreId, isNull);
+        expect(screen.fixedSourceStoreId, isNull);
+        for (final label in ['Request from store', 'Deliver to store']) {
+          expect(
+            find.ancestor(
+              of: find.text(label),
+              matching: find.byWidgetPredicate((w) => w is FormField),
+            ),
+            findsOneWidget,
+            reason: label,
+          );
+        }
+        await disposeScreen(tester);
+      });
+    });
+
     for (final (name, size, padding, scale) in const [
       ('360x740 @1.3', Size(360, 740), _uprightInsets, 1.3),
       ('844x390 + insets @1.3', _sideways, _sidewaysInsets, 1.3),
@@ -898,6 +1025,8 @@ void main() {
     ]) {
       testWidgets('$name: no overflow, labels fit, targets ≥ 48dp, in the '
           'safe area', (tester) async {
+        // Two stores: all four tiles.
+        await addStore('Ikeja');
         await pumpHome(
           tester,
           role: _ceoQ,
@@ -906,7 +1035,15 @@ void main() {
           textScaler: TextScaler.linear(scale),
         );
         expectNoOverflow(tester);
-        for (final k in _tileKeys) {
+        // The row scrolls sideways only where four tiles do not fit.
+        expect(
+          find.descendant(
+            of: find.byKey(HomeKeys.quickActions),
+            matching: find.byType(SingleChildScrollView),
+          ),
+          size.width < 600 ? findsOneWidget : findsNothing,
+        );
+        for (final k in [HomeKeys.quickStockTransfer, ..._tileKeys]) {
           final r = tester.getRect(find.byKey(k));
           expect(r.width, greaterThanOrEqualTo(kMinInteractiveDimension));
           expect(r.height, greaterThanOrEqualTo(kMinInteractiveDimension));
@@ -922,7 +1059,7 @@ void main() {
           expect(r.left, greaterThanOrEqualTo(padding.left));
           expect(r.top, greaterThanOrEqualTo(padding.top));
           if (size.width >= 600) {
-            // Sideways all three fit beside the 48dp nav bar.
+            // Sideways all four fit beside the 48dp nav bar.
             expect(r.right, lessThanOrEqualTo(size.width - padding.right));
           }
         }
