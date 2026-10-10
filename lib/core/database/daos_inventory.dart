@@ -751,6 +751,10 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+/// One product line of a multi-product stock request (#380): what
+/// [StockTransferDao.requestTransfers] writes as one `pending` row.
+typedef StockRequestLine = ({String productId, int quantity});
+
 class ProductDataWithStock {
   final ProductData product;
   final int totalStock;
@@ -1702,28 +1706,152 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       throw ArgumentError('Quantity must be positive.');
     }
 
-    final transferId = UuidV7.generate();
     final now = DateTime.now();
-
+    late final String transferId;
     await transaction(() async {
-      final header = StockTransfersCompanion.insert(
-        id: Value(transferId),
-        businessId: requireBusinessId(),
-        fromLocationId: fromStoreId,
-        toLocationId: toStoreId,
+      transferId = await _insertPendingRequest(
+        fromStoreId: fromStoreId,
+        toStoreId: toStoreId,
         productId: productId,
         quantity: quantity,
-        status: const Value('pending'),
-        initiatedBy: requestedBy,
-        initiatedAt: Value(now),
-        createdAt: Value(now),
-        lastUpdatedAt: Value(now),
+        requestedBy: requestedBy,
+        now: now,
       );
-      await into(stockTransfers).insert(header);
-      await db.syncDao.enqueueUpsert('stock_transfers', header);
     });
 
-    await db.activityLogDao.log(
+    await _logRequest(
+      fromStoreId: fromStoreId,
+      toStoreId: toStoreId,
+      productId: productId,
+      quantity: quantity,
+      requestedBy: requestedBy,
+    );
+    await _notifyHolderOfRequest(
+      fromStoreId: fromStoreId,
+      requestedBy: requestedBy,
+      linkedTransferId: transferId,
+      message: 'Stock request: $quantity unit(s) requested from your store.',
+    );
+
+    return transferId;
+  }
+
+  /// Raise ONE request for several products at once (#380, Request Stock's
+  /// multi-product picker): one `pending` header per line, from the holder
+  /// [fromStoreId] to the requester [toStoreId], each exactly what
+  /// [requestTransfer] writes for that line.
+  ///
+  /// **All or nothing**: every header (and its outbox entry) is written inside
+  /// ONE local transaction, so a failure on any line leaves no row behind.
+  /// Every line is validated before anything is written: the stores differ,
+  /// [lines] is not empty, each quantity is positive and no product appears
+  /// twice.
+  ///
+  /// After the commit: one activity-log entry per row (as [requestTransfer]),
+  /// and ONE notification per recipient for the whole submit — the holder
+  /// store's users + the CEO, minus the requester — linked to the first row.
+  /// A one-line request notifies with [requestTransfer]'s exact wording.
+  ///
+  /// Returns the new transfer ids in [lines] order.
+  Future<List<String>> requestTransfers({
+    required String fromStoreId,
+    required String toStoreId,
+    required List<StockRequestLine> lines,
+    required String requestedBy,
+  }) async {
+    if (fromStoreId == toStoreId) {
+      throw ArgumentError('Source and destination stores must differ.');
+    }
+    if (lines.isEmpty) {
+      throw ArgumentError('A request needs at least one product.');
+    }
+    final seen = <String>{};
+    for (final line in lines) {
+      if (line.quantity <= 0) {
+        throw ArgumentError('Quantity must be positive.');
+      }
+      if (!seen.add(line.productId)) {
+        throw ArgumentError('Product ${line.productId} is listed twice.');
+      }
+    }
+
+    final now = DateTime.now();
+    final ids = <String>[];
+    await transaction(() async {
+      for (final line in lines) {
+        ids.add(
+          await _insertPendingRequest(
+            fromStoreId: fromStoreId,
+            toStoreId: toStoreId,
+            productId: line.productId,
+            quantity: line.quantity,
+            requestedBy: requestedBy,
+            now: now,
+          ),
+        );
+      }
+    });
+
+    for (final line in lines) {
+      await _logRequest(
+        fromStoreId: fromStoreId,
+        toStoreId: toStoreId,
+        productId: line.productId,
+        quantity: line.quantity,
+        requestedBy: requestedBy,
+      );
+    }
+    final units = lines.fold<int>(0, (sum, l) => sum + l.quantity);
+    await _notifyHolderOfRequest(
+      fromStoreId: fromStoreId,
+      requestedBy: requestedBy,
+      linkedTransferId: ids.first,
+      message: lines.length == 1
+          ? 'Stock request: $units unit(s) requested from your store.'
+          : 'Stock request: ${lines.length} products ($units units) '
+                'requested from your store.',
+    );
+
+    return ids;
+  }
+
+  /// Inserts one `pending` request header and enqueues it. Callers wrap it in
+  /// their transaction.
+  Future<String> _insertPendingRequest({
+    required String fromStoreId,
+    required String toStoreId,
+    required String productId,
+    required int quantity,
+    required String requestedBy,
+    required DateTime now,
+  }) async {
+    final transferId = UuidV7.generate();
+    final header = StockTransfersCompanion.insert(
+      id: Value(transferId),
+      businessId: requireBusinessId(),
+      fromLocationId: fromStoreId,
+      toLocationId: toStoreId,
+      productId: productId,
+      quantity: quantity,
+      status: const Value('pending'),
+      initiatedBy: requestedBy,
+      initiatedAt: Value(now),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await into(stockTransfers).insert(header);
+    await db.syncDao.enqueueUpsert('stock_transfers', header);
+    return transferId;
+  }
+
+  Future<void> _logRequest({
+    required String fromStoreId,
+    required String toStoreId,
+    required String productId,
+    required int quantity,
+    required String requestedBy,
+  }) {
+    return db.activityLogDao.log(
       action: 'stock_transfer_requested',
       description:
           'Requested $quantity unit(s) of $productId '
@@ -1732,9 +1860,16 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       storeId: toStoreId,
       productId: productId,
     );
+  }
 
-    // Notify the holder store (its assigned users) + the CEO that a request
-    // is waiting for them to accept and dispatch.
+  /// Notify the holder store (its assigned users) + the CEO that a request is
+  /// waiting for them to accept and dispatch. Never the requester.
+  Future<void> _notifyHolderOfRequest({
+    required String fromStoreId,
+    required String requestedBy,
+    required String linkedTransferId,
+    required String message,
+  }) async {
     final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
     final holderUserIds = (await db.userStoresDao.getUserIdsForStore(
       fromStoreId,
@@ -1745,14 +1880,12 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     }..remove(requestedBy)) {
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.requested',
-        message: 'Stock request: $quantity unit(s) requested from your store.',
+        message: message,
         severity: 'info',
-        linkedRecordId: transferId,
+        linkedRecordId: linkedTransferId,
         recipientUserId: uid,
       );
     }
-
-    return transferId;
   }
 
   /// Accept a `pending` request on the holder side and DISPATCH it: optionally

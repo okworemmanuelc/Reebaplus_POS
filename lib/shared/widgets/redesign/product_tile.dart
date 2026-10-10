@@ -25,7 +25,8 @@ enum StockLevel { ok, low, out }
 /// while cart and checkout lines keep `productIconFromCodePoint`.
 ///
 /// Below: the name, a muted [subtitle] ("60cl · Crate of 12"), the price in
-/// primary and a stock pill with a dot. [inCartQty] > 0 draws the primary
+/// primary and a stock pill with a dot. Without a [priceLabel] (#380: Request
+/// Stock, where nothing is sold) the stock pill sits alone at the start. [inCartQty] > 0 draws the primary
 /// border and the count badge. Out of stock dims the tile and ignores taps.
 /// The whole tile is one tap target.
 class ProductTile extends StatelessWidget {
@@ -33,7 +34,7 @@ class ProductTile extends StatelessWidget {
     super.key,
     required this.name,
     this.subtitle,
-    required this.priceLabel,
+    this.priceLabel,
     required this.stockLabel,
     this.stockLevel = StockLevel.ok,
     this.categoryName,
@@ -46,8 +47,8 @@ class ProductTile extends StatelessWidget {
   final String name;
   final String? subtitle;
 
-  /// Formatted by the caller (e.g. `formatCurrency`).
-  final String priceLabel;
+  /// Formatted by the caller (e.g. `formatCurrency`); null shows no price.
+  final String? priceLabel;
 
   /// Text in the stock pill, e.g. "38".
   final String stockLabel;
@@ -135,20 +136,22 @@ class ProductTile extends StatelessWidget {
           SizedBox(height: context.getRSize(8)),
           Row(
             children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    priceLabel,
-                    maxLines: 1,
-                    style: context
-                        .boldStyle(16)
-                        .copyWith(color: t.colorScheme.primary),
+              if (priceLabel != null) ...[
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      priceLabel!,
+                      maxLines: 1,
+                      style: context
+                          .boldStyle(16)
+                          .copyWith(color: t.colorScheme.primary),
+                    ),
                   ),
                 ),
-              ),
-              SizedBox(width: context.getRSize(6)),
+                SizedBox(width: context.getRSize(6)),
+              ],
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: context.getRSize(8),

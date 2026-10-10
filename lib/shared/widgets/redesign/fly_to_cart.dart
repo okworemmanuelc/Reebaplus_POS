@@ -13,6 +13,9 @@ enum FlyTargetId {
   /// The sales cart: the bottom-bar Cart item (under 600dp), the rail Cart
   /// item (600dp+), or the cart panel header while the panel is open.
   cart,
+
+  /// Request Stock's "Review request" bar (#380), while it shows.
+  stockRequest,
 }
 
 /// Where flights land, by [FlyTargetId]. [FlyTarget] widgets register
