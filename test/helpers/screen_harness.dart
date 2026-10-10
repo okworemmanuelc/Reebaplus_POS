@@ -234,6 +234,11 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
 ///
 /// [viewInsets] models an open keyboard (#377); the default is none.
 ///
+/// [followView] hands the screen the view's own MediaQuery instead of the
+/// fixed [padding] / [viewInsets] (#380): a test that sets `tester.view`'s
+/// `padding`, `viewPadding` and `viewInsets` — and changes them mid-test, e.g.
+/// focus a field, then raise the keyboard — gets what a device would.
+///
 /// Returns the captured [BuildContext] so a test can read responsive getters.
 Future<BuildContext> pumpScreen(
   WidgetTester tester, {
@@ -253,6 +258,7 @@ Future<BuildContext> pumpScreen(
   Map<String, Object>? sharedPreferences,
   bool settle = true,
   List<StoreData>? selectableStores,
+  bool followView = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -354,12 +360,16 @@ Future<BuildContext> pumpScreen(
         // the screen.
         home: Builder(
           builder: (context) => MediaQuery(
-            data: MediaQueryData(
-              size: MediaQuery.sizeOf(context),
-              padding: padding ?? EdgeInsets.zero,
-              viewInsets: viewInsets,
-              textScaler: textScaler ?? TextScaler.noScaling,
-            ),
+            data: followView
+                ? MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: textScaler ?? TextScaler.noScaling)
+                : MediaQueryData(
+                    size: MediaQuery.sizeOf(context),
+                    padding: padding ?? EdgeInsets.zero,
+                    viewInsets: viewInsets,
+                    textScaler: textScaler ?? TextScaler.noScaling,
+                  ),
             child: Builder(
               builder: (context) {
                 capturedContext = context;

@@ -16,6 +16,10 @@ class UiHintService {
   // (Gates.editProductPrice) lets long-press-edit; dismissal is permanent per
   // staff member, stored locally, never synced.
   static const hintInventoryLongpress = 'hint_inventory_longpress';
+  // Request Stock's one combined coach banner (#380): "tap a product to add it
+  // to the request, or tap and hold to choose a quantity". Same retire rules
+  // as POS's: view-counted on display, a deliberate ✕ retires it for good.
+  static const hintRequestStockGestures = 'hint_request_stock_gestures';
 
   // A hint stops surfacing once its stored view-count reaches this threshold —
   // whether it got there by repeated views (markShown) or a deliberate

@@ -453,7 +453,7 @@ width. Under the cap the gutter is `getRSize(16)`, as in the mockup.
 | `StatCard` | `stat_card.dart` | Home figure cards: icon tile, muted title + status pill, big figure, one-line subtitle. Optional `onTap`; optional `trailing` widget after the text (#374: Total SKUs' expand chevron); optional `density` (`StatCardDensity.compact`, #374: the landscape mockup's 12 padding / 44 tile / title 13 / figure 22 / subtitle 12 with a `dense` pill) for narrow grid cells. |
 | `TagPill`, `StatusPill` | `tag_pill.dart` | PRO / CEO / status words in fixed colours (`TagPillTone`). `StatusPill` adds the mockup's ↑ / ↓ / ⓘ icon per tone. Optional `dense` (#374: 5×2 padding, 9 icon, 11 label) for compact stat cards. Display only. |
 | `IconTile` (`IconTileTone`) | `icon_tile.dart` | The pale rounded square with a filled icon (stat cards, settings rows, cart lines). Fixed tone pairs, or explicit colours. |
-| `ProductTile` (`StockLevel`) | `product_tile.dart` | POS / Receive Stock grid tile: photo first, else category tint + keyword icon; name, size·pack, price, stock pill; cart-count badge and primary border; out of stock dims and ignores taps. |
+| `ProductTile` (`StockLevel`) | `product_tile.dart` | POS / Receive Stock / Request Stock grid tile: photo first, else category tint + keyword icon; name, size·pack, price (optional since #380 — Request Stock passes none and the stock pill sits at the start), stock pill; cart-count badge and primary border; out of stock dims and ignores taps. |
 | `categoryVisual()` / `CategoryVisual` | `category_visual.dart` | The pure tile rule: keyword → icon + colour (stout/malt/beer·lager/water/energy/soft drink·soda·juice/wine·spirit), else a stable code-unit-sum hash into the fixed palette; null/blank → neutral + box. Unit-tested. |
 | `CategoryChip` | `category_chip.dart` | Category filter chip with a dot coloured by `categoryVisual`; null category = "All". |
 | `CartLine`, `QuantityStepper` | `cart_line.dart` | Cart line card: icon tile, name, "qty × price", total, size·pack, stepper (− becomes a red delete at the last unit). Caller resolves the icon (today: `productIconFromCodePoint`). |
@@ -484,6 +484,7 @@ panel header registers at priority 1, the nav Cart item at 0.
   removes itself on landing), so the source may unmount mid-flight. The
   returned `FlyToCartFlight` can `cancel()`; POS cancels a tile's previous
   flight on a new tap and on dispose, as before.
+- **Request Stock (#380)** flies to its "Review request" bar: `FlyTargetId.stockRequest`.
 - **A new destination** (Receive Stock's receiving cart, Wave 2 A): add a
   `FlyTargetId` value, wrap its button in a `FlyTarget` with that id, and call
   `flyToTarget(context, target: thatId)` after the add.
@@ -496,6 +497,8 @@ never build a raw `TextStyle`.
 
 **Fixed colours.** `AppFixedColors.onSolid` (white, both brightnesses) is the
 text on a solid fixed pill (PRO).
+
+**Coach hint banner (`lib/shared/widgets/coach_hint_banner.dart`, #380).** The pale `primaryTint` "tap to add, tap and hold to choose a quantity" banner over a product grid, with a 48dp ✕. One per screen; the caller owns showing and retiring it (`UiHintService`). Request Stock uses it; POS and Receive Stock still draw their own private copies until their redesign waves.
 
 ## Layout patterns
 
@@ -551,6 +554,10 @@ Settings — full tab roots on the same per-tab `Navigator` machinery.
 - **Customer Credits**: single column = full card (wallet tile, title, chevron, Credit `infoTint` / Debt `dangerTint` boxes); grid cell = compact title + "Credit and debt", **values kept** (the card opens Customers, which lists per-customer balances, not these totals).
 - **Staff Sales**: `SectionHeader` + one flat card, full width under the grid.
 - **Quick actions** (#362, PRD #270): a "Quick actions" `SectionHeader` (the "Performance Overview" style) over fixed-size tiles (`kHomeQuickActionTileWidth` = 104 base): flat `AppDecorations.card`, a 44 `IconTile` with an explicit fixed pair (tint + filled icon), label DM Sans 600 at 12, up to 2 lines. Tiles share a height, line up from the left and are never stretched; the row scrolls sideways only when they do not fit. It sits between the period header and the cards at every size (upright: under the pills; rail layout: under the "Performance Overview" line), is held back during the first load and omitted, heading included, when no tile is visible. Tiles, in order, and their pairs: Add Expense `danger` + `bill`; Stock Transfer `info` + `transfer` (only with 2+ non-van stores; opens Request Stock with the locked store as "Deliver to", or neither end fixed under All Stores); Take Stock `purple` + `auditCheck`; Receive Stock `warning` + `receiving` — **always last** (owner, 2026-10-10), so Record Payment `green` + `payments` (#362 PR 4) goes before it. Which tiles show is decided only by `resolveQuickActions` (`lib/features/dashboard/quick_actions.dart`), citing Gate Registry entries.
+
+### Request Stock (`lib/features/stores/screens/request_stock_screen.dart`, #380)
+
+A pushed screen (GlassyScaffold title bar). One `CustomScrollView`: the two store pickers side by side ("Request from store" / "Deliver to store"; a fixed end is a locked field), a search field, the coach hint, then `RequestProductGrid` — `ProductTile`s for the **source store's in-stock products** only, columns = width / 170 (2–6), cell height `getRSize(220)`, no price, "N in stock" pill (warning at or under the product's `lowStockThreshold`), the requested quantity as the badge. Empty states centre in the remaining space (no source yet / source has nothing in stock / no search match). Under it, while the list is not empty and the keyboard is down, a Surface footer with the primary "N items · Review request" button (`deviceBottomPadding` below it); it is the fly-to target. The review sheet lists lines as cards (category `IconTile`, name up to 2 lines, "‹store› has N", red ✕ remove, `QuantityStepper` — at 1 the minus is remove), then "N products · M units" and "Send request" → a confirm dialog. Hold on a tile opens a quantity sheet (autofocused number field). With the keyboard up the scroll view ends at the keyboard's top edge (pinned by `request_stock_keyboard_test.dart`).
 
 ### App bar
 
