@@ -232,6 +232,8 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
 /// width on the left and no bottom bar. Pass `bottomNavHeight: 0` for a screen
 /// that is not inside the frame (auth, MainLayout itself).
 ///
+/// [viewInsets] models an open keyboard (#377); the default is none.
+///
 /// Returns the captured [BuildContext] so a test can read responsive getters.
 Future<BuildContext> pumpScreen(
   WidgetTester tester, {
@@ -239,6 +241,7 @@ Future<BuildContext> pumpScreen(
   required Size size,
   required Widget screen,
   EdgeInsets? padding = kRealisticPhoneInsets,
+  EdgeInsets viewInsets = EdgeInsets.zero,
   double bottomNavHeight = kBottomNavBodyHeight,
   List<Override> overrides = const [],
   Set<String> grantedKeys = const {'sales.make'},
@@ -354,6 +357,7 @@ Future<BuildContext> pumpScreen(
             data: MediaQueryData(
               size: MediaQuery.sizeOf(context),
               padding: padding ?? EdgeInsets.zero,
+              viewInsets: viewInsets,
               textScaler: textScaler ?? TextScaler.noScaling,
             ),
             child: Builder(

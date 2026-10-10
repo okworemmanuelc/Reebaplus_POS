@@ -525,48 +525,53 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     if (panelShown) _panelMounted = true;
 
     // Tab content. Keyed so the whole stack (and every tab's Navigator) moves
-    // intact when a rotation swaps the bottom bar for the rail.
-    final tabs = KeyedSubtree(
-      key: _contentKey,
-      child: Stack(
-        children: [
-          ...List.generate(_tabWidgets.length, (i) {
-            if (!_initializedTabs.contains(i)) {
-              // Not yet visited — render nothing
-              return const SizedBox.shrink();
-            }
-            Widget tabChild = TabNavigator(
-              navigatorKey: _navigatorKeys[i],
-              rootScreen: _tabWidgets[i],
-              observer: _observers[i],
-            );
-            if (i == NavigationService.posTab) {
-              // The View Cart bar sits under POS (never over its grid or its
-              // scan button). The Column is unconditional so POS's Navigator
-              // keeps its place in the tree whether the bar shows or not.
-              tabChild = Column(
-                children: [
-                  Expanded(child: tabChild),
-                  _buildViewCartSlot(
-                    context,
-                    onPosRoot: onPosRoot,
-                    panelMode: panelMode,
-                  ),
-                ],
+    // intact when a rotation swaps the bottom bar for the rail. The scope
+    // tells everything above a visible bottom bar that the bar already clears
+    // the system-nav inset (#377), so deviceBottomPadding adds none there.
+    final tabs = BottomBarInsetScope(
+      clearsInset: !isRail && _bottomBarShown(currentIndex, canPop),
+      child: KeyedSubtree(
+        key: _contentKey,
+        child: Stack(
+          children: [
+            ...List.generate(_tabWidgets.length, (i) {
+              if (!_initializedTabs.contains(i)) {
+                // Not yet visited — render nothing
+                return const SizedBox.shrink();
+              }
+              Widget tabChild = TabNavigator(
+                navigatorKey: _navigatorKeys[i],
+                rootScreen: _tabWidgets[i],
+                observer: _observers[i],
               );
-            }
-            final tab = Offstage(
-              offstage: i != currentIndex,
-              // TickerMode guarantees animations on offstage tabs don't tick
-              child: TickerMode(enabled: i == currentIndex, child: tabChild),
-            );
-            if (i != currentIndex) return tab;
-            return FadeTransition(opacity: _tabFadeAnimation, child: tab);
-          }),
-          // Non-blocking sync pull status overlay — first-download
-          // progress bar at top, "Synced" pill above the bottom nav.
-          const Positioned.fill(child: SyncPullBanner()),
-        ],
+              if (i == NavigationService.posTab) {
+                // The View Cart bar sits under POS (never over its grid or its
+                // scan button). The Column is unconditional so POS's Navigator
+                // keeps its place in the tree whether the bar shows or not.
+                tabChild = Column(
+                  children: [
+                    Expanded(child: tabChild),
+                    _buildViewCartSlot(
+                      context,
+                      onPosRoot: onPosRoot,
+                      panelMode: panelMode,
+                    ),
+                  ],
+                );
+              }
+              final tab = Offstage(
+                offstage: i != currentIndex,
+                // TickerMode guarantees animations on offstage tabs don't tick
+                child: TickerMode(enabled: i == currentIndex, child: tabChild),
+              );
+              if (i != currentIndex) return tab;
+              return FadeTransition(opacity: _tabFadeAnimation, child: tab);
+            }),
+            // Non-blocking sync pull status overlay — first-download
+            // progress bar at top, "Synced" pill above the bottom nav.
+            const Positioned.fill(child: SyncPullBanner()),
+          ],
+        ),
       ),
     );
 
@@ -678,26 +683,46 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
   /// Pads [child] clear of the left / right system insets it owns and removes
   /// those insets from its MediaQuery, so screens inside never add them again.
+  ///
+  /// The MediaQuery is read INSIDE the frame Scaffold's body (the [Builder]),
+  /// never from MainLayout's own context above it (#377). The Scaffold has
+  /// already taken the bottom system inset out of its body when the bottom
+  /// bar is present (the bar pads itself by it) and the keyboard out always
+  /// (it resizes the body). Rebuilding from the outer context put both back:
+  /// every tab body with a bottom `SafeArea` (POS, Stock) padded the
+  /// system-nav height a second time above the bar — the band — and nested
+  /// Scaffolds resized for the keyboard twice. So the rule inside the frame:
+  /// a screen's MediaQuery is exactly what the frame Scaffold gives its body,
+  /// minus the side insets handled here.
   Widget _insetContent(
     BuildContext context,
     Widget child, {
     required bool padLeft,
     required bool padRight,
   }) {
-    final insets = MediaQuery.paddingOf(context);
-    return Padding(
-      padding: EdgeInsets.only(
-        left: padLeft ? insets.left : 0.0,
-        right: padRight ? insets.right : 0.0,
-      ),
-      child: MediaQuery.removePadding(
-        context: context,
-        removeLeft: true,
-        removeRight: true,
-        child: child,
-      ),
+    return Builder(
+      builder: (context) {
+        final insets = MediaQuery.paddingOf(context);
+        return Padding(
+          padding: EdgeInsets.only(
+            left: padLeft ? insets.left : 0.0,
+            right: padRight ? insets.right : 0.0,
+          ),
+          child: MediaQuery.removePadding(
+            context: context,
+            removeLeft: true,
+            removeRight: true,
+            child: child,
+          ),
+        );
+      },
     );
   }
+
+  /// Whether the bottom bar is on screen (under 600dp wide): only on a nav
+  /// tab's root. A pushed screen or a drawer-only tab has no bar.
+  bool _bottomBarShown(int currentIndex, bool canPop) =>
+      !canPop && _navTabOrder().contains(currentIndex);
 
   /// The bottom bar under 600dp wide, inside #258's slide-away clip.
   Widget _buildBottomBarHost(
@@ -706,8 +731,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     required bool canPop,
     required int pendingOrderCount,
   }) {
-    final isNavTab = _navTabOrder().contains(currentIndex);
-    if (!isNavTab || canPop) return const SizedBox.shrink();
+    if (!_bottomBarShown(currentIndex, canPop)) return const SizedBox.shrink();
     return AnimatedBuilder(
       animation: _bottomBarAnimation,
       builder: (context, child) {

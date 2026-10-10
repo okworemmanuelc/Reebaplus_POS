@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #377: band above the bottom bar (2026-10-10)
+Branch `fix/bottom-bar-band-377` off `main` 84a267aa, worktree `../drinkPosApp-wt-377`. **No Drift/cloud/sync/package change, no restyle.**
+- **Cause**: `MainLayout._insetContent` (added by 251bc46c, the #352 sideways side-inset fix) ran `MediaQuery.removePadding` on MainLayout's OWN context, above its Scaffold. That rebuilt the tabs' MediaQuery from the un-removed data: the bottom system inset (which the bottom bar already pads by) and the keyboard inset (which the Scaffold already resizes for) came back. POS and Stock wrap their bodies in a bottom `SafeArea` → a band the system-nav height (48 / 24dp) above the bar; nested Scaffolds resized for the keyboard twice (POS at 390×844 + 300dp keyboard: content ended at 196 instead of 544). Home was clean because its `SafeArea` is `bottom: false`.
+- **Fix**: `_insetContent` reads the MediaQuery inside a `Builder` under the Scaffold body. Plus `BottomBarInsetScope` (in `responsive.dart`): `MainLayout` sets it while the bar shows (nav tab root, under 600dp) and `deviceBottomPadding` returns 0 inside it — a sheet opened on a tab navigator sat on the bar and still padded its footer by the raw inset. Pushed screens, drawer-only tabs, the rail layout and root-navigator routes still get the raw inset. Rule in ui-context "System insets".
+- Tests: `test/shared/frame_bottom_band_test.dart` (14: Home/POS/Stock/Orders × 3-button 48 / gesture 24 content reaches the bar; POS scan + Stock + FABs 16dp above the bar; keyboard once; 800×1280 rail keeps the inset; tab sheet sits on the bar with 0; pushed screen + root sheet still 48). Harness `pumpScreen` gained an optional `viewInsets`. Goldens: new `frame_pos_390x844_insets_{light,dark}`, `frame_inventory_390x844_insets_{light,dark}`; none regenerated.
+
 ### Issue #362 PR 1: Redesign Wave 1 — Home quick actions row (2026-10-10)
 Branch `feat/redesign-w1-home-quick-actions-1` off `main` d1aff714 (after PR #375), worktree `../drinkPosApp-wt-362`. Part of #362 (absorbs PRD #270); PR 1 of 4. **No Drift/cloud/sync/permission change, no new packages.** RELEASE FREEZE ON.
 - **Purple fixed pair**: `AppFixedColors.purple` / `purpleTint` (light `#7C3AED` on `#F3EEFF`, dark `#A78BFA` on `#241B3D`), base constants in `colors.dart`, through `copyWith` / `lerp`, pinned in `theme_colours_test.dart`.

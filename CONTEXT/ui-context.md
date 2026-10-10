@@ -517,7 +517,7 @@ screens keep using `isPhone` / `isTablet` / `isDesktop` for their own layouts.
 - `cart_panel.dart` — `CartPanel` (solid `colorScheme.surface`, `AppSchemeColors.panelShadow`, left hairline), `CartPanelCloseButton` (the ✕, placed at the end of the hosted Cart screen's own header via `CartScreen.onClosePanel`, so there is no extra strip and the status-bar padding is applied once) and `CartPanelScrim`. Widths: slide-in = 60% of the screen, max 460; fixed = 30%, 360–440 — plus the right system inset, which the panel's Surface runs under.
 - `view_cart_bar.dart` — `ViewCartBar` (count badge, "N items · customer", the Cart screen's Total, chevron). Moves into the shared parts in #352 PR 2.
 
-**System insets (#352 phone check).** The frame respects the side insets (a landscape navigation bar on the right, a display cutout on the left): the rail owns the left inset, the fixed cart panel owns the right one while it shows, and otherwise the content area is padded clear of it (and the inset is removed from the screens' MediaQuery so they never add it again). The bottom bar, the rail and the View Cart bar respect the bottom inset.
+**System insets (#352 phone check).** The frame respects the side insets (a landscape navigation bar on the right, a display cutout on the left): the rail owns the left inset, the fixed cart panel owns the right one while it shows, and otherwise the content area is padded clear of it (and the inset is removed from the screens' MediaQuery so they never add it again). The bottom bar, the rail and the View Cart bar respect the bottom inset. **Bottom inset rule (#377):** the frame reads the tabs' MediaQuery *inside* its Scaffold body, so a screen sees exactly what that Scaffold gives it — under the bottom bar no bottom inset and no keyboard inset (the bar pads itself by the inset, the Scaffold's resize owns the keyboard). Never rebuild a tab's MediaQuery from `MainLayout`'s own context: that re-adds both, and a bottom `SafeArea` then draws a band the height of the system nav above the bar. `MainLayout` also wraps the tabs in `BottomBarInsetScope` while the bar shows (a nav tab's root, under 600dp), and `deviceBottomPadding` returns 0 inside it, so a tab root, a sheet opened on the tab's navigator and the in-tab drawer never add the inset again. A pushed screen (the bar hides), a drawer-only tab (no bar), the side rail (600dp+, the screen owns the bottom inset) and anything on the root navigator still get the raw inset.
 
 **Visible nav items (5):** Home, Stock (`Gates.viewInventory`), POS + Cart (`Gates.makeSale`), Orders (pending-orders badge for the active store). Cart shows the cart-line count badge.
 
@@ -597,7 +597,9 @@ Centered overlay. Corner radius 16–20px (`AppRadius.lg` to `AppRadius.xl`).
 ### Safe-area rule
 
 Content anchored to the bottom of the screen under `MainLayout` must use
-`context.deviceBottomPadding` (accounts for the nav bar only). Never use
+`context.deviceBottomPadding` (accounts for the nav bar only). Above a visible
+bottom bar it returns 0 (#377: the bar already clears the system nav), so the
+same call is right on a tab root, in a sheet over it, and on a pushed screen. Never use
 `MediaQuery.of(context).viewInsets.bottom` or
 `MediaQuery.of(context).padding.bottom` inside `MainLayout` — both either
 read 0 or double-count the keyboard due to how `MainLayout`'s `Scaffold`
