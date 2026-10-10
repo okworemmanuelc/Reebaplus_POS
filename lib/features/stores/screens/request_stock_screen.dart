@@ -18,12 +18,17 @@ import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 /// NEEDS stock asks a holder store to send it. A `pending` row is written — no
 /// stock moves until the holder accepts and dispatches.
 ///
-/// Exactly one of [fixedDestStoreId] / [fixedSourceStoreId] is supplied by the
-/// caller, depending on the entry point:
+/// At most one of [fixedDestStoreId] / [fixedSourceStoreId] is supplied by
+/// the caller, depending on the entry point:
 /// - From your OWN store details (you need stock): pass [fixedDestStoreId] —
 ///   the user picks which other store to request FROM.
 /// - From another store you're browsing (its inventory): pass
 ///   [fixedSourceStoreId] — the destination defaults to your selectable store.
+/// - From Home's Stock Transfer quick action (#362): the locked store as
+///   [fixedDestStoreId], or NEITHER under All Stores — then both pickers show
+///   and the user chooses both ends (the sole-selectable-store auto-fill of the
+///   destination still applies). Vans are never offered, and the two ends must
+///   differ, in every mode.
 class RequestStockScreen extends ConsumerStatefulWidget {
   final String? fixedDestStoreId;
   final String? fixedSourceStoreId;
@@ -33,8 +38,8 @@ class RequestStockScreen extends ConsumerStatefulWidget {
     this.fixedDestStoreId,
     this.fixedSourceStoreId,
   }) : assert(
-          (fixedDestStoreId == null) != (fixedSourceStoreId == null),
-          'Supply exactly one of fixedDestStoreId / fixedSourceStoreId.',
+          fixedDestStoreId == null || fixedSourceStoreId == null,
+          'Supply at most one of fixedDestStoreId / fixedSourceStoreId.',
         );
 
   @override

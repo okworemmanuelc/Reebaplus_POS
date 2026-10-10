@@ -10,8 +10,9 @@
 // The mockup's sample data, signed in as the CEO: business "Stallion Global",
 // store "Abuja HQ", Total Sales ₦225,800, Net Profit ₦7,100, no pending
 // orders, no expenses, Stock Value ₦19,382,600, ₦0 credit and debt, 8 unread
-// notifications and the Reports attention dot, plus the three quick-action
-// tiles of #362 PR 1 (Add Expense, Receive Stock, Take Stock). The mockup shows no Staff
+// notifications and the Reports attention dot, plus the four quick-action
+// tiles of #362 (Add Expense, Stock Transfer — the business has a second
+// store, Lekki — Receive Stock, Take Stock). The mockup shows no Staff
 // Sales; the one sale's cashier appears there. At 600dp+ the harness leaves
 // the side rail's width blank on the left; only the screen is captured.
 // `₦` draws as a box in tests (DM Sans has no Naira glyph).
@@ -58,6 +59,17 @@ void main() {
     await db.customStatement(
       "UPDATE stores SET name = 'Abuja HQ' WHERE id = '${env.storeId}'",
     );
+    // A second store (#362 PR 2), so the CEO sees the Stock Transfer tile.
+    // Abuja HQ stays the locked store, so every figure is unchanged.
+    await db
+        .into(db.stores)
+        .insert(
+          StoresCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: b,
+            name: 'Lekki',
+          ),
+        );
     // 50 in stock × ₦387,652 = ₦19,382,600.
     await db.customStatement(
       'UPDATE products SET retailer_price_kobo = 38765200 '
@@ -159,8 +171,9 @@ void main() {
         'stock.view',
         'customers.add',
         'sales.make',
-        // The quick-action tiles (#362): Add Expense, Receive Stock, Take
-        // Stock.
+        // The quick-action tiles (#362): Add Expense, Stock Transfer,
+        // Receive Stock, Take Stock.
+        'stores.request_transfer',
         'expenses.create',
         'stock.add',
         'products.add',
