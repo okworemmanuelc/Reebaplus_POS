@@ -218,13 +218,14 @@ class _CustomerPaymentSheetState extends ConsumerState<CustomerPaymentSheet> {
     // at, resolved the same way an expense (§20.8) and a POS sale resolve it.
     final storeId = ref.read(activeWriteStoreProvider).id;
     final service = ref.read(customerServiceProvider);
+    final staffId = widget.staffId;
     navigator.pop();
     try {
       await service.topUpWallet(
         customerId: customerId,
         amountKobo: (amount * 100).round(),
         method: method,
-        staffId: widget.staffId,
+        staffId: staffId,
         storeId: storeId,
         note: note.isEmpty ? null : note,
       );
@@ -324,10 +325,10 @@ class _CustomerPaymentSheetState extends ConsumerState<CustomerPaymentSheet> {
           ),
       ];
     } else {
-      final balanceKobo = balances?[picked.id];
-      final line = balanceKobo == null
+      // Null while the balances load; a customer with no ledger rows is 0.
+      final line = balances == null
           ? null
-          : CustomerBalanceLine.fromKobo(balanceKobo);
+          : CustomerBalanceLine.fromKobo(balances[picked.id] ?? 0);
       slivers = [
         SliverToBoxAdapter(
           child: Form(
@@ -346,18 +347,14 @@ class _CustomerPaymentSheetState extends ConsumerState<CustomerPaymentSheet> {
                 ),
                 if (line case CustomerOwes(:final debtKobo)) ...[
                   SizedBox(height: context.getRSize(10)),
-                  Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: AppButton(
-                      key: CustomerPaymentSheetKeys.payFull,
-                      text: 'Pay full ${formatCurrency(debtKobo / 100)}',
-                      icon: AppIcons.checkCircle,
-                      variant: AppButtonVariant.secondary,
-                      size: AppButtonSize.small,
-                      isFullWidth: false,
-                      height: kMinInteractiveDimension,
-                      onPressed: () => _payFull(debtKobo),
-                    ),
+                  AppButton(
+                    key: CustomerPaymentSheetKeys.payFull,
+                    text: 'Pay full ${formatCurrency(debtKobo / 100)}',
+                    icon: AppIcons.checkCircle,
+                    variant: AppButtonVariant.secondary,
+                    size: AppButtonSize.small,
+                    height: kMinInteractiveDimension,
+                    onPressed: () => _payFull(debtKobo),
                   ),
                 ],
                 SizedBox(height: context.getRSize(16)),
