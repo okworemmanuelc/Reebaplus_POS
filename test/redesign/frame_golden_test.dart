@@ -99,9 +99,11 @@ void main() {
     required String goldenName,
     bool openPanel = false,
   }) async {
-    NavigationService().setIndex(
-      screen == 'home' ? NavigationService.homeTab : NavigationService.posTab,
-    );
+    NavigationService().setIndex(switch (screen) {
+      'home' => NavigationService.homeTab,
+      'inventory' => 2,
+      _ => NavigationService.posTab,
+    });
     final context = await pumpScreen(
       tester,
       env: env,
@@ -199,6 +201,26 @@ void main() {
           padding: sidewaysInsets,
           openPanel: openPanel,
           goldenName: 'frame_${name}_844x390_insets_$themeName',
+        ),
+      );
+    }
+  }
+
+  // #377: upright with 3-button navigation (48dp bottom inset). The content
+  // must run down to the bottom bar with no band of background above it.
+  const uprightInsets = EdgeInsets.only(top: 24, bottom: 48);
+  for (final brightness in Brightness.values) {
+    final themeName = brightness == Brightness.light ? 'light' : 'dark';
+    for (final screen in const ['pos', 'inventory']) {
+      testWidgets(
+        'frame $screen 390x844 with bottom inset $themeName',
+        (tester) => pumpGolden(
+          tester,
+          screen: screen,
+          brightness: brightness,
+          size: const Size(390, 844),
+          padding: uprightInsets,
+          goldenName: 'frame_${screen}_390x844_insets_$themeName',
         ),
       );
     }

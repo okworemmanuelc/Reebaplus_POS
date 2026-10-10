@@ -225,7 +225,14 @@ extension ResponsiveHelper on BuildContext {
     bottom: getRSize(bottom),
   );
 
-  /// Returns the combined bottom padding (safe area + keyboard view insets).
+  /// Returns the combined bottom padding (safe area + keyboard view insets),
+  /// from the nearest MediaQuery.
+  ///
+  /// Inside `MainLayout` this reads what the frame Scaffold gives its body
+  /// (#377): 0 under the bottom bar (the bar owns the system-nav inset, the
+  /// Scaffold's resize owns the keyboard), and 0 too on a pushed screen or a
+  /// drawer-only tab — use [deviceBottomPadding] there. With the side rail
+  /// (600dp+) the body keeps the system-nav inset and the screen owns it.
   double get bottomInset =>
       (MediaQuery.maybeOf(this)?.padding.bottom ?? 0) +
       (MediaQuery.maybeOf(this)?.viewInsets.bottom ?? 0);
@@ -265,9 +272,57 @@ extension ResponsiveHelper on BuildContext {
   /// Keyboard down → this clears the nav bar; keyboard up → it collapses to 0 (the
   /// resize covers that). Adding the keyboard here too (via [deviceBottomInset])
   /// double-counts it and jumps content too high.
+  ///
+  /// Returns 0 above a visible bottom bar (#377). The bottom bar pads itself
+  /// by the system-nav inset, so anything that ends at the bar's top edge — a
+  /// tab root's own content, a sheet opened on the tab's navigator, the
+  /// drawer under 600dp — must not add it again. `MainLayout` marks that
+  /// subtree with [BottomBarInsetScope]. Everything else still gets the raw
+  /// inset: a screen pushed inside a tab (the bar hides), a drawer-only tab
+  /// with no bar (Customers, Expenses, …), the side-rail layout (600dp+, no
+  /// bar), and sheets / dialogs / screens on the root navigator, which sit
+  /// outside `MainLayout`'s subtree.
   double get deviceBottomPadding {
+    if (BottomBarInsetScope.barClearsInset(this)) return 0;
     final view = View.maybeOf(this);
     if (view == null) return MediaQuery.maybeOf(this)?.viewPadding.bottom ?? 0;
     return MediaQueryData.fromView(view).viewPadding.bottom;
   }
+}
+
+/// Marks the part of the app frame that sits directly above a visible bottom
+/// bar (#377), so [ResponsiveHelper.deviceBottomPadding] returns 0 inside it.
+///
+/// `MainLayout`'s bottom bar pads itself by the system-navigation inset, and
+/// the frame Scaffold takes that inset out of its body's MediaQuery. Content
+/// that ends at the bar's top edge has nothing left to clear; adding the raw
+/// inset there draws a band of background the height of the system nav
+/// between the content and the bar.
+///
+/// `MainLayout` sets [clearsInset] while the bar is on screen: a nav tab's
+/// root, under 600dp wide. It is false on a pushed screen (the bar hides), on
+/// a drawer-only tab (no bar) and in the side-rail layout (no bar). Routes on
+/// the root navigator are outside the frame's subtree and never see it.
+class BottomBarInsetScope extends InheritedWidget {
+  const BottomBarInsetScope({
+    super.key,
+    required this.clearsInset,
+    required super.child,
+  });
+
+  /// Whether the bottom bar below this subtree already clears the system
+  /// navigation inset.
+  final bool clearsInset;
+
+  /// Whether [context] sits above a visible bottom bar that already clears
+  /// the system navigation inset. False outside any scope.
+  static bool barClearsInset(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<BottomBarInsetScope>()
+          ?.clearsInset ??
+      false;
+
+  @override
+  bool updateShouldNotify(BottomBarInsetScope oldWidget) =>
+      oldWidget.clearsInset != clearsInset;
 }

@@ -15,6 +15,7 @@ New entries: add a compact bullet at the top of the current month, same format �
 ---
 
 ## October 2026
+- **2026-10-10** — **No band above the bottom bar (#377)**: never build a tab's MediaQuery from `MainLayout`'s own context — it sits above the frame Scaffold, so `MediaQuery.removePadding(context: <MainLayout context>)` re-adds the bottom inset and the keyboard the Scaffold took out of its body (251bc46c did, for the side insets; a bottom `SafeArea` then drew a system-nav-high band above the bar and nested Scaffolds resized for the keyboard twice). Read it under the body (`Builder`). `deviceBottomPadding` now returns 0 inside `BottomBarInsetScope` (set by `MainLayout` while the bar shows); widget tests that check it must set `tester.view.viewPadding` — the harness MediaQuery alone doesn't reach the raw view.
 - **2026-10-03** — **Scanner no longer shows "Camera unavailable" after the first scan (#319 follow-up)**:
   - **Cause**: on Android, `mobile_scanner` 7.2.0's native `start()` sets `isPaused = false` BEFORE its "already started" guard. So a `start()` after `pause()` always fails with AlreadyStarted, which surfaced as the generic error view.
   - **Seen on**: Samsung SM-A566B, where the camera closed at the first read and never reopened. Upstream fixed the ordering in 7.2.1.
