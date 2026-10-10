@@ -407,8 +407,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       // between the period header and the cards.
                       SizedBox(height: context.getRSize(16)),
                       HomeCardGrid(
-                        cardsFor: (columns) => _buildCards(
-                          columns: columns,
+                        cardsFor: (cell) => _buildCards(
+                          cell: cell,
                           sales: totalSales,
                           pending: pendingOrdersCount,
                           profit: netProfit,
@@ -550,7 +550,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// Expenses, Stock Value, Credits, Total SKUs). Cards are gated by role
   /// (§11.4) and hidden while their data loads, so neither leaves a gap.
   List<Widget> _buildCards({
-    required int columns,
+    required HomeGridCell cell,
     required double sales,
     required int pending,
     required double? profit,
@@ -568,11 +568,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required bool showCreditBalance,
   }) {
     final cards = <Widget>[];
+    final density = cell.density;
 
     if (showTotalSales && !_ordersLoading) {
       cards.add(
         StatCard(
           key: HomeKeys.sales,
+          density: density,
           title: 'Total Sales',
           value: formatCurrency(sales),
           subtitle:
@@ -589,6 +591,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       cards.add(
         StatCard(
           key: HomeKeys.profit,
+          density: density,
           title: 'Net Profit',
           value: profit != null ? formatCurrency(profit) : '—',
           subtitle: profit != null
@@ -616,6 +619,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       cards.add(
         StatCard(
           key: HomeKeys.pending,
+          density: density,
           title: 'Pending Orders',
           value: pending.toString(),
           subtitle: 'Orders awaiting fulfillment',
@@ -635,6 +639,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       cards.add(
         StatCard(
           key: HomeKeys.expenses,
+          density: density,
           title: 'Total Expenses',
           value: formatCurrency(expenses),
           subtitle: 'Including operations & staff',
@@ -658,6 +663,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       cards.add(
         StatCard(
           key: HomeKeys.stockValue,
+          density: density,
           title: 'Stock Value',
           value: formatCurrency(_totalStockValue),
           subtitle: 'Estimated inventory worth',
@@ -675,7 +681,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           key: HomeKeys.credits,
           credit: formatCurrency(credit),
           debt: formatCurrency(debt),
-          compact: columns > 1,
+          compact: cell.columns > 1,
+          dense: density == StatCardDensity.compact,
           onTap: () {
             Navigator.of(context).push(slideLeftRoute(const CustomersScreen()));
           },
@@ -683,7 +690,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
     if (showTotalSkus && !_inventoryLoading) {
-      cards.add(_buildTotalSkusCard());
+      cards.add(_buildTotalSkusCard(density));
     }
     return cards;
   }
@@ -691,7 +698,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// §11.5 — Total SKUs, expandable, grouped by manufacturer. Cashier/Stock
   /// keeper only. Closed shows the SKU count; open lists per-manufacturer
   /// counts under the card.
-  Widget _buildTotalSkusCard() {
+  Widget _buildTotalSkusCard(StatCardDensity density) {
     final totalSkus = _inventoryItems.length;
     final manufacturers =
         ref.watch(allManufacturersProvider).valueOrNull ??
@@ -710,6 +717,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final card = StatCard(
+      density: density,
       title: 'Total SKUs',
       value: '$totalSkus',
       subtitle: 'Tap to see breakdown by manufacturer',

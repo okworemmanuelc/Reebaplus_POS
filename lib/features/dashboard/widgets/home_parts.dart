@@ -321,14 +321,28 @@ class _PillLabel extends StatelessWidget {
   }
 }
 
+/// Below this card width (base dp, scaled with `getRSize`) Home draws its
+/// stat cards at [StatCardDensity.compact]. A regular card needs 2×16 padding
+/// + a 52 tile + a 16 gap + the widest title ("Pending Orders", ~100 at
+/// SemiBold 14) + 8 + the widest pill ("ⓘ Attention", ~90) ≈ 298; 310 leaves
+/// a margin. An upright phone (≈344) stays regular, as in
+/// `phone-home-*.png`; the sideways 3-column phone (≈257–270) and the upright
+/// tablet's 2 columns (≈285) go compact; 1280×800's 3 columns (≈325) stay
+/// regular.
+const double kHomeCompactCardBelow = 310;
+
+/// What [HomeCardGrid] tells the card builder about the cells.
+typedef HomeGridCell = ({int columns, StatCardDensity density});
+
 /// Lays Home's cards out in [homeGridColumns] columns measured from the real
 /// width. Cards in a row share a height; a short last row keeps the column
-/// widths. [cardsFor] builds the visible cards for the chosen column count,
+/// widths. [cardsFor] builds the visible cards for the chosen column count
+/// and the density that fits the measured cell width,
 /// so a gated card leaves no gap.
 class HomeCardGrid extends StatelessWidget {
   const HomeCardGrid({super.key, required this.cardsFor});
 
-  final List<Widget> Function(int columns) cardsFor;
+  final List<Widget> Function(HomeGridCell cell) cardsFor;
 
   @override
   Widget build(BuildContext context) {
@@ -339,8 +353,15 @@ class HomeCardGrid extends StatelessWidget {
           width: constraints.maxWidth,
           landscape: MediaQuery.orientationOf(context) == Orientation.landscape,
         );
-        final cards = cardsFor(columns);
         final gap = context.getRSize(12);
+        final cellWidth =
+            (constraints.maxWidth - gap * (columns - 1)) / columns;
+        final cards = cardsFor((
+          columns: columns,
+          density: cellWidth < context.getRSize(kHomeCompactCardBelow)
+              ? StatCardDensity.compact
+              : StatCardDensity.regular,
+        ));
         if (cards.isEmpty) return const SizedBox.shrink();
         if (columns == 1) {
           return Column(
@@ -396,6 +417,7 @@ class HomeCreditsCard extends StatelessWidget {
     required this.debt,
     required this.compact,
     required this.onTap,
+    this.dense = false,
   });
 
   final String credit;
@@ -403,13 +425,19 @@ class HomeCreditsCard extends StatelessWidget {
   final bool compact;
   final VoidCallback onTap;
 
+  /// The grid form beside [StatCardDensity.compact] cards: the landscape
+  /// mockup's 12 padding and smaller boxes, so its row stays close to the
+  /// stat cards' height. Only used with [compact].
+  final bool dense;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    final pad = context.getRSize(compact ? 14 : 16);
-    final gap = context.getRSize(compact ? 10 : 12);
+    final tight = compact && dense;
+    final pad = context.getRSize(tight ? 12 : (compact ? 14 : 16));
+    final gap = context.getRSize(tight ? 8 : (compact ? 10 : 12));
     final header = Row(
       children: [
         const IconTile(
@@ -426,7 +454,7 @@ class HomeCreditsCard extends StatelessWidget {
               Text(
                 'Customer Credits Balance',
                 style: context
-                    .boldStyle(compact ? 15 : 17)
+                    .boldStyle(tight ? 14 : (compact ? 15 : 17))
                     .copyWith(color: t.colorScheme.onSurface),
               ),
               if (compact)
@@ -449,8 +477,8 @@ class HomeCreditsCard extends StatelessWidget {
     );
     Widget box(String label, String value, Color fill, Color ink) => Container(
       padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(compact ? 12 : 16),
-        vertical: context.getRSize(compact ? 10 : 14),
+        horizontal: context.getRSize(tight ? 10 : (compact ? 12 : 16)),
+        vertical: context.getRSize(tight ? 6 : (compact ? 10 : 14)),
       ),
       decoration: BoxDecoration(
         color: fill,
@@ -465,17 +493,19 @@ class HomeCreditsCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: context
-                .semiBoldStyle(compact ? 13 : 14)
+                .semiBoldStyle(tight ? 12 : (compact ? 13 : 14))
                 .copyWith(color: muted),
           ),
-          SizedBox(height: context.getRSize(4)),
+          SizedBox(height: context.getRSize(tight ? 2 : 4)),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
               value,
               maxLines: 1,
-              style: context.boldStyle(compact ? 18 : 20).copyWith(color: ink),
+              style: context
+                  .boldStyle(tight ? 16 : (compact ? 18 : 20))
+                  .copyWith(color: ink),
             ),
           ),
         ],

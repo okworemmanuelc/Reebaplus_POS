@@ -7,6 +7,21 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
 
+/// How tightly a [StatCard] is drawn.
+enum StatCardDensity {
+  /// The upright-phone card (`phone-home-*.png`): 16 padding, 52 tile.
+  regular,
+
+  /// The narrow grid card of `phone-landscape-home-dark.png` (#374), measured
+  /// at 844×390 (1×): 12 padding, 44 tile, title 13, figure 22, subtitle 12,
+  /// and a [TagPill.dense] status pill. The tile-to-text gap (9; mockup 10)
+  /// and title-to-pill gap (4) are a little tighter so "Pending Orders" +
+  /// "ⓘ Attention" fit beside a 48dp sideways navigation bar. Same base-dp
+  /// convention as every part: the values go through `getRSize` /
+  /// `getRFontSize`.
+  compact,
+}
+
 /// A Home stat card (#352 PR 2; `phone-home-*.png`,
 /// `phone-landscape-home-dark.png`): a fixed-colour icon tile, a muted title
 /// with a status pill on the right, a big figure, and a one-line muted
@@ -26,6 +41,7 @@ class StatCard extends StatelessWidget {
     this.pillTone = TagPillTone.neutral,
     this.onTap,
     this.trailing,
+    this.density = StatCardDensity.regular,
   });
 
   final IconData icon;
@@ -43,17 +59,25 @@ class StatCard extends StatelessWidget {
   /// that opens a breakdown, #374). Nothing is drawn there when null.
   final Widget? trailing;
 
+  /// Defaults to [StatCardDensity.regular] (unchanged since #352).
+  final StatCardDensity density;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final compact = density == StatCardDensity.compact;
+    // (padding, tile, tile gap, line gap, title, figure, subtitle) in base dp.
+    final (pad, tile, tileGap, lineGap, titleSize, valueSize, subSize) = compact
+        ? (12.0, 44.0, 9.0, 2.0, 13.0, 22.0, 12.0)
+        : (16.0, 52.0, 16.0, 4.0, 14.0, 26.0, 13.0);
     final content = Padding(
-      padding: EdgeInsets.all(context.getRSize(16)),
+      padding: EdgeInsets.all(context.getRSize(pad)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          IconTile(icon: icon, tone: tone),
-          SizedBox(width: context.getRSize(16)),
+          IconTile(icon: icon, tone: tone, size: tile),
+          SizedBox(width: context.getRSize(tileGap)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,16 +90,22 @@ class StatCard extends StatelessWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: context.semiBoldStyle(14).copyWith(color: muted),
+                        style: context
+                            .semiBoldStyle(titleSize)
+                            .copyWith(color: muted),
                       ),
                     ),
                     if (pillLabel != null) ...[
-                      SizedBox(width: context.getRSize(8)),
-                      StatusPill(label: pillLabel!, tone: pillTone),
+                      SizedBox(width: context.getRSize(compact ? 4 : 8)),
+                      StatusPill(
+                        label: pillLabel!,
+                        tone: pillTone,
+                        dense: compact,
+                      ),
                     ],
                   ],
                 ),
-                SizedBox(height: context.getRSize(4)),
+                SizedBox(height: context.getRSize(lineGap)),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
@@ -83,16 +113,16 @@ class StatCard extends StatelessWidget {
                     value,
                     maxLines: 1,
                     style: context
-                        .boldStyle(26)
+                        .boldStyle(valueSize)
                         .copyWith(color: t.colorScheme.onSurface),
                   ),
                 ),
-                SizedBox(height: context.getRSize(4)),
+                SizedBox(height: context.getRSize(lineGap)),
                 Text(
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: context.regularStyle(13).copyWith(color: muted),
+                  style: context.regularStyle(subSize).copyWith(color: muted),
                 ),
               ],
             ),

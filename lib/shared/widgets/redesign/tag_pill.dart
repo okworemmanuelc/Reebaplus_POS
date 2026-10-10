@@ -39,11 +39,17 @@ class TagPill extends StatelessWidget {
     required this.label,
     this.tone = TagPillTone.info,
     this.icon,
+    this.dense = false,
   });
 
   final String label;
   final TagPillTone tone;
   final IconData? icon;
+
+  /// The landscape-mockup pill (#374, `StatCardDensity.compact`): 5×2
+  /// padding, 9 icon, 2 gap, 11 label (mockup ≈ 5.5 / 9 / 3 / 11). Off by
+  /// default (10×4, 14, 4, 12).
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -59,22 +65,27 @@ class TagPill extends StatelessWidget {
     };
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(10),
-        vertical: context.getRSize(4),
+        horizontal: context.getRSize(dense ? 5 : 10),
+        vertical: context.getRSize(dense ? 2 : 4),
       ),
       decoration: ShapeDecoration(color: fill, shape: const StadiumBorder()),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            AppIcon(icon, size: context.getRSize(14), color: ink, filled: true),
-            SizedBox(width: context.getRSize(4)),
+            AppIcon(
+              icon,
+              size: context.getRSize(dense ? 9 : 14),
+              color: ink,
+              filled: true,
+            ),
+            SizedBox(width: context.getRSize(dense ? 2 : 4)),
           ],
           Text(
             label,
             maxLines: 1,
             softWrap: false,
-            style: context.boldStyle(12).copyWith(color: ink),
+            style: context.boldStyle(dense ? 11 : 12).copyWith(color: ink),
           ),
         ],
       ),
@@ -85,10 +96,18 @@ class TagPill extends StatelessWidget {
 /// A status pill for a stat card: a [TagPill] with the arrow / info icon the
 /// mockups pair with each tone ("↑ Positive", "↓ None", "ⓘ Clear").
 class StatusPill extends StatelessWidget {
-  const StatusPill({super.key, required this.label, required this.tone});
+  const StatusPill({
+    super.key,
+    required this.label,
+    required this.tone,
+    this.dense = false,
+  });
 
   final String label;
   final TagPillTone tone;
+
+  /// See [TagPill.dense].
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +116,6 @@ class StatusPill extends StatelessWidget {
       TagPillTone.danger => AppIcons.arrowDown,
       _ => AppIcons.alertCircle,
     };
-    return TagPill(label: label, tone: tone, icon: icon);
+    return TagPill(label: label, tone: tone, icon: icon, dense: dense);
   }
 }

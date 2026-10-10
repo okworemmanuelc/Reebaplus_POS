@@ -6,6 +6,7 @@
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -414,6 +415,75 @@ void main() {
         }
         await disposeScreen(tester);
       });
+    });
+  });
+
+  group('titles fit (compact density)', () {
+    // #374 review: at 844x390 the three-column titles were ellipsized
+    // ("Pending Ord…"). Every stat-card title must paint in full, with the
+    // widest pills each card can show.
+    final sizes = <String, (Size, EdgeInsets)>{
+      '844x390': (_sideways, EdgeInsets.zero),
+      '844x390 + insets': (_sideways, _sidewaysInsets),
+      '915x412 + insets': (const Size(915, 412), _sidewaysInsets),
+      '800x1280': (const Size(800, 1280), _uprightInsets),
+      '1280x800': (const Size(1280, 800), EdgeInsets.zero),
+      '390x844': (_upright, _uprightInsets),
+    };
+    for (final expense in const [0, 500000]) {
+      sizes.forEach((name, spec) {
+        final (size, padding) = spec;
+        testWidgets('$name, expense $expense: no title is truncated', (
+          tester,
+        ) async {
+          await seedSales(expenseKobo: expense);
+          await pumpHome(tester, size: size, padding: padding);
+          final titles = {
+            HomeKeys.sales: 'Total Sales',
+            HomeKeys.profit: 'Net Profit',
+            HomeKeys.pending: 'Pending Orders',
+            HomeKeys.expenses: 'Total Expenses',
+            HomeKeys.stockValue: 'Stock Value',
+          };
+          // The widest pills: "Attention" (a pending order), "Recorded" or
+          // "Negative".
+          expect(find.text('Attention'), findsOneWidget);
+          titles.forEach((card, title) {
+            final f = find.descendant(
+              of: find.byKey(card),
+              matching: find.text(title),
+            );
+            expect(f, findsOneWidget, reason: title);
+            final p = tester.renderObject<RenderParagraph>(f);
+            expect(p.didExceedMaxLines, isFalse, reason: '$title at $name');
+          });
+          expectNoOverflow(tester);
+          await disposeScreen(tester);
+        });
+      });
+    }
+
+    testWidgets('compact only where the cards are narrow', (tester) async {
+      StatCardDensity densityAt(WidgetTester t) => _widgetOf<StatCard>(
+        find.descendant(
+          of: find.byKey(HomeKeys.sales),
+          matching: find.byType(StatCard),
+          matchRoot: true,
+        ),
+      ).density;
+      await pumpHome(tester);
+      expect(densityAt(tester), StatCardDensity.regular);
+      await disposeScreen(tester);
+      await pumpHome(tester, size: _sideways, padding: _sidewaysInsets);
+      expect(densityAt(tester), StatCardDensity.compact);
+      await disposeScreen(tester);
+      await pumpHome(
+        tester,
+        size: const Size(1280, 800),
+        padding: EdgeInsets.zero,
+      );
+      expect(densityAt(tester), StatCardDensity.regular);
+      await disposeScreen(tester);
     });
   });
 
