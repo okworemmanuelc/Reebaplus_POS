@@ -27,6 +27,8 @@ import 'package:reebaplus_pos/features/dashboard/widgets/home_parts.dart';
 import 'package:reebaplus_pos/features/expenses/screens/add_expense_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
+import 'package:reebaplus_pos/features/stores/screens/request_stock_screen.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
@@ -364,7 +366,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // keeps them in the period header above the cards.
     final pillsInBar = context.isRailLayout;
     final nameMap = {for (final u in _staffList) u.id: u};
-    final quickActions = resolveQuickActions((g) => g.allows(ref));
+    final quickActions = resolveQuickActions(
+      (g) => g.allows(ref),
+      storeCount: withoutVans(
+        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[],
+      ).length,
+    );
     final firstLoad =
         _ordersLoading ||
         _expensesLoading ||
@@ -565,6 +572,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         tint: f.dangerTint,
         label: 'Add Expense',
         onTap: () => AddExpenseScreen.show(context),
+      ),
+      // A locked store is where the stock is needed ("Deliver to" fixed);
+      // under All Stores neither end is fixed and both pickers show.
+      QuickAction.stockTransfer => (
+        key: HomeKeys.quickStockTransfer,
+        icon: AppIcons.transfer,
+        color: f.info,
+        tint: f.infoTint,
+        label: 'Stock Transfer',
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => RequestStockScreen(
+              fixedDestStoreId: ref
+                  .read(navigationProvider)
+                  .lockedStoreId
+                  .value,
+            ),
+          ),
+        ),
       ),
       QuickAction.receiveStock => (
         key: HomeKeys.quickReceiveStock,
