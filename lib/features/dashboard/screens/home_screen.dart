@@ -22,7 +22,12 @@ import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/get_started_card.dart';
+import 'package:reebaplus_pos/features/dashboard/quick_actions.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/home_parts.dart';
+import 'package:reebaplus_pos/features/expenses/screens/add_expense_screen.dart';
+import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
+import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/reports_attention.dart';
@@ -359,6 +364,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // keeps them in the period header above the cards.
     final pillsInBar = context.isRailLayout;
     final nameMap = {for (final u in _staffList) u.id: u};
+    final quickActions = resolveQuickActions((g) => g.allows(ref));
+    final firstLoad =
+        _ordersLoading ||
+        _expensesLoading ||
+        _customersLoading ||
+        _inventoryLoading;
 
     return Container(
       decoration: AppDecorations.pageBackground(context),
@@ -403,8 +414,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         showReports: showReports,
                         withPills: !pillsInBar,
                       ),
-                      // The quick-actions row (#362) slots in directly here,
-                      // between the period header and the cards.
+                      // Quick actions (#362): between the period header and the
+                      // cards. Held back during the first load, so nobody taps
+                      // a tile before Home knows what they may do (#270 US 55),
+                      // and omitted (heading too) when no tile is visible.
+                      if (!firstLoad && quickActions.tiles.isNotEmpty) ...[
+                        SizedBox(height: context.getRSize(16)),
+                        HomeQuickActions(
+                          tiles: [
+                            for (final a in quickActions.tiles)
+                              _quickActionTile(a),
+                          ],
+                        ),
+                      ],
                       SizedBox(height: context.getRSize(16)),
                       HomeCardGrid(
                         cardsFor: (cell) => _buildCards(
@@ -525,6 +547,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
       },
     );
+  }
+
+  /// A quick action's tile: its fixed colour pair, filled icon, label and
+  /// destination. Destinations push on the Home tab's navigator with the same
+  /// transitions as their existing entry points (Expenses FAB, Inventory FAB,
+  /// Inventory's Daily Stock Count button), so Back returns to Home.
+  HomeQuickActionTile _quickActionTile(QuickAction action) {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    return switch (action) {
+      // Same icon and red as the Total Expenses card: money going out.
+      QuickAction.addExpense => (
+        key: HomeKeys.quickAddExpense,
+        icon: AppIcons.bill,
+        color: f.danger,
+        tint: f.dangerTint,
+        label: 'Add Expense',
+        onTap: () => AddExpenseScreen.show(context),
+      ),
+      QuickAction.receiveStock => (
+        key: HomeKeys.quickReceiveStock,
+        icon: AppIcons.receiving,
+        color: f.warning,
+        tint: f.warningTint,
+        label: 'Receive Stock',
+        onTap: () => Navigator.of(
+          context,
+        ).push(slideDownRoute(const ReceiveStockScreen())),
+      ),
+      // The locked store; under All Stores (null) the count's own store
+      // picker applies.
+      QuickAction.takeStock => (
+        key: HomeKeys.quickTakeStock,
+        icon: AppIcons.auditCheck,
+        color: f.purple,
+        tint: f.purpleTint,
+        label: 'Take Stock',
+        onTap: () => Navigator.of(context).push(
+          slideDownRoute(
+            StockCountScreen(
+              storeId: ref.read(navigationProvider).lockedStoreId.value,
+            ),
+          ),
+        ),
+      ),
+    };
   }
 
   void _openSalesDetail(
