@@ -60,17 +60,17 @@ void main() {
       'CEO': [
         QuickAction.addExpense,
         QuickAction.stockTransfer,
-        QuickAction.receiveStock,
         QuickAction.takeStock,
+        QuickAction.receiveStock,
       ],
       'Manager': [
         QuickAction.addExpense,
         QuickAction.stockTransfer,
-        QuickAction.receiveStock,
         QuickAction.takeStock,
+        QuickAction.receiveStock,
       ],
       'Cashier': [],
-      'Stock keeper': [QuickAction.receiveStock, QuickAction.takeStock],
+      'Stock keeper': [QuickAction.takeStock, QuickAction.receiveStock],
     };
     expected.forEach((role, tiles) {
       test(role, () {
@@ -102,8 +102,8 @@ void main() {
     test('one store: the other three tiles are unaffected', () {
       expect(_resolve(rank, keys, storeCount: 1).tiles, [
         QuickAction.addExpense,
-        QuickAction.receiveStock,
         QuickAction.takeStock,
+        QuickAction.receiveStock,
       ]);
     });
     test('revoking stores.request_transfer hides it with two stores', () {
@@ -117,13 +117,13 @@ void main() {
     });
   });
 
-  test('the order is fixed: Add Expense, Stock Transfer, Receive Stock, '
-      'Take Stock', () {
+  test('the order is fixed: Add Expense, Stock Transfer, Take Stock, '
+      'Receive Stock (Receive Stock always last)', () {
     expect(QuickAction.values, [
       QuickAction.addExpense,
       QuickAction.stockTransfer,
-      QuickAction.receiveStock,
       QuickAction.takeStock,
+      QuickAction.receiveStock,
     ]);
     final all = resolveQuickActions((_) => true, storeCount: 2);
     expect(all.tiles, QuickAction.values);
@@ -140,8 +140,8 @@ void main() {
     test('expenses.create → no Add Expense', () {
       expect(_resolve(rank, {...keys}..remove('expenses.create')).tiles, [
         QuickAction.stockTransfer,
-        QuickAction.receiveStock,
         QuickAction.takeStock,
+        QuickAction.receiveStock,
       ]);
     });
     test('stock.adjust → no Take Stock', () {

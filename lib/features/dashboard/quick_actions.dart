@@ -1,9 +1,11 @@
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 
 /// A Home quick-action tile (PRD #270, redesign #362). Declared in the row's
-/// fixed order: Add Expense, Stock Transfer, Receive Stock, Record Payment,
-/// Take Stock. Record Payment (#362 PR 4) joins in its place when it ships.
-enum QuickAction { addExpense, stockTransfer, receiveStock, takeStock }
+/// fixed order — the declaration order IS the display order: Add Expense,
+/// Stock Transfer, Take Stock, Receive Stock. **Receive Stock is always
+/// last** (owner, 2026-10-10): Record Payment (#362 PR 4) is declared
+/// before it, after Take Stock.
+enum QuickAction { addExpense, stockTransfer, takeStock, receiveStock }
 
 /// Who a "Record Payment" can be for (#362 PR 4): a customer paying us, or us
 /// paying a supplier.
@@ -28,8 +30,12 @@ typedef QuickActions = ({
 /// |----------------|-----------------------------------------------------|
 /// | Add Expense    | [Gates.addExpense]                                  |
 /// | Stock Transfer | [Gates.requestStoreTransfer] and [storeCount] ≥ 2   |
-/// | Receive Stock  | [Gates.receiveStock]                                |
 /// | Take Stock     | [Gates.dailyStockCount]                             |
+/// | Receive Stock  | [Gates.receiveStock]                                |
+///
+/// Tiles come out in [QuickAction]'s declaration order. **Receive Stock
+/// stays last**: when #362 PR 4 adds Record Payment, declare it between
+/// Take Stock and Receive Stock, never after Receive Stock.
 ///
 /// Each destination keeps its own screen guard and write-boundary check; a
 /// tile is a shortcut, never the only line of defence. The Record Payment

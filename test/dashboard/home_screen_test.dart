@@ -104,10 +104,11 @@ const _stockKeeperQ = (
   keys: {'stock.add', 'stock.view', 'stock.adjust'},
 );
 
+// Without Stock Transfer (one store): Receive Stock is always last.
 const _tileKeys = [
   HomeKeys.quickAddExpense,
-  HomeKeys.quickReceiveStock,
   HomeKeys.quickTakeStock,
+  HomeKeys.quickReceiveStock,
 ];
 
 void main() {
@@ -773,7 +774,7 @@ void main() {
       (
         'Stock keeper',
         _stockKeeperQ,
-        [HomeKeys.quickReceiveStock, HomeKeys.quickTakeStock],
+        [HomeKeys.quickTakeStock, HomeKeys.quickReceiveStock],
       ),
       ('Cashier', _cashier, <Key>[]),
     ]) {
@@ -828,8 +829,8 @@ void main() {
         size: const Size(1280, 800),
         padding: EdgeInsets.zero,
       );
-      final a = tester.getRect(find.byKey(HomeKeys.quickReceiveStock));
-      final b = tester.getRect(find.byKey(HomeKeys.quickTakeStock));
+      final a = tester.getRect(find.byKey(HomeKeys.quickTakeStock));
+      final b = tester.getRect(find.byKey(HomeKeys.quickReceiveStock));
       expect(a.width, moreOrLessEquals(b.width));
       expect(a.height, moreOrLessEquals(b.height));
       expect(a.width, lessThan(200));
@@ -864,8 +865,9 @@ void main() {
       expect(scroller, findsOneWidget);
       await tester.drag(scroller, const Offset(-200, 0));
       await tester.pumpAndSettle();
+      // Receive Stock is the last tile.
       expect(
-        tester.getRect(find.byKey(HomeKeys.quickTakeStock)).right,
+        tester.getRect(find.byKey(HomeKeys.quickReceiveStock)).right,
         lessThanOrEqualTo(300),
       );
       await disposeScreen(tester);
@@ -933,9 +935,7 @@ void main() {
         );
         expect(
           tester.getTopLeft(find.byKey(HomeKeys.quickStockTransfer)).dx,
-          lessThan(
-            tester.getTopLeft(find.byKey(HomeKeys.quickReceiveStock)).dx,
-          ),
+          lessThan(tester.getTopLeft(find.byKey(HomeKeys.quickTakeStock)).dx),
         );
         await disposeScreen(tester);
       });

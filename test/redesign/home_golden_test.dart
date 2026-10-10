@@ -172,7 +172,7 @@ void main() {
         'customers.add',
         'sales.make',
         // The quick-action tiles (#362): Add Expense, Stock Transfer,
-        // Receive Stock, Take Stock.
+        // Take Stock, Receive Stock (always last).
         'stores.request_transfer',
         'expenses.create',
         'stock.add',
