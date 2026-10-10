@@ -68,6 +68,12 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
   /// brightnesses; #352 PR 2).
   final Color onSolid;
 
+  /// Purple icons and text: Home's Take Stock quick action (#362).
+  final Color purple;
+
+  /// Pale purple fill behind [purple].
+  final Color purpleTint;
+
   const AppFixedColors({
     required this.danger,
     required this.dangerTint,
@@ -84,6 +90,8 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
     required this.neutralTile,
     required this.maltTile,
     required this.onSolid,
+    required this.purple,
+    required this.purpleTint,
   });
 
   /// The fixed set for every light theme.
@@ -103,6 +111,8 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
     neutralTile: fixedNeutralInkLight.withValues(alpha: 0.08),
     maltTile: fixedMalt.withValues(alpha: 0.20),
     onSolid: fixedOnSolid,
+    purple: fixedPurpleLight,
+    purpleTint: fixedPurpleTintLight,
   );
 
   /// The fixed set for every dark theme.
@@ -122,6 +132,8 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
     neutralTile: Colors.white.withValues(alpha: 0.08),
     maltTile: fixedMalt.withValues(alpha: 0.16),
     onSolid: fixedOnSolid,
+    purple: fixedPurpleDark,
+    purpleTint: fixedPurpleTintDark,
   );
 
   @override
@@ -141,6 +153,8 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
     Color? neutralTile,
     Color? maltTile,
     Color? onSolid,
+    Color? purple,
+    Color? purpleTint,
   }) {
     return AppFixedColors(
       danger: danger ?? this.danger,
@@ -158,6 +172,8 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
       neutralTile: neutralTile ?? this.neutralTile,
       maltTile: maltTile ?? this.maltTile,
       onSolid: onSolid ?? this.onSolid,
+      purple: purple ?? this.purple,
+      purpleTint: purpleTint ?? this.purpleTint,
     );
   }
 
@@ -180,6 +196,8 @@ class AppFixedColors extends ThemeExtension<AppFixedColors> {
       neutralTile: Color.lerp(neutralTile, other.neutralTile, t)!,
       maltTile: Color.lerp(maltTile, other.maltTile, t)!,
       onSolid: Color.lerp(onSolid, other.onSolid, t)!,
+      purple: Color.lerp(purple, other.purple, t)!,
+      purpleTint: Color.lerp(purpleTint, other.purpleTint, t)!,
     );
   }
 }

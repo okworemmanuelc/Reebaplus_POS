@@ -33,6 +33,10 @@ abstract final class HomeKeys {
   static const skus = Key('home-card-skus');
   static const skuBreakdown = Key('home-sku-breakdown');
   static const staffSales = Key('home-staff-sales');
+  static const quickActions = Key('home-quick-actions');
+  static const quickAddExpense = Key('home-quick-add-expense');
+  static const quickReceiveStock = Key('home-quick-receive-stock');
+  static const quickTakeStock = Key('home-quick-take-stock');
 }
 
 /// How many card columns Home uses (PRD #346, revised 2026-10-03), from the
@@ -715,3 +719,128 @@ double homeTopBarHeight(BuildContext context) => math.max(
   math.max(context.getRSize(44), kMinInteractiveDimension) +
       context.getRSize(16),
 );
+
+/// One Home quick-action tile's data: its fixed colour pair (`AppFixedColors`:
+/// [color] for the icon, [tint] for the pale tile), filled icon, label and
+/// what a tap does.
+typedef HomeQuickActionTile = ({
+  Key key,
+  IconData icon,
+  Color color,
+  Color tint,
+  String label,
+  VoidCallback onTap,
+});
+
+/// The "Quick actions" section (PRD #270, redesign #362): a [SectionHeader]
+/// over a row of fixed-size tiles. The tiles line up from the left and share
+/// a height; the row scrolls sideways only when they do not fit. The caller
+/// omits the whole section when there are no tiles.
+class HomeQuickActions extends StatelessWidget {
+  const HomeQuickActions({super.key, required this.tiles});
+
+  final List<HomeQuickActionTile> tiles;
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = context.getRSize(12);
+    final tileWidth = context.getRSize(kHomeQuickActionTileWidth);
+    final row = IntrinsicHeight(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, t) in tiles.indexed) ...[
+            if (i > 0) SizedBox(width: gap),
+            SizedBox(
+              width: tileWidth,
+              child: _QuickActionTile(tile: t),
+            ),
+          ],
+        ],
+      ),
+    );
+    final rowWidth = tiles.length * tileWidth + (tiles.length - 1) * gap;
+    return Column(
+      key: HomeKeys.quickActions,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeader(title: 'Quick actions'),
+        SizedBox(height: context.getRSize(10)),
+        LayoutBuilder(
+          builder: (context, constraints) => rowWidth <= constraints.maxWidth
+              ? Align(alignment: Alignment.centerLeft, child: row)
+              // Too many to fit: scroll sideways. Nothing clips, so the card
+              // shadows at the ends stay visible.
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  child: row,
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A quick-action tile's width in base dp (scaled with `getRSize`): three
+/// tiles fit an upright 360dp phone without scrolling, and "Receive Stock"
+/// (SemiBold 12) stays on one line at text scale 1.0. At larger text a label
+/// wraps to a second line instead of widening the tile.
+const double kHomeQuickActionTileWidth = 104;
+
+class _QuickActionTile extends StatelessWidget {
+  const _QuickActionTile({required this.tile});
+
+  final HomeQuickActionTile tile;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return DecoratedBox(
+      key: tile.key,
+      decoration: AppDecorations.card(context),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
+          onTap: tile.onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+              minWidth: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: context.getRSize(6),
+                vertical: context.getRSize(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconTile(
+                    icon: tile.icon,
+                    tint: tile.tint,
+                    iconColor: tile.color,
+                    size: 44,
+                  ),
+                  SizedBox(height: context.getRSize(8)),
+                  Text(
+                    tile.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: context
+                        .semiBoldStyle(12)
+                        .copyWith(color: t.colorScheme.onSurface),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

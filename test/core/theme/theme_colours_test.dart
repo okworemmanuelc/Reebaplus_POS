@@ -53,6 +53,8 @@ List<Color> _fixedValues(AppFixedColors f) => [
   f.neutralTile,
   f.maltTile,
   f.onSolid,
+  f.purple,
+  f.purpleTint,
 ];
 
 void main() {
@@ -104,6 +106,8 @@ void main() {
       _expectColour(f.neutralTile, _hex(0x0B1220, 0.08), 'neutralTile');
       _expectColour(f.maltTile, _hex(0x60A5FA, 0.20), 'maltTile');
       _expectColour(f.onSolid, _hex(0xFFFFFF, 1.0), 'onSolid');
+      _expectColour(f.purple, _hex(0x7C3AED), 'purple');
+      _expectColour(f.purpleTint, _hex(0xF3EEFF), 'purpleTint');
     });
 
     test('dark values equal the colour sheet', () {
@@ -123,7 +127,19 @@ void main() {
       _expectColour(f.neutralTile, _hex(0xFFFFFF, 0.08), 'neutralTile');
       _expectColour(f.maltTile, _hex(0x60A5FA, 0.16), 'maltTile');
       _expectColour(f.onSolid, _hex(0xFFFFFF, 1.0), 'onSolid');
+      _expectColour(f.purple, _hex(0xA78BFA), 'purple');
+      _expectColour(f.purpleTint, _hex(0x241B3D), 'purpleTint');
     });
+  });
+
+  test('purple survives copyWith and lerp (#362)', () {
+    final l = AppFixedColors.light;
+    final d = AppFixedColors.dark;
+    expect(l.copyWith().purple, l.purple);
+    expect(l.copyWith().purpleTint, l.purpleTint);
+    expect(l.copyWith(purple: d.purple).purple, d.purple);
+    expect(l.lerp(d, 0).purple, l.purple);
+    expect(l.lerp(d, 1).purpleTint, d.purpleTint);
   });
 
   group('Blue Classic matches the colour sheet', () {

@@ -17,6 +17,9 @@ import 'package:reebaplus_pos/features/dashboard/get_started_checklist.dart';
 import 'package:reebaplus_pos/features/dashboard/reports_attention.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/home_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/home_parts.dart';
+import 'package:reebaplus_pos/features/expenses/screens/add_expense_screen.dart';
+import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
+import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
@@ -67,6 +70,39 @@ const _cardKeys = [
   HomeKeys.stockValue,
   HomeKeys.credits,
   HomeKeys.skus,
+];
+
+// Roles with their seeded keys for the quick-action tiles (#362):
+// expenses.create, stock.add / products.add, stock.adjust.
+const _quickKeys = {
+  'expenses.create',
+  'stock.add',
+  'products.add',
+  'stock.adjust',
+};
+const _ceoQ = (
+  slug: 'ceo',
+  name: 'CEO',
+  rank: GateTier.ceo,
+  keys: {..._allKeys, ..._quickKeys},
+);
+const _managerQ = (
+  slug: 'manager',
+  name: 'Manager',
+  rank: GateTier.manager,
+  keys: {..._allKeys, ..._quickKeys},
+);
+const _stockKeeperQ = (
+  slug: 'stock_keeper',
+  name: 'Stock keeper',
+  rank: GateTier.stockKeeper,
+  keys: {'stock.add', 'stock.view', 'stock.adjust'},
+);
+
+const _tileKeys = [
+  HomeKeys.quickAddExpense,
+  HomeKeys.quickReceiveStock,
+  HomeKeys.quickTakeStock,
 ];
 
 void main() {
@@ -702,6 +738,197 @@ void main() {
       expect(find.text('Unspecified'), findsOneWidget);
       await disposeScreen(tester);
     });
+  });
+
+  group('quick actions (#362)', () {
+    List<Key> visibleTiles() => [
+      for (final k in _tileKeys)
+        if (find.byKey(k).evaluate().isNotEmpty) k,
+    ];
+
+    for (final (name, role, tiles) in [
+      ('CEO', _ceoQ, _tileKeys),
+      ('Manager', _managerQ, _tileKeys),
+      (
+        'Stock keeper',
+        _stockKeeperQ,
+        [HomeKeys.quickReceiveStock, HomeKeys.quickTakeStock],
+      ),
+      ('Cashier', _cashier, <Key>[]),
+    ]) {
+      testWidgets('$name sees ${tiles.length} tile(s) in order', (
+        tester,
+      ) async {
+        await pumpHome(tester, role: role);
+        expect(visibleTiles(), tiles);
+        if (tiles.isEmpty) {
+          // No empty heading.
+          expect(find.byKey(HomeKeys.quickActions), findsNothing);
+          expect(find.text('Quick actions'), findsNothing);
+        } else {
+          expect(find.text('Quick actions'), findsOneWidget);
+          final xs = [for (final k in tiles) tester.getTopLeft(find.byKey(k))];
+          for (var i = 1; i < xs.length; i++) {
+            expect(xs[i].dx, greaterThan(xs[i - 1].dx));
+            expect(xs[i].dy, moreOrLessEquals(xs[0].dy));
+          }
+        }
+        await disposeScreen(tester);
+      });
+    }
+
+    testWidgets('placement: under the period header, above the cards', (
+      tester,
+    ) async {
+      for (final (size, padding) in const [
+        (_upright, _uprightInsets),
+        (_sideways, _sidewaysInsets),
+      ]) {
+        await pumpHome(tester, role: _ceoQ, size: size, padding: padding);
+        final row = tester.getRect(find.byKey(HomeKeys.quickActions));
+        expect(
+          row.top,
+          greaterThan(tester.getRect(find.byKey(HomeKeys.periodHeader)).bottom),
+        );
+        expect(
+          row.bottom,
+          lessThan(tester.getRect(find.byKey(HomeKeys.sales)).top),
+        );
+        await disposeScreen(tester);
+      }
+    });
+
+    testWidgets('a short row keeps fixed-size tiles, left-aligned', (
+      tester,
+    ) async {
+      await pumpHome(
+        tester,
+        role: _stockKeeperQ,
+        size: const Size(1280, 800),
+        padding: EdgeInsets.zero,
+      );
+      final a = tester.getRect(find.byKey(HomeKeys.quickReceiveStock));
+      final b = tester.getRect(find.byKey(HomeKeys.quickTakeStock));
+      expect(a.width, moreOrLessEquals(b.width));
+      expect(a.height, moreOrLessEquals(b.height));
+      expect(a.width, lessThan(200));
+      expect(
+        a.left,
+        moreOrLessEquals(tester.getRect(find.text('Quick actions')).left),
+      );
+      // It fits, so it does not scroll.
+      expect(
+        find.descendant(
+          of: find.byKey(HomeKeys.quickActions),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsNothing,
+      );
+      await disposeScreen(tester);
+    });
+
+    testWidgets('scrolls sideways only when the tiles do not fit', (
+      tester,
+    ) async {
+      await pumpHome(
+        tester,
+        role: _ceoQ,
+        size: const Size(300, 640),
+        padding: _uprightInsets,
+      );
+      final scroller = find.descendant(
+        of: find.byKey(HomeKeys.quickActions),
+        matching: find.byType(SingleChildScrollView),
+      );
+      expect(scroller, findsOneWidget);
+      await tester.drag(scroller, const Offset(-200, 0));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byKey(HomeKeys.quickTakeStock)).right,
+        lessThanOrEqualTo(300),
+      );
+      await disposeScreen(tester);
+    });
+
+    testWidgets('not in the first-load skeleton', (tester) async {
+      await pumpHome(tester, role: _ceoQ, doDeliver: false);
+      expect(find.byKey(HomeKeys.quickActions), findsNothing);
+      await deliver(tester);
+      expect(find.byKey(HomeKeys.quickActions), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('not in the zero-stores state', (tester) async {
+      await pumpHome(tester, role: _ceoQ, zeroStores: true);
+      expect(find.byType(FirstRunEmptyState), findsOneWidget);
+      expect(find.byKey(HomeKeys.quickActions), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    for (final (key, type) in [
+      (HomeKeys.quickAddExpense, AddExpenseScreen),
+      (HomeKeys.quickReceiveStock, ReceiveStockScreen),
+      (HomeKeys.quickTakeStock, StockCountScreen),
+    ]) {
+      testWidgets('$key opens $type and Back returns Home', (tester) async {
+        await pumpHome(tester, role: _ceoQ);
+        await tester.tap(find.byKey(key));
+        await deliver(tester);
+        expect(find.byType(type), findsOneWidget);
+        if (type == StockCountScreen) {
+          // The locked store is passed through.
+          expect(
+            _widgetOf<StockCountScreen>(find.byType(StockCountScreen)).storeId,
+            env.storeId,
+          );
+        }
+        final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
+        nav.pop();
+        await deliver(tester);
+        expect(find.byType(type), findsNothing);
+        expect(find.byKey(HomeKeys.quickActions), findsOneWidget);
+        await disposeScreen(tester);
+      });
+    }
+
+    for (final (name, size, padding, scale) in const [
+      ('360x740 @1.3', Size(360, 740), _uprightInsets, 1.3),
+      ('844x390 + insets @1.3', _sideways, _sidewaysInsets, 1.3),
+      ('844x390 + insets', _sideways, _sidewaysInsets, 1.0),
+    ]) {
+      testWidgets('$name: no overflow, labels fit, targets ≥ 48dp, in the '
+          'safe area', (tester) async {
+        await pumpHome(
+          tester,
+          role: _ceoQ,
+          size: size,
+          padding: padding,
+          textScaler: TextScaler.linear(scale),
+        );
+        expectNoOverflow(tester);
+        for (final k in _tileKeys) {
+          final r = tester.getRect(find.byKey(k));
+          expect(r.width, greaterThanOrEqualTo(kMinInteractiveDimension));
+          expect(r.height, greaterThanOrEqualTo(kMinInteractiveDimension));
+          final label = find.descendant(
+            of: find.byKey(k),
+            matching: find.byType(Text),
+          );
+          expect(
+            tester.renderObject<RenderParagraph>(label).didExceedMaxLines,
+            isFalse,
+            reason: '$k label at $name',
+          );
+          expect(r.left, greaterThanOrEqualTo(padding.left));
+          expect(r.top, greaterThanOrEqualTo(padding.top));
+          if (size.width >= 600) {
+            // Sideways all three fit beside the 48dp nav bar.
+            expect(r.right, lessThanOrEqualTo(size.width - padding.right));
+          }
+        }
+        await disposeScreen(tester);
+      });
+    }
   });
 
   group('states', () {

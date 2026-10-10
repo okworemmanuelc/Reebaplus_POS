@@ -135,6 +135,8 @@ rows), Credit/Debt boxes and product-tile tints. Access:
 | `neutralIcon` | `#0B1220` | `#E2E8F0` | Stout and neutral icon |
 | `neutralTile` | `#0B1220` @ 0.08 | `#FFFFFF` @ 0.08 | Stout and neutral tile |
 | `maltTile` | `#60A5FA` @ 0.20 | `#60A5FA` @ 0.16 | Malt tile |
+| `purple` | `#7C3AED` | `#A78BFA` | Home's Take Stock quick action (#362; not on the designer's sheet, proposed in #362, owner may swap) |
+| `purpleTint` | `#F3EEFF` | `#241B3D` | Pale purple tile behind `purple` (opaque, unlike the alpha tints) |
 
 The sheet defines outlines for danger and warning only; there is no green or
 info outline token. Base hexes are the `fixed*` constants at the bottom of
@@ -548,6 +550,7 @@ Settings — full tab roots on the same per-tab `Navigator` machinery.
 - **Trend pills**: neutral flags ("Active"/"No sales", "Attention"/"Clear", "Live") → `TagPillTone.neutral` "!"; positive → `green` ↑; otherwise `danger` ↓ (`homeTrendTone`).
 - **Customer Credits**: single column = full card (wallet tile, title, chevron, Credit `infoTint` / Debt `dangerTint` boxes); grid cell = compact title + "Credit and debt", **values kept** (the card opens Customers, which lists per-customer balances, not these totals).
 - **Staff Sales**: `SectionHeader` + one flat card, full width under the grid.
+- **Quick actions** (#362, PRD #270): a "Quick actions" `SectionHeader` (the "Performance Overview" style) over fixed-size tiles (`kHomeQuickActionTileWidth` = 104 base): flat `AppDecorations.card`, a 44 `IconTile` with an explicit fixed pair (tint + filled icon), label DM Sans 600 at 12, up to 2 lines. Tiles share a height, line up from the left and are never stretched; the row scrolls sideways only when they do not fit. It sits between the period header and the cards at every size (upright: under the pills; rail layout: under the "Performance Overview" line), is held back during the first load and omitted, heading included, when no tile is visible. Tiles and their pairs: Add Expense `danger` + `bill`; Receive Stock `warning` + `receiving`; Take Stock `purple` + `auditCheck` (Stock Transfer `info` + `transfer` and Record Payment `green` + `payments` come in #362 PRs 2 and 4). Which tiles show is decided only by `resolveQuickActions` (`lib/features/dashboard/quick_actions.dart`), citing Gate Registry entries.
 
 ### App bar
 

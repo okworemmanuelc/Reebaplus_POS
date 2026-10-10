@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #362 PR 1: Redesign Wave 1 — Home quick actions row (2026-10-10)
+Branch `feat/redesign-w1-home-quick-actions-1` off `main` d1aff714 (after PR #375), worktree `../drinkPosApp-wt-362`. Part of #362 (absorbs PRD #270); PR 1 of 4. **No Drift/cloud/sync/permission change, no new packages.** RELEASE FREEZE ON.
+- **Purple fixed pair**: `AppFixedColors.purple` / `purpleTint` (light `#7C3AED` on `#F3EEFF`, dark `#A78BFA` on `#241B3D`), base constants in `colors.dart`, through `copyWith` / `lerp`, pinned in `theme_colours_test.dart`.
+- **Resolver** `lib/features/dashboard/quick_actions.dart`: `resolveQuickActions(allows)` → ordered tiles + Record Payment sides (empty until PR 4). Cites `Gates.addExpense`, `receiveStock`, `dailyStockCount`; Home passes `(g) => g.allows(ref)`. `QuickAction` holds only the three PR 1 tiles, in the fixed order.
+- **Row** (`HomeQuickActions` in `home_parts.dart`): see ui-context "Home". Destinations push on the Home tab navigator exactly as their existing entry points: `AddExpenseScreen.show`, `slideDownRoute(ReceiveStockScreen())`, `slideDownRoute(StockCountScreen(storeId: lockedStoreId))`. No shared-part edits (the tile uses `IconTile`'s existing `tint` / `iconColor`).
+- Tests: `test/dashboard/quick_actions_test.dart` (11: role table, order, revocations, cashier tier rule, not ready); `home_screen_test.dart` +17 (per role + order, placement upright/sideways, short row fixed-size + left-aligned, scrolls only at 300dp, skeleton, zero stores, each tile opens its screen + Back, Take Stock gets the locked store, 360@1.3 and 844×390 + insets: no overflow, labels fit, ≥ 48dp, safe area). Goldens: all 10 `home_*` (CEO with the 3 tiles) and all 10 `frame_home_*` (the frame's manager has `products.add` → Receive Stock) regenerated.
+- **Next**: PR 2 (Stock Transfer), PR 3 (shared customer payment form), PR 4 (Record Payment). `project-overview.md` waits for the last PR.
+
 ### Issue #374: Redesign Wave 1 — Home restyle to the mockups (2026-10-09)
 Branch `feat/redesign-w1-home` off `main` (after PR #373), worktree `../drinkPosApp-wt-374`. Parent PRD #346; part 1 of 2 (quick actions = #362, after this merges). **No Drift/cloud/sync change, no money/calculation change, no new packages.** RELEASE FREEZE ON.
 - `home_screen.dart` keeps every stream, filter, calculation, gate, tap and dialog; only the drawing changed. New `lib/features/dashboard/widgets/home_parts.dart` (plain data): `HomeTopBar`, `HomeLiveBell`, `HomePeriodPill`, `HomeReportsPill`, `HomeCardGrid` + `homeGridColumns`, `HomeCreditsCard`, `HomeSkuBreakdown`, `HomeStaffSalesSection`, `homeTopBarHeight`, `HomeKeys`. `homeTrendTone` lives in the screen file.
