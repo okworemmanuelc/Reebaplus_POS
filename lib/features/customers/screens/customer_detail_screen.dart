@@ -270,7 +270,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   // ── Sheets ─────────────────────────────────────────────────────────────────
 
   void _showAddFundsSheet() {
-    final customer = widget.customer;
+    // The live row when it has loaded, so an edit made on this page shows.
+    final data = _customerData;
+    final customer = data != null ? Customer.fromDb(data) : widget.customer;
     if (customer == null || _customerId == null) return;
     // §18 Add Credit — the shared customer payment sheet (#362 PR 3),
     // pre-picked, with its balance line and "Pay full" shortcut.
