@@ -171,7 +171,6 @@ class AppDrawer extends ConsumerWidget {
         if (role != null) (label: role.name, tone: TagPillTone.info),
       ],
       onOpenProfile: () => _pushRoute(context, ref, const ProfileScreen()),
-      onClose: () => Navigator.pop(context),
       // Lock — a quick lock back to the PIN screen, not a full logout.
       onLock: user == null
           ? null

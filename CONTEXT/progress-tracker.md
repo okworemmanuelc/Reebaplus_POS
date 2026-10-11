@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #388: Drawer — remove the close ✕ (2026-10-11)
+- Owner request (PRD #346): the drawer header's ✕ is gone at every size (phone, tablet, wide). The drawer is a pop-over `Drawer` everywhere, so tapping outside, the back button / gesture and a swipe still close it. Lock button kept; the business name's `Expanded` now gets the ✕'s width ("Stallion Global" no longer truncates at 390×844).
+- `DrawerHeaderBlock.onClose` and `AppDrawerKeys.close` removed (no other users). `app_drawer_test.dart`: the ✕ test is replaced by no-✕ + tap-outside tests at 390×844, 844×390 and 1280×800, plus back-button and swipe-shut tests. All 10 `drawer_*` goldens regenerated.
+
 ### Issue #362 PR 4: Home quick actions — Record Payment tile (2026-10-11) — #362 COMPLETE
 Branch `feat/redesign-w1-home-quick-actions-4` off `main` 62612cba (after PR #382), worktree `../drinkPosApp-wt-362d`. PR 4 of 4: closes #362 and PRD #270. **No Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages; `record_supplier_activity.dart` and `customer_payment_sheet.dart` untouched.** RELEASE FREEZE ON.
 - **Resolver** (`quick_actions.dart`): `QuickAction.recordPayment` declared between `takeStock` and `receiveStock` (Receive Stock stays last). `resolveQuickActions` now takes `customerCount` + `supplierCount` (as `storeCount`, pure inputs) and fills `paymentSides`: customer = `Gates.addCustomerCredit` and ≥ 1 registered customer; supplier = `Gates.manageSuppliers` and ≥ 1 supplier. The tile shows with ≥ 1 side. `registeredCustomerCount` drops the walk-in. Home feeds `customerServiceProvider` (the picker's own list, deleted excluded) and `allSuppliersProvider` (the supplier dropdown's list), both live.
