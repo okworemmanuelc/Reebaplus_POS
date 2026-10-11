@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/screen_header.dart';
 
 import '../helpers/pos_home_harness.dart';
 import '../helpers/screen_harness.dart';
@@ -89,7 +89,7 @@ void main() {
   /// The top of the top bar, found through its title header. (Not the menu
   /// button: at 600dp+ wide the menu lives on the frame's rail, #352.)
   double topBarTop(WidgetTester tester) =>
-      tester.getTopLeft(find.byType(AppBarHeader)).dy;
+      tester.getTopLeft(find.byType(ScreenHeader)).dy;
 
   /// A range of fling speeds, because which one ends inside a layout pass
   /// depends on the frame the fling runs out on. 300px/s is the one that threw
@@ -161,7 +161,7 @@ void main() {
 
     await tester.drag(posSurface(), const Offset(0, -300));
     await tester.pumpAndSettle();
-    final header = find.byType(AppBarHeader);
+    final header = find.byType(ScreenHeader);
     if (header.evaluate().isNotEmpty) {
       expect(
         topBarTop(tester),

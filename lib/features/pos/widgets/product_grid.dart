@@ -170,7 +170,7 @@ class ProductGrid extends StatelessWidget {
       return SliverPadding(
         padding: EdgeInsets.fromLTRB(
           gutter,
-          context.getRSize(4),
+          context.getRSize(8),
           gutter,
           gutter,
         ),
@@ -195,7 +195,7 @@ class ProductGrid extends StatelessWidget {
     // The grid's real width: the screen minus whatever the app frame puts
     // beside it (the side rail, the fixed cart panel — #352).
     return SliverPadding(
-      padding: EdgeInsets.fromLTRB(gutter, context.getRSize(4), gutter, gutter),
+      padding: EdgeInsets.fromLTRB(gutter, context.getRSize(8), gutter, gutter),
       sliver: SliverLayoutBuilder(
         builder: (context, constraints) {
           final effectiveColumns = columnsFor(

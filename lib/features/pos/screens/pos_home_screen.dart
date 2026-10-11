@@ -410,9 +410,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         // Opaque: the grid scrolls underneath this band. The page fade's top
         // colour, so the band reads as part of the page (mockups).
         color: Theme.of(context).scaffoldBackgroundColor,
-        padding: EdgeInsets.only(bottom: context.getRSize(8)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // #111: the search field is always visible — no show/hide toggle,
             // no app-bar search icon. #384: the scan control sits beside it
@@ -420,7 +420,14 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             // only while a multi-store user still has to pick a store —
             // there's no catalogue loaded to scan into yet.
             Padding(
-              padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter / 2),
+              // The chips below keep their own 48dp tap height, so the
+              // visible gap above and below a chip is already built in.
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                0,
+                gutter,
+                context.getRSize(4),
+              ),
               child: Row(
                 children: [
                   Expanded(child: _buildSearchField()),

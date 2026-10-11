@@ -176,11 +176,11 @@ void main() {
         });
       });
 
-      testWidgets('POS scan button and Stock + clear the bar once, $mode', (
-        tester,
-      ) async {
+      // #384: POS's scan button left the FAB slot for the frozen search band
+      // (the POS mockups), so only Stock's FAB is left to check here; the
+      // scan button's place is pinned in test/pos/pos_redesign_test.dart.
+      testWidgets('Stock + clears the bar once, $mode', (tester) async {
         for (final (tab, finder) in [
-          (NavigationService.posTab, find.byKey(kPosScannerKey)),
           (
             2,
             find.byWidgetPredicate(
