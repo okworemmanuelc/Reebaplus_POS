@@ -40,6 +40,7 @@ class ProductTile extends StatelessWidget {
     this.categoryName,
     this.photoPath,
     this.inCartQty = 0,
+    this.inCartLabel,
     this.onTap,
     this.onLongPress,
   });
@@ -58,6 +59,10 @@ class ProductTile extends StatelessWidget {
 
   /// Lines of this product already in the cart; 0 hides the badge.
   final int inCartQty;
+
+  /// The badge text when it is not just [inCartQty] (#384: POS sells
+  /// fractional quantities, e.g. "1.5"). Null = [inCartQty].
+  final String? inCartLabel;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -229,7 +234,7 @@ class ProductTile extends StatelessWidget {
                   ],
                 ),
                 child: Text(
-                  '$inCartQty',
+                  inCartLabel ?? '$inCartQty',
                   style: context
                       .boldStyle(12)
                       .copyWith(color: t.colorScheme.onPrimary),

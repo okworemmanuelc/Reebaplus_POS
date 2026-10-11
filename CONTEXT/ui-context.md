@@ -350,13 +350,20 @@ above. Chevron: `AppIcons.chevronDown`.
 | Radius | `AppRadius.lg` (16px) |
 | Background | Secondary → Primary gradient + glow shadow |
 | `reserveBottomInset` | `true` by default (lifts above the nav bar). Set `false` only on the 5 visible-bar tab roots (Home, POS, Inventory, Orders, Cart). |
-| Under POS | The frame's View Cart bar sits below the POS tab (not over it), so POS's FAB rises above it (#352). |
+| Under POS | POS has no FAB since #384: its scan button sits beside the search field in the frozen band. |
 
 ### `AppNotification`
 
 Use for all success, error, info, and warning feedback messages. Never use a
 raw `SnackBar`. Success variant uses `Colors.green.shade600` (`#43A047`) to
 match `AppButton`'s success gradient.
+
+**Placement (#384).** The card starts `AppNotification.topOffset(context)`
+under the top safe-area edge: the tallest top bar the app draws
+(`max(68, max(getRSize(44), 48) + getRSize(16))`) plus `getRSize(8)`, so it
+never covers a screen's title, store name or bell. A screen's top bar must not
+be taller than that. The card lives in the Overlay of the context that raised
+it (each MainLayout tab has its own), so it always shows on the tab in view.
 
 ### `AppDecorations` (`app_decorations.dart`)
 
@@ -453,7 +460,7 @@ width. Under the cap the gutter is `getRSize(16)`, as in the mockup.
 | `StatCard` | `stat_card.dart` | Home figure cards: icon tile, muted title + status pill, big figure, one-line subtitle. Optional `onTap`; optional `trailing` widget after the text (#374: Total SKUs' expand chevron); optional `density` (`StatCardDensity.compact`, #374: the landscape mockup's 12 padding / 44 tile / title 13 / figure 22 / subtitle 12 with a `dense` pill) for narrow grid cells. |
 | `TagPill`, `StatusPill` | `tag_pill.dart` | PRO / CEO / status words in fixed colours (`TagPillTone`). `StatusPill` adds the mockup's ↑ / ↓ / ⓘ icon per tone. Optional `dense` (#374: 5×2 padding, 9 icon, 11 label) for compact stat cards. Display only. |
 | `IconTile` (`IconTileTone`) | `icon_tile.dart` | The pale rounded square with a filled icon (stat cards, settings rows, cart lines). Fixed tone pairs, or explicit colours. |
-| `ProductTile` (`StockLevel`) | `product_tile.dart` | POS / Receive Stock / Request Stock grid tile: photo first, else category tint + keyword icon; name, size·pack, price (optional since #380 — Request Stock passes none and the stock pill sits at the start), stock pill; cart-count badge and primary border; out of stock dims and ignores taps. |
+| `ProductTile` (`StockLevel`) | `product_tile.dart` | POS / Receive Stock / Request Stock grid tile: photo first, else category tint + keyword icon; name, size·pack, price (optional since #380 — Request Stock passes none and the stock pill sits at the start), stock pill; cart-count badge and primary border; out of stock dims and ignores taps. Optional `inCartLabel` (#384) replaces the badge text (POS sells fractions: "1.5"). |
 | `categoryVisual()` / `CategoryVisual` | `category_visual.dart` | The pure tile rule: keyword → icon + colour (stout/malt/beer·lager/water/energy/soft drink·soda·juice/wine·spirit), else a stable code-unit-sum hash into the fixed palette; null/blank → neutral + box. Unit-tested. |
 | `CategoryChip` | `category_chip.dart` | Category filter chip with a dot coloured by `categoryVisual`; null category = "All". |
 | `CartLine`, `QuantityStepper` | `cart_line.dart` | Cart line card: icon tile, name, "qty × price", total, size·pack, stepper (− becomes a red delete at the last unit). Caller resolves the icon (the Cart uses `categoryVisual`, #385). Optional `badges` (tags under "qty × price") and `originalTotalLabel` (the pre-discount total, struck through above the total), both #385, default to none. |
@@ -498,7 +505,7 @@ never build a raw `TextStyle`.
 **Fixed colours.** `AppFixedColors.onSolid` (white, both brightnesses) is the
 text on a solid fixed pill (PRO).
 
-**Coach hint banner (`lib/shared/widgets/coach_hint_banner.dart`, #380).** The pale `primaryTint` "tap to add, tap and hold to choose a quantity" banner over a product grid, with a 48dp ✕. One per screen; the caller owns showing and retiring it (`UiHintService`). Request Stock uses it; POS and Receive Stock still draw their own private copies until their redesign waves.
+**Coach hint banner (`lib/shared/widgets/coach_hint_banner.dart`, #380).** The pale `primaryTint` "tap to add, tap and hold to choose a quantity" banner over a product grid, with a 48dp ✕. One per screen; the caller owns showing and retiring it (`UiHintService`). Request Stock and POS (#384) use it; Receive Stock still draws its own private copy until its redesign wave.
 
 ## Layout patterns
 
@@ -555,6 +562,16 @@ Settings — full tab roots on the same per-tab `Navigator` machinery.
 - **Staff Sales**: `SectionHeader` + one flat card, full width under the grid.
 - **Quick actions** (#362, PRD #270): a "Quick actions" `SectionHeader` (the "Performance Overview" style) over fixed-size tiles (`kHomeQuickActionTileWidth` = 104 base): flat `AppDecorations.card`, a 44 `IconTile` with an explicit fixed pair (tint + filled icon), label DM Sans 600 at 12, up to 2 lines. Tiles share a height, line up from the left and are never stretched; the row scrolls sideways only when they do not fit. It sits between the period header and the cards at every size (upright: under the pills; rail layout: under the "Performance Overview" line), is held back during the first load and omitted, heading included, when no tile is visible. Tiles, in order, and their pairs: Add Expense `danger` + `bill`; Stock Transfer `info` + `transfer` (only with 2+ non-van stores; opens Request Stock with the locked store as "Deliver to", or neither end fixed under All Stores); Take Stock `purple` + `auditCheck`; Record Payment `green` + `payments` (#362 PR 4; shown when at least one payment side is available); Receive Stock `warning` + `receiving` — **always last** (owner, 2026-10-10). Five tiles scroll sideways on an upright phone and fit sideways at 844×390 ("Stock Transfer" / "Record Payment" wrap to 2 lines there). Which tiles show, and the Record Payment sides, are decided only by `resolveQuickActions` (`lib/features/dashboard/quick_actions.dart`), citing Gate Registry entries.
 - **Record Payment chooser** (`lib/features/dashboard/widgets/record_payment_chooser.dart`, #362 PR 4): only when both sides are available. A modal sheet on the Home tab's navigator: handle, "Record Payment" (`screenTitleStyle`), muted SemiBold "Who is paying?", then one flat `AppDecorations.card` option per side (≥ 48dp, whole card taps): 44 `IconTile` + title Bold 15 + subtitle Regular 12 muted + chevron — "Customer paid us" / "Reduces what they owe" (`green`, `user`), "We paid a supplier" / "Reduces what you owe" (`danger`, `supplier`). It returns the side and Home opens that form: `CustomerPaymentSheet` titled "Record Payment" with its picker, or the supplier `RecordPaymentSheet` in its supplier-picker mode, unchanged. One side skips the chooser.
+
+### POS (`pos_home_screen.dart` + `pos/widgets/`, #384)
+
+One scroll view (PRD #239): top bar (pinned upright, floats away sideways) → tier row (scrolls away) → frozen band (pinned) → coach hint → grid. The page sits on `AppDecorations.pageBackground`.
+- **Top bar** (`PosTopBar`, `pos_header_parts.dart`): solid Surface `AppBar` + hairline + `topBarShadow` with `ScreenHeader` — POS tile (`AppIcons.pos`), "Point of Sale", the store POS sells from (the controller's store, else `activeStoreLabelProvider`), then the view selector (grid / list, kept from before) and the live bell (`PosLiveBell`, a copy of Home's); the menu button (48dp) only under 600dp. Height `posTopBarHeight`: Home's rule, but the 68dp shrinks with the scale on a short sideways phone.
+- **Tier row** (kept, not in the mockups): Retailer / Wholesaler (`AppDropdown`, CEO/Manager only, as before), manufacturer filter, and the Quick Sale button (`PosQuickSaleButton`: 48dp `primaryTint` square, bolt).
+- **Frozen band**: page-fade colour; a Surface-filled search field with the scan button beside it — a square primary-gradient button under 600dp, a "Scan Barcode" pill at 600dp+ (`PosBarcodeScanButton.shape`); hidden with nothing to scan into (All Stores placeholder). Under it `CategoryFilterBar`: the shared `CategoryChip`s in a horizontal scroll, "All" first, "Uncategorized" last (Receive Stock shares the bar).
+- **Grid**: `ProductTile` per product (subtitle = description · size · unit, price for the active tier, stock pill — amber at ≤ 5, `kPosLowStockAt` — count badge with the cart line's quantity). Gutter 16, gap 12, cell height `posTileExtent` (grows with the text scale). Columns: `ProductGrid.columnsFor(grid width, preference)` — under 380dp at most 2; 380–600 the view selector's choice (default 2); over 600 at least width / 170 (`kPosTileMinWidth`): 4 at 800dp upright beside the rail, 4 beside the fixed cart panel at 1280dp, 4 sideways at 844dp. The list view is a row card (`_PosProductListRow`) from the same data.
+- **All Stores placeholder**: neutral `IconTile` (store), the same text, a 48dp "Select store" text button.
+- **Short screen** (`posShortHeight`: screen height minus top/bottom system insets under `kPosShortHeight` = 480dp — a sideways phone; a measured height, not `isShortViewport`, and the keyboard never flips it): no separate tier row; one frozen row = search (flexes) + tier picker (`kPosShortTierWidth` 128) + manufacturer picker (`kPosShortManufacturerWidth` 150) + Quick Sale square + scan **square**; tile art drops from 60 to 20 (base) so a full row of tiles shows on first view at 844×390 with insets, View Cart bar included. Upright phones, tablets and wide screens are unchanged.
 
 ### Cart (`lib/features/pos/screens/cart_screen.dart` + `lib/features/pos/widgets/cart/cart_parts.dart`, #385)
 
