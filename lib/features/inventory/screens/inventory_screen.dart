@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,16 +9,20 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
-import 'package:reebaplus_pos/core/theme/colors.dart';
-
 import 'package:reebaplus_pos/core/utils/responsive.dart'; // RESPONSIVE: utility imported
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/shared/widgets/coach_hint_banner.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 import 'package:reebaplus_pos/core/crates/empty_crates_roster.dart';
@@ -98,6 +103,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         ? UiHintService.hintInventoryLongpress
         : '${UiHintService.hintInventoryLongpress}_$userId';
   }
+
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
   int _totalCrateAssetsSum = 0;
@@ -108,13 +114,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   StreamSubscription<List<CategoryData>>? _categoriesSub;
   StreamSubscription<int>? _emptyCratesSumSub;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _surface => Theme.of(context).colorScheme.surface;
 
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
 
   void _onTabChanged() {
     if (mounted && _tabController.index != _currentTab) {
@@ -364,23 +368,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       denied: SharedScaffold(
         activeRoute: 'inventory',
         backgroundColor: _bg,
-        appBar: AppBar(
-          title: const Text(
-            'Inventory',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
+        appBar: InventoryTopBar(
+          icon: AppIcons.inventory,
+          title: 'Inventory',
+          height: inventoryTopBarHeight(context),
         ),
         body: Center(
           child: Text(
             'You don\'t have access to Inventory.',
-            style: TextStyle(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
+            style: context.regularStyle(14).copyWith(color: _subtext),
           ),
         ),
       ),
@@ -420,75 +416,90 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           label: 'Add ${lex.item}',
           description:
               'Create a ${lex.item.toLowerCase()} and set what’s on your shelf',
-          onPressed: () => Navigator.of(context)
-              .push(slideDownRoute(const AddProductScreen())),
+          onPressed: () => Navigator.of(
+            context,
+          ).push(slideDownRoute(const AddProductScreen())),
         ),
       if (Gates.receiveStock.allows(ref))
         AppSpeedDialAction(
           icon: AppIcons.supplier,
           label: 'Receive Stock',
           description: 'Log a delivery from a supplier',
-          onPressed: () => Navigator.of(context)
-              .push(slideDownRoute(const ReceiveStockScreen())),
+          onPressed: () => Navigator.of(
+            context,
+          ).push(slideDownRoute(const ReceiveStockScreen())),
         ),
     ];
 
-    return SharedScaffold(
-      activeRoute: 'inventory',
-      backgroundColor: _bg,
-      appBar: _buildAppBar(context),
-      floatingActionButton: onProductsTab
-          ? SpotlightTarget(
-              id: SpotlightTargetId.addProductFab,
-              child: AppSpeedDialFab(
-                actions: speedDialActions,
-                reserveBottomInset: false,
-              ),
-            )
-          : null,
-      body: SafeArea(
-        top: false,
-        child: !tabsReady
-            ? const Center(child: CircularProgressIndicator())
-            // One scrollable surface (PRD #239): the summary cards scroll
-            // away, the tab bar pins, and each tab is its own scroll view whose
-            // filter band is a sliver above its list. Nothing inside a tab
-            // depends on a supplied height, so the short body a NestedScrollView
-            // hands its child can no longer crush the stock list to zero.
-            : AppRefreshWrapper(
-                child: TabbedSliverScaffold(
-                  controller: _tabController,
-                  headerSlivers: [
-                    SliverToBoxAdapter(child: _buildSummaryCards(context)),
-                  ],
-                  tabBar: _buildTabBar(context),
-                  tabViews: [
-                    for (final key in _tabKeys) _tabSliverView(context, key),
-                  ],
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: SharedScaffold(
+        activeRoute: 'inventory',
+        backgroundColor: Colors.transparent,
+        appBar: _buildAppBar(context),
+        floatingActionButton: onProductsTab
+            ? SpotlightTarget(
+                id: SpotlightTargetId.addProductFab,
+                child: AppSpeedDialFab(
+                  actions: speedDialActions,
+                  reserveBottomInset: false,
                 ),
-              ),
+              )
+            : null,
+        body: SafeArea(
+          top: false,
+          child: !tabsReady
+              ? const Center(child: CircularProgressIndicator())
+              // One scrollable surface (PRD #239): the summary cards scroll
+              // away, the tab bar pins, and each tab is its own scroll view
+              // whose filter band is a sliver above its list. Nothing inside a
+              // tab depends on a supplied height, so the short body a
+              // NestedScrollView hands its child can no longer crush the stock
+              // list to zero.
+              : AppRefreshWrapper(
+                  child: TabbedSliverScaffold(
+                    controller: _tabController,
+                    // The hairline under the tab bar is reserved on top of the
+                    // 48dp floor, so every tab keeps its full target (#392).
+                    tabBarExtent: kMinInteractiveDimension,
+                    tabBarChromeExtent: 1,
+                    headerSlivers: [
+                      SliverToBoxAdapter(child: _buildSummaryCards(context)),
+                    ],
+                    tabBar: _buildTabBar(context),
+                    tabViews: [
+                      for (final key in _tabKeys) _tabSliverView(context, key),
+                    ],
+                  ),
+                ),
+        ),
       ),
     );
   }
 
+  /// The menu button (48dp) under 600dp; the rail carries it at 600dp+.
+  Widget? _menuLeading(BuildContext context) => context.isRailLayout
+      ? null
+      : const SizedBox.square(
+          dimension: kMinInteractiveDimension,
+          child: MenuButton(),
+        );
+
   PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: _surface,
-      elevation: 0,
-      leading: context.isRailLayout ? null : const MenuButton(),
-      title: AppBarHeader(
-        icon: AppIcons.inventory,
-        title: 'Inventory',
-        subtitle: ref.watch(activeStoreLabelProvider),
-      ),
+    return InventoryTopBar(
+      icon: AppIcons.inventory,
+      title: 'Inventory',
+      subtitle: ref.watch(activeStoreLabelProvider),
+      height: inventoryTopBarHeight(context),
+      leading: _menuLeading(context),
       actions: [
         // Search toggle — only meaningful on the Products tab (§16.4).
         if (_currentTab == 0)
-          IconButton(
+          InventoryBarAction(
             tooltip: _showSearch
                 ? 'Close search'
                 : 'Search ${ref.watch(industryLexiconProvider).itemPluralLower}',
-            icon: Icon(_showSearch ? AppIcons.close : AppIcons.search),
+            icon: _showSearch ? AppIcons.close : AppIcons.search,
             onPressed: () => setState(() {
               _showSearch = !_showSearch;
               if (!_showSearch) {
@@ -502,9 +513,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         // count/damage actions decrement stock and the key is independently
         // revocable. Otherwise hide the icon entirely (hard rule #7).
         if (Gates.dailyStockCount.allows(ref))
-          IconButton(
+          InventoryBarAction(
             tooltip: 'Daily Stock Count',
-            icon: const Icon(AppIcons.auditCheck),
+            icon: AppIcons.auditCheck,
             onPressed: () => Navigator.push(
               context,
               slideDownRoute(
@@ -514,8 +525,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               ),
             ),
           ),
-        const NotificationBell(),
-        const SizedBox(width: AppSpacing.s),
+        const InventoryLiveBell(),
       ],
     );
   }
@@ -537,38 +547,38 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     final totalCrates = _totalCrateAssetsSum.toDouble();
 
-    final cards = [
-      _summaryCard(
-        context,
-        'Total SKUs',
-        '$totalItems',
-        AppIcons.category,
-        Theme.of(context).colorScheme.primary,
-        isActive: _stockFilter == 'all',
+    final cards = <Widget>[
+      InventoryFigureCard(
+        key: const ValueKey('inventory-summary-total'),
+        label: 'Total SKUs',
+        value: '$totalItems',
+        icon: AppIcons.category,
+        tone: IconTileTone.info,
+        selected: _stockFilter == 'all',
         onTap: () => setState(() {
           _stockFilter = 'all';
           _tabController.animateTo(0);
         }),
       ),
-      _summaryCard(
-        context,
-        'Low Stock',
-        '$lowStock',
-        AppIcons.warning,
-        AppColors.warning,
-        isActive: _stockFilter == 'low',
+      InventoryFigureCard(
+        key: const ValueKey('inventory-summary-low'),
+        label: 'Low Stock',
+        value: '$lowStock',
+        icon: AppIcons.warning,
+        tone: IconTileTone.warning,
+        selected: _stockFilter == 'low',
         onTap: () => setState(() {
           _stockFilter = 'low';
           _tabController.animateTo(0);
         }),
       ),
-      _summaryCard(
-        context,
-        'Out of Stock',
-        '$outOfStock',
-        AppIcons.block,
-        danger,
-        isActive: _stockFilter == 'out',
+      InventoryFigureCard(
+        key: const ValueKey('inventory-summary-out'),
+        label: 'Out of Stock',
+        value: '$outOfStock',
+        icon: AppIcons.block,
+        tone: IconTileTone.danger,
+        selected: _stockFilter == 'out',
         onTap: () => setState(() {
           _stockFilter = 'out';
           _tabController.animateTo(0);
@@ -577,13 +587,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // Total Crates only when the Empty Crates tab is visible (Bar / Beer
       // distributor — §16.10). Jumps to that tab by its dynamic index.
       if (_tabKeys.contains('crates'))
-        _summaryCard(
-          context,
-          'Total Crates',
-          '${totalCrates.toInt()}',
-          AppIcons.beerMug,
-          success,
-          isActive: _currentTab == _tabKeys.indexOf('crates'),
+        InventoryFigureCard(
+          key: const ValueKey('inventory-summary-crates'),
+          label: 'Total Crates',
+          value: '${totalCrates.toInt()}',
+          icon: AppIcons.beerMug,
+          tone: IconTileTone.green,
+          selected: _currentTab == _tabKeys.indexOf('crates'),
           onTap: () => setState(() {
             _tabController.animateTo(_tabKeys.indexOf('crates'));
           }),
@@ -591,13 +601,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // Near Expiry — last card; available for all business types (§16.5).
       // Tapping filters the Products list to flagged items, which already
       // sort soonest-expiry first.
-      _summaryCard(
-        context,
-        'Near Expiry',
-        '$nearExpiry',
-        AppIcons.pending,
-        AppColors.warning,
-        isActive: _stockFilter == 'expiry',
+      InventoryFigureCard(
+        key: const ValueKey('inventory-summary-expiry'),
+        label: 'Near Expiry',
+        value: '$nearExpiry',
+        icon: AppIcons.pending,
+        tone: IconTileTone.warning,
+        selected: _stockFilter == 'expiry',
         onTap: () => setState(() {
           _stockFilter = 'expiry';
           _tabController.animateTo(0);
@@ -605,117 +615,89 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       ),
     ];
 
-    return Container(
-      color: _surface,
-      padding: EdgeInsets.only(
-        top: context.getRSize(8),
-        bottom: context.getRSize(10),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: context.spacingM),
-        child: Row(
-          children: cards.asMap().entries.map((entry) {
-            final int index = entry.key;
-            final Widget card = entry.value;
-            return Container(
-              width: context.isPhone
-                  ? context.getRSize(108)
-                  : context.getRSize(150),
-              margin: EdgeInsets.only(
-                right: index < cards.length - 1 ? context.getRSize(10) : 0,
+    // Measured, not a viewport predicate (#392): the cards share one row when
+    // each gets at least [cardWidth]; otherwise they keep that width and
+    // scroll sideways, as before.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = inventoryGutter(context, constraints.maxWidth);
+        final gap = context.getRSize(10);
+        final cardWidth = context.getRSize(132);
+        final inner = constraints.maxWidth - 2 * gutter;
+        final fits =
+            inner >= cards.length * cardWidth + (cards.length - 1) * gap;
+        final padding = EdgeInsets.fromLTRB(
+          gutter,
+          context.getRSize(12),
+          gutter,
+          context.getRSize(12),
+        );
+        if (fits) {
+          return Padding(
+            padding: padding,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < cards.length; i++) ...[
+                    if (i > 0) SizedBox(width: gap),
+                    Expanded(child: cards[i]),
+                  ],
+                ],
               ),
-              child: card,
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _summaryCard(
-    BuildContext context,
-    String label,
-    String value,
-    IconData icon,
-    Color color, {
-    bool isActive = false,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.all(context.getRSize(10)),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(context.radiusM),
-          border: Border.all(
-            color: isActive ? color : color.withValues(alpha: 0.2),
-            width: isActive ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+            ),
+          );
+        }
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: padding,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(icon, size: context.getRSize(13), color: color),
-                SizedBox(width: context.getRSize(6)),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: rFontSize(context, 16),
-                      fontWeight: FontWeight.w800,
-                      color: _text,
-                    ),
-                  ),
-                ),
+                for (var i = 0; i < cards.length; i++) ...[
+                  if (i > 0) SizedBox(width: gap),
+                  SizedBox(width: cardWidth, child: cards[i]),
+                ],
               ],
             ),
-            SizedBox(height: context.getRSize(4)),
-            Text(
-              label,
-              style: context.bodySmall.copyWith(
-                color: _subtext,
-                fontWeight: FontWeight.w600,
-                fontSize: context.getRFontSize(11),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildTabBar(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        border: Border(bottom: BorderSide(color: _border)),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        isScrollable: true,
-        tabAlignment: TabAlignment.start,
-        dividerColor: Colors.transparent,
-        labelColor: Theme.of(context).colorScheme.primary,
-        unselectedLabelColor: _subtext,
-        labelStyle: TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: context.getRFontSize(13),
-        ),
-        unselectedLabelStyle: TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: context.getRFontSize(13),
-        ),
-        indicatorColor: Theme.of(context).colorScheme.primary,
-        indicatorWeight: 3,
-        tabs: [for (final key in _tabKeys) Tab(text: _tabLabel(key))],
-      ),
+    final t = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Tab labels start at the content column's edge (the TabBar's own
+        // 16dp label padding is the gutter inside the cap).
+        final offset = math.max(
+          0.0,
+          inventoryGutter(context, constraints.maxWidth) - context.getRSize(16),
+        );
+        return Container(
+          decoration: BoxDecoration(
+            color: t.colorScheme.surface,
+            border: Border(bottom: BorderSide(color: t.dividerColor)),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: offset),
+          child: TabBar(
+            controller: _tabController,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            dividerColor: Colors.transparent,
+            labelColor: t.colorScheme.primary,
+            unselectedLabelColor: _subtext,
+            labelStyle: context.boldStyle(14),
+            unselectedLabelStyle: context.semiBoldStyle(14),
+            indicatorColor: t.colorScheme.primary,
+            indicatorWeight: 3,
+            tabs: [for (final key in _tabKeys) Tab(text: _tabLabel(key))],
+          ),
+        );
+      },
     );
   }
 
@@ -775,6 +757,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // their existing order.
     list = _sortNearExpiryFirst(list);
 
+    final categoryNames = {for (final c in _dbCategories) c.id: c.name};
+
     return [
       if (_showSearch) SliverToBoxAdapter(child: _buildSearchField(context)),
       SliverToBoxAdapter(child: _buildSupplierFilter(context)),
@@ -786,8 +770,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       if (_showLongPressHint &&
           list.isNotEmpty &&
           Gates.editProductPrice.allows(ref))
-        SliverToBoxAdapter(
-          child: _buildInlineHint(
+        _cappedBox(
+          EdgeInsets.only(top: context.getRSize(4)),
+          CoachHintBanner(
             message:
                 'Press and hold a '
                 '${ref.watch(industryLexiconProvider).itemLower}'
@@ -817,91 +802,79 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               : Center(
                   child: Text(
                     'No ${ref.watch(industryLexiconProvider).itemPluralLower} matching filters',
-                    style: TextStyle(color: _subtext),
+                    style: context.regularStyle(14).copyWith(color: _subtext),
                   ),
                 ),
         )
       else
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(
-            context.getRSize(16),
-            context.getRSize(12),
-            context.getRSize(16),
-            context.getRSize(120) + context.bottomInset,
-          ),
+        _cappedSliver(
+          top: context.getRSize(12),
           sliver: SliverList.builder(
             itemCount: list.length,
-            itemBuilder: (_, i) => _buildProductRow(context, list[i]),
+            itemBuilder: (_, i) => Padding(
+              padding: EdgeInsets.only(bottom: context.getRSize(10)),
+              child: _buildProductRow(
+                context,
+                list[i],
+                categoryNames[list[i].product.categoryId],
+              ),
+            ),
           ),
         ),
     ];
   }
 
-  // Inline dismissible hint shown at the top of the Products list (first couple
-  // of visits). Mirrors the POS home screen's "tap and hold to edit" banner
-  // (issue #110); view-counted under UiHintService.hintInventoryLongpress.
-  Widget _buildInlineHint({
-    required String message,
-    required VoidCallback onDismiss,
-  }) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return Container(
-      margin: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(8),
-        context.getRSize(16),
-        0,
-      ),
-      padding: EdgeInsets.all(context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            AppIcons.infoCircle,
-            size: context.getRSize(16),
-            color: primary,
-          ),
-          SizedBox(width: context.getRSize(12)),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                color: primary,
-              ),
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              AppIcons.close,
-              size: context.getRSize(16),
-              color: primary,
-            ),
-            onPressed: onDismiss,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-        ],
-      ),
-    );
-  }
+  /// Bottom room under every tab's list: clear of the speed-dial FAB, plus the
+  /// system nav inset where the screen owns it (#392: `deviceBottomPadding`,
+  /// 0 above the bottom bar).
+  double _listBottomPadding(BuildContext context) =>
+      context.getRSize(120) + context.deviceBottomPadding;
+
+  /// [sliver] inside the centred content column (`kInventoryMaxContentWidth`),
+  /// measured from the sliver's own width.
+  Widget _cappedSliver({
+    required Widget sliver,
+    double top = 0,
+    double? bottom,
+  }) => SliverLayoutBuilder(
+    builder: (context, constraints) {
+      final gutter = inventoryGutter(context, constraints.crossAxisExtent);
+      return SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          gutter,
+          top,
+          gutter,
+          bottom ?? _listBottomPadding(context),
+        ),
+        sliver: sliver,
+      );
+    },
+  );
+
+  /// A box child in the centred content column.
+  Widget _cappedBox(EdgeInsets padding, Widget child) => SliverToBoxAdapter(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = inventoryGutter(context, constraints.maxWidth);
+        return Padding(
+          padding: padding.add(EdgeInsets.symmetric(horizontal: gutter)),
+          child: child,
+        );
+      },
+    ),
+  );
 
   List<Widget> _suppliersTabSlivers(BuildContext context) {
     final suppliers =
         ref.watch(allSuppliersProvider).valueOrNull ?? const <SupplierData>[];
     return [
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.all(context.getRSize(16)),
-          child: AppButton(
-            text: 'Add Supplier',
-            variant: AppButtonVariant.secondary,
-            icon: AppIcons.add,
-            onPressed: () => SupplierFormSheet.show(context),
-          ),
+      _cappedBox(
+        EdgeInsets.symmetric(vertical: context.getRSize(16)),
+        AppButton(
+          text: 'Add Supplier',
+          variant: AppButtonVariant.secondary,
+          icon: AppIcons.add,
+          onPressed: () => SupplierFormSheet.show(context),
         ),
       ),
       if (suppliers.isEmpty)
@@ -914,18 +887,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               : Center(
                   child: Text(
                     'No suppliers added yet',
-                    style: TextStyle(color: _subtext),
+                    style: context.regularStyle(14).copyWith(color: _subtext),
                   ),
                 ),
         )
       else
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(
-            context.getRSize(16),
-            0,
-            context.getRSize(16),
-            context.getRSize(120) + context.bottomInset,
-          ),
+        _cappedSliver(
           sliver: SliverList.builder(
             itemCount: suppliers.length,
             itemBuilder: (_, i) {
@@ -935,70 +902,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 s.email,
                 s.address,
               ].where((x) => x != null && x.isNotEmpty).join(', ');
-              return GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => SupplierDetailScreen(supplierId: s.id),
-                  ),
-                ),
-                child: Container(
-                  margin: EdgeInsets.only(bottom: context.getRSize(12)),
-                  padding: EdgeInsets.all(context.getRSize(16)),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: _border),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: context.getRSize(48),
-                        height: context.getRSize(48),
-                        decoration: BoxDecoration(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          AppIcons.bank,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: context.getRSize(20),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: context.getRFontSize(16),
-                                color: _text,
-                              ),
-                            ),
-                            if (contactDetails.isNotEmpty) ...[
-                              SizedBox(height: context.getRSize(4)),
-                              Text(
-                                contactDetails,
-                                style: TextStyle(
-                                  color: _subtext,
-                                  fontSize: context.getRFontSize(13),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        AppIcons.chevronRight,
-                        color: _subtext,
-                        size: context.getRSize(20),
-                      ),
-                    ],
+              return Padding(
+                padding: EdgeInsets.only(bottom: context.getRSize(12)),
+                child: SettingsRow(
+                  key: ValueKey('inventory-supplier-row-${s.id}'),
+                  icon: AppIcons.bank,
+                  tone: IconTileTone.info,
+                  title: s.name,
+                  subtitle: contactDetails.isEmpty ? null : contactDetails,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SupplierDetailScreen(supplierId: s.id),
+                    ),
                   ),
                 ),
               );
@@ -1039,154 +955,169 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         _subscribeToProducts();
       });
     }
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(12),
-        context.getRSize(16),
-        context.getRSize(16),
-      ),
-      color: _surface,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          // Category dropdown (§16.4, amended): replaces the old chip row,
-          // drives `_selectedCategoryId`. The store is now picked in the nav bar.
-          Expanded(
-            child: _isFirstLoad
-                ? const SizedBox.shrink()
-                : AppDropdown<String>(
-                    value: _selectedCategoryId ?? 'all',
-                    labelText: 'Category',
-                    items: [
-                      DropdownMenuItem(
-                        value: 'all',
-                        child: Text('All', style: TextStyle(color: _text)),
-                      ),
-                      ..._dbCategories.map(
-                        (c) => DropdownMenuItem(
-                          value: c.id,
-                          child: Text(
-                            c.name,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: _text),
+    final itemStyle = context.mediumStyle(14).copyWith(color: _text);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = inventoryGutter(context, constraints.maxWidth);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            context.getRSize(12),
+            gutter,
+            context.getRSize(4),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Category dropdown (§16.4, amended): replaces the old chip row,
+              // drives `_selectedCategoryId`. The store is now picked in the
+              // nav bar.
+              Expanded(
+                child: _isFirstLoad
+                    ? const SizedBox.shrink()
+                    : AppDropdown<String>(
+                        value: _selectedCategoryId ?? 'all',
+                        labelText: 'Category',
+                        items: [
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All', style: itemStyle),
                           ),
+                          ..._dbCategories.map(
+                            (c) => DropdownMenuItem(
+                              value: c.id,
+                              child: Text(
+                                c.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: itemStyle,
+                              ),
+                            ),
+                          ),
+                          // #109: filter to products with no category.
+                          DropdownMenuItem(
+                            value: kUncategorizedCategoryId,
+                            child: Text(
+                              'Uncategorized',
+                              overflow: TextOverflow.ellipsis,
+                              style: itemStyle,
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) => setState(
+                          () => _selectedCategoryId =
+                              (val == null || val == 'all') ? null : val,
                         ),
                       ),
-                      // #109: filter to products with no category.
-                      DropdownMenuItem(
-                        value: kUncategorizedCategoryId,
-                        child: Text(
-                          'Uncategorized',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: _text),
+              ),
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: _isFirstLoad
+                    ? const SizedBox.shrink()
+                    : AppDropdown<String>(
+                        value: _selectedManufacturer,
+                        labelText: 'Manufacturer',
+                        items: [
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All', style: itemStyle),
+                          ),
+                          ..._dbManufacturers.map(
+                            (m) => DropdownMenuItem(
+                              value: m.name,
+                              child: Text(
+                                m.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: itemStyle,
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) => setState(
+                          () => _selectedManufacturer = val ?? 'all',
                         ),
                       ),
-                    ],
-                    onChanged: (val) => setState(
-                      () => _selectedCategoryId = (val == null || val == 'all')
-                          ? null
-                          : val,
-                    ),
-                  ),
+              ),
+              // #109: Manage categories (rename / delete → Uncategorized).
+              // Gated on the same permission as adding a product —
+              // product-catalogue management. Bottom-aligned with the fields.
+              if (Gates.addProduct.allows(ref)) ...[
+                SizedBox(width: context.getRSize(8)),
+                _buildManageCategoriesButton(context),
+              ],
+            ],
           ),
-          SizedBox(width: context.getRSize(12)),
-          Expanded(
-            child: _isFirstLoad
-                ? const SizedBox.shrink()
-                : AppDropdown<String>(
-                    value: _selectedManufacturer,
-                    labelText: 'Manufacturer',
-                    items: [
-                      DropdownMenuItem(
-                        value: 'all',
-                        child: Text('All', style: TextStyle(color: _text)),
-                      ),
-                      ..._dbManufacturers.map(
-                        (m) => DropdownMenuItem(
-                          value: m.name,
-                          child: Text(m.name, style: TextStyle(color: _text)),
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) =>
-                        setState(() => _selectedManufacturer = val ?? 'all'),
-                  ),
-          ),
-          // #109: Manage categories (rename / delete → Uncategorized). Gated on
-          // the same permission as adding a product — product-catalogue
-          // management. Bottom-aligned with the dropdown fields.
-          if (Gates.addProduct.allows(ref)) ...[
-            SizedBox(width: context.getRSize(8)),
-            _buildManageCategoriesButton(context),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildManageCategoriesButton(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return InkWell(
-      onTap: () => showManageCategoriesSheet(context),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        height: context.getRSize(52),
-        width: context.getRSize(52),
-        decoration: BoxDecoration(
-          color: primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: primary.withValues(alpha: 0.25)),
-        ),
-        child: Icon(
-          AppIcons.tag,
-          size: context.getRSize(16),
-          color: primary,
+    final t = Theme.of(context);
+    final tint =
+        t.extension<AppSchemeColors>()?.primaryTint ??
+        t.colorScheme.primary.withValues(alpha: 0.12);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+    // Never under the 48dp target, however hard the scale compresses (#392).
+    final side = math.max(context.getRSize(52), kMinInteractiveDimension);
+    return Tooltip(
+      message: 'Manage categories',
+      child: Material(
+        color: tint,
+        borderRadius: radius,
+        child: InkWell(
+          key: const ValueKey('inventory-manage-categories'),
+          onTap: () => showManageCategoriesSheet(context),
+          borderRadius: radius,
+          child: SizedBox.square(
+            dimension: side,
+            child: Center(
+              child: AppIcon(
+                AppIcons.tag,
+                filled: true,
+                size: context.getRSize(20),
+                color: t.colorScheme.primary,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildSearchField(BuildContext context) {
-    return Container(
-      color: _surface,
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(12),
-        context.getRSize(16),
-        0,
-      ),
-      child: TextField(
-        controller: _searchCtrl,
-        autofocus: true,
-        onChanged: (v) => setState(() => _searchQuery = v.trim()),
-        style: TextStyle(color: _text, fontSize: context.getRFontSize(14)),
-        decoration: InputDecoration(
-          isDense: true,
-          hintText:
-              'Search ${ref.watch(industryLexiconProvider).itemPluralLower}…',
-          prefixIcon: Icon(AppIcons.search, size: 18, color: _subtext),
-          suffixIcon: _searchQuery.isEmpty
-              ? null
-              : IconButton(
-                  icon: Icon(AppIcons.close, size: 18, color: _subtext),
-                  onPressed: () => setState(() {
-                    _searchCtrl.clear();
-                    _searchQuery = '';
-                  }),
-                ),
-          filled: true,
-          fillColor: Theme.of(context).cardColor,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: _border),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = inventoryGutter(context, constraints.maxWidth);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(gutter, context.getRSize(12), gutter, 0),
+          child: AppInput(
+            controller: _searchCtrl,
+            autofocus: true,
+            onChanged: (v) => setState(() => _searchQuery = v.trim()),
+            hintText:
+                'Search ${ref.watch(industryLexiconProvider).itemPluralLower}…',
+            prefixIcon: AppIcon(
+              AppIcons.search,
+              size: context.getRSize(20),
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            suffixIcon: _searchQuery.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Clear search',
+                    icon: AppIcon(
+                      AppIcons.close,
+                      size: context.getRSize(18),
+                      color: _subtext,
+                    ),
+                    onPressed: () => setState(() {
+                      _searchCtrl.clear();
+                      _searchQuery = '';
+                    }),
+                  ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: _border),
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1226,68 +1157,48 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     return [...flagged, ...rest];
   }
 
-  /// Small expiry chip shown on a flagged product row (§16.4).
-  Widget? _expiryChip(BuildContext context, ProductData product) {
+  /// The expiry pill's words on a flagged product row (§16.4), or null.
+  String? _expiryLabel(ProductData product) {
     final e = product.expiryDate;
     if (e == null) return null;
     final days = _daysToExpiry(e);
-    String label;
-    Color color;
-    if (days < 0) {
-      label = 'Expired';
-      color = danger;
-    } else if (days <= 30) {
-      label = days == 0 ? 'Expires today' : 'Expires in ${days}d';
-      color = AppColors.warning;
-    } else {
-      return null;
-    }
-    return Container(
-      margin: EdgeInsets.only(top: context.getRSize(4)),
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(2),
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: context.getRFontSize(10),
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
+    if (days < 0) return 'Expired';
+    if (days <= 30) return days == 0 ? 'Expires today' : 'Expires in ${days}d';
+    return null;
   }
 
-  Widget _buildProductRow(BuildContext context, ProductDataWithStock item) {
+  Widget _buildProductRow(
+    BuildContext context,
+    ProductDataWithStock item,
+    String? categoryName,
+  ) {
     final product = item.product;
     final currentStock = item.totalStock;
     final isLow = currentStock > 0 && currentStock <= product.lowStockThreshold;
     final isOut = currentStock == 0;
 
-    Color statusColor = success;
-    String statusLabel = 'In Stock';
-    if (isOut) {
-      statusColor = danger;
-      statusLabel = 'Out of Stock';
-    } else if (isLow) {
-      statusColor = AppColors.warning;
-      statusLabel = 'Low Stock';
-    }
-
+    // The detail screen's hero still reads the product's own colour.
     final accent = product.colorHex != null
         ? Color(int.parse(product.colorHex!.replaceFirst('#', '0xFF')))
         : Theme.of(context).colorScheme.primary;
+    final expiry = product.expiryDate;
 
-    return GestureDetector(
+    return InventoryProductRow(
       // One complete product row is the unit the viewport tests assert on
       // (PRD #239): a starved list renders at zero height, shows nothing, and
       // reports no overflow, so "no red band" alone cannot catch it.
       key: inventoryProductRowKey(product.id),
+      name: productDisplayName(product.name, product.size, unit: product.unit),
+      subtitle: product.subtitle,
+      categoryName: categoryName,
+      photoPath: product.imagePath,
+      stockLabel: currentStock.toString(),
+      unit: product.unit,
+      state: isOut
+          ? InventoryStockState.out
+          : (isLow ? InventoryStockState.low : InventoryStockState.ok),
+      expiryLabel: _expiryLabel(product),
+      expired: expiry != null && _daysToExpiry(expiry) < 0,
       // Long-press opens the full product editor (name/prices/details), so it
       // is gated on `products.edit_price` (hard rule #6/#7 — hide, don't
       // disable). Stock-only roles add stock via the product-detail Update
@@ -1340,130 +1251,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           ),
         );
       },
-      child: Container(
-        margin: EdgeInsets.only(bottom: context.spacingS),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isOut
-                ? Theme.of(context).colorScheme.error.withValues(alpha: 0.3)
-                : (isLow
-                      ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
-                      : _border),
-          ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(context.getRSize(10)),
-          child: Row(
-            children: [
-              Container(
-                width: context.getRSize(52),
-                height: context.getRSize(52),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  productIconFromCodePoint(product.iconCodePoint),
-                  color: accent,
-                  size: context.getRSize(24),
-                ),
-              ),
-              SizedBox(width: context.getRSize(14)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            productDisplayName(
-                              product.name,
-                              product.size,
-                              unit: product.unit,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: context.getRFontSize(15),
-                              color: _text,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: context.getRSize(8)),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: context.getRSize(8),
-                            vertical: context.getRSize(2),
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            statusLabel,
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(10),
-                              fontWeight: FontWeight.bold,
-                              color: statusColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (product.subtitle != null) ...[
-                      SizedBox(height: context.getRSize(4)),
-                      Text(
-                        product.subtitle!,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(12),
-                          color: _subtext,
-                        ),
-                      ),
-                    ],
-                    if (_expiryChip(context, product) case final chip?)
-                      Align(alignment: Alignment.centerLeft, child: chip),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      currentStock.toString(),
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(22),
-                        fontWeight: FontWeight.w800,
-                        color: isOut
-                            ? danger
-                            : (isLow ? AppColors.warning : _text),
-                      ),
-                    ),
-                  ),
-                  // A unitless product (#108) shows just the count — no label.
-                  if ((product.unit ?? '').isNotEmpty)
-                    Text(
-                      product.unit!,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(11),
-                        color: _subtext,
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
-  // ── CRATES TAB REDESIGNED ──────────────────────────────────────────────────
+  // ── EMPTY CRATES TAB ───────────────────────────────────────────────────────
   List<Widget> _cratesTabSlivers(BuildContext context) {
     // §16.8.1 Phase 2: crate figures are PER-STORE when a store is active and
     // business-wide in "All Stores". Full bottles come from the active store's
@@ -1508,22 +1299,37 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     final totalEmpty = emptyByMfr.values.fold<int>(0, (s, v) => s + v);
     final totalFull = stats.fold<int>(0, (s, e) => s + e.fullCratesEquiv);
+    final gap = context.getRSize(12);
 
     return [
-      SliverPadding(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(16),
-          context.getRSize(16),
-          context.getRSize(16),
-          context.getRSize(120) + context.bottomInset,
-        ),
+      _cappedSliver(
+        top: context.getRSize(16),
         sliver: SliverList.list(
           children: [
             // 1. Stats Overview
-            _buildCrateStatsRow(
-              context,
-              totalEmpty: totalEmpty,
-              totalFull: totalFull,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: InventoryFigureCard(
+                      label: 'Empty In Stock',
+                      value: totalEmpty.toString(),
+                      icon: AppIcons.beerMug,
+                      tone: IconTileTone.warning,
+                    ),
+                  ),
+                  SizedBox(width: gap),
+                  Expanded(
+                    child: InventoryFigureCard(
+                      label: 'Full (Crate)',
+                      value: totalFull.toString(),
+                      icon: AppIcons.wineBottle,
+                      tone: IconTileTone.info,
+                    ),
+                  ),
+                ],
+              ),
             ),
 
             SizedBox(height: context.getRSize(24)),
@@ -1531,19 +1337,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             // 2. Bottle manufacturers (#389): only brands with a tracked
             // bottle product, plus any brand still holding crates in this view.
             // Every manufacturer (and Add New) lives on the Manufacturers tab.
-            Text(
-              'Bottle manufacturers',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: context.getRFontSize(18),
-                fontWeight: FontWeight.w800,
-                color: _text,
-                letterSpacing: -0.5,
-              ),
-            ),
+            const SectionHeader(title: 'Bottle manufacturers'),
 
-            SizedBox(height: context.getRSize(12)),
+            SizedBox(height: gap),
 
             // Same rule as the Suppliers tab: no "none yet" before the first
             // download has finished (#313).
@@ -1551,16 +1347,18 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 ref.watch(firstDownloadInProgressProvider))
               const SizedBox.shrink()
             else if (crateManufacturers.isEmpty)
-              _buildEmptyCratesState(
-                context,
-                'No bottle manufacturers yet',
-                'A manufacturer shows here once it has a returnable bottle '
+              const InventoryEmptyCard(
+                icon: AppIcons.box,
+                title: 'No bottle manufacturers yet',
+                subtitle:
+                    'A manufacturer shows here once it has a returnable bottle '
                     'product',
               )
             else
               ...crateManufacturers.map((mfr) {
-                // stats is keyed by manufacturer ID, so match on mfr.id — matching
-                // on mfr.name never hits and forced every card's "Full" to 0.
+                // stats is keyed by manufacturer ID, so match on mfr.id —
+                // matching on mfr.name never hits and forced every card's
+                // "Full" to 0.
                 final stat = stats.firstWhere(
                   (s) => s.manufacturer == mfr.id,
                   orElse: () => ManufacturerCrateStats(
@@ -1570,95 +1368,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     totalValueKobo: 0,
                   ),
                 );
-                return _buildManufacturerCard(
-                  context,
-                  mfr,
-                  stat,
-                  emptyCount: emptyForMfr(mfr),
-                  shortCount: shortagesByMfr[mfr.id] ?? 0,
+                return Padding(
+                  padding: EdgeInsets.only(bottom: gap),
+                  child: _buildManufacturerCard(
+                    context,
+                    mfr,
+                    stat,
+                    emptyCount: emptyForMfr(mfr),
+                    shortCount: shortagesByMfr[mfr.id] ?? 0,
+                  ),
                 );
               }),
           ],
         ),
       ),
     ];
-  }
-
-  Widget _buildCrateStatsRow(
-    BuildContext context, {
-    required int totalEmpty,
-    required int totalFull,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: _miniCrateStatCard(
-            context,
-            'Empty In Stock',
-            totalEmpty.toString(),
-            AppIcons.beerMug,
-            AppColors.warning,
-          ),
-        ),
-        SizedBox(width: context.getRSize(12)),
-        Expanded(
-          child: _miniCrateStatCard(
-            context,
-            'Full (Crate)',
-            totalFull.toString(),
-            AppIcons.wineBottle,
-            Theme.of(context).colorScheme.primary,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _miniCrateStatCard(
-    BuildContext context,
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Container(
-      padding: EdgeInsets.all(context.getRSize(16)),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: EdgeInsets.all(context.getRSize(6)),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: context.getRSize(12), color: color),
-          ),
-          SizedBox(height: context.getRSize(10)),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: context.getRFontSize(22),
-              fontWeight: FontWeight.w900,
-              color: _text,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(11),
-              fontWeight: FontWeight.bold,
-              color: _subtext,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildManufacturerCard(
@@ -1668,158 +1392,109 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     required int emptyCount,
     int shortCount = 0,
   }) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     final depositNaira = mfr.depositAmountKobo / 100;
     final totalAssets = stat.fullCratesEquiv + emptyCount;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
 
-    final card = Material(
-      color: Theme.of(context).cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: _border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        key: ValueKey('$kManufacturerCardKeyPrefix${mfr.id}'),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ManufacturerScreen(manufacturer: mfr),
-            ),
-          );
-        },
-        child: Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.all(context.getRSize(16)),
-              child: Row(
-                children: [
-                  Container(
-                    width: context.getRSize(44),
-                    height: context.getRSize(44),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.secondary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
+    return DecoratedBox(
+      decoration: AppDecorations.card(context),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          key: ValueKey('$kManufacturerCardKeyPrefix${mfr.id}'),
+          borderRadius: radius,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ManufacturerScreen(manufacturer: mfr),
+              ),
+            );
+          },
+          child: Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.all(context.getRSize(16)),
+                child: Row(
+                  children: [
+                    const IconTile(
+                      icon: AppIcons.manufacturer,
+                      tone: IconTileTone.info,
+                      size: 44,
                     ),
-                    child: Icon(
-                      AppIcons.manufacturer,
-                      color: Theme.of(context).colorScheme.secondary,
-                      size: context.getRSize(16),
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(14)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                mfr.name,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: context.getRFontSize(15),
-                                  color: _text,
-                                  letterSpacing: -0.5,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (shortCount > 0) ...[
-                              SizedBox(width: context.getRSize(6)),
-                              _shortageBadge(context, shortCount, mfr.id),
-                            ],
-                          ],
-                        ),
-                        if (depositNaira > 0)
+                    SizedBox(width: context.getRSize(12)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            'Crate value: ${formatCurrency(depositNaira)}',
-                            style: TextStyle(
-                              color: _subtext,
-                              fontSize: context.getRFontSize(11),
-                              fontWeight: FontWeight.w500,
-                            ),
+                            mfr.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.boldStyle(15).copyWith(color: _text),
                           ),
-                      ],
+                          if (depositNaira > 0)
+                            Text(
+                              'Crate value: ${formatCurrency(depositNaira)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context
+                                  .regularStyle(12)
+                                  .copyWith(color: _subtext),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    if (shortCount > 0) ...[
+                      SizedBox(width: context.getRSize(8)),
+                      TagPill(
+                        key: ValueKey('mfr_shortage_badge_${mfr.id}'),
+                        // Wording unchanged (the badge test reads it).
+                        label: '⚠ $shortCount short',
+                        tone: TagPillTone.warning,
+                      ),
+                    ],
+                    SizedBox(width: context.getRSize(4)),
+                    AppIcon(
+                      AppIcons.chevronRight,
+                      size: context.getRSize(22),
+                      color: _subtext,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Divider(height: 1, color: _border),
-            Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(16),
-                vertical: context.getRSize(12),
+              Divider(height: 1, color: t.dividerColor),
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: context.getRSize(16),
+                  vertical: context.getRSize(12),
+                ),
+                child: Row(
+                  children: [
+                    _mfrSimpleStat(
+                      context,
+                      'Full',
+                      stat.fullCratesEquiv.toString(),
+                      t.colorScheme.primary,
+                    ),
+                    _mfrSimpleStat(
+                      context,
+                      'Empty',
+                      emptyCount.toString(),
+                      f.warning,
+                    ),
+                    _mfrSimpleStat(
+                      context,
+                      'Total',
+                      totalAssets.toString(),
+                      f.green,
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _mfrSimpleStat(
-                    context,
-                    'Full',
-                    stat.fullCratesEquiv.toString(),
-                    Theme.of(context).colorScheme.primary,
-                  ),
-                  _mfrSimpleStat(
-                    context,
-                    'Empty',
-                    emptyCount.toString(),
-                    AppColors.warning,
-                  ),
-                  _mfrSimpleStat(
-                    context,
-                    'Total',
-                    totalAssets.toString(),
-                    AppColors.success,
-                    isBold: true,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(12)),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-            offset: const Offset(0, 4),
-            blurRadius: 10,
+            ],
           ),
-        ],
-      ),
-      child: card,
-    );
-  }
-
-  Widget _shortageBadge(BuildContext context, int shortCount, String mfrId) {
-    return Container(
-      key: ValueKey('mfr_shortage_badge_$mfrId'),
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(6),
-        vertical: context.getRSize(2),
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(context.radiusS),
-        border: Border.all(
-          color: AppColors.warning.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Text(
-        '⚠ $shortCount short',
-        style: TextStyle(
-          color: AppColors.warning,
-          fontSize: context.getRFontSize(10),
-          fontWeight: FontWeight.w800,
         ),
       ),
     );
@@ -1829,61 +1504,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     BuildContext context,
     String label,
     String value,
-    Color color, {
-    bool isBold = false,
-  }) {
-    return Column(
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            fontSize: context.getRFontSize(9),
-            fontWeight: FontWeight.w900,
-            color: _subtext,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: context.getRFontSize(16),
-            fontWeight: isBold ? FontWeight.w900 : FontWeight.w700,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmptyCratesState(
-    BuildContext context,
-    String title,
-    String subtitle,
+    Color color,
   ) {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(32)),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _border),
-      ),
-      child: Center(
-        child: Column(
-          children: [
-            Icon(
-              AppIcons.box,
-              size: context.getRSize(32),
-              color: _border,
-            ),
-            SizedBox(height: context.getRSize(16)),
-            Text(
-              title,
-              style: TextStyle(fontWeight: FontWeight.bold, color: _text),
-            ),
-            Text(subtitle, style: TextStyle(fontSize: 12, color: _subtext)),
-          ],
-        ),
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: context
+                .semiBoldStyle(11)
+                .copyWith(color: _subtext, letterSpacing: 0.5),
+          ),
+          SizedBox(height: context.getRSize(2)),
+          Text(value, style: context.extraBoldStyle(18).copyWith(color: color)),
+        ],
       ),
     );
   }
