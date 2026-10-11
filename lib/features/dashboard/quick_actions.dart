@@ -1,14 +1,20 @@
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 
 /// A Home quick-action tile (PRD #270, redesign #362). Declared in the row's
 /// fixed order — the declaration order IS the display order: Add Expense,
-/// Stock Transfer, Take Stock, Receive Stock. **Receive Stock is always
-/// last** (owner, 2026-10-10): Record Payment (#362 PR 4) is declared
-/// before it, after Take Stock.
-enum QuickAction { addExpense, stockTransfer, takeStock, receiveStock }
+/// Stock Transfer, Take Stock, Record Payment, Receive Stock. **Receive Stock
+/// is always last** (owner, 2026-10-10).
+enum QuickAction {
+  addExpense,
+  stockTransfer,
+  takeStock,
+  recordPayment,
+  receiveStock,
+}
 
 /// Who a "Record Payment" can be for (#362 PR 4): a customer paying us, or us
-/// paying a supplier.
+/// paying a supplier. Declared in the chooser's order.
 enum PaymentSide { customer, supplier }
 
 /// What the Home quick-actions row shows: the visible tiles in their fixed
@@ -21,46 +27,71 @@ typedef QuickActions = ({
 /// The single place that decides which quick actions a viewer sees (PRD #270
 /// "Which tiles show"). Pure: [allows] answers a Gate Registry entry, so the
 /// Home row passes `(g) => g.allows(ref)` (reactive — a revoked key hides its
-/// tile live) and a test passes `(g) => g.evaluate(ctx)`. [storeCount] is the
-/// business's active stores with vans excluded — the same list Request
-/// Stock's pickers use (`withoutVans(allStoresProvider)`), not the viewer's
-/// selectable stores — so a second store shows Stock Transfer live.
+/// tile live) and a test passes `(g) => g.evaluate(ctx)`. The counts are live
+/// inputs, so the first store, customer or supplier shows its tile without a
+/// restart:
+/// - [storeCount]: the business's active stores with vans excluded — the
+///   same list Request Stock's pickers use (`withoutVans(allStoresProvider)`),
+///   not the viewer's selectable stores;
+/// - [customerCount]: registered customers — not deleted, never the walk-in
+///   (the customer payment picker's list);
+/// - [supplierCount]: suppliers that are not deleted (the supplier payment
+///   form's dropdown).
 ///
 /// | Tile           | Visible when                                        |
 /// |----------------|-----------------------------------------------------|
 /// | Add Expense    | [Gates.addExpense]                                  |
 /// | Stock Transfer | [Gates.requestStoreTransfer] and [storeCount] ≥ 2   |
 /// | Take Stock     | [Gates.dailyStockCount]                             |
+/// | Record Payment | at least one payment side (below)                   |
 /// | Receive Stock  | [Gates.receiveStock]                                |
 ///
-/// Tiles come out in [QuickAction]'s declaration order. **Receive Stock
-/// stays last**: when #362 PR 4 adds Record Payment, declare it between
-/// Take Stock and Receive Stock, never after Receive Stock.
+/// | Payment side | Available when                                         |
+/// |--------------|--------------------------------------------------------|
+/// | customer     | [Gates.addCustomerCredit] and [customerCount] ≥ 1      |
+/// | supplier     | [Gates.manageSuppliers] and [supplierCount] ≥ 1        |
 ///
-/// Each destination keeps its own screen guard and write-boundary check; a
-/// tile is a shortcut, never the only line of defence. The Record Payment
-/// sides stay empty until #362 PR 4 adds the tile.
+/// Tiles come out in [QuickAction]'s declaration order, sides in
+/// [PaymentSide]'s. Each destination keeps its own screen guard and
+/// write-boundary check; a tile is a shortcut, never the only line of
+/// defence.
 QuickActions resolveQuickActions(
   bool Function(NamedGate gate) allows, {
   required int storeCount,
+  required int customerCount,
+  required int supplierCount,
 }) {
+  final paymentSides = [
+    for (final side in PaymentSide.values)
+      if (switch (side) {
+        // Nobody to pick: no point opening an empty picker.
+        PaymentSide.customer =>
+          customerCount >= 1 && allows(Gates.addCustomerCredit),
+        PaymentSide.supplier =>
+          supplierCount >= 1 && allows(Gates.manageSuppliers),
+      })
+        side,
+  ];
   bool visible(QuickAction a) => switch (a) {
+    QuickAction.addExpense => allows(Gates.addExpense),
     // A transfer needs somewhere to come from: one store has nowhere.
-    QuickAction.stockTransfer => storeCount >= 2 && allows(_gateFor(a)),
-    _ => allows(_gateFor(a)),
+    QuickAction.stockTransfer =>
+      storeCount >= 2 && allows(Gates.requestStoreTransfer),
+    QuickAction.takeStock => allows(Gates.dailyStockCount),
+    QuickAction.recordPayment => paymentSides.isNotEmpty,
+    QuickAction.receiveStock => allows(Gates.receiveStock),
   };
   return (
     tiles: [
       for (final a in QuickAction.values)
         if (visible(a)) a,
     ],
-    paymentSides: const <PaymentSide>[],
+    paymentSides: paymentSides,
   );
 }
 
-NamedGate _gateFor(QuickAction action) => switch (action) {
-  QuickAction.addExpense => Gates.addExpense,
-  QuickAction.stockTransfer => Gates.requestStoreTransfer,
-  QuickAction.receiveStock => Gates.receiveStock,
-  QuickAction.takeStock => Gates.dailyStockCount,
-};
+/// [resolveQuickActions]' `customerCount` from the business's (non-deleted)
+/// customers: everyone but the walk-in, who can't be picked for a payment. A
+/// business whose only customer is the walk-in has no customers to pick.
+int registeredCustomerCount(Iterable<Customer> customers) =>
+    customers.where((c) => !c.isWalkIn).length;
