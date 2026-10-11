@@ -206,6 +206,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
   void _openCheckout() {
     // Rebuilt from the live cart rather than captured in `build`, so the values
     // pushed to checkout are the ones that survived the pre-flight above.
+    // Sorted by quantity for checkout only: its order summary and the order it
+    // writes list lines largest first, as before (the cart itself keeps the
+    // order the lines were added).
     final items = List<Map<String, dynamic>>.from(ref.read(cartProvider).value)
       ..sort((a, b) => b['qty'].compareTo(a['qty']));
     final quote = _quote(
@@ -1052,12 +1055,19 @@ class _CartScreenState extends ConsumerState<CartScreen>
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
+    // The lines show in the order they were added and never move when a
+    // quantity changes (#385: sorting by quantity made a line jump to the top
+    // mid-edit). The quote is still built from the quantity-sorted copy it
+    // has always used, so every figure — including the order of its sums and
+    // of the Empty Crates rows — is exactly as before; checkout keeps its own
+    // sort in [_openCheckout].
     final cartItems = List<Map<String, dynamic>>.from(
       ref.read(cartProvider).value,
     );
-    cartItems.sort((a, b) => b['qty'].compareTo(a['qty']));
+    final quoteItems = List<Map<String, dynamic>>.from(cartItems)
+      ..sort((a, b) => b['qty'].compareTo(a['qty']));
     final quote = _quote(
-      cartItems,
+      quoteItems,
       isCrate: businessTracksCrates(ref.watch(currentBusinessProvider)),
     );
     final sub = quote.subtotal;

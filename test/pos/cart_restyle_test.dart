@@ -219,6 +219,64 @@ void main() {
       await disposeScreen(tester);
     });
 
+    testWidgets('lines keep the order they were added when a quantity '
+        'passes the others (stepper and edit sheet)', (tester) async {
+      // Star Lager ×2, Hero Lager ×1, Eva Water ×2 — Eva added last.
+      final cart = await pumpCart(
+        tester,
+        size: const Size(800, 1280),
+        padding: const EdgeInsets.only(top: 24, bottom: 24),
+        fill: fillMockupCart,
+      );
+      const order = ['Star Lager', 'Hero Lager', 'Eva Water'];
+      void expectOrder(String when) {
+        final tops = [
+          for (final name in order) tester.getTopLeft(lineOf(name)).dy,
+        ];
+        expect(
+          tops[0] < tops[1] && tops[1] < tops[2],
+          isTrue,
+          reason: 'Lines moved $when: tops $tops for $order',
+        );
+      }
+
+      expectOrder('at the start');
+      final eva = lineOf('Eva Water');
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(
+          find.descendant(
+            of: eva,
+            matching: find.byKey(const Key('stepper-increment')),
+          ),
+        );
+        await tester.pump();
+      }
+      expect(
+        (cart.value.firstWhere((l) => l['name'] == 'Eva Water')['qty'] as num)
+            .toDouble(),
+        5,
+      );
+      expectOrder('after + took Eva Water above the others');
+
+      // Through the edit sheet: set Eva Water to 9 and save.
+      await tester.tap(
+        find.descendant(of: eva, matching: find.text('Eva Water')),
+      );
+      await settle(tester);
+      final qtyField = find.byType(EditableText).first;
+      await tester.enterText(qtyField, '9');
+      await tester.pump();
+      await tester.tap(find.text('Save Changes'));
+      await settle(tester);
+      expect(
+        (cart.value.firstWhere((l) => l['name'] == 'Eva Water')['qty'] as num)
+            .toDouble(),
+        9,
+      );
+      expectOrder('after the edit sheet set Eva Water to 9');
+      await disposeScreen(tester);
+    });
+
     testWidgets('+ stops at the line\'s stock cap', (tester) async {
       final cart = await pumpCart(
         tester,
