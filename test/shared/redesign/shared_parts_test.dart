@@ -205,6 +205,44 @@ void main() {
     expect(beerIcon.icon, AppIcons.beerMug);
   });
 
+  testWidgets('ProductTile: tappableWhenOut keeps an out-of-stock tile live '
+      '(#394)', (tester) async {
+    var taps = 0;
+    var holds = 0;
+    await pump(
+      tester,
+      (_) => SizedBox(
+        height: 260,
+        width: 180,
+        child: ProductTile(
+          key: const Key('out-live'),
+          name: 'Hero Lager',
+          stockLabel: 'No stock',
+          stockLevel: StockLevel.out,
+          categoryName: 'Beer',
+          tappableWhenOut: true,
+          onTap: () => taps++,
+          onLongPress: () => holds++,
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('out-live')));
+    await tester.longPress(find.byKey(const Key('out-live')));
+    expect(taps, 1);
+    expect(holds, 1);
+    // Not dimmed, no overlay; the stock pill keeps its text.
+    expect(find.text('Out of stock'), findsNothing);
+    expect(find.text('No stock'), findsOneWidget);
+    final opacity = tester.widget<Opacity>(
+      find.descendant(
+        of: find.byKey(const Key('out-live')),
+        matching: find.byType(Opacity),
+      ),
+    );
+    expect(opacity.opacity, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('CategoryChip: the dot follows the product-tile colour rule', (
     tester,
   ) async {
