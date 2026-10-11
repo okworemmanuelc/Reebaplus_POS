@@ -45,7 +45,7 @@ void fillMockupCart(
     mockupLine(
       name: 'Star Lager',
       price: 9600,
-      subtitle: '60cl · Crate of 12',
+      subtitle: '60cl',
       category: 'Beer',
       bottle: crates,
       crateKobo: crates ? 100000 : 0,
@@ -57,7 +57,7 @@ void fillMockupCart(
     mockupLine(
       name: 'Hero Lager',
       price: 8400,
-      subtitle: '60cl · Crate of 12',
+      subtitle: '60cl',
       category: 'Beer',
       bottle: crates,
     ),
@@ -66,7 +66,7 @@ void fillMockupCart(
     mockupLine(
       name: 'Eva Water',
       price: 2700,
-      subtitle: '75cl · Pack of 12',
+      subtitle: '75cl',
       category: 'Water',
     ),
     qty: 2,

@@ -51,28 +51,32 @@ class CartPanel extends StatelessWidget {
     final t = Theme.of(context);
     final scheme = t.extension<AppSchemeColors>();
     final rightInset = MediaQuery.paddingOf(context).right;
-    return Container(
-      key: const Key('cart-panel'),
-      width: cartPanelWidth(context) + rightInset,
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface,
-        border: Border(left: BorderSide(color: t.dividerColor)),
-        boxShadow: [
-          if (scheme != null && !context.isWideLayout)
-            BoxShadow(
-              color: scheme.panelShadow,
-              blurRadius: 24,
-              offset: const Offset(-4, 0),
-            ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.only(right: rightInset),
-        child: MediaQuery.removePadding(
-          context: context,
-          removeLeft: true,
-          removeRight: true,
-          child: child,
+    // Its own layer: the panel repaints alone as the cart changes, and its
+    // goldens capture the panel without the screen beside it.
+    return RepaintBoundary(
+      child: Container(
+        key: const Key('cart-panel'),
+        width: cartPanelWidth(context) + rightInset,
+        decoration: BoxDecoration(
+          color: t.colorScheme.surface,
+          border: Border(left: BorderSide(color: t.dividerColor)),
+          boxShadow: [
+            if (scheme != null && !context.isWideLayout)
+              BoxShadow(
+                color: scheme.panelShadow,
+                blurRadius: 24,
+                offset: const Offset(-4, 0),
+              ),
+          ],
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(right: rightInset),
+          child: MediaQuery.removePadding(
+            context: context,
+            removeLeft: true,
+            removeRight: true,
+            child: child,
+          ),
         ),
       ),
     );

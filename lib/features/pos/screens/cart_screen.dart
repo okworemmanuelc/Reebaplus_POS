@@ -1103,7 +1103,12 @@ class _CartScreenState extends ConsumerState<CartScreen>
         categoryNames[rawCategory] ?? rawCategory,
         fixed,
       );
-      final subtitle = (item['subtitle'] as String?)?.trim();
+      // "60cl · Bottle": the product's own subtitle, then its unit (as the
+      // Request Stock tiles). The unit moved here from the front of the name.
+      final detail = [
+        item['subtitle'] as String?,
+        item['unit'] as String?,
+      ].where((s) => s != null && s.trim().isNotEmpty).join(' · ');
       final card = CartLine(
         key: cartLineKey(
           productId: item['id'] as String?,
@@ -1112,7 +1117,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
         name: productDisplayName(
           item['name'] as String,
           item['size'] as String?,
-          unit: item['unit'] as String?,
         ),
         icon: visual.icon,
         tileTint: visual.tint,
@@ -1122,7 +1126,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         totalLabel: formatCurrency(net),
         originalTotalLabel: discountKobo > 0 ? formatCurrency(gross) : null,
         badges: _lineBadges(item),
-        detail: (subtitle == null || subtitle.isEmpty) ? null : subtitle,
+        detail: detail.isEmpty ? null : detail,
         isLastUnit: qty <= 1,
         onIncrement: _isClearing ? () {} : () => _incrementLine(item),
         onDecrement: _isClearing ? () {} : () => _decrementLine(item),
