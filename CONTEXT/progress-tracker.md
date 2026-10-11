@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #394 PR 1: Receive Stock restyle + fly-to-cart (2026-10-11) — PRD #346 Wave 2 A
+Branch `feat/redesign-w2-receiving` off `main` 2ec88349, worktree `../drinkPosApp-wt-394`. PR 1 of 2 (PR 2 = receive cart, Edit Receive Item sheet, checkout, supplier picker, uncosted warning). **No Drift/cloud/sync/permission/status/money/stock-rule change (no `pos-parity` issue), no new packages.**
+- **Shared parts (additive)**: `ProductTile.tappableWhenOut` (default false; `parts_product_tile_*` goldens unchanged, new parts test) and `FlyTargetId.receiveCart`.
+- **Screen**: solid top bar with `ScreenHeader` (new local `receive_parts.dart`), one scroll view (search → chips → shared `CoachHintBanner` → sliver grid), shared `ProductTile`s (today's content: name, size · unit, "Current: N" / "No stock", no price; out of stock still tappable), restyled New Product cell, "Review Items (N)" footer. Phone grid 2 columns (was 3), to match POS. Conventions in `ui-context.md` "Receive Stock".
+- **Fly-to-cart (new behaviour, PRD #346)**: tile tap adds, then flies to "Review Items" in a post-frame callback (so the first add flies too); cancelled on re-tap and on dispose; nothing under reduced motion.
+- **Fixes**: a chosen category deleted by sync threw `StateError` in the chip lookup → falls back to "All"; opening search while scrolled down scrolls the field into view. Dead grid params (`showHint`, `onHintTap`, `gridColumns`, colour args) removed.
+- **Tests**: new `test/receiving/receive_stock_redesign_test.dart` + fixture `receive_fixture.dart`; `receive_flow_mode_test.dart` setup hosts the sliver grid (assertions unchanged). Goldens `receive_stock_{390x844,844x390_insets,800x1280,1280x800}_{light,dark}`.
+- **Next**: PR 2 after supervisor go-ahead.
+
 ### Issue #389: Empty Crates lists bottle manufacturers only + Manufacturers tab (2026-10-11)
 Branch `fix/empty-crates-bottle-only-389` off `main` 9a6a3d73, worktree `../drinkPosApp-wt-389`. **No Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages.**
 - **Root cause**: `_cratesTabSlivers` built one card per `_dbManufacturers` row (`inventoryDao.watchAllManufacturers()` — every manufacturer). The card figures were already bottle-only; the list was not.

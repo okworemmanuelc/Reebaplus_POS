@@ -461,7 +461,7 @@ width. Under the cap the gutter is `getRSize(16)`, as in the mockup.
 | `StatCard` | `stat_card.dart` | Home figure cards: icon tile, muted title + status pill, big figure, one-line subtitle. Optional `onTap`; optional `trailing` widget after the text (#374: Total SKUs' expand chevron); optional `density` (`StatCardDensity.compact`, #374: the landscape mockup's 12 padding / 44 tile / title 13 / figure 22 / subtitle 12 with a `dense` pill) for narrow grid cells. |
 | `TagPill`, `StatusPill` | `tag_pill.dart` | PRO / CEO / status words in fixed colours (`TagPillTone`). `StatusPill` adds the mockup's ↑ / ↓ / ⓘ icon per tone. Optional `dense` (#374: 5×2 padding, 9 icon, 11 label) for compact stat cards. Display only. |
 | `IconTile` (`IconTileTone`) | `icon_tile.dart` | The pale rounded square with a filled icon (stat cards, settings rows, cart lines). Fixed tone pairs, or explicit colours. |
-| `ProductTile` (`StockLevel`) | `product_tile.dart` | POS / Receive Stock / Request Stock grid tile: photo first, else category tint + keyword icon; name, size·pack, price (optional since #380 — Request Stock passes none and the stock pill sits at the start), stock pill; cart-count badge and primary border; out of stock dims and ignores taps. Optional `inCartLabel` (#384) replaces the badge text (POS sells fractions: "1.5"). |
+| `ProductTile` (`StockLevel`) | `product_tile.dart` | POS / Receive Stock / Request Stock grid tile: photo first, else category tint + keyword icon; name, size·pack, price (optional since #380 — Request Stock passes none and the stock pill sits at the start), stock pill; cart-count badge and primary border; out of stock dims and ignores taps. Optional `inCartLabel` (#384) replaces the badge text (POS sells fractions: "1.5"). Optional `tappableWhenOut` (#394, default false): an out-of-stock tile keeps tap and hold, is not dimmed and has no overlay; the danger pill stays (Receive Stock restocks empty products). |
 | `categoryVisual()` / `CategoryVisual` | `category_visual.dart` | The pure tile rule: keyword → icon + colour (stout/malt/beer·lager/water/energy/soft drink·soda·juice/wine·spirit), else a stable code-unit-sum hash into the fixed palette; null/blank → neutral + box. Unit-tested. |
 | `CategoryChip` | `category_chip.dart` | Category filter chip with a dot coloured by `categoryVisual`; null category = "All". |
 | `CartLine`, `QuantityStepper` | `cart_line.dart` | Cart line card: icon tile, name, "qty × price", total, size·pack, stepper (− becomes a red delete at the last unit). Caller resolves the icon (the Cart uses `categoryVisual`, #385). Optional `badges` (tags under "qty × price") and `originalTotalLabel` (the pre-discount total, struck through above the total), both #385, default to none. |
@@ -493,9 +493,15 @@ panel header registers at priority 1, the nav Cart item at 0.
   returned `FlyToCartFlight` can `cancel()`; POS cancels a tile's previous
   flight on a new tap and on dispose, as before.
 - **Request Stock (#380)** flies to its "Review request" bar: `FlyTargetId.stockRequest`.
-- **A new destination** (Receive Stock's receiving cart, Wave 2 A): add a
-  `FlyTargetId` value, wrap its button in a `FlyTarget` with that id, and call
-  `flyToTarget(context, target: thatId)` after the add.
+- **Receive Stock (#394)** flies to its "Review Items (N)" bar:
+  `FlyTargetId.receiveCart`. The bar only exists once the receipt has a line,
+  and a flight resolves its target at launch, so the tile launches the flight
+  in a post-frame callback after the add (the first add flies too; the add
+  itself never waits). Request Stock launches synchronously and so skips the
+  flight on its first add (follow-up).
+- **A new destination**: add a `FlyTargetId` value, wrap its button in a
+  `FlyTarget` with that id, and call `flyToTarget(context, target: thatId)`
+  after the add (post-frame if the target appears with that add).
 
 **Text weights for parts.** `AppTextStyles` (`app_theme.dart`) gained
 `boldStyle(base)` (700), `semiBoldStyle(base)` (600), `mediumStyle(base)` (500),
@@ -506,7 +512,7 @@ never build a raw `TextStyle`.
 **Fixed colours.** `AppFixedColors.onSolid` (white, both brightnesses) is the
 text on a solid fixed pill (PRO).
 
-**Coach hint banner (`lib/shared/widgets/coach_hint_banner.dart`, #380).** The pale `primaryTint` "tap to add, tap and hold to choose a quantity" banner over a product grid, with a 48dp ✕. One per screen; the caller owns showing and retiring it (`UiHintService`). Request Stock and POS (#384) use it; Receive Stock still draws its own private copy until its redesign wave.
+**Coach hint banner (`lib/shared/widgets/coach_hint_banner.dart`, #380).** The pale `primaryTint` "tap to add, tap and hold to choose a quantity" banner over a product grid, with a 48dp ✕. One per screen; the caller owns showing and retiring it (`UiHintService`). Request Stock, POS (#384) and Receive Stock (#394) use it.
 
 ## Layout patterns
 
@@ -594,6 +600,14 @@ The one form for "a customer paid us": the customer page's Add Credit and Home's
 ### Request Stock (`lib/features/stores/screens/request_stock_screen.dart`, #380)
 
 A pushed screen (GlassyScaffold title bar). One `CustomScrollView`: the two store pickers side by side ("Request from store" / "Deliver to store"; a fixed end is a locked field), a search field, the coach hint, then `RequestProductGrid` — `ProductTile`s for the **source store's in-stock products** only, columns = width / 170 (2–6), cell height `getRSize(220)`, no price, "N in stock" pill (warning at or under the product's `lowStockThreshold`), the requested quantity as the badge. Empty states centre in the remaining space (no source yet / source has nothing in stock / no search match). Under it, while the list is not empty and the keyboard is down, a Surface footer with the primary "N items · Review request" button (`deviceBottomPadding` below it); it is the fly-to target. The review sheet lists lines as cards (category `IconTile`, name up to 2 lines, "‹store› has N", red ✕ remove, `QuantityStepper` — at 1 the minus is remove), then "N products · M units" and "Send request" → a confirm dialog. Hold on a tile opens a quantity sheet (autofocused number field). With the keyboard up the scroll view ends at the keyboard's top edge (pinned by `request_stock_keyboard_test.dart`).
+
+### Receive Stock (`lib/features/receiving/screens/receive_stock_screen.dart` + `receiving/widgets/`, #394)
+
+A pushed screen (Inventory's FAB, Home's quick action) on `AppDecorations.pageBackground`. **Restyle only: the receive gate (`stock.add || products.add`), the direct inventory write, the FIFO batch, the supplier rule and the uncosted warning are untouched.**
+- **Top bar** (`ReceiveTopBar`, `receive_parts.dart`, a copy of the CEO Settings / POS bar): solid Surface + hairline + `topBarShadow`, `ScreenHeader` — receiving tile (`AppIcons.receiving`), "Receive Stock", the active store label (whose stock the "Current" counts show: the locked store, or All Stores' aggregate), a 48dp back arrow exactly when the route implies one, and the search toggle (48dp, search ↔ close). Height `receiveTopBarHeight` (POS's rule).
+- **One `CustomScrollView`** (PRD #239): the search field (only while toggled on, autofocus; opening it scrolls to the top so it is in view) → `CategoryFilterBar` (POS's, reused) → the shared `CoachHintBanner` "Tap and hold a product to edit it." (only with `Gates.editProductPrice`, same `UiHintService` key) → the grid. On a sideways phone the chips and hint scroll away; a whole tile row then fits above the bar. A chosen category deleted by sync falls back to "All".
+- **Grid** (`ReceiveProductGrid`, a sliver): the New Product cell first (only with `Gates.addProduct`; card frame with a primary border, pale primary add `IconTile`, "New Product"), then a `ProductTile` per product — name, subtitle = size · unit (the crate size and unit, as before), pill "Current: N" or a red "No stock", **no price**, the receipt quantity as the badge, `tappableWhenOut: true`. Tap adds one and flies; hold re-checks `editProductPrice` and opens `UpdateProductSheet` (receive mode). Columns = `(grid width incl. gutters / 170).clamp(2, 6)`: 2 on phones (was 3), 4 sideways at 844 and upright at 800 beside the rail, 6 at 1280. Cell height `receiveTileExtent` (grows with the text scale; the art shrinks under 480dp of height). Tile keys `receiveProductTileKey(id)`.
+- **Footer**: while the receipt has lines, a Surface + hairline bar with the gradient "Review Items (N)" `AppButton` (`deviceBottomPadding` below, side insets cleared) — the fly-to target — opening the receive cart.
 
 ### App bar
 
