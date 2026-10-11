@@ -186,8 +186,6 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
                     }
                   });
                 },
-                textCol: textCol,
-                borderCol: borderCol,
               ),
             if (!_isLoading &&
                 _showReceiveHint &&
