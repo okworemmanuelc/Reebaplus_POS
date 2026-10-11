@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
-import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
+import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/crates/cart_crate_lines.dart';
@@ -21,6 +21,11 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/features/pos/widgets/cart/cart_parts.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/cart_line.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
@@ -313,30 +318,30 @@ class _CartScreenState extends ConsumerState<CartScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (modalCtx) {
-        return Container(
-          height: context.getRHeight(0.7),
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
+        final muted = _subtext;
+        final fixed =
+            Theme.of(modalCtx).extension<AppFixedColors>() ??
+            AppFixedColors.light;
+        return SizedBox(
+          key: const Key('cart-saved-carts-sheet'),
+          height: modalCtx.sheetMaxHeight(0.7),
           child: Column(
             children: [
               Padding(
-                padding: EdgeInsets.all(modalCtx.getRSize(20)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Saved Carts',
-                      style: TextStyle(
-                        fontSize: modalCtx.getRFontSize(18),
-                        fontWeight: FontWeight.w800,
-                        color: _text,
-                      ),
-                    ),
-                    IconButton(
+                padding: EdgeInsets.fromLTRB(
+                  modalCtx.getRSize(20),
+                  modalCtx.getRSize(12),
+                  modalCtx.getRSize(12),
+                  modalCtx.getRSize(12),
+                ),
+                child: SalesSheetHeader(
+                  title: 'Saved Carts',
+                  leading: const IconTile(icon: AppIcons.history, size: 44),
+                  trailing: [
+                    SalesBackButton(
+                      icon: AppIcons.close,
+                      tooltip: 'Close',
                       onPressed: () => Navigator.pop(modalCtx),
-                      icon: Icon(AppIcons.close, color: _subtext),
                     ),
                   ],
                 ),
@@ -354,89 +359,127 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     final carts = snapshot.data!;
                     if (carts.isEmpty) {
                       return Center(
-                        child: Text(
-                          'No saved carts found',
-                          style: TextStyle(color: _subtext),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const IconTile(
+                              icon: AppIcons.history,
+                              tone: IconTileTone.neutral,
+                              size: 56,
+                            ),
+                            SizedBox(height: modalCtx.getRSize(10)),
+                            Text(
+                              'No saved carts found',
+                              style: modalCtx
+                                  .semiBoldStyle(14)
+                                  .copyWith(color: muted),
+                            ),
+                          ],
                         ),
                       );
                     }
-                    return ListView.builder(
-                      padding: EdgeInsets.only(
-                        bottom: modalCtx.deviceBottomPadding,
+                    return ListView.separated(
+                      padding: EdgeInsets.fromLTRB(
+                        modalCtx.getRSize(20),
+                        0,
+                        modalCtx.getRSize(20),
+                        modalCtx.deviceBottomPadding + modalCtx.getRSize(20),
                       ),
                       itemCount: carts.length,
+                      separatorBuilder: (_, __) =>
+                          SizedBox(height: modalCtx.getRSize(8)),
                       itemBuilder: (context, index) {
                         final cart = carts[index];
-                        // ListTile paints its ink/background on the nearest
-                        // Material; the modal's surface-colored Container sits
-                        // above it and would hide those. A transparent Material
-                        // gives the tile an ink target above that fill.
-                        return Material(
-                          type: MaterialType.transparency,
-                          child: ListTile(
-                            title: Text(
-                              cart.name,
-                              style: TextStyle(color: _text),
-                            ),
-                            subtitle: Text(
-                              'Saved on ${cart.createdAt.toString().split('.')[0]}',
-                              style: TextStyle(color: _subtext),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(
-                                AppIcons.delete,
-                                color: Colors.red,
-                              ),
-                              onPressed: () async {
-                                try {
-                                  await db.ordersDao.deleteSavedCart(cart.id);
-                                } catch (e, st) {
-                                  CrashReporter.record(
-                                    e,
-                                    st,
-                                    context: 'pos.cart.delete_saved',
-                                  );
-                                  if (!mounted) return;
-                                  AppNotification.showError(
-                                    this.context,
-                                    'Could not delete saved cart: $e',
-                                  );
-                                }
+                        final radius = BorderRadius.circular(
+                          AppSpacing.borderRadiusL,
+                        );
+                        return DecoratedBox(
+                          decoration: AppDecorations.card(
+                            context,
+                            radius: AppSpacing.borderRadiusL,
+                          ),
+                          child: Material(
+                            type: MaterialType.transparency,
+                            child: InkWell(
+                              borderRadius: radius,
+                              onTap: () async {
+                                await _recallSavedCart(
+                                  cart,
+                                  modalCtx: modalCtx,
+                                  custSvc: custSvc,
+                                  cartSvc: cartSvc,
+                                );
                               },
+                              child: Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  modalCtx.getRSize(12),
+                                  modalCtx.getRSize(8),
+                                  modalCtx.getRSize(4),
+                                  modalCtx.getRSize(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const IconTile(
+                                      icon: AppIcons.cart,
+                                      size: 40,
+                                    ),
+                                    SizedBox(width: modalCtx.getRSize(10)),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            cart.name,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: modalCtx
+                                                .boldStyle(15)
+                                                .copyWith(color: _text),
+                                          ),
+                                          Text(
+                                            'Saved on ${cart.createdAt.toString().split('.')[0]}',
+                                            style: modalCtx
+                                                .regularStyle(12)
+                                                .copyWith(color: muted),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Delete',
+                                      constraints: const BoxConstraints(
+                                        minWidth: kMinInteractiveDimension,
+                                        minHeight: kMinInteractiveDimension,
+                                      ),
+                                      icon: AppIcon(
+                                        AppIcons.delete,
+                                        size: modalCtx.getRSize(22),
+                                        color: fixed.danger,
+                                      ),
+                                      onPressed: () async {
+                                        try {
+                                          await db.ordersDao.deleteSavedCart(
+                                            cart.id,
+                                          );
+                                        } catch (e, st) {
+                                          CrashReporter.record(
+                                            e,
+                                            st,
+                                            context: 'pos.cart.delete_saved',
+                                          );
+                                          if (!mounted) return;
+                                          AppNotification.showError(
+                                            this.context,
+                                            'Could not delete saved cart: $e',
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                            onTap: () async {
-                              try {
-                                final items =
-                                    (jsonDecode(cart.cartData) as List)
-                                        .cast<Map<String, dynamic>>();
-                                Customer? customer;
-                                if (cart.customerId != null) {
-                                  customer = custSvc.getById(cart.customerId!);
-                                }
-                                cartSvc.loadCart(
-                                  items,
-                                  customer,
-                                  storeId: cart.storeId,
-                                );
-                                Navigator.pop(modalCtx);
-                                AppNotification.showSuccess(
-                                  context,
-                                  'Cart loaded',
-                                );
-                              } catch (e, st) {
-                                CrashReporter.record(
-                                  e,
-                                  st,
-                                  context: 'pos.cart.load_saved',
-                                );
-                                if (!mounted) return;
-                                Navigator.pop(modalCtx);
-                                AppNotification.showError(
-                                  this.context,
-                                  'Could not load this saved cart.',
-                                );
-                              }
-                            },
                           ),
                         );
                       },
@@ -451,14 +494,38 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
+  /// Loads [cart] from the Saved Carts sheet (unchanged from before #393; moved
+  /// out of the sheet builder so the restyled row can call it).
+  Future<void> _recallSavedCart(
+    SavedCartData cart, {
+    required BuildContext modalCtx,
+    required CustomerService custSvc,
+    required CartService cartSvc,
+  }) async {
+    try {
+      final items = (jsonDecode(cart.cartData) as List)
+          .cast<Map<String, dynamic>>();
+      Customer? customer;
+      if (cart.customerId != null) {
+        customer = custSvc.getById(cart.customerId!);
+      }
+      cartSvc.loadCart(items, customer, storeId: cart.storeId);
+      Navigator.pop(modalCtx);
+      AppNotification.showSuccess(context, 'Cart loaded');
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'pos.cart.load_saved');
+      if (!mounted) return;
+      Navigator.pop(modalCtx);
+      AppNotification.showError(context, 'Could not load this saved cart.');
+    }
+  }
+
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _surface => Theme.of(context).colorScheme.surface;
 
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
   Color get _primary => Theme.of(context).colorScheme.primary;
 
   void _showChangeCustomerModal() {
@@ -479,156 +546,110 @@ class _CartScreenState extends ConsumerState<CartScreen>
       // a downward scroll never doubles as drag-to-dismiss; close via the
       // native barrier (tap-outside, smooth slide-down) or the X.
       enableDrag: false,
-      backgroundColor: _surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
       builder: (modalCtx) {
         String searchQuery = '';
         String? pickerStoreId = defaultPickerStoreId;
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
+            final muted = _subtext;
             return SizedBox(
-              height: modalCtx.getRHeight(0.85),
+              key: const Key('cart-customer-picker'),
+              height: modalCtx.sheetMaxHeight(0.85),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
                     padding: EdgeInsets.fromLTRB(
                       modalCtx.getRSize(20),
-                      modalCtx.getRSize(14),
-                      modalCtx.getRSize(20),
+                      modalCtx.getRSize(12),
+                      modalCtx.getRSize(12),
                       0,
                     ),
-                    child: Center(
-                      child: Container(
-                        width: modalCtx.getRSize(40),
-                        height: modalCtx.getRSize(4),
-                        decoration: BoxDecoration(
-                          color: _border,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: modalCtx.getRSize(16)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: modalCtx.getRSize(20),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Select Customer',
-                          style: TextStyle(
-                            fontSize: modalCtx.getRFontSize(18),
-                            fontWeight: FontWeight.w800,
-                            color: _text,
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Creating a customer needs `customers.add`
-                            // (hard rule #6/#7) — hide "New" otherwise.
-                            // The AddCustomerSheet save handler re-checks
-                            // the same key at the write boundary.
-                            if (Gates.addCustomer.allows(ref)) ...[
-                              AppButton(
-                                text: 'New',
-                                variant: AppButtonVariant.secondary,
-                                isFullWidth: false,
-                                height: modalCtx.getRSize(36),
-                                icon: AppIcons.userAdd,
-                                onPressed: () {
-                                  Navigator.pop(modalCtx);
-                                  AddCustomerSheet.show(
-                                    context,
-                                    onCustomerAdded: (newCustomer) {
-                                      setState(
-                                        () => _activeCustomer = newCustomer,
-                                      );
-                                      widget.onCustomerChanged(newCustomer);
-                                      ref
-                                          .read(cartProvider)
-                                          .setActiveCustomer(newCustomer);
-                                    },
-                                  );
+                    child: SalesSheetHeader(
+                      title: 'Select Customer',
+                      leading: const IconTile(icon: AppIcons.user, size: 44),
+                      trailing: [
+                        // Creating a customer needs `customers.add`
+                        // (hard rule #6/#7) — hide "New" otherwise.
+                        // The AddCustomerSheet save handler re-checks
+                        // the same key at the write boundary.
+                        if (Gates.addCustomer.allows(ref)) ...[
+                          AppButton(
+                            key: const Key('cart-picker-new'),
+                            text: 'New',
+                            variant: AppButtonVariant.secondary,
+                            isFullWidth: false,
+                            height: kMinInteractiveDimension,
+                            icon: AppIcons.userAdd,
+                            onPressed: () {
+                              Navigator.pop(modalCtx);
+                              AddCustomerSheet.show(
+                                context,
+                                onCustomerAdded: (newCustomer) {
+                                  setState(() => _activeCustomer = newCustomer);
+                                  widget.onCustomerChanged(newCustomer);
+                                  ref
+                                      .read(cartProvider)
+                                      .setActiveCustomer(newCustomer);
                                 },
-                              ),
-                              SizedBox(width: modalCtx.getRSize(8)),
-                            ],
-                            IconButton(
-                              onPressed: () => Navigator.pop(modalCtx),
-                              icon: Icon(AppIcons.close, color: _subtext),
-                            ),
-                          ],
+                              );
+                            },
+                          ),
+                          SizedBox(width: modalCtx.getRSize(4)),
+                        ],
+                        SalesBackButton(
+                          icon: AppIcons.close,
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.pop(modalCtx),
                         ),
                       ],
                     ),
                   ),
+                  SizedBox(height: modalCtx.getRSize(12)),
                   // ── Store filter ──
                   if (_stores.isNotEmpty)
                     Padding(
                       padding: EdgeInsets.fromLTRB(
                         modalCtx.getRSize(20),
-                        modalCtx.getRSize(4),
-                        modalCtx.getRSize(20),
                         0,
+                        modalCtx.getRSize(20),
+                        modalCtx.getRSize(8),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            AppIcons.store,
-                            size: modalCtx.getRSize(12),
-                            color: _subtext,
+                      child: AppDropdown<String?>(
+                        value: pickerStoreId,
+                        items: [
+                          DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text(
+                              'All Stores',
+                              style: modalCtx
+                                  .semiBoldStyle(13)
+                                  .copyWith(color: _primary),
+                            ),
                           ),
-                          SizedBox(width: modalCtx.getRSize(6)),
-                          Expanded(
-                            child: AppDropdown<String?>(
-                              value: pickerStoreId,
-                              items: [
-                                DropdownMenuItem<String?>(
-                                  value: null,
-                                  child: Text(
-                                    'All Stores',
-                                    style: TextStyle(
-                                      fontSize: modalCtx.getRFontSize(13),
-                                      fontWeight: FontWeight.w600,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                    ),
-                                  ),
-                                ),
-                                ..._stores.map(
-                                  (w) => DropdownMenuItem<String?>(
-                                    value: w.id,
-                                    child: Text(
-                                      w.name,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: modalCtx.getRFontSize(13),
-                                        fontWeight: FontWeight.w600,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              onChanged: (id) =>
-                                  setDialogState(() => pickerStoreId = id),
+                          ..._stores.map(
+                            (w) => DropdownMenuItem<String?>(
+                              value: w.id,
+                              child: Text(
+                                w.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: modalCtx
+                                    .semiBoldStyle(13)
+                                    .copyWith(color: _primary),
+                              ),
                             ),
                           ),
                         ],
+                        onChanged: (id) =>
+                            setDialogState(() => pickerStoreId = id),
                       ),
                     ),
                   Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: modalCtx.getRSize(20),
-                      vertical: modalCtx.getRSize(8),
+                    padding: EdgeInsets.fromLTRB(
+                      modalCtx.getRSize(20),
+                      0,
+                      modalCtx.getRSize(20),
+                      modalCtx.getRSize(12),
                     ),
                     child: AppInput(
                       onChanged: (v) {
@@ -639,10 +660,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       hintText: 'Search customers...',
                       prefixIcon: Icon(
                         AppIcons.search,
-                        size: modalCtx.getRSize(16),
-                        color: _subtext,
+                        size: modalCtx.getRSize(18),
+                        color: muted,
                       ),
-                      fillColor: Theme.of(context).cardColor,
                     ),
                   ),
                   Expanded(
@@ -666,7 +686,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                             modalCtx.getRSize(20),
                             0,
                             modalCtx.getRSize(20),
-                            modalCtx.deviceBottomPadding + 20,
+                            modalCtx.deviceBottomPadding +
+                                modalCtx.getRSize(20),
                           ),
                           children: [
                             _buildCustomerTile(null, modalCtx),
@@ -696,91 +717,90 @@ class _CartScreenState extends ConsumerState<CartScreen>
               0);
     final customerCreditBalance = balanceKobo / 100.0;
     final isOwe = customerCreditBalance < 0;
+    final fixed =
+        Theme.of(modalCtx).extension<AppFixedColors>() ?? AppFixedColors.light;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    final base = AppDecorations.card(
+      modalCtx,
+      radius: AppSpacing.borderRadiusL,
+    );
 
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _activeCustomer = customer;
-        });
-        widget.onCustomerChanged(customer);
-        ref.read(cartProvider).setActiveCustomer(customer);
+    return Padding(
+      padding: EdgeInsets.only(bottom: modalCtx.getRSize(8)),
+      child: DecoratedBox(
+        decoration: isSelected
+            ? base.copyWith(border: Border.all(color: _primary, width: 1.5))
+            : base,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            key: Key('cart-picker-row-${customer?.id ?? 'walk-in'}'),
+            onTap: () {
+              setState(() {
+                _activeCustomer = customer;
+              });
+              widget.onCustomerChanged(customer);
+              ref.read(cartProvider).setActiveCustomer(customer);
 
-        Navigator.pop(modalCtx);
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          vertical: modalCtx.getRSize(12),
-          horizontal: modalCtx.getRSize(8),
-        ),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: _border.withValues(alpha: 0.5)),
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(modalCtx.getRSize(10)),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
+              Navigator.pop(modalCtx);
+            },
+            borderRadius: radius,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: kMinInteractiveDimension,
               ),
-              child: Icon(
-                customer == null ? AppIcons.customerRole : AppIcons.user,
-                size: modalCtx.getRSize(16),
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            SizedBox(width: modalCtx.getRSize(14)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: modalCtx.getRFontSize(15),
-                      color: _text,
+              child: Padding(
+                padding: EdgeInsets.all(modalCtx.getRSize(12)),
+                child: Row(
+                  children: [
+                    IconTile(
+                      icon: customer == null
+                          ? AppIcons.customerRole
+                          : AppIcons.user,
+                      tone: customer == null
+                          ? IconTileTone.neutral
+                          : IconTileTone.info,
+                      size: 40,
                     ),
-                  ),
-                  if (customer != null) ...[
-                    SizedBox(height: modalCtx.getRSize(4)),
-                    Row(
-                      children: [
-                        Icon(
-                          AppIcons.naira,
-                          size: modalCtx.getRSize(10),
-                          color: customerCreditBalance == 0
-                              ? success
-                              : (isOwe ? danger : success),
-                        ),
-                        Text(
-                          ' Bal: ${formatCurrency(customerCreditBalance)}',
-                          style: TextStyle(
-                            fontSize: modalCtx.getRFontSize(12),
-                            color: customerCreditBalance == 0
-                                ? success
-                                : (isOwe ? danger : success),
-                            fontWeight: FontWeight.w600,
+                    SizedBox(width: modalCtx.getRSize(10)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: modalCtx
+                                .boldStyle(15)
+                                .copyWith(color: _text),
                           ),
-                        ),
-                      ],
+                          if (customer != null) ...[
+                            SizedBox(height: modalCtx.getRSize(2)),
+                            Text(
+                              'Bal: ${formatCurrency(customerCreditBalance)}',
+                              style: modalCtx
+                                  .semiBoldStyle(12)
+                                  .copyWith(
+                                    color: isOwe ? fixed.danger : fixed.green,
+                                  ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
+                    if (isSelected)
+                      AppIcon(
+                        AppIcons.checkCircle,
+                        filled: true,
+                        color: _primary,
+                        size: modalCtx.getRSize(22),
+                      ),
                   ],
-                ],
+                ),
               ),
             ),
-            if (isSelected)
-              Icon(
-                AppIcons.checkCircle,
-                color: Theme.of(context).colorScheme.primary,
-                size: modalCtx.getRSize(18),
-              ),
-          ],
+          ),
         ),
       ),
     );
