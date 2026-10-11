@@ -742,6 +742,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       // the keyboard every time POS opens — the cashier taps it when they want
       // to search.
       onChanged: (v) => _controller!.updateSearch(v),
+      // The mockups' white field on the page fade (Surface, not Surface 2).
+      fillColor: Theme.of(context).colorScheme.surface,
       hintText:
           'Search ${ref.watch(industryLexiconProvider).itemPluralLower}...',
       prefixIcon: AppIcon(

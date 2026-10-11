@@ -58,10 +58,12 @@ double posTileExtent(BuildContext context) {
       4; // the in-cart border
 }
 
-/// "60cl · Crate of 12": the product's size, then its unit (the same two
-/// fields the tile showed before #384, now with the mockup's separator).
+/// "60cl · Crate": the product's description (its subtitle), its size and
+/// its unit, the blanks skipped, joined with the mockup's " · " (#384). The
+/// tile showed size + unit before; the description leads now, as on Request
+/// Stock's tiles (#380), and the size word stays so nothing is lost.
 String? posTileSubtitle(ProductData product) {
-  final parts = [product.size, product.unit]
+  final parts = [product.subtitle, product.size, product.unit]
       .where((s) => s != null && s.trim().isNotEmpty && s != 'null')
       .map((s) => s!.trim())
       .toList();
