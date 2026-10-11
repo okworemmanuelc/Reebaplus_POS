@@ -439,8 +439,9 @@ The redesign's building blocks. Import the barrel
 gallery golden in `test/redesign/goldens/parts_<part>_<theme>.png`. Screens
 adopt them in Waves 1 and 2: the frame (View Cart bar), CEO Settings (#369:
 `ScreenHeader` in an `AppBar`, `ProfileCard`, `SectionHeader`, `SettingsRow`)
-and Home (#374: `ScreenHeader` + `HeaderBell`, `StatCard` + `StatusPill`,
-`IconTile`, `SectionHeader`) so far.
+Home (#374: `ScreenHeader` + `HeaderBell`, `StatCard` + `StatusPill`,
+`IconTile`, `SectionHeader`) and Inventory → Manufacturers (#389:
+`SectionHeader` + `SettingsRow` per manufacturer, 720dp cap) so far.
 
 **Settings-style lists on wide screens (#369).** A list of cards (settings
 rows, a profile card, a search card) caps its content at 720dp

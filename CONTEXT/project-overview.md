@@ -58,7 +58,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 ### Inventory & Stock
 
-- Products with per-tier prices, stock, and expiry dates; tabs for Products, Suppliers, Empty Crates (Beverage distributor only), and History.
+- Products with per-tier prices, stock, and expiry dates; tabs for Products, Suppliers, Empty Crates and Manufacturers (Beverage distributor only), and History. Empty Crates lists only manufacturers with a returnable-bottle product (or still holding crates); Manufacturers lists every manufacturer and is where one is added (#389).
 - Low-stock, out-of-stock, and near-expiry stat cards; stock-keeper adjustment approvals; and Daily Stock Count.
 - A POS-style Receive Stock flow (gated on `products.add`): a tap-to-add grid, a receive cart with an Invoice Total, and an invoice checkout that atomically posts the supplier invoice, increments stock, records empty crates returned to the supplier, and logs the receipt.
 
