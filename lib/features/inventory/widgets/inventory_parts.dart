@@ -183,20 +183,22 @@ class InventoryFigureCard extends StatelessWidget {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    // Tile and figure on one line, the label under them at full width, so a
+    // narrow card (the phone's sideways row) still fits "Out of Stock".
     final content = ConstrainedBox(
       constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
       child: Padding(
         padding: EdgeInsets.all(context.getRSize(12)),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconTile(icon: icon, tone: tone, size: 36),
-            SizedBox(width: context.getRSize(10)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
+            Row(
+              children: [
+                IconTile(icon: icon, tone: tone, size: 32),
+                SizedBox(width: context.getRSize(8)),
+                Expanded(
+                  child: Text(
                     value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -204,14 +206,15 @@ class InventoryFigureCard extends StatelessWidget {
                         .extraBoldStyle(20)
                         .copyWith(color: t.colorScheme.onSurface),
                   ),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.semiBoldStyle(12).copyWith(color: muted),
-                  ),
-                ],
-              ),
+                ),
+              ],
+            ),
+            SizedBox(height: context.getRSize(6)),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.semiBoldStyle(12).copyWith(color: muted),
             ),
           ],
         ),

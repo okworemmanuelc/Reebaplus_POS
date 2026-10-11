@@ -33,6 +33,7 @@ class AddManufacturerSheet extends ConsumerStatefulWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => AddManufacturerSheet(existingNames: existingNames),
     );
   }

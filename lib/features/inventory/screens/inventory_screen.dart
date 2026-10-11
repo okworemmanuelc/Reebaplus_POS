@@ -622,7 +622,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       builder: (context, constraints) {
         final gutter = inventoryGutter(context, constraints.maxWidth);
         final gap = context.getRSize(10);
-        final cardWidth = context.getRSize(132);
+        final cardWidth = context.getRSize(112);
         final inner = constraints.maxWidth - 2 * gutter;
         final fits =
             inner >= cards.length * cardWidth + (cards.length - 1) * gap;

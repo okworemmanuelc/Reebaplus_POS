@@ -25,6 +25,7 @@ Future<void> showManageCategoriesSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     builder: (_) => const ManageCategoriesSheet(),
   );
 }
