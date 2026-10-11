@@ -305,18 +305,24 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
         color: t.colorScheme.surface,
         border: Border(top: BorderSide(color: t.dividerColor)),
       ),
-      child: FlyTarget(
-        id: FlyTargetId.receiveCart,
-        child: AppButton(
-          key: ReceiveKeys.reviewBar,
-          text: 'Review Items ($cartLineCount)',
-          icon: AppIcons.cart,
-          isFullWidth: true,
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ReceiveCartScreen()),
-            );
-          },
+      // Clear of a side system inset (a landscape navigation bar, a cutout)
+      // when nothing above has taken it out already.
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: FlyTarget(
+          id: FlyTargetId.receiveCart,
+          child: AppButton(
+            key: ReceiveKeys.reviewBar,
+            text: 'Review Items ($cartLineCount)',
+            icon: AppIcons.cart,
+            isFullWidth: true,
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ReceiveCartScreen()),
+              );
+            },
+          ),
         ),
       ),
     );

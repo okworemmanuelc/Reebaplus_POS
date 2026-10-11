@@ -373,17 +373,21 @@ void main() {
       );
     });
 
-    testWidgets('844x390 sideways with insets: a full first row shows', (
-      tester,
-    ) async {
+    testWidgets('844x390 sideways with insets: the chrome scrolls away and a '
+        'whole row of tiles fits above the review bar', (tester) async {
       await open(tester, size: const Size(844, 390), padding: _sidewaysInsets);
       await tapTile(tester, 0);
       await tester.pump(const Duration(seconds: 1));
       expect(tester.takeException(), isNull);
-      final bar = tester.getRect(find.byKey(ReceiveKeys.reviewBar));
-      // The first row: New Product and the tiles beside it.
+      // Scroll the chips and the hint away: the first row then shows whole
+      // between the top bar and the "Review Items" bar.
+      await tester.drag(find.byKey(ReceiveKeys.scroll), const Offset(0, -150));
+      await tester.pump();
+      final viewport = tester.getRect(find.byKey(ReceiveKeys.scroll));
       final first = tester.getRect(find.byKey(ReceiveKeys.newProduct));
-      expect(first.bottom, lessThanOrEqualTo(bar.top));
+      final bar = tester.getRect(find.byKey(ReceiveKeys.reviewBar));
+      expect(first.height, lessThanOrEqualTo(viewport.height));
+      expect(viewport.bottom, lessThanOrEqualTo(bar.top + 1));
       await disposeScreen(tester);
     });
 
@@ -434,9 +438,9 @@ void main() {
   });
 
   test('receiveGridColumns: 2 on phones, width / 170 up to 6', () {
-    expect(receiveGridColumns(328), 2);
-    expect(receiveGridColumns(358), 2);
-    expect(receiveGridColumns(688), 4);
-    expect(receiveGridColumns(1156), 6);
+    expect(receiveGridColumns(360), 2);
+    expect(receiveGridColumns(390), 2);
+    expect(receiveGridColumns(707), 4); // 800dp beside the rail
+    expect(receiveGridColumns(1184), 6); // 1280dp beside the rail
   });
 }

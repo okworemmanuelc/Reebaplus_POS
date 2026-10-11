@@ -21,8 +21,9 @@ ValueKey<String> receiveProductTileKey(String productId) =>
 /// Request Stock's 170).
 const double kReceiveTileMinWidth = 170;
 
-/// Columns for a grid [width] dp wide: as many [kReceiveTileMinWidth]
-/// columns as fit, at least 2 (a 360dp phone) and at most 6 (#394).
+/// Columns for a grid [width] dp wide (gutters included): as many
+/// [kReceiveTileMinWidth] columns as fit, at least 2 (a phone) and at most 6
+/// (#394).
 int receiveGridColumns(double width) =>
     (width / kReceiveTileMinWidth).floor().clamp(2, 6);
 
@@ -78,10 +79,12 @@ class ReceiveProductGrid extends ConsumerWidget {
     final canAddProduct = Gates.addProduct.allows(ref);
     final gutter = context.getRSize(16);
     final gap = context.getRSize(12);
-    return SliverPadding(
-      padding: EdgeInsets.symmetric(horizontal: gutter),
-      sliver: SliverLayoutBuilder(
-        builder: (context, constraints) => SliverGrid.builder(
+    // Columns from the grid's whole width, gutters included (POS's
+    // `columnsFor` reads the same width): 4 beside the rail at 800dp.
+    return SliverLayoutBuilder(
+      builder: (context, constraints) => SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: gutter),
+        sliver: SliverGrid.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: receiveGridColumns(constraints.crossAxisExtent),
             mainAxisExtent: receiveTileExtent(context),
