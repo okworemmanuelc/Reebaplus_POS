@@ -34,6 +34,11 @@ class ReceiveStockScreen extends ConsumerStatefulWidget {
 class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
   final TextEditingController _searchController = TextEditingController();
 
+  /// The one scroll view's controller: opening search scrolls back to the top
+  /// so the field (the first sliver) is in view, as it was when it sat above
+  /// the grid.
+  final ScrollController _scrollController = ScrollController();
+
   List<ProductDataWithStock> _allProducts = [];
   List<CategoryData> _categories = [];
   String? _selectedCategoryId;
@@ -66,6 +71,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
     _productsSub?.cancel();
     _categoriesSub?.cancel();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -138,6 +144,9 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
         _searchQuery = '';
       }
     });
+    if (_isSearching && _scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
   }
 
   @override
@@ -200,6 +209,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
         : _categories.where((c) => c.id == _selectedCategoryId).firstOrNull;
     return CustomScrollView(
       key: ReceiveKeys.scroll,
+      controller: _scrollController,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
