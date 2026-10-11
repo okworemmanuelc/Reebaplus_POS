@@ -4,20 +4,24 @@ import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
-import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/coach_hint_banner.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/screen_header.dart';
 import 'package:reebaplus_pos/shared/widgets/view_selector_sheet.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/product_grid.dart';
 import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
+import 'package:reebaplus_pos/features/pos/widgets/pos_header_parts.dart';
 import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -30,6 +34,9 @@ import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 
+export 'package:reebaplus_pos/features/pos/widgets/pos_header_parts.dart'
+    show kPosTopBarKey, kPosViewSelectorKey, kPosHintKey, kPosSelectStoreKey;
+
 /// POS's one vertical scroll surface (issue #259 / PRD #239).
 const Key kPosScrollSurfaceKey = ValueKey<String>('pos-scroll-surface');
 
@@ -40,8 +47,9 @@ const Key kPosTierRowKey = ValueKey<String>('pos-tier-row');
 const Key kPosSearchBandKey = ValueKey<String>('pos-search-band');
 
 const Key kPosTierDropdownKey = ValueKey<String>('pos-tier-dropdown');
-const Key kPosManufacturerDropdownKey =
-    ValueKey<String>('pos-manufacturer-dropdown');
+const Key kPosManufacturerDropdownKey = ValueKey<String>(
+  'pos-manufacturer-dropdown',
+);
 const Key kPosQuickSaleKey = ValueKey<String>('pos-quick-sale');
 const Key kPosScannerKey = ValueKey<String>('pos-scanner');
 const Key kPosSearchFieldKey = ValueKey<String>('pos-search-field');
@@ -73,7 +81,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _hasAutoShownPicker = false;
   bool _isListView = false;
-  int _gridColumns = 3;
+  // #384: 2 columns on an upright phone by default (the mockup); a saved
+  // view-selector choice still wins.
+  int _gridColumns = 2;
   bool _showPosHint = false;
 
   @override
@@ -113,7 +123,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     if (mounted) {
       setState(() {
         _isListView = prefs.getBool('pos_is_list_view') ?? false;
-        _gridColumns = prefs.getInt('pos_grid_columns') ?? 3;
+        _gridColumns = prefs.getInt('pos_grid_columns') ?? 2;
       });
     }
   }
@@ -248,105 +258,85 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     return ListenableBuilder(
       listenable: _controller!,
       builder: (context, _) {
-        final bgCol = Theme.of(context).scaffoldBackgroundColor;
-        final surfaceCol = Theme.of(context).colorScheme.surface;
-        final cardCol = Theme.of(context).cardColor;
-        final textCol = Theme.of(context).colorScheme.onSurface;
-        final subtextCol =
-            Theme.of(context).textTheme.bodySmall?.color ??
-            Theme.of(context).iconTheme.color!;
-        final borderCol = Theme.of(context).dividerColor;
-
-        return SharedScaffold(
-          activeRoute: 'pos',
-          backgroundColor: bgCol,
-          // The top bar is a sliver in the body's own scroll view now, so the
-          // Scaffold must not render one as fixed chrome (issue #259).
-          bodyOwnsAppBar: true,
-          // #118: the always-visible one-shot scan control lives at the
-          // bottom-right (the FAB slot the removed cart FAB used, ADR 0017).
-          // Hidden only while a multi-store user still has to pick a store —
-          // there's no catalogue loaded to scan into yet.
-          floatingActionButton: needsStoreSelection
-              ? null
-              : PosBarcodeScanButton(
-                  key: kPosScannerKey,
-                  tier: _controller!.selectedGroup,
-                  loadedProducts: _controller!.allProducts,
-                  storeName: _controller!.currentStoreName,
-                  storeId: _controller!.activeStoreId,
-                  readStoreProducts: () => _controller!.allProducts,
-                ),
-          // The top bar lives inside the scroll view, so this SafeArea owns the
-          // status-bar inset the Scaffold's AppBar used to absorb.
-          body: SafeArea(
-            // Pull-to-refresh wraps the WHOLE body (above the header) so the
-            // gesture + spinner work from the very top of the screen, over the
-            // dropdowns and category bar — not just on the product grid.
-            child: AppRefreshWrapper(
-              // POS is ONE scrolling surface (issue #259 / PRD #239). The top
-              // bar and the price-tier row scroll away; the search bar and
-              // category chips freeze at the top; the grid is a sliver that
-              // depends on no supplied height. That last part is the fix: the
-              // grid used to sit in an `Expanded` under a non-scrolling Column
-              // of fixed chrome, and at 800x360 that chrome took the whole
-              // viewport and left the grid 0.0dp — rendering nothing and
-              // reporting nothing.
-              child: CustomScrollView(
-                key: kPosScrollSurfaceKey,
-                slivers: [
-                  _buildTopBarSliver(context, surfaceCol, textCol, subtextCol),
-                  SliverToBoxAdapter(
-                    child: _buildHeader(
-                      context,
-                      surfaceCol,
-                      textCol,
-                      subtextCol,
-                      borderCol,
-                    ),
-                  ),
-                  _buildFrozenBandSliver(
-                    context,
-                    surfaceCol,
-                    cardCol,
-                    textCol,
-                    subtextCol,
-                    borderCol,
-                  ),
-                  // ONE combined coach banner. Tap adds to the cart; tap-and-hold
-                  // opens the qty/discount sheet to add several at once (it does
-                  // NOT edit the product — that's done from the Products screen),
-                  // which is why the copy says "quantity", not "edit". Both
-                  // gestures act on a product tile, so gate on a non-empty grid.
-                  //
-                  // It carries ONE hint key. Main had already merged the two
-                  // banners into one widget but left them on two independently
-                  // retiring keys, which is what made the ✕ a half-dismiss: it
-                  // called `markShown` on each, moving both counts 0 → 1, so the
-                  // banner came back once more. One key + `markDismissed` is what
-                  // makes a close final (see `UiHintService.hintPosGestures`).
-                  if (!_controller!.isLoading &&
-                      _showPosHint &&
-                      !needsStoreSelection &&
-                      _controller!.filteredProducts.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: _buildInlineHint(
-                        message: 'Tap a '
-                            '${ref.watch(industryLexiconProvider).itemLower}'
-                            ' to add it to the cart, or tap and hold to choose a'
-                            ' quantity.',
-                        onDismiss: () {
-                          setState(() => _showPosHint = false);
-                          // Deliberate close retires the hint immediately so it
-                          // never reappears.
-                          uiHintService
-                              .markDismissed(UiHintService.hintPosGestures);
-                        },
+        // #384: the page sits on the shared soft fade; the top bar is solid
+        // Surface and the frozen band takes the fade's top colour, so the grid
+        // scrolls under an opaque strip.
+        return DecoratedBox(
+          decoration: AppDecorations.pageBackground(context),
+          child: SharedScaffold(
+            activeRoute: 'pos',
+            backgroundColor: Colors.transparent,
+            // The top bar is a sliver in the body's own scroll view now, so the
+            // Scaffold must not render one as fixed chrome (issue #259).
+            bodyOwnsAppBar: true,
+            // The top bar lives inside the scroll view, so this SafeArea owns
+            // the status-bar inset the Scaffold's AppBar used to absorb.
+            body: SafeArea(
+              // Pull-to-refresh wraps the WHOLE body (above the header) so the
+              // gesture + spinner work from the very top of the screen, over
+              // the dropdowns and category bar — not just on the product grid.
+              child: AppRefreshWrapper(
+                // POS is ONE scrolling surface (issue #259 / PRD #239). The top
+                // bar and the price-tier row scroll away; the search bar and
+                // category chips freeze at the top; the grid is a sliver that
+                // depends on no supplied height. That last part is the fix: the
+                // grid used to sit in an `Expanded` under a non-scrolling
+                // Column of fixed chrome, and at 800x360 that chrome took the
+                // whole viewport and left the grid 0.0dp — rendering nothing
+                // and reporting nothing.
+                child: CustomScrollView(
+                  key: kPosScrollSurfaceKey,
+                  slivers: [
+                    _buildTopBarSliver(context),
+                    SliverToBoxAdapter(child: _buildHeader(context)),
+                    _buildFrozenBandSliver(context, needsStoreSelection),
+                    // ONE combined coach banner. Tap adds to the cart;
+                    // tap-and-hold opens the qty/discount sheet to add several
+                    // at once (it does NOT edit the product — that's done from
+                    // the Products screen), which is why the copy says
+                    // "quantity", not "edit". Both gestures act on a product
+                    // tile, so gate on a non-empty grid.
+                    //
+                    // It carries ONE hint key. Main had already merged the two
+                    // banners into one widget but left them on two
+                    // independently retiring keys, which is what made the ✕ a
+                    // half-dismiss: it called `markShown` on each, moving both
+                    // counts 0 → 1, so the banner came back once more. One key
+                    // + `markDismissed` is what makes a close final (see
+                    // `UiHintService.hintPosGestures`).
+                    if (!_controller!.isLoading &&
+                        _showPosHint &&
+                        !needsStoreSelection &&
+                        _controller!.filteredProducts.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            context.getRSize(16),
+                            0,
+                            context.getRSize(16),
+                            context.getRSize(12),
+                          ),
+                          child: CoachHintBanner(
+                            key: kPosHintKey,
+                            message:
+                                'Tap a '
+                                '${ref.watch(industryLexiconProvider).itemLower}'
+                                ' to add it to the cart, or tap and hold to'
+                                ' choose a quantity.',
+                            onDismiss: () {
+                              setState(() => _showPosHint = false);
+                              // Deliberate close retires the hint immediately
+                              // so it never reappears.
+                              uiHintService.markDismissed(
+                                UiHintService.hintPosGestures,
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                  _buildContentSliver(context, cardCol, textCol, subtextCol,
-                      borderCol, needsStoreSelection),
-                ],
+                    _buildContentSliver(context, needsStoreSelection),
+                  ],
+                ),
               ),
             ),
           ),
@@ -355,10 +345,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     );
   }
 
-
-
-  /// The top bar (menu, business name, store subtitle, view selector, bell) as
-  /// a sliver.
+  /// The top bar (menu, "Point of Sale", store subtitle, view selector, bell)
+  /// as a sliver.
   ///
   /// Sideways it floats: it scrolls away while the cashier browses and slides
   /// back the moment they scroll the other way, without waiting for the top of
@@ -382,13 +370,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   /// PRD #239 (amendment 3), the same one the bottom bar takes in #258. It is
   /// *not* a layout gate: the scrolling structure below is unconditional, and
   /// no viewport depends on a hidden bar to avoid overflowing.
-  Widget _buildTopBarSliver(
-    BuildContext context,
-    Color surfaceCol,
-    Color textCol,
-    Color subtextCol,
-  ) {
-    final topBar = _buildAppBar(context, surfaceCol, textCol, subtextCol);
+  Widget _buildTopBarSliver(BuildContext context) {
+    final topBar = _buildAppBar(context);
     // Exactly what Scaffold does with an AppBar: lay it out at its own
     // preferred height, which already answers for the text scale.
     final bar = SizedBox(height: topBar.preferredSize.height, child: topBar);
@@ -406,7 +389,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         : PinnedHeaderSliver(child: bar);
   }
 
-  /// The search bar and category chips, frozen at the top of the scroll view.
+  /// The search bar (+ scan) and category chips, frozen at the top of the
+  /// scroll view.
   ///
   /// [PinnedHeaderSliver] pins the band at its own natural height, so there is
   /// no declared extent to keep in step with the responsive scale — the trap
@@ -417,24 +401,46 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   /// what makes it acceptable for the price-tier row above to scroll off.
   Widget _buildFrozenBandSliver(
     BuildContext context,
-    Color surfaceCol,
-    Color cardCol,
-    Color textCol,
-    Color subtextCol,
-    Color borderCol,
+    bool needsStoreSelection,
   ) {
+    final gutter = context.getRSize(16);
     return PinnedHeaderSliver(
       child: Container(
         key: kPosSearchBandKey,
-        // Opaque: the grid scrolls underneath this band.
-        color: surfaceCol,
+        // Opaque: the grid scrolls underneath this band. The page fade's top
+        // colour, so the band reads as part of the page (mockups).
+        color: Theme.of(context).scaffoldBackgroundColor,
+        padding: EdgeInsets.only(bottom: context.getRSize(8)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // #111: the search field is always visible in its position between
-            // the price/manufacturer dropdowns and the category chips — no
-            // show/hide toggle, no app-bar search icon.
-            _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
+            // #111: the search field is always visible — no show/hide toggle,
+            // no app-bar search icon. #384: the scan control sits beside it
+            // (square on a phone, a "Scan Barcode" pill at 600dp+). Hidden
+            // only while a multi-store user still has to pick a store —
+            // there's no catalogue loaded to scan into yet.
+            Padding(
+              padding: EdgeInsets.fromLTRB(gutter, 0, gutter, gutter / 2),
+              child: Row(
+                children: [
+                  Expanded(child: _buildSearchField()),
+                  if (!needsStoreSelection) ...[
+                    SizedBox(width: context.getRSize(12)),
+                    PosBarcodeScanButton(
+                      key: kPosScannerKey,
+                      shape: context.isRailLayout
+                          ? PosScanButtonShape.pill
+                          : PosScanButtonShape.square,
+                      tier: _controller!.selectedGroup,
+                      loadedProducts: _controller!.allProducts,
+                      storeName: _controller!.currentStoreName,
+                      storeId: _controller!.activeStoreId,
+                      readStoreProducts: () => _controller!.allProducts,
+                    ),
+                  ],
+                ],
+              ),
+            ),
             if (!_controller!.isLoading)
               CategoryFilterBar(
                 key: kPosCategoryChipsKey,
@@ -461,8 +467,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                     _controller!.selectCategory(cat.id);
                   }
                 },
-                textCol: textCol,
-                borderCol: borderCol,
               ),
           ],
         ),
@@ -478,18 +482,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   /// which sizes to the LARGER of the remaining viewport and the child's own
   /// height — so each still centres on a roomy phone and scrolls, rather than
   /// overflowing, once the chrome above has eaten the screen.
-  Widget _buildContentSliver(
-    BuildContext context,
-    Color cardCol,
-    Color textCol,
-    Color subtextCol,
-    Color borderCol,
-    bool needsStoreSelection,
-  ) {
+  Widget _buildContentSliver(BuildContext context, bool needsStoreSelection) {
     if (needsStoreSelection) {
       return SliverFillRemaining(
         hasScrollBody: false,
-        child: _buildSelectStorePlaceholder(context, subtextCol),
+        child: _buildSelectStorePlaceholder(context),
       );
     }
     if (_controller!.isLoading) {
@@ -504,7 +501,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     // FirstRunEmptyState itself is deliberately untouched (PRD #239, Out of
     // Scope): seven of its nine host screens hand it the whole body and it fits
     // with room to spare.
-    final showFirstRunEmptyState = _controller!.filteredProducts.isEmpty &&
+    final showFirstRunEmptyState =
+        _controller!.filteredProducts.isEmpty &&
         ref.watch(firstRunSurfaceStateProvider) !=
             FirstRunSurfaceState.hasContent;
 
@@ -516,10 +514,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         : ProductGrid(
             products: _controller!.filteredProducts,
             onProductTap: (item) => _addToCart(context, item),
-            cardCol: cardCol,
-            textCol: textCol,
-            subtextCol: subtextCol,
-            borderCol: borderCol,
             controller: _controller!,
             isListView: _isListView,
             gridColumns: _gridColumns,
@@ -539,42 +533,49 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   // Shown in place of the product grid while a multi-store user is on "All
   // Stores" / hasn't picked the store they're selling from. The picker sheet is
   // up on top of this; tapping the placeholder re-opens it if dismissed.
-  Widget _buildSelectStorePlaceholder(BuildContext context, Color subtextCol) {
+  // #384: the empty-state look (a neutral IconTile, muted text, a primary text
+  // button); wording unchanged.
+  Widget _buildSelectStorePlaceholder(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     return Center(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: context.getRSize(32)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              AppIcons.store,
-              size: context.getRSize(48),
-              color: subtextCol.withValues(alpha: 0.5),
+            const IconTile(
+              icon: AppIcons.store,
+              tone: IconTileTone.neutral,
+              size: 56,
             ),
-            SizedBox(height: context.getRSize(20)),
+            SizedBox(height: context.getRSize(16)),
             Text(
               'Please select a store to view POS products.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: context.getRFontSize(15),
-                color: subtextCol,
-              ),
+              style: context.regularStyle(15).copyWith(color: muted),
             ),
-            SizedBox(height: context.getRSize(20)),
+            SizedBox(height: context.getRSize(12)),
             TextButton.icon(
+              key: kPosSelectStoreKey,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(
+                  kMinInteractiveDimension,
+                  kMinInteractiveDimension,
+                ),
+              ),
               onPressed: () =>
                   showStorePickerSheet(context, ref, isDismissible: false),
-              icon: Icon(
+              icon: AppIcon(
                 AppIcons.store,
-                size: context.getRSize(14),
-                color: Theme.of(context).colorScheme.primary,
+                size: context.getRSize(16),
+                color: t.colorScheme.primary,
               ),
               label: Text(
                 'Select store',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: context
+                    .semiBoldStyle(14)
+                    .copyWith(color: t.colorScheme.primary),
               ),
             ),
           ],
@@ -597,119 +598,73 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     return 'All';
   }
 
-  // Inline dismissible hint shown above the product grid (first couple of
-  // visits). Mirrors the cart screen's "tap an item to edit" banner. Renders
-  // the single combined tap-to-add / tap-and-hold tip, view-counted under the
-  // one `hintPosGestures` key.
-  //
-  // The per-tip adaptive copy this replaced ("…still live for this user":
-  // both / hold-only / tap-only sentences) went with the second key. Those
-  // branches only had distinct reachable states because the two keys retired
-  // independently — the very thing that made a ✕ a half-dismiss — so merging
-  // the keys collapses them to the both-gestures sentence by construction.
-  Widget _buildInlineHint({
-    required String message,
-    required VoidCallback onDismiss,
-  }) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return Container(
-      margin: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(8),
-        context.getRSize(20),
-        0,
-      ),
-      padding: EdgeInsets.all(context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            AppIcons.infoCircle,
-            size: context.getRSize(16),
-            color: primary,
-          ),
-          SizedBox(width: context.getRSize(12)),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                color: primary,
+  /// The solid top bar (#384, `phone-pos-*.png` / `tablet-pos-*.png`): the
+  /// shared [ScreenHeader] — gradient POS tile, "Point of Sale", the store POS
+  /// sells from as the subtitle — then the view selector (grid / list, not in
+  /// the mockup, kept) and the live bell. The menu button only under 600dp.
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    // §12.1: the store selector lives in the navigation drawer (above Home),
+    // not on the POS header. POS just reflects the store it's selling from
+    // (the controller's current store name, which already resolves the "All
+    // Stores" fallback).
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final gap = context.getRSize(4);
+    return PosTopBar(
+      height: posTopBarHeight(context),
+      header: ScreenHeader(
+        icon: AppIcons.pos,
+        title: 'Point of Sale',
+        subtitle:
+            _controller!.currentStoreName ??
+            ref.watch(activeStoreLabelProvider),
+        leading: context.isRailLayout
+            ? null
+            : const SizedBox.square(
+                dimension: kMinInteractiveDimension,
+                child: MenuButton(),
               ),
-            ),
-          ),
+        actions: [
+          SizedBox(width: gap),
           IconButton(
-            icon: Icon(
-              AppIcons.close,
-              size: context.getRSize(16),
-              color: primary,
+            key: kPosViewSelectorKey,
+            tooltip: 'Select View Layout',
+            constraints: const BoxConstraints(
+              minWidth: kMinInteractiveDimension,
+              minHeight: kMinInteractiveDimension,
             ),
-            onPressed: onDismiss,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            icon: AppIcon(
+              _isListView ? AppIcons.list : AppIcons.grid,
+              size: context.getRSize(22),
+              color: muted,
+            ),
+            onPressed: _showViewSelectorModal,
           ),
+          SizedBox(width: gap),
+          const PosLiveBell(),
         ],
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(
-    BuildContext context,
-    Color surfaceCol,
-    Color textCol,
-    Color subtextCol,
-  ) {
-    // §12.1: the store selector now lives in the navigation drawer (above Home),
-    // not on the POS header. POS just reflects the active store: the header
-    // subtitle shows the store it's selling from (the controller's current store
-    // name, which already resolves the "All Stores" fallback). POS header shows
-    // the business name (live, so a Business Info rename reflects here) with the
-    // current store as the subtitle.
-    final bizName = ref.watch(currentBusinessNameProvider);
-    return AppBar(
-      backgroundColor: surfaceCol,
-      elevation: 0,
-      leading: context.isRailLayout ? null : const MenuButton(),
-      title: AppBarHeader(
-        icon: AppIcons.beerMug,
-        title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
-        subtitle: _controller!.currentStoreName ?? 'Point of Sale',
-        truncateTitleWithReveal: true,
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            _isListView ? AppIcons.list : AppIcons.grid,
-            size: 18,
-            color: subtextCol,
-          ),
-          onPressed: _showViewSelectorModal,
-        ),
-        const NotificationBell(),
-        SizedBox(width: context.getRSize(16)),
-      ],
-    );
-  }
-
-  Widget _buildHeader(
-    BuildContext context,
-    Color surfaceCol,
-    Color textCol,
-    Color subtextCol,
-    Color borderCol,
-  ) {
+  /// The price tier, manufacturer filter and Quick Sale — on today's screen,
+  /// not in the mockups, so kept (#384) in their own row between the top bar
+  /// and the frozen search band. It scrolls away, as before.
+  Widget _buildHeader(BuildContext context) {
     // §12.2: CEO/Manager switch price tier freely; Cashier is locked to
     // Retailer (a selected wholesaler customer still auto-applies via the
     // controller's customer listener).
     final slug = ref.watch(currentUserRoleProvider)?.slug;
     final canSwitchTier = slug == 'ceo' || slug == 'manager';
-    return Container(
+    final gutter = context.getRSize(16);
+    return Padding(
       key: kPosTierRowKey,
-      color: surfaceCol,
-      padding: EdgeInsets.all(context.getRSize(16)),
+      padding: EdgeInsets.fromLTRB(
+        gutter,
+        gutter,
+        gutter,
+        context.getRSize(12),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -762,65 +717,30 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                     },
                   ),
           ),
-          SizedBox(width: context.getRSize(12)),
-          _buildQuickSaleBtn(context),
+          SizedBox(width: context.getRSize(8)),
+          PosQuickSaleButton(
+            key: kPosQuickSaleKey,
+            onPressed: () => _showQuickSaleModal(context),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildQuickSaleBtn(BuildContext context) {
-    return GestureDetector(
-      key: kPosQuickSaleKey,
-      onTap: () => _showQuickSaleModal(context),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(16),
-          vertical: context.getRSize(10),
-        ),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-          ),
-        ),
-        child: Icon(
-          AppIcons.quickSale,
-          size: context.getRSize(18),
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchField(
-    Color surfaceCol,
-    Color cardCol,
-    Color textCol,
-    Color subtextCol,
-  ) {
-    return Container(
-      color: surfaceCol,
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        0,
-        context.getRSize(16),
-        context.getRSize(12),
-      ),
-      child: AppInput(
-        key: kPosSearchFieldKey,
-        controller: _searchController,
-        // #111: the field is now always visible, so it must not steal focus
-        // and pop the keyboard every time POS opens — the cashier taps it when
-        // they want to search.
-        onChanged: (v) => _controller!.updateSearch(v),
-        hintText:
-            'Search ${ref.watch(industryLexiconProvider).itemPluralLower}...',
-        prefixIcon: Icon(
-          AppIcons.search,
-          size: context.getRSize(16),
-        ),
+  Widget _buildSearchField() {
+    return AppInput(
+      key: kPosSearchFieldKey,
+      controller: _searchController,
+      // #111: the field is always visible, so it must not steal focus and pop
+      // the keyboard every time POS opens — the cashier taps it when they want
+      // to search.
+      onChanged: (v) => _controller!.updateSearch(v),
+      hintText:
+          'Search ${ref.watch(industryLexiconProvider).itemPluralLower}...',
+      prefixIcon: AppIcon(
+        AppIcons.search,
+        size: context.getRSize(22),
+        color: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -898,8 +818,7 @@ class _FloatingTopBarDelegate extends SliverPersistentHeaderDelegate {
     BuildContext context,
     double shrinkOffset,
     bool overlapsContent,
-  ) =>
-      child;
+  ) => child;
 
   /// The child is built fresh from screen state on every host build, so it
   /// has to be part of the comparison (see `PinnedTabBarDelegate`).
