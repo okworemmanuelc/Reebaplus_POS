@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
+import 'package:reebaplus_pos/core/crates/empty_crates_roster.dart';
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/features/inventory/screens/manufacturer_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/supplier_detail_screen.dart';
@@ -28,9 +29,9 @@ import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.d
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_manufacturers_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/add_manufacturer_sheet.dart';
 import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
@@ -126,6 +127,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   ///  - products  — always.
   ///  - suppliers — `suppliers.manage` (CEO; Manager if toggled on).
   ///  - crates    — Bar / Beer distributor businesses only.
+  ///  - manufacturers — beside crates (#389): every brand, bottle or not.
   ///  - history   — CEO / Manager / Stock keeper (own store); Cashier hidden.
   ///
   /// Returns null until the role, its grants, and the business row have all
@@ -155,6 +157,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       'products',
       if (showSuppliers) 'suppliers',
       if (showCrates) 'crates',
+      if (showCrates) 'manufacturers',
       if (showHistory) 'history',
     ];
   }
@@ -196,6 +199,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   String _tabLabel(String key) => switch (key) {
     'suppliers' => 'Suppliers',
     'crates' => 'Empty Crates',
+    'manufacturers' => 'Manufacturers',
     'history' => 'History',
     _ => ref.watch(industryLexiconProvider).itemPlural,
   };
@@ -214,6 +218,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         'crates' => TabSliverView(
           storageKey: 'inventory-crates',
           slivers: _cratesTabSlivers(context),
+        ),
+        'manufacturers' => const TabSliverView(
+          storageKey: 'inventory-manufacturers',
+          slivers: [InventoryManufacturersTab()],
         ),
         'history' => TabSliverView(
           storageKey: 'inventory-history',
@@ -1485,6 +1493,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final stats = _computeCrateStats(fullByMfr, emptyByMfr);
     int emptyForMfr(ManufacturerData mfr) => emptyByMfr[mfr.id] ?? 0;
 
+    final trackedMfrIds =
+        ref.watch(crateTrackedManufacturerIdsProvider).valueOrNull ??
+        const <String>{};
+    final crateManufacturers = [
+      for (final mfr in _dbManufacturers)
+        if (showsOnEmptyCrates(
+          hasTrackedBottleProduct: trackedMfrIds.contains(mfr.id),
+          emptyCount: emptyForMfr(mfr),
+          shortCount: shortagesByMfr[mfr.id] ?? 0,
+        ))
+          mfr,
+    ];
+
     final totalEmpty = emptyByMfr.values.fold<int>(0, (s, v) => s + v);
     final totalFull = stats.fold<int>(0, (s, e) => s + e.fullCratesEquiv);
 
@@ -1507,52 +1528,37 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
             SizedBox(height: context.getRSize(24)),
 
-            // 2. Manufacturers Section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text(
-                    'Manufacturers',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(18),
-                      fontWeight: FontWeight.w800,
-                      color: _text,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ),
-                if (Gates.addManufacturer.allows(ref))
-                  AppButton(
-                    text: 'Add New',
-                    icon: AppIcons.addCircle,
-                    variant: AppButtonVariant.ghost,
-                    isFullWidth: false,
-                    onPressed: () => AddManufacturerSheet.show(
-                      context,
-                      existingNames: [for (final m in _dbManufacturers) m.name],
-                    ),
-                  ),
-              ],
+            // 2. Bottle manufacturers (#389): only brands with a tracked
+            // bottle product, plus any brand still holding crates in this view.
+            // Every manufacturer (and Add New) lives on the Manufacturers tab.
+            Text(
+              'Bottle manufacturers',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: context.getRFontSize(18),
+                fontWeight: FontWeight.w800,
+                color: _text,
+                letterSpacing: -0.5,
+              ),
             ),
 
             SizedBox(height: context.getRSize(12)),
 
             // Same rule as the Suppliers tab: no "none yet" before the first
             // download has finished (#313).
-            if (_dbManufacturers.isEmpty &&
+            if (crateManufacturers.isEmpty &&
                 ref.watch(firstDownloadInProgressProvider))
               const SizedBox.shrink()
-            else if (_dbManufacturers.isEmpty)
+            else if (crateManufacturers.isEmpty)
               _buildEmptyCratesState(
                 context,
-                'No manufacturers to track',
-                'Add your first manufacturer above',
+                'No bottle manufacturers yet',
+                'A manufacturer shows here once it has a returnable bottle '
+                    'product',
               )
             else
-              ..._dbManufacturers.map((mfr) {
+              ...crateManufacturers.map((mfr) {
                 // stats is keyed by manufacturer ID, so match on mfr.id — matching
                 // on mfr.name never hits and forced every card's "Full" to 0.
                 final stat = stats.firstWhere(
@@ -1572,7 +1578,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   shortCount: shortagesByMfr[mfr.id] ?? 0,
                 );
               }),
-
           ],
         ),
       ),
