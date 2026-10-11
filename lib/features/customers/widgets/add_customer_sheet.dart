@@ -12,6 +12,8 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/screen_header.dart';
+import 'package:reebaplus_pos/features/customers/widgets/customer_parts.dart';
 
 class AddCustomerSheet extends ConsumerStatefulWidget {
   final void Function(Customer)? onCustomerAdded;
@@ -53,10 +55,6 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
       if (mounted) setState(() => _stores = wh);
     });
   }
-
-  Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _border => Theme.of(context).dividerColor;
 
   @override
   void dispose() {
@@ -106,11 +104,10 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
           return GestureDetector(
             onTap: () {}, // Prevent tap from reaching the barrier
             child: Container(
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
+              key: CustomersKeys.addSheet,
+              decoration: ShapeDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                shape: customerSheetShape(context),
               ),
               child: Form(
                 key: _formKey,
@@ -122,79 +119,17 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                         context.getRSize(20),
                         context.getRSize(12),
                         context.getRSize(20),
-                        0,
+                        context.getRSize(10),
                       ),
                       child: Column(
                         children: [
-                          Container(
-                            width: context.getRSize(40),
-                            height: context.getRSize(4),
-                            decoration: BoxDecoration(
-                              color: _border,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
+                          const CustomerSheetHandle(),
+                          SizedBox(height: context.getRSize(16)),
+                          const ScreenHeader(
+                            icon: AppIcons.userAdd,
+                            title: 'Add New Customer',
+                            subtitle: 'Client Details & Contact',
                           ),
-                          SizedBox(height: context.getRSize(20)),
-                          Row(
-                            children: [
-                              Container(
-                                width: context.getRSize(44),
-                                height: context.getRSize(44),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Theme.of(context).colorScheme.primary
-                                          .withValues(alpha: 0.7),
-                                      Theme.of(context).colorScheme.primary,
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  AppIcons.userAdd,
-                                  color: Colors.white,
-                                  size: context.getRSize(20),
-                                ),
-                              ),
-                              SizedBox(width: context.getRSize(14)),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Add New Customer',
-                                    style: TextStyle(
-                                      fontSize: context.getRFontSize(18),
-                                      fontWeight: FontWeight.w800,
-                                      color: _text,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Client Details & Contact',
-                                    style: TextStyle(
-                                      fontSize: context.getRFontSize(13),
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: context.getRSize(10)),
                         ],
                       ),
                     ),
