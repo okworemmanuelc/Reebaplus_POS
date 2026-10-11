@@ -196,6 +196,8 @@ Future<void> _rename(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setLocal) => AlertDialog(
+        // Scrolls rather than overflows over a sideways keyboard (#392).
+        scrollable: true,
         title: Text(
           'Rename category',
           style: ctx.screenTitleStyle.copyWith(
@@ -305,6 +307,8 @@ Future<void> _confirmDelete(
           theme.extension<AppSchemeColors>()?.primaryTint ??
           theme.colorScheme.primary.withValues(alpha: 0.12);
       return AlertDialog(
+        // Scrolls rather than overflows over a sideways keyboard (#392).
+        scrollable: true,
         title: Text(
           'Delete category',
           style: ctx.screenTitleStyle.copyWith(
