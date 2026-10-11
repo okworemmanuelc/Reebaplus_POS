@@ -24,6 +24,9 @@ import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.d
 import 'package:reebaplus_pos/features/dashboard/widgets/get_started_card.dart';
 import 'package:reebaplus_pos/features/dashboard/quick_actions.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/home_parts.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/record_payment_chooser.dart';
+import 'package:reebaplus_pos/features/customers/widgets/customer_payment_sheet.dart';
+import 'package:reebaplus_pos/features/payments/widgets/record_supplier_activity.dart';
 import 'package:reebaplus_pos/features/expenses/screens/add_expense_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
@@ -371,6 +374,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       storeCount: withoutVans(
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[],
       ).length,
+      // The customer payment picker's own list (never the walk-in), so the
+      // tile shows exactly when the picker has someone in it.
+      customerCount: ref
+          .watch(customerServiceProvider)
+          .value
+          .where((c) => !c.isWalkIn)
+          .length,
+      supplierCount:
+          (ref.watch(allSuppliersProvider).valueOrNull ??
+                  const <SupplierData>[])
+              .length,
     );
     final firstLoad =
         _ordersLoading ||
@@ -430,7 +444,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         HomeQuickActions(
                           tiles: [
                             for (final a in quickActions.tiles)
-                              _quickActionTile(a),
+                              _quickActionTile(
+                                a,
+                                paymentSides: quickActions.paymentSides,
+                              ),
                           ],
                         ),
                       ],
@@ -560,7 +577,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// destination. Destinations push on the Home tab's navigator with the same
   /// transitions as their existing entry points (Expenses FAB, Inventory FAB,
   /// Inventory's Daily Stock Count button), so Back returns to Home.
-  HomeQuickActionTile _quickActionTile(QuickAction action) {
+  HomeQuickActionTile _quickActionTile(
+    QuickAction action, {
+    required List<PaymentSide> paymentSides,
+  }) {
     final f =
         Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     return switch (action) {
@@ -592,6 +612,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
+      // Both sides → "Customer paid us" / "We paid a supplier"; one side
+      // opens its form directly.
+      QuickAction.recordPayment => (
+        key: HomeKeys.quickRecordPayment,
+        icon: AppIcons.payments,
+        color: f.green,
+        tint: f.greenTint,
+        label: 'Record Payment',
+        onTap: () => _recordPayment(paymentSides),
+      ),
       QuickAction.receiveStock => (
         key: HomeKeys.quickReceiveStock,
         icon: AppIcons.receiving,
@@ -619,6 +649,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
     };
+  }
+
+  /// Record Payment: asks who paid when both sides are available, then opens
+  /// that side's existing form on the Home tab's navigator. The customer side
+  /// is the shared customer payment sheet with its picker; the supplier side
+  /// is the supplier payment sheet in its supplier-picker mode, unchanged.
+  Future<void> _recordPayment(List<PaymentSide> sides) async {
+    final side = sides.length == 1
+        ? sides.single
+        : await showRecordPaymentChooser(context, sides: sides);
+    if (side == null || !mounted) return;
+    switch (side) {
+      case PaymentSide.customer:
+        await CustomerPaymentSheet.show(
+          context,
+          title: 'Record Payment',
+          submitLabel: 'Record Payment',
+        );
+      case PaymentSide.supplier:
+        RecordPaymentSheet.show(context);
+    }
   }
 
   void _openSalesDetail(

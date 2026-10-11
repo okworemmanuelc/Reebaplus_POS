@@ -36,6 +36,7 @@ abstract final class HomeKeys {
   static const quickActions = Key('home-quick-actions');
   static const quickAddExpense = Key('home-quick-add-expense');
   static const quickStockTransfer = Key('home-quick-stock-transfer');
+  static const quickRecordPayment = Key('home-quick-record-payment');
   static const quickReceiveStock = Key('home-quick-receive-stock');
   static const quickTakeStock = Key('home-quick-take-stock');
 }
