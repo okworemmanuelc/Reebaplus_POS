@@ -10,11 +10,13 @@
 // The mockup's sample data, signed in as the CEO: business "Stallion Global",
 // store "Abuja HQ", Total Sales ₦225,800, Net Profit ₦7,100, no pending
 // orders, no expenses, Stock Value ₦19,382,600, ₦0 credit and debt, 8 unread
-// notifications and the Reports attention dot, plus the four quick-action
+// notifications and the Reports attention dot, plus the five quick-action
 // tiles of #362 (Add Expense, Stock Transfer — the business has a second
-// store, Lekki — Receive Stock, Take Stock). The mockup shows no Staff
-// Sales; the one sale's cashier appears there. At 600dp+ the harness leaves
-// the side rail's width blank on the left; only the screen is captured.
+// store, Lekki — Take Stock, Record Payment — one customer who owes nothing
+// and one supplier, so both payment sides — and Receive Stock, always last).
+// The mockup shows no Staff Sales; the one sale's cashier appears there. At
+// 600dp+ the harness leaves the side rail's width blank on the left; only the
+// screen is captured.
 // `₦` draws as a box in tests (DM Sans has no Naira glyph).
 //
 // The PNGs live in test/redesign/goldens/ — never test/golden/, which CI runs
@@ -69,6 +71,33 @@ void main() {
             businessId: b,
             name: 'Lekki',
           ),
+        );
+    // Record Payment (#362 PR 4): a customer who owes nothing (the credit
+    // and debt figures stay ₦0) and a supplier, so the CEO has both sides.
+    final customerId = UuidV7.generate();
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: Value(customerId),
+            businessId: b,
+            name: 'Adaeze Okafor',
+            phone: const Value('0803 111 2222'),
+          ),
+        );
+    await db
+        .into(db.customerWallets)
+        .insert(
+          CustomerWalletsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: b,
+            customerId: customerId,
+          ),
+        );
+    await db
+        .into(db.suppliers)
+        .insert(
+          SuppliersCompanion.insert(businessId: b, name: 'Kano Distributors'),
         );
     // 50 in stock × ₦387,652 = ₦19,382,600.
     await db.customStatement(
@@ -172,8 +201,10 @@ void main() {
         'customers.add',
         'sales.make',
         // The quick-action tiles (#362): Add Expense, Stock Transfer,
-        // Take Stock, Receive Stock (always last).
+        // Take Stock, Record Payment, Receive Stock (always last).
         'stores.request_transfer',
+        'customers.wallet.update',
+        'suppliers.manage',
         'expenses.create',
         'stock.add',
         'products.add',

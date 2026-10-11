@@ -1,4 +1,5 @@
-// Home screen restyle (#374, PRD #346 Wave 1): cards and order per role,
+// Home screen restyle (#374, PRD #346 Wave 1) and its quick actions (#362):
+// cards and order per role,
 // trend pills, columns per size, the period pill + Custom, Reports and its
 // dot, both Customer Credits forms, Staff Sales, the loading and zero-stores
 // states, text scale 1.3, 48dp tap targets and the safe area with realistic
@@ -16,7 +17,12 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/features/dashboard/get_started_checklist.dart';
 import 'package:reebaplus_pos/features/dashboard/reports_attention.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/home_screen.dart';
+import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
+import 'package:reebaplus_pos/features/customers/widgets/customer_payment_sheet.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/home_parts.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/record_payment_chooser.dart';
+import 'package:reebaplus_pos/features/dashboard/quick_actions.dart';
+import 'package:reebaplus_pos/features/payments/widgets/record_supplier_activity.dart';
 import 'package:reebaplus_pos/features/expenses/screens/add_expense_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
@@ -102,6 +108,37 @@ const _stockKeeperQ = (
   name: 'Stock keeper',
   rank: GateTier.stockKeeper,
   keys: {'stock.add', 'stock.view', 'stock.adjust'},
+);
+
+// Record Payment's keys (#362 PR 4): customers.wallet.update is seeded for
+// CEO, Manager and Cashier; suppliers.manage for the CEO only.
+const _ceoP = (
+  slug: 'ceo',
+  name: 'CEO',
+  rank: GateTier.ceo,
+  keys: {
+    ..._allKeys,
+    ..._quickKeys,
+    'customers.wallet.update',
+    'suppliers.manage',
+  },
+);
+const _managerP = (
+  slug: 'manager',
+  name: 'Manager',
+  rank: GateTier.manager,
+  keys: {..._allKeys, ..._quickKeys, 'customers.wallet.update'},
+);
+const _cashierP = (
+  slug: 'cashier',
+  name: 'Cashier',
+  rank: GateTier.cashier,
+  keys: {
+    'reports.see_sales',
+    'customers.add',
+    'sales.make',
+    'customers.wallet.update',
+  },
 );
 
 // Without Stock Transfer (one store): Receive Stock is always last.
@@ -287,6 +324,59 @@ void main() {
         );
     return id;
   }
+
+  /// A registered customer owing [owesKobo] (0 = nothing owed).
+  Future<String> addCustomer(
+    String name, {
+    int owesKobo = 0,
+    String? id,
+  }) async {
+    final db = env.db;
+    final cId = id ?? UuidV7.generate();
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: Value(cId),
+            businessId: env.businessId,
+            name: name,
+            phone: const Value('0803 555 0101'),
+          ),
+        );
+    final walletId = UuidV7.generate();
+    await db
+        .into(db.customerWallets)
+        .insert(
+          CustomerWalletsCompanion.insert(
+            id: Value(walletId),
+            businessId: env.businessId,
+            customerId: cId,
+          ),
+        );
+    if (owesKobo > 0) {
+      await db
+          .into(db.walletTransactions)
+          .insert(
+            WalletTransactionsCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: env.businessId,
+              walletId: walletId,
+              customerId: cId,
+              type: 'debit',
+              amountKobo: owesKobo,
+              signedAmountKobo: -owesKobo,
+              referenceType: 'order_payment',
+            ),
+          );
+    }
+    return cId;
+  }
+
+  Future<void> addSupplier(String name) => env.db
+      .into(env.db.suppliers)
+      .insert(
+        SuppliersCompanion.insert(businessId: env.businessId, name: name),
+      );
 
   List<Key> visibleCards() => [
     for (final k in _cardKeys)
@@ -1018,6 +1108,229 @@ void main() {
       });
     });
 
+    group('Record Payment', () {
+      bool shown() =>
+          find.byKey(HomeKeys.quickRecordPayment).evaluate().isNotEmpty;
+
+      Future<void> tapRecordPayment(WidgetTester tester) async {
+        await tester.tap(find.byKey(HomeKeys.quickRecordPayment));
+        await tester.pumpAndSettle();
+        await deliver(tester);
+      }
+
+      for (final (name, role, expected) in [
+        ('CEO', _ceoP, true),
+        ('Manager', _managerP, true),
+        ('Cashier', _cashierP, true),
+        ('Stock keeper', _stockKeeperQ, false),
+      ]) {
+        testWidgets('a customer and a supplier, $name: '
+            '${expected ? 'shown' : 'hidden'}', (tester) async {
+          await addCustomer('Adaeze Okafor');
+          await addSupplier('Kano Distributors');
+          await pumpHome(tester, role: role);
+          expect(shown(), expected);
+          await disposeScreen(tester);
+        });
+      }
+
+      testWidgets('sits between Take Stock and Receive Stock', (tester) async {
+        await addCustomer('Adaeze Okafor');
+        await pumpHome(tester, role: _ceoP);
+        double x(Key k) => tester.getTopLeft(find.byKey(k)).dx;
+        expect(
+          x(HomeKeys.quickRecordPayment),
+          greaterThan(x(HomeKeys.quickTakeStock)),
+        );
+        expect(
+          x(HomeKeys.quickRecordPayment),
+          lessThan(x(HomeKeys.quickReceiveStock)),
+        );
+        await disposeScreen(tester);
+      });
+
+      testWidgets('a cashier sees only Record Payment, under the heading', (
+        tester,
+      ) async {
+        await addCustomer('Adaeze Okafor');
+        await pumpHome(tester, role: _cashierP);
+        expect(find.text('Quick actions'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(HomeKeys.quickActions),
+            matching: find.byType(InkWell),
+          ),
+          findsOneWidget,
+        );
+        await disposeScreen(tester);
+      });
+
+      testWidgets('no customers and no suppliers: no tile; the first '
+          'customer adds it live', (tester) async {
+        // The walk-in alone is nobody to pick.
+        await addCustomer('Walk-in Customer', id: Customer.walkInId);
+        await pumpHome(tester, role: _ceoP);
+        expect(shown(), isFalse);
+        // Two inserts while Home's streams are live: let the fake clock and
+        // real time both run until they land (a bare runAsync can wait on a
+        // query held by the fake-async zone).
+        final added = addCustomer('Adaeze Okafor');
+        await deliver(tester);
+        await added;
+        await deliver(tester);
+        expect(shown(), isTrue);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('both sides: the chooser, then "Customer paid us" opens '
+          'the customer form with its picker', (tester) async {
+        await addCustomer('Adaeze Okafor');
+        await addSupplier('Kano Distributors');
+        await pumpHome(tester, role: _ceoP);
+        await tapRecordPayment(tester);
+        expect(find.byKey(RecordPaymentChooserKeys.sheet), findsOneWidget);
+        expect(find.text('Record Payment'), findsWidgets);
+        expect(find.text('Customer paid us'), findsOneWidget);
+        expect(find.text('Reduces what they owe'), findsOneWidget);
+        expect(find.text('We paid a supplier'), findsOneWidget);
+        expect(find.text('Reduces what you owe'), findsOneWidget);
+        await tester.tap(
+          find.byKey(RecordPaymentChooserKeys.option(PaymentSide.customer)),
+        );
+        await tester.pumpAndSettle();
+        await deliver(tester);
+        expect(find.byKey(RecordPaymentChooserKeys.sheet), findsNothing);
+        expect(find.byKey(CustomerPaymentSheetKeys.sheet), findsOneWidget);
+        expect(find.byKey(CustomerPaymentSheetKeys.search), findsOneWidget);
+        expect(find.byType(RecordPaymentSheet), findsNothing);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('both sides: "We paid a supplier" opens the supplier form '
+          'with its supplier picker', (tester) async {
+        await addCustomer('Adaeze Okafor');
+        await addSupplier('Kano Distributors');
+        await pumpHome(tester, role: _ceoP);
+        await tapRecordPayment(tester);
+        await tester.tap(
+          find.byKey(RecordPaymentChooserKeys.option(PaymentSide.supplier)),
+        );
+        await tester.pumpAndSettle();
+        await deliver(tester);
+        final sheet = find.byType(RecordPaymentSheet);
+        expect(sheet, findsOneWidget);
+        expect(tester.widget<RecordPaymentSheet>(sheet).supplierId, isNull);
+        expect(find.text('Select supplier'), findsOneWidget);
+        expect(find.byKey(CustomerPaymentSheetKeys.sheet), findsNothing);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('dismissing the chooser returns to Home', (tester) async {
+        await addCustomer('Adaeze Okafor');
+        await addSupplier('Kano Distributors');
+        await pumpHome(tester, role: _ceoP);
+        await tapRecordPayment(tester);
+        await tester.tapAt(const Offset(20, 20));
+        await tester.pumpAndSettle();
+        expect(find.byKey(RecordPaymentChooserKeys.sheet), findsNothing);
+        expect(find.byKey(CustomerPaymentSheetKeys.sheet), findsNothing);
+        expect(find.byType(RecordPaymentSheet), findsNothing);
+        expect(find.byKey(HomeKeys.quickActions), findsOneWidget);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('customer side only: the customer form opens directly, '
+          'titled Record Payment, with its picker', (tester) async {
+        await addCustomer('Adaeze Okafor');
+        await addSupplier('Kano Distributors');
+        // A Manager can't pay suppliers.
+        await pumpHome(tester, role: _managerP);
+        await tapRecordPayment(tester);
+        expect(find.byKey(RecordPaymentChooserKeys.sheet), findsNothing);
+        expect(find.byKey(CustomerPaymentSheetKeys.sheet), findsOneWidget);
+        expect(find.byKey(CustomerPaymentSheetKeys.search), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(CustomerPaymentSheetKeys.sheet),
+            matching: find.text('Record Payment'),
+          ),
+          findsOneWidget,
+        );
+        await disposeScreen(tester);
+      });
+
+      testWidgets('supplier side only: the supplier form opens directly', (
+        tester,
+      ) async {
+        // No customers yet.
+        await addSupplier('Kano Distributors');
+        await pumpHome(tester, role: _ceoP);
+        await tapRecordPayment(tester);
+        expect(find.byKey(RecordPaymentChooserKeys.sheet), findsNothing);
+        expect(find.byType(RecordPaymentSheet), findsOneWidget);
+        expect(find.text('Select supplier'), findsOneWidget);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('end to end: pick a customer, Pay full, submit → the '
+          'payment row carries the active write store and the debt clears', (
+        tester,
+      ) async {
+        final adaeze = await addCustomer('Adaeze Okafor', owesKobo: 1250000);
+        // The signed-in user as a real row: a payment records who took it.
+        await env.db
+            .into(env.db.users)
+            .insert(
+              UsersCompanion.insert(
+                id: const Value('test-user-id'),
+                businessId: env.businessId,
+                name: 'Test Admin',
+                pin: '1234',
+              ),
+            );
+        await pumpHome(tester, role: _managerP);
+        await tapRecordPayment(tester);
+        final row = find.byKey(CustomerPaymentSheetKeys.pickerRow(adaeze));
+        await tester.ensureVisible(row);
+        await tester.pumpAndSettle();
+        await tester.tap(row);
+        await deliver(tester);
+        expect(
+          tester
+              .widget<Text>(find.byKey(CustomerPaymentSheetKeys.balance))
+              .data,
+          'Owes ₦12,500',
+        );
+        await tester.tap(find.byKey(CustomerPaymentSheetKeys.payFull));
+        await tester.pump();
+        final submit = find.byKey(CustomerPaymentSheetKeys.submit);
+        expect(
+          find.descendant(of: submit, matching: find.text('Record Payment')),
+          findsOneWidget,
+        );
+        await tester.ensureVisible(submit);
+        await tester.pumpAndSettle();
+        await tester.tap(submit);
+        await deliver(tester);
+        await tester.pumpAndSettle();
+
+        final rows = await tester.runAsync(
+          () => env.db.select(env.db.paymentTransactions).get(),
+        );
+        expect(rows, hasLength(1));
+        expect(rows!.single.amountKobo, 1250000);
+        expect(rows.single.type, 'wallet_topup');
+        expect(rows.single.storeId, env.storeId);
+        final balance = await tester.runAsync(
+          () => env.db.walletTransactionsDao.getBalanceKobo(adaeze),
+        );
+        expect(balance, 0);
+        expect(find.byKey(CustomerPaymentSheetKeys.sheet), findsNothing);
+        expect(find.byKey(HomeKeys.quickActions), findsOneWidget);
+        await disposeScreen(tester);
+      });
+    });
+
     for (final (name, size, padding, scale) in const [
       ('360x740 @1.3', Size(360, 740), _uprightInsets, 1.3),
       ('844x390 + insets @1.3', _sideways, _sidewaysInsets, 1.3),
@@ -1025,17 +1338,19 @@ void main() {
     ]) {
       testWidgets('$name: no overflow, labels fit, targets ≥ 48dp, in the '
           'safe area', (tester) async {
-        // Two stores: all four tiles.
+        // Two stores, a customer and a supplier: all five tiles.
         await addStore('Ikeja');
+        await addCustomer('Adaeze Okafor');
+        await addSupplier('Kano Distributors');
         await pumpHome(
           tester,
-          role: _ceoQ,
+          role: _ceoP,
           size: size,
           padding: padding,
           textScaler: TextScaler.linear(scale),
         );
         expectNoOverflow(tester);
-        // The row scrolls sideways only where four tiles do not fit.
+        // Five tiles scroll sideways on an upright phone; sideways they fit.
         expect(
           find.descendant(
             of: find.byKey(HomeKeys.quickActions),
@@ -1043,7 +1358,11 @@ void main() {
           ),
           size.width < 600 ? findsOneWidget : findsNothing,
         );
-        for (final k in [HomeKeys.quickStockTransfer, ..._tileKeys]) {
+        for (final k in [
+          HomeKeys.quickStockTransfer,
+          HomeKeys.quickRecordPayment,
+          ..._tileKeys,
+        ]) {
           final r = tester.getRect(find.byKey(k));
           expect(r.width, greaterThanOrEqualTo(kMinInteractiveDimension));
           expect(r.height, greaterThanOrEqualTo(kMinInteractiveDimension));
@@ -1059,7 +1378,7 @@ void main() {
           expect(r.left, greaterThanOrEqualTo(padding.left));
           expect(r.top, greaterThanOrEqualTo(padding.top));
           if (size.width >= 600) {
-            // Sideways all four fit beside the 48dp nav bar.
+            // Sideways all five fit beside the 48dp nav bar.
             expect(r.right, lessThanOrEqualTo(size.width - padding.right));
           }
         }
