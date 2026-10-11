@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #392 PR 1: Inventory screen restyle (Wave 2 A, 2026-10-12)
+Branch `feat/redesign-w2-inventory-1` off `main` 2ec88349, worktree `../drinkPosApp-wt-392`. PR 1 of 4 (screen + tabs + Manage Categories + Add Manufacturer). **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, no shared-part change.**
+- New local parts `lib/features/inventory/widgets/inventory_parts.dart`: `InventoryTopBar` (Home's solid bar + `ScreenHeader`), `InventoryBarAction`, `InventoryLiveBell`, `InventoryFigureCard` (selectable compact figure), `InventoryProductRow` (photo, else `categoryVisual` tile — `colorHex` no longer drawn in the row), `InventoryEmptyCard`, `InventorySheetHeader`, `InventoryPeriodChip`; `kInventoryMaxContentWidth` (= 720) + `inventoryGutter`. All shared-part candidates.
+- Inventory content (figure cards, filter band, every tab, tab labels) capped at 720 and centred (measured widths, no viewport predicate); figure cards share one row when each gets 104dp, else scroll at 112dp.
+- Fixes: Manage-categories square / category row actions / History period chips now ≥ 48dp; list bottom padding `deviceBottomPadding` (was `bottomInset`); tab bar keeps 48dp under its hairline; sheets `useSafeArea`; category dialogs `scrollable`.
+- Tests: `test/inventory/inventory_redesign_test.dart` (31), goldens `test/redesign/inventory_golden_test.dart` (36) + sample seed `test/helpers/inventory_seed.dart`; `inventory_manufacturers_*` and `frame_inventory_*` goldens regenerated.
+- Next: PR 2 (Add Product, Update Product sheet) after owner approval. Owner question carried: Product Detail's Update Stock sheet + edit mode are unreachable (`_showUpdateStockModal` has no caller).
+
 ### Issue #389: Empty Crates lists bottle manufacturers only + Manufacturers tab (2026-10-11)
 Branch `fix/empty-crates-bottle-only-389` off `main` 9a6a3d73, worktree `../drinkPosApp-wt-389`. **No Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages.**
 - **Root cause**: `_cratesTabSlivers` built one card per `_dbManufacturers` row (`inventoryDao.watchAllManufacturers()` — every manufacturer). The card figures were already bottle-only; the list was not.

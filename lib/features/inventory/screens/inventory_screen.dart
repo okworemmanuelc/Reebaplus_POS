@@ -624,8 +624,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         final gap = context.getRSize(10);
         final cardWidth = context.getRSize(112);
         final inner = constraints.maxWidth - 2 * gutter;
+        // Sharing the row only needs a little less than the scrolling width:
+        // "Out of Stock" still fits on one line at 104dp.
+        final minShared = context.getRSize(104);
         final fits =
-            inner >= cards.length * cardWidth + (cards.length - 1) * gap;
+            inner >= cards.length * minShared + (cards.length - 1) * gap;
         final padding = EdgeInsets.fromLTRB(
           gutter,
           context.getRSize(12),
