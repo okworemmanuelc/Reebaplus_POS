@@ -100,14 +100,17 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
+                // The walk-in is never a registered customer. It is synthetic
+                // (never stored), so this only guards the rule (#395).
+                final registered = customers.where((c) => !c.isWalkIn);
                 List<Customer> filtered;
 
                 if (storeFilter == null) {
                   // "All Stores" selected
-                  filtered = customers;
+                  filtered = registered.toList();
                 } else {
                   // A specific store selected
-                  filtered = customers
+                  filtered = registered
                       .where((c) => c.storeId == storeFilter)
                       .toList();
                 }

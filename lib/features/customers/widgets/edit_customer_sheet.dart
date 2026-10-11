@@ -164,150 +164,130 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
           ),
           child: Form(
             key: _formKey,
-            child: Column(
-              children: [
-                // Handle & Header — the back button is one of the two ways to close the sheet.
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(20),
-                    context.getRSize(12),
-                    context.getRSize(20),
-                    context.getRSize(10),
-                  ),
-                  child: Column(
-                    children: [
-                      const CustomerSheetHandle(),
-                      SizedBox(height: context.getRSize(16)),
-                      ScreenHeader(
-                        icon: AppIcons.edit,
-                        title: 'Edit Customer Details',
-                        subtitle: 'Update Client Information',
-                        leading: IconButton(
-                          key: CustomersKeys.editBack,
-                          onPressed: () => Navigator.pop(context),
-                          tooltip: 'Back',
-                          constraints: const BoxConstraints(
-                            minWidth: kMinInteractiveDimension,
-                            minHeight: kMinInteractiveDimension,
-                          ),
-                          icon: AppIcon(
-                            AppIcons.arrowBack,
-                            size: context.getRSize(24),
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+            child: CustomerFormSheetLayout(
+              scrollController: scrollController,
+              // Handle & Header — the back button is one of the two ways to close the sheet.
+              header: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.getRSize(20),
+                  context.getRSize(12),
+                  context.getRSize(20),
+                  context.getRSize(10),
+                ),
+                child: Column(
+                  children: [
+                    const CustomerSheetHandle(),
+                    SizedBox(height: context.getRSize(16)),
+                    ScreenHeader(
+                      icon: AppIcons.edit,
+                      title: 'Edit Customer Details',
+                      subtitle: 'Update Client Information',
+                      leading: IconButton(
+                        key: CustomersKeys.editBack,
+                        onPressed: () => Navigator.pop(context),
+                        tooltip: 'Back',
+                        constraints: const BoxConstraints(
+                          minWidth: kMinInteractiveDimension,
+                          minHeight: kMinInteractiveDimension,
+                        ),
+                        icon: AppIcon(
+                          AppIcons.arrowBack,
+                          size: context.getRSize(24),
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-
-                // Scrollable Content
-                Expanded(
-                  child: ListView(
-                    controller: scrollController,
-                    padding: EdgeInsets.fromLTRB(
-                      context.getRSize(20),
-                      context.getRSize(10),
-                      context.getRSize(20),
-                      context.getRSize(20),
                     ),
-                    children: [
-                      AppInput(
-                        labelText: 'Customer Name',
-                        controller: _nameCtrl,
-                        hintText: 'e.g. John Doe',
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'This field is required'
-                            : null,
-                      ),
-                      _groupDropdown(),
-                      AppDropdown<String>(
-                        labelText: 'Assign to Store',
-                        value: _selectedStoreId,
-                        hintText: 'Select store',
-                        items: _stores.map((wh) {
-                          return DropdownMenuItem<String>(
-                            value: wh.id,
-                            child: Text(wh.name),
-                          );
-                        }).toList(),
-                        onChanged: (val) =>
-                            setState(() => _selectedStoreId = val),
-                        validator: (v) =>
-                            v == null ? 'Please select a store' : null,
-                      ),
-                      SizedBox(height: context.getRSize(16)),
-                      AppInput(
-                        labelText: 'Address (optional)',
-                        controller: _addressCtrl,
-                        hintText: 'e.g. 123 Main Street',
-                      ),
-                      AppInput(
-                        labelText: 'Phone Number',
-                        controller: _phoneCtrl,
-                        hintText: 'e.g. 08012345678',
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'This field is required'
-                            : null,
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
-
-                // Button
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(20),
-                    context.getRSize(16),
-                    context.getRSize(20),
-                    context.deviceBottomPadding + context.getRSize(16),
-                  ),
-                  child: AppButton(
-                    text: 'Save Details',
-                    variant: AppButtonVariant.primary,
-                    onPressed: () async {
-                      // Defense-in-depth (hard rule #6): re-check the gate at
-                      // the write boundary (fire-time decision, no subscribe).
-                      if (!Gates.editCustomer.allowsNow(ref)) {
-                        Navigator.pop(context);
-                        return;
-                      }
-                      if (_formKey.currentState!.validate()) {
-                        final updated = Customer(
-                          id: widget.customerId,
-                          name: _nameCtrl.text.trim(),
-                          addressText: _addressCtrl.text.trim(),
-                          googleMapsLocation: _locationCtrl.text.trim(),
-                          phone: _phoneCtrl.text.trim().isEmpty
-                              ? null
-                              : _phoneCtrl.text.trim(),
-                          priceTier: _selectedGroup,
-                          isWalkIn: false,
-                          storeId: _selectedStoreId,
-                        );
-                        try {
-                          await ref
-                              .read(customerServiceProvider)
-                              .updateCustomer(updated);
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
-                          widget.onCustomerUpdated?.call(updated);
-                        } catch (_) {
-                          if (!context.mounted) return;
-                          AppNotification.showError(
-                            context,
-                            'Could not update customer. Please try again.',
-                          );
-                        }
-                      }
-                    },
-                  ),
+              ),
+              fields: [
+                AppInput(
+                  labelText: 'Customer Name',
+                  controller: _nameCtrl,
+                  hintText: 'e.g. John Doe',
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'This field is required'
+                      : null,
+                ),
+                _groupDropdown(),
+                AppDropdown<String>(
+                  labelText: 'Assign to Store',
+                  value: _selectedStoreId,
+                  hintText: 'Select store',
+                  items: _stores.map((wh) {
+                    return DropdownMenuItem<String>(
+                      value: wh.id,
+                      child: Text(wh.name),
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => _selectedStoreId = val),
+                  validator: (v) => v == null ? 'Please select a store' : null,
+                ),
+                SizedBox(height: context.getRSize(16)),
+                AppInput(
+                  labelText: 'Address (optional)',
+                  controller: _addressCtrl,
+                  hintText: 'e.g. 123 Main Street',
+                ),
+                AppInput(
+                  labelText: 'Phone Number',
+                  controller: _phoneCtrl,
+                  hintText: 'e.g. 08012345678',
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'This field is required'
+                      : null,
                 ),
               ],
+              footer: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.getRSize(20),
+                  context.getRSize(16),
+                  context.getRSize(20),
+                  context.deviceBottomPadding + context.getRSize(16),
+                ),
+                child: AppButton(
+                  text: 'Save Details',
+                  variant: AppButtonVariant.primary,
+                  onPressed: () async {
+                    // Defense-in-depth (hard rule #6): re-check the gate at
+                    // the write boundary (fire-time decision, no subscribe).
+                    if (!Gates.editCustomer.allowsNow(ref)) {
+                      Navigator.pop(context);
+                      return;
+                    }
+                    if (_formKey.currentState!.validate()) {
+                      final updated = Customer(
+                        id: widget.customerId,
+                        name: _nameCtrl.text.trim(),
+                        addressText: _addressCtrl.text.trim(),
+                        googleMapsLocation: _locationCtrl.text.trim(),
+                        phone: _phoneCtrl.text.trim().isEmpty
+                            ? null
+                            : _phoneCtrl.text.trim(),
+                        priceTier: _selectedGroup,
+                        isWalkIn: false,
+                        storeId: _selectedStoreId,
+                      );
+                      try {
+                        await ref
+                            .read(customerServiceProvider)
+                            .updateCustomer(updated);
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                        widget.onCustomerUpdated?.call(updated);
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        AppNotification.showError(
+                          context,
+                          'Could not update customer. Please try again.',
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
             ),
           ),
         );

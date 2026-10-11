@@ -283,3 +283,75 @@ ShapeBorder customerSheetShape(BuildContext context) =>
         top: Radius.circular(AppSpacing.borderRadiusXL),
       ),
     );
+
+/// Below this much sheet height (base dp, scaled) the Add / Edit Customer
+/// sheets stop pinning their header and Save button and scroll them with the
+/// fields instead — a phone held sideways with the keyboard up (#395). A
+/// measured height, not a viewport predicate (PRD #239).
+const double kCustomerFormPinnedMinHeight = 340;
+
+/// The body of the Add / Edit Customer sheets (#395): [header] and [footer]
+/// pinned around the scrolling [fields] when the sheet has room
+/// ([kCustomerFormPinnedMinHeight]); otherwise all three scroll as one list,
+/// so the fields never get squeezed to nothing. Both shapes scroll with the
+/// `DraggableScrollableSheet`'s [scrollController].
+class CustomerFormSheetLayout extends StatelessWidget {
+  const CustomerFormSheetLayout({
+    super.key,
+    required this.scrollController,
+    required this.header,
+    required this.fields,
+    required this.footer,
+  });
+
+  final ScrollController scrollController;
+  final Widget header;
+  final List<Widget> fields;
+  final Widget footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final fieldsPadding = EdgeInsets.fromLTRB(
+      context.getRSize(20),
+      context.getRSize(10),
+      context.getRSize(20),
+      context.getRSize(20),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pinned =
+            constraints.maxHeight >=
+            context.getRSize(kCustomerFormPinnedMinHeight);
+        if (!pinned) {
+          return ListView(
+            controller: scrollController,
+            children: [
+              header,
+              Padding(
+                padding: fieldsPadding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: fields,
+                ),
+              ),
+              footer,
+            ],
+          );
+        }
+        return Column(
+          children: [
+            header,
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                padding: fieldsPadding,
+                children: fields,
+              ),
+            ),
+            footer,
+          ],
+        );
+      },
+    );
+  }
+}
