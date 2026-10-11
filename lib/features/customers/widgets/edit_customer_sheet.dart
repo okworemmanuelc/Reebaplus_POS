@@ -209,6 +209,7 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                       ? 'This field is required'
                       : null,
                 ),
+                SizedBox(height: context.getRSize(16)),
                 _groupDropdown(),
                 AppDropdown<String>(
                   labelText: 'Assign to Store',
@@ -229,6 +230,7 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                   controller: _addressCtrl,
                   hintText: 'e.g. 123 Main Street',
                 ),
+                SizedBox(height: context.getRSize(16)),
                 AppInput(
                   labelText: 'Phone Number',
                   controller: _phoneCtrl,
