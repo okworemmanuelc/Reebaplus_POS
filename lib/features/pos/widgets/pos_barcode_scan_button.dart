@@ -6,8 +6,11 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/core/widgets/app_fab.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
@@ -18,9 +21,19 @@ import 'package:reebaplus_pos/features/pos/widgets/scan_unknown_choice_sheet.dar
 import 'package:reebaplus_pos/features/pos/widgets/scan_which_one_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
-/// The always-visible POS scan control (#118). Rendered as the bottom-right
-/// [AppFAB] that replaces the removed cart FAB (ADR 0017); it is never gated on
-/// a non-empty cart — tapping it opens a scan session (via
+/// How the scan control is drawn (#384, the POS mockups).
+enum PosScanButtonShape {
+  /// Phone: a square primary-gradient button beside the search field.
+  square,
+
+  /// Tablet and wide: a primary-gradient "Scan Barcode" pill (icon + label).
+  pill,
+}
+
+/// The always-visible POS scan control (#118). Since #384 it sits beside the
+/// search field in POS's frozen band (it was the bottom-right FAB, ADR 0017):
+/// a square button on a phone, a "Scan Barcode" pill at 600dp+ ([shape]). It
+/// is never gated on a non-empty cart — tapping it opens a scan session (via
 /// [barcodeScannerProvider]) that stays open until the cashier closes it
 /// (#319).
 ///
@@ -50,7 +63,11 @@ class PosBarcodeScanButton extends ConsumerStatefulWidget {
     this.storeId,
     this.readStoreProducts,
     this.onUnknownBarcode,
+    this.shape = PosScanButtonShape.square,
   });
+
+  /// Square (phone) or labelled pill (600dp+).
+  final PosScanButtonShape shape;
 
   /// The active price tier (§12.2). A scanned line is priced exactly as a tap.
   final PriceTier tier;
@@ -96,16 +113,52 @@ class PosBarcodeScanButton extends ConsumerStatefulWidget {
 class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
   @override
   Widget build(BuildContext context) {
-    // Rendered as a FAB in the POS scaffold's FAB slot — the spot the old cart
-    // FAB used before #118 removed it (owner request). Still always visible: a
-    // scan is never gated on the cart. reserveBottomInset:false because the POS
-    // is a bottom-nav tab root whose visible bar already lifts the FAB clear of
-    // the system nav (see AppFAB).
-    return AppFAB(
-      icon: AppIcons.barcode,
-      tooltip: 'Scan barcode',
-      onPressed: _scan,
-      reserveBottomInset: false,
+    final t = Theme.of(context);
+    final ink = t.colorScheme.onPrimary;
+    final height = context.getRSize(52) < kMinInteractiveDimension
+        ? kMinInteractiveDimension
+        : context.getRSize(52);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    final icon = AppIcon(
+      AppIcons.barcode,
+      size: context.getRSize(24),
+      color: ink,
+    );
+    final child = switch (widget.shape) {
+      PosScanButtonShape.square => SizedBox.square(
+        dimension: height,
+        child: Center(child: icon),
+      ),
+      PosScanButtonShape.pill => Container(
+        height: height,
+        padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            icon,
+            SizedBox(width: context.getRSize(10)),
+            Text(
+              'Scan Barcode',
+              maxLines: 1,
+              softWrap: false,
+              style: context.boldStyle(16).copyWith(color: ink),
+            ),
+          ],
+        ),
+      ),
+    };
+    return Tooltip(
+      message: 'Scan barcode',
+      child: DecoratedBox(
+        decoration: AppDecorations.primaryButtonGradient(
+          context,
+          radius: AppSpacing.borderRadiusL,
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(borderRadius: radius, onTap: _scan, child: child),
+        ),
+      ),
     );
   }
 
@@ -249,7 +302,9 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
 
     final outcome = resolveProduct(
       product: product,
-      storeProducts: [ProductDataWithStock(product: product, totalStock: stock)],
+      storeProducts: [
+        ProductDataWithStock(product: product, totalStock: stock),
+      ],
       cartQty: _cartQtyOf(product.id),
       tier: widget.tier,
     );
@@ -277,8 +332,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     // Stock may have moved while the list was open: use the current catalogue.
     final outcome = resolveProduct(
       product: picked,
-      storeProducts:
-          widget.readStoreProducts?.call() ?? widget.loadedProducts,
+      storeProducts: widget.readStoreProducts?.call() ?? widget.loadedProducts,
       cartQty: _cartQtyOf(picked.id),
       tier: widget.tier,
     );
@@ -315,10 +369,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
 
   /// Opens the tap-and-hold "Add to Cart" sheet for a sellable scan. The sheet
   /// sets the line to the chosen total itself; Cancel / dismiss add nothing.
-  Future<void> _openAddSheet(
-    BuildContext context,
-    ScanAddSheet outcome,
-  ) async {
+  Future<void> _openAddSheet(BuildContext context, ScanAddSheet outcome) async {
     final product = outcome.product;
     final result = await EditItemModal.showForProduct(
       context,

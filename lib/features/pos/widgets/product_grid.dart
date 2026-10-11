@@ -4,17 +4,23 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
+import 'package:reebaplus_pos/features/pos/widgets/pos_header_parts.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart';
 
 /// Key prefix on every product tile, so a test can find the *complete* tiles
 /// the cashier can actually reach (issue #259 / PRD #239). The two-assertion
@@ -26,6 +32,50 @@ const String kPosProductTileKeyPrefix = 'pos-product-tile-';
 /// The key carried by the tile for [productId].
 ValueKey<String> posProductTileKey(String productId) =>
     ValueKey<String>('$kPosProductTileKeyPrefix$productId');
+
+/// At or under this many in stock a tile's stock pill turns amber (the POS
+/// rule since before the redesign; unchanged by #384).
+const int kPosLowStockAt = 5;
+
+/// The narrowest a grid column gets on a tablet or wide screen before the grid
+/// drops a column (#384: 4 columns at 800dp upright beside the rail, and 4
+/// beside the fixed cart panel at 1280dp, as the mockups draw).
+const double kPosTileMinWidth = 170;
+
+/// The height of one grid tile: padding, a fixed art area and room for a
+/// two-line name, the size · pack line and the price row, all grown with the
+/// text scale so a large system font never squeezes the text (ui-context
+/// "Responsive Grid & Card Layouts").
+double posTileExtent(BuildContext context) {
+  final scaler = MediaQuery.textScalerOf(context);
+  double line(double base) => scaler.scale(context.getRFontSize(base)) * 1.35;
+  return context.getRSize(10) * 2 + // tile padding
+      // art: smaller on a short screen, so a full row fits under the band
+      context.getRSize(posShortHeight(context) ? 20 : 60) +
+      context.getRSize(10) + // art → name
+      line(15) * 2 + // name, up to two lines
+      line(12) + // size · pack
+      context.getRSize(8) +
+      max(line(16), line(12) + context.getRSize(6)) + // price / stock pill
+      4; // the in-cart border
+}
+
+/// "60cl · Crate": the product's description (its subtitle), its size and
+/// its unit, the blanks skipped, joined with the mockup's " · " (#384). The
+/// tile showed size + unit before; the description leads now, as on Request
+/// Stock's tiles (#380), and the size word stays so nothing is lost.
+String? posTileSubtitle(ProductData product) {
+  final parts = [product.subtitle, product.size, product.unit]
+      .where((s) => s != null && s.trim().isNotEmpty && s != 'null')
+      .map((s) => s!.trim())
+      .toList();
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// The cart-badge text for [qty]: whole numbers bare, fractions to one place.
+String posCartQtyLabel(double qty) => qty == qty.roundToDouble()
+    ? qty.toInt().toString()
+    : qty.toStringAsFixed(1);
 
 /// The POS product grid, expressed as a **sliver** rather than a box.
 ///
@@ -42,36 +92,32 @@ ValueKey<String> posProductTileKey(String productId) =>
 /// As a sliver it no longer depends on a supplied height. It is content inside
 /// POS's one scroll view, so a short viewport costs the cashier a scroll rather
 /// than costing them the grid.
+///
+/// ### Tiles (#384)
+///
+/// Each grid cell is the shared [ProductTile]; the list view (the view
+/// selector's "List View") is a flat row card built from the same data.
 class ProductGrid extends StatelessWidget {
   final List<ProductDataWithStock> products;
   final Function(ProductDataWithStock) onProductTap;
-  final Color cardCol;
-  final Color textCol;
-  final Color subtextCol;
-  final Color borderCol;
   final PosController controller;
   final bool isListView;
   final int gridColumns;
-  final bool showHint;
-  final VoidCallback? onHintTap;
 
   const ProductGrid({
     super.key,
     required this.products,
     required this.onProductTap,
-    required this.cardCol,
-    required this.textCol,
-    required this.subtextCol,
-    required this.borderCol,
     required this.controller,
     this.isListView = false,
-    this.gridColumns = 3,
-    this.showHint = false,
-    this.onHintTap,
+    this.gridColumns = 2,
   });
 
-  /// Column count for [availableWidth]. Extracted so the responsive-density
-  /// tests can assert it without measuring a rendered grid.
+  /// Column count for [availableWidth] (the grid's own width: the screen minus
+  /// the side rail and a fixed cart panel). Under 380dp a phone is capped at 2;
+  /// from 380 to 600 the view selector's preference governs; over 600 the
+  /// width wins when it fits more [kPosTileMinWidth] columns than the
+  /// preference, never fewer.
   static int columnsFor(double availableWidth, int gridColumns) {
     int effectiveColumns = gridColumns;
     if (availableWidth < 380) {
@@ -79,7 +125,7 @@ class ProductGrid extends StatelessWidget {
       if (effectiveColumns > 2) effectiveColumns = 2;
     } else if (availableWidth > 600) {
       // Tablet/Desktop: dynamically increase contents per row
-      final dynamicColumns = (availableWidth / 180).floor();
+      final dynamicColumns = (availableWidth / kPosTileMinWidth).floor();
       effectiveColumns = max(effectiveColumns, dynamicColumns);
     }
     return effectiveColumns;
@@ -87,6 +133,9 @@ class ProductGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final muted =
+        Theme.of(context).textTheme.bodySmall?.color ??
+        Theme.of(context).colorScheme.onSurface;
     if (products.isEmpty) {
       // `hasScrollBody: false` sizes this to the LARGER of the remaining
       // viewport and its own natural height, so the "no products found" copy
@@ -101,17 +150,13 @@ class ProductGrid extends StatelessWidget {
               Icon(
                 AppIcons.search,
                 size: context.getRSize(48),
-                color: subtextCol.withValues(alpha: 0.3),
+                color: muted.withValues(alpha: 0.3),
               ),
               SizedBox(height: context.getRSize(16)),
               Consumer(
                 builder: (context, ref, _) => Text(
                   'No ${ref.watch(industryLexiconProvider).itemPluralLower} found',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(16),
-                    color: subtextCol,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: context.semiBoldStyle(16).copyWith(color: muted),
                 ),
               ),
             ],
@@ -120,26 +165,31 @@ class ProductGrid extends StatelessWidget {
       );
     }
 
+    // Category id → name, for each tile's tint, icon and the chip dot colour.
+    final categoryNames = {for (final c in controller.categories) c.id: c.name};
+    final gutter = context.getRSize(16);
+    final gap = context.getRSize(12);
+
     if (isListView) {
       return SliverPadding(
-        padding: EdgeInsets.all(context.getRSize(16)),
+        padding: EdgeInsets.fromLTRB(
+          gutter,
+          context.getRSize(8),
+          gutter,
+          gutter,
+        ),
         sliver: SliverList.separated(
           itemCount: products.length,
-          separatorBuilder: (_, __) => SizedBox(height: context.getRSize(16)),
+          separatorBuilder: (_, __) => SizedBox(height: gap),
           itemBuilder: (context, index) {
             final item = products[index];
             return _ProductCard(
               key: posProductTileKey(item.product.id),
               item: item,
+              categoryName: categoryNames[item.product.categoryId],
               onTap: () => onProductTap(item),
-              cardCol: cardCol,
-              textCol: textCol,
-              subtextCol: subtextCol,
-              borderCol: borderCol,
               controller: controller,
               isListView: true,
-              showHint: showHint,
-              onHintTap: onHintTap,
             );
           },
         ),
@@ -148,26 +198,20 @@ class ProductGrid extends StatelessWidget {
 
     // The grid's real width: the screen minus whatever the app frame puts
     // beside it (the side rail, the fixed cart panel — #352).
-    return SliverLayoutBuilder(
-      builder: (context, constraints) {
-        final availableWidth = constraints.crossAxisExtent;
-        final effectiveColumns = columnsFor(availableWidth, gridColumns);
-
-        // Calculate aspect ratio dynamically to guarantee a minimum height and avoid overflow
-        final totalPadding = context.getRSize(16); // 8 padding on each side
-        final totalSpacing = context.getRSize(8) * (effectiveColumns - 1);
-        final cellWidth = (availableWidth - totalPadding - totalSpacing) / effectiveColumns;
-        // We need roughly 210px (scaled) of height for the image, name, price, stock
-        final aspect = cellWidth / context.getRSize(210);
-
-        return SliverPadding(
-          padding: EdgeInsets.all(context.getRSize(8)),
-          sliver: SliverGrid.builder(
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(gutter, context.getRSize(8), gutter, gutter),
+      sliver: SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final effectiveColumns = columnsFor(
+            constraints.crossAxisExtent + gutter * 2,
+            gridColumns,
+          );
+          return SliverGrid.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: effectiveColumns,
-              childAspectRatio: aspect,
-              crossAxisSpacing: context.getRSize(8),
-              mainAxisSpacing: context.getRSize(8),
+              mainAxisExtent: posTileExtent(context),
+              crossAxisSpacing: gap,
+              mainAxisSpacing: gap,
             ),
             itemCount: products.length,
             itemBuilder: (context, index) {
@@ -175,48 +219,33 @@ class ProductGrid extends StatelessWidget {
               return _ProductCard(
                 key: posProductTileKey(item.product.id),
                 item: item,
+                categoryName: categoryNames[item.product.categoryId],
                 onTap: () => onProductTap(item),
-                cardCol: cardCol,
-                textCol: textCol,
-                subtextCol: subtextCol,
-                borderCol: borderCol,
                 controller: controller,
                 isListView: false,
-                showHint: showHint,
-                onHintTap: onHintTap,
               );
             },
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
 
 class _ProductCard extends ConsumerStatefulWidget {
   final ProductDataWithStock item;
+  final String? categoryName;
   final VoidCallback onTap;
-  final Color cardCol;
-  final Color textCol;
-  final Color subtextCol;
-  final Color borderCol;
   final PosController controller;
   final bool isListView;
-  final bool showHint;
-  final VoidCallback? onHintTap;
 
   const _ProductCard({
     super.key,
     required this.item,
+    required this.categoryName,
     required this.onTap,
-    required this.cardCol,
-    required this.textCol,
-    required this.subtextCol,
-    required this.borderCol,
     required this.controller,
     this.isListView = false,
-    this.showHint = false,
-    this.onHintTap,
   });
 
   @override
@@ -270,7 +299,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
   @override
   Widget build(BuildContext context) {
     final product = widget.item.product;
-    final bool isOutOfStock = widget.item.totalStock <= 0;
+    final stock = widget.item.totalStock;
+    final bool isOutOfStock = stock <= 0;
     final int priceKobo = ref
         .read(databaseProvider)
         .catalogDao
@@ -281,7 +311,10 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
               : 'wholesaler',
         );
     final price = priceKobo / 100.0;
-    final bool isLowStock = !isOutOfStock && widget.item.totalStock <= 5;
+    final bool isLowStock = !isOutOfStock && stock <= kPosLowStockAt;
+    final level = isOutOfStock
+        ? StockLevel.out
+        : (isLowStock ? StockLevel.low : StockLevel.ok);
 
     return ValueListenableBuilder<List<Map<String, dynamic>>>(
       valueListenable: ref.watch(cartProvider),
@@ -289,417 +322,261 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         final double cartQty = cartItems
             .where((i) => i['id'] == product.id)
             .fold(0.0, (s, i) => s + (i['qty'] as num).toDouble());
-        final bool inCart = cartQty > 0;
-        final bool atStockLimit =
-            !isOutOfStock && cartQty >= widget.item.totalStock;
-        final String badgeText = cartQty == cartQty.roundToDouble()
-            ? cartQty.toInt().toString()
-            : cartQty.toStringAsFixed(1);
+        final bool atStockLimit = !isOutOfStock && cartQty >= stock;
+        final VoidCallback? onTap = isOutOfStock
+            ? null
+            : (atStockLimit
+                  ? () => AppNotification.showError(
+                      context,
+                      'Stock limit reached for ${product.name}',
+                    )
+                  : _handleTap);
+        final VoidCallback? onLongPress = isOutOfStock ? null : _openAddModal;
+        // A fraction still counts as "in the cart" (border + badge).
+        final inCartQty = cartQty > 0 ? cartQty.ceil() : 0;
 
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Opacity(
-              opacity: isOutOfStock ? 0.45 : 1.0,
-              child: GestureDetector(
-                onLongPress: isOutOfStock ? null : _openAddModal,
-                child: InkWell(
-                  onTap: isOutOfStock
-                      ? null
-                      : (atStockLimit
-                            ? () => AppNotification.showError(
-                                context,
-                                'Stock limit reached for ${product.name}',
-                              )
-                            : _handleTap),
-                  borderRadius: BorderRadius.circular(16),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                    decoration: BoxDecoration(
-                      color: widget.cardCol,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: inCart && !isOutOfStock 
-                            ? Theme.of(context).colorScheme.primary 
-                            : Colors.transparent, // Toned down outline
-                        width: inCart && !isOutOfStock ? 2.0 : 1.0,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: inCart && !isOutOfStock
-                              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
-                              : Colors.black.withValues(alpha: 0.06),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: widget.isListView
-                        ? _buildListLayout(context, product, price, isOutOfStock, isLowStock, inCart)
-                        : _buildGridLayout(context, product, price, isOutOfStock, isLowStock, inCart),
-                  ),
-                ),
-              ),
-            ),
-            // Cart quantity badge
-            Positioned(
-              top: -8,
-              right: -8,
-              child: AnimatedScale(
-                scale: inCart ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.elasticOut,
-                child: Container(
-                  width: context.getRSize(30),
-                  height: context.getRSize(30),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.45),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      badgeText,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: context.getRFontSize(11),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // Info Icon
-            if (widget.showHint && !isOutOfStock)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: GestureDetector(
-                  onTap: widget.onHintTap,
-                  child: Container(
-                    padding: EdgeInsets.all(context.getRSize(4)),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      AppIcons.infoCircle,
-                      size: context.getRSize(10),
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-          ],
+        if (widget.isListView) {
+          return _PosProductListRow(
+            name: product.name,
+            subtitle: posTileSubtitle(product),
+            priceLabel: formatCurrency(price),
+            stockLabel: '$stock',
+            stockLevel: level,
+            categoryName: widget.categoryName,
+            photoPath: product.imagePath,
+            inCartLabel: inCartQty > 0 ? posCartQtyLabel(cartQty) : null,
+            onTap: onTap,
+            onLongPress: onLongPress,
+          );
+        }
+        return ProductTile(
+          name: product.name,
+          subtitle: posTileSubtitle(product),
+          priceLabel: formatCurrency(price),
+          stockLabel: '$stock',
+          stockLevel: level,
+          categoryName: widget.categoryName,
+          photoPath: product.imagePath,
+          inCartQty: inCartQty,
+          inCartLabel: posCartQtyLabel(cartQty),
+          onTap: onTap,
+          onLongPress: onLongPress,
         );
       },
     );
   }
+}
 
-  Widget _buildGridLayout(BuildContext context, dynamic product, double price, bool isOutOfStock, bool isLowStock, bool inCart) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Stack(
-            children: [
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Center(
-                  child: product.imagePath != null
-                      ? Image.file(
-                          File(product.imagePath!),
-                          width: double.infinity,
-                          height: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (ctx, _, __) => Padding(
-                            padding: EdgeInsets.symmetric(horizontal: context.getRSize(8)),
-                            child: Text(
-                              product.name,
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(16),
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
-                              ),
-                            ),
-                          ),
-                        )
-                      : Padding(
-                          padding: EdgeInsets.symmetric(horizontal: context.getRSize(8)),
-                          child: Text(
-                            product.name,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(16),
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ),
-                ),
-              ),
-              if (isOutOfStock)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'Out of\nStock',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: context.getRFontSize(10),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.all(context.getRSize(12)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                product.name,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w800,
-                  color: widget.textCol,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: context.getRSize(2)),
-              Text(
-                '${product.size != null && product.size.toString() != 'null' ? '${product.size} ' : ''}${product.unit ?? ''}'.trim(),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(11),
-                  color: widget.subtextCol,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: context.getRSize(6)),
-              Text(
-                formatCurrency(price),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w900,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              SizedBox(height: context.getRSize(8)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
-                      isOutOfStock
-                          ? 'No stock'
-                          : 'Stock: ${widget.item.totalStock}',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(11),
-                        color: isOutOfStock
-                            ? danger
-                            : (isLowStock ? danger : widget.subtextCol),
-                        fontWeight: (isOutOfStock || isLowStock)
-                            ? FontWeight.bold
-                            : FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (isLowStock)
-                    Icon(
-                      AppIcons.warning,
-                      size: context.getRSize(12),
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
+/// One product in the POS list view (the view selector's "List View"): the
+/// [ProductTile]'s content laid out as a row card — art square, name, size ·
+/// pack, price in primary and the stock pill. In the cart = primary border and
+/// the count badge; out of stock = dimmed, "Out of stock", no taps.
+///
+/// Shared-part candidate (a list density of `ProductTile`), local to POS until
+/// a second screen needs it.
+class _PosProductListRow extends StatelessWidget {
+  const _PosProductListRow({
+    required this.name,
+    required this.subtitle,
+    required this.priceLabel,
+    required this.stockLabel,
+    required this.stockLevel,
+    required this.categoryName,
+    required this.photoPath,
+    required this.inCartLabel,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final String name;
+  final String? subtitle;
+  final String priceLabel;
+  final String stockLabel;
+  final StockLevel stockLevel;
+  final String? categoryName;
+  final String? photoPath;
+
+  /// Null when the product is not in the cart.
+  final String? inCartLabel;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final visual = categoryVisual(categoryName, f);
+    final out = stockLevel == StockLevel.out;
+    final inCart = inCartLabel != null;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
+    final art = context.getRSize(64);
+
+    final (Color pillFill, Color pillDot) = switch (stockLevel) {
+      StockLevel.ok => (f.greenTint, f.greenDot),
+      StockLevel.low => (f.warningTint, f.warning),
+      StockLevel.out => (f.dangerTint, f.danger),
+    };
+
+    final fallback = Center(
+      child: AppIcon(
+        visual.icon,
+        filled: true,
+        size: art * 0.5,
+        color: visual.iconColor,
+      ),
     );
-  }
 
-  Widget _buildListLayout(BuildContext context, dynamic product, double price, bool isOutOfStock, bool isLowStock, bool inCart) {
-    return IntrinsicHeight(
+    final card = Container(
+      decoration: AppDecorations.card(context).copyWith(
+        border: Border.all(
+          color: inCart ? t.colorScheme.primary : t.dividerColor,
+          width: inCart ? 2 : 1,
+        ),
+      ),
+      padding: EdgeInsets.all(context.getRSize(10)),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: context.getRSize(100),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
-            ),
-            child: Stack(
-              children: [
-                Center(
-                  child: product.imagePath != null
-                      ? ClipRRect(
-                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
-                          child: Image.file(
-                            File(product.imagePath!),
-                            width: double.infinity,
-                            height: double.infinity,
-                            fit: BoxFit.cover,
-                            errorBuilder: (ctx, _, __) => Padding(
-                              padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-                              child: Text(
-                                product.name,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(12),
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
-                                ),
-                              ),
-                            ),
-                          ),
-                        )
-                      : Padding(
-                          padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-                          child: Text(
-                            product.name,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(12),
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ),
-                ),
-                if (isOutOfStock)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.35),
-                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
+            child: SizedBox.square(
+              dimension: art,
+              child: ColoredBox(
+                color: visual.tint,
+                child: photoPath == null
+                    ? fallback
+                    : Image.file(
+                        File(photoPath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => fallback,
                       ),
-                      child: Center(
+              ),
+            ),
+          ),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context
+                      .boldStyle(15)
+                      .copyWith(color: t.colorScheme.onSurface),
+                ),
+                if (subtitle != null)
+                  Text(
+                    subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.regularStyle(12).copyWith(color: muted),
+                  ),
+                SizedBox(height: context.getRSize(6)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
                         child: Text(
-                          'Out of\nStock',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: context.getRFontSize(10),
-                            fontWeight: FontWeight.w800,
-                          ),
+                          priceLabel,
+                          maxLines: 1,
+                          style: context
+                              .boldStyle(16)
+                              .copyWith(color: t.colorScheme.primary),
                         ),
                       ),
                     ),
-                  ),
+                    SizedBox(width: context.getRSize(6)),
+                    if (out)
+                      Text(
+                        'Out of stock',
+                        style: context.boldStyle(12).copyWith(color: f.danger),
+                      )
+                    else
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: context.getRSize(8),
+                          vertical: context.getRSize(3),
+                        ),
+                        decoration: ShapeDecoration(
+                          color: pillFill,
+                          shape: const StadiumBorder(),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: context.getRSize(7),
+                              height: context.getRSize(7),
+                              decoration: BoxDecoration(
+                                color: pillDot,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            SizedBox(width: context.getRSize(4)),
+                            Text(
+                              stockLabel,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: context
+                                  .boldStyle(12)
+                                  .copyWith(color: t.colorScheme.onSurface),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.all(context.getRSize(16)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    product.name,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(16),
-                      fontWeight: FontWeight.w800,
-                      color: widget.textCol,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: context.getRSize(4)),
-                  Text(
-                    '${product.size != null && product.size.toString() != 'null' ? '${product.size} ' : ''}${product.unit ?? ''}'.trim(),
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      color: widget.subtextCol,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: context.getRSize(12)),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        formatCurrency(price),
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(16),
-                          fontWeight: FontWeight.w900,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          if (isLowStock) ...[
-                            Icon(
-                              AppIcons.warning,
-                              size: context.getRSize(12),
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                            SizedBox(width: context.getRSize(4)),
-                          ],
-                          Text(
-                            isOutOfStock
-                                ? 'No stock'
-                                : 'Stock: ${widget.item.totalStock}',
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(12),
-                              color: isOutOfStock
-                                  ? danger
-                                  : (isLowStock ? danger : widget.subtextCol),
-                              fontWeight: (isOutOfStock || isLowStock)
-                                  ? FontWeight.bold
-                                  : FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+        ],
+      ),
+    );
+
+    return Semantics(
+      button: true,
+      enabled: !out,
+      label: name,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: radius,
+              onTap: onTap,
+              onLongPress: onLongPress,
+              child: Opacity(opacity: out ? 0.5 : 1, child: card),
             ),
           ),
+          if (inCart)
+            Positioned(
+              top: -context.getRSize(6),
+              right: -context.getRSize(6),
+              child: Container(
+                constraints: BoxConstraints(
+                  minWidth: context.getRSize(26),
+                  minHeight: context.getRSize(26),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: context.getRSize(6)),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: t.colorScheme.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: t.colorScheme.surface, width: 2),
+                ),
+                child: Text(
+                  inCartLabel!,
+                  style: context
+                      .boldStyle(12)
+                      .copyWith(color: t.colorScheme.onPrimary),
+                ),
+              ),
+            ),
         ],
       ),
     );
