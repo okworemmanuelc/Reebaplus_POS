@@ -31,6 +31,7 @@ abstract final class AppIcons {
   static const IconData bill = Symbols.request_quote;
   static const IconData cart = Symbols.shopping_cart;
   static const IconData cartAdd = Symbols.add_shopping_cart;
+  static const IconData cartCheckout = Symbols.shopping_cart_checkout;
   static const IconData cash = Symbols.payments;
   static const IconData creditBalance = Symbols.account_balance_wallet;
   static const IconData creditCard = Symbols.credit_card;

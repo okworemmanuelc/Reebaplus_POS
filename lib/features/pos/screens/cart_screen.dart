@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/theme/colors.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -20,12 +18,14 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/shared/widgets/frame/cart_panel.dart';
-import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/pos/widgets/cart/cart_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/cart_line.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/features/pos/screens/checkout_page.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -36,7 +36,6 @@ import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/cart_crate_sync.dart';
-import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:flutter/services.dart';
 
@@ -47,8 +46,10 @@ const String kCartLineKeyPrefix = 'cart-line-';
 
 /// The key on one cart line. A line is identified by product id AND name, as
 /// `CartService.addItem` merges them: Quick Sale lines carry no product id.
-ValueKey<String> cartLineKey({required String? productId, required String name}) =>
-    ValueKey<String>('$kCartLineKeyPrefix${productId ?? ''}-$name');
+ValueKey<String> cartLineKey({
+  required String? productId,
+  required String name,
+}) => ValueKey<String>('$kCartLineKeyPrefix${productId ?? ''}-$name');
 
 class CartScreen extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> cart;
@@ -205,6 +206,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
   void _openCheckout() {
     // Rebuilt from the live cart rather than captured in `build`, so the values
     // pushed to checkout are the ones that survived the pre-flight above.
+    // Sorted by quantity for checkout only: its order summary and the order it
+    // writes list lines largest first, as before (the cart itself keeps the
+    // order the lines were added).
     final items = List<Map<String, dynamic>>.from(ref.read(cartProvider).value)
       ..sort((a, b) => b['qty'].compareTo(a['qty']));
     final quote = _quote(
@@ -370,68 +374,69 @@ class _CartScreenState extends ConsumerState<CartScreen>
                         return Material(
                           type: MaterialType.transparency,
                           child: ListTile(
-                          title: Text(
-                            cart.name,
-                            style: TextStyle(color: _text),
-                          ),
-                          subtitle: Text(
-                            'Saved on ${cart.createdAt.toString().split('.')[0]}',
-                            style: TextStyle(color: _subtext),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(
-                              AppIcons.delete,
-                              color: Colors.red,
+                            title: Text(
+                              cart.name,
+                              style: TextStyle(color: _text),
                             ),
-                            onPressed: () async {
+                            subtitle: Text(
+                              'Saved on ${cart.createdAt.toString().split('.')[0]}',
+                              style: TextStyle(color: _subtext),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(
+                                AppIcons.delete,
+                                color: Colors.red,
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await db.ordersDao.deleteSavedCart(cart.id);
+                                } catch (e, st) {
+                                  CrashReporter.record(
+                                    e,
+                                    st,
+                                    context: 'pos.cart.delete_saved',
+                                  );
+                                  if (!mounted) return;
+                                  AppNotification.showError(
+                                    this.context,
+                                    'Could not delete saved cart: $e',
+                                  );
+                                }
+                              },
+                            ),
+                            onTap: () async {
                               try {
-                                await db.ordersDao.deleteSavedCart(cart.id);
+                                final items =
+                                    (jsonDecode(cart.cartData) as List)
+                                        .cast<Map<String, dynamic>>();
+                                Customer? customer;
+                                if (cart.customerId != null) {
+                                  customer = custSvc.getById(cart.customerId!);
+                                }
+                                cartSvc.loadCart(
+                                  items,
+                                  customer,
+                                  storeId: cart.storeId,
+                                );
+                                Navigator.pop(modalCtx);
+                                AppNotification.showSuccess(
+                                  context,
+                                  'Cart loaded',
+                                );
                               } catch (e, st) {
                                 CrashReporter.record(
                                   e,
                                   st,
-                                  context: 'pos.cart.delete_saved',
+                                  context: 'pos.cart.load_saved',
                                 );
                                 if (!mounted) return;
+                                Navigator.pop(modalCtx);
                                 AppNotification.showError(
                                   this.context,
-                                  'Could not delete saved cart: $e',
+                                  'Could not load this saved cart.',
                                 );
                               }
                             },
-                          ),
-                          onTap: () async {
-                            try {
-                              final items = (jsonDecode(cart.cartData) as List)
-                                  .cast<Map<String, dynamic>>();
-                              Customer? customer;
-                              if (cart.customerId != null) {
-                                customer = custSvc.getById(cart.customerId!);
-                              }
-                              cartSvc.loadCart(
-                                items,
-                                customer,
-                                storeId: cart.storeId,
-                              );
-                              Navigator.pop(modalCtx);
-                              AppNotification.showSuccess(
-                                context,
-                                'Cart loaded',
-                              );
-                            } catch (e, st) {
-                              CrashReporter.record(
-                                e,
-                                st,
-                                context: 'pos.cart.load_saved',
-                              );
-                              if (!mounted) return;
-                              Navigator.pop(modalCtx);
-                              AppNotification.showError(
-                                this.context,
-                                'Could not load this saved cart.',
-                              );
-                            }
-                          },
                           ),
                         );
                       },
@@ -455,8 +460,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
   Color get _primary => Theme.of(context).colorScheme.primary;
-  Color get _success =>
-      Theme.of(context).extension<AppSemanticColors>()?.success ?? success;
 
   void _showChangeCustomerModal() {
     if (ref.read(zeroStoresEmptySurfaceProvider)) return;
@@ -726,9 +729,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                customer == null
-                    ? AppIcons.customerRole
-                    : AppIcons.user,
+                customer == null ? AppIcons.customerRole : AppIcons.user,
                 size: modalCtx.getRSize(16),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -799,86 +800,79 @@ class _CartScreenState extends ConsumerState<CartScreen>
     }
   }
 
-  /// Small "−10%" / "−₦500" badge on a discounted cart line (§13.3).
-  Widget _discountBadge(Map<String, dynamic> item) {
+  /// A quantity as the cart shows it: "2", "1.5" (no trailing ".0").
+  static String _qtyLabel(double qty) {
+    if (qty == qty.roundToDouble()) return qty.toInt().toString();
+    return qty.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+  }
+
+  /// "−10%" / "−₦500" for a discounted cart line (§13.3).
+  String _discountBadgeLabel(Map<String, dynamic> item) {
     final kind = item['discountKind'] as String?;
     final value = (item['discountValue'] as num?)?.toDouble() ?? 0.0;
     final valueText = value == value.toInt()
         ? value.toInt().toString()
         : value.toStringAsFixed(1);
-    final label = kind == 'naira'
+    return kind == 'naira'
         ? '−$activeCurrencySymbol$valueText'
         : '−$valueText%';
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(2),
-      ),
-      decoration: BoxDecoration(
-        color: _success.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: context.getRFontSize(11),
-          fontWeight: FontWeight.w800,
-          color: _success,
-        ),
-      ),
-    );
   }
 
-  /// Small "Custom price" badge on a cart line whose unit price was hand-set
-  /// (§13.4), so it's clear the line isn't at its designated selling price.
-  Widget _customPriceBadge() {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(2),
-      ),
-      decoration: BoxDecoration(
-        color: _primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        'Custom price',
-        style: TextStyle(
-          fontSize: context.getRFontSize(11),
-          fontWeight: FontWeight.w800,
-          color: _primary,
+  /// The tags under a line's "qty × price": "Custom price" when the unit
+  /// price was hand-set (§13.4), then the line discount (§13.3).
+  List<Widget> _lineBadges(Map<String, dynamic> item) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final tint =
+        t.extension<AppSchemeColors>()?.primaryTint ??
+        _primary.withValues(alpha: 0.12);
+    return [
+      if (item['customPriceKobo'] != null)
+        CartLineBadge(label: 'Custom price', color: _primary, fill: tint),
+      if (((item['discountKobo'] as int?) ?? 0) > 0)
+        CartLineBadge(
+          label: _discountBadgeLabel(item),
+          color: f.green,
+          fill: f.greenTint,
         ),
-      ),
-    );
+    ];
   }
 
-  Widget _totalRow(
-    String label,
-    double value, {
-    bool small = false,
-    bool large = false,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: context.getRFontSize(large ? 18 : 14),
-            fontWeight: large ? FontWeight.bold : FontWeight.w600,
-            color: large ? _text : _subtext,
-          ),
-        ),
-        Text(
-          formatCurrency(value),
-          style: TextStyle(
-            fontSize: context.getRFontSize(large ? 22 : 15),
-            fontWeight: FontWeight.w800,
-            color: large ? _primary : _text,
-          ),
-        ),
-      ],
-    );
+  /// The stepper's +: one more, clamped to the line's stock cap by
+  /// `CartService.updateQty` exactly as the Edit Item sheet does.
+  void _incrementLine(Map<String, dynamic> item) {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
+    final qty = (item['qty'] as num).toDouble();
+    final applied = ref
+        .read(cartProvider)
+        .updateQty(item['name'] as String, qty + 1);
+    if (!applied && mounted) {
+      final cap = ((item['maxStock'] as int?) ?? (1 << 30)).toDouble();
+      AppNotification.showInfo(
+        context,
+        '${_qtyLabel(cap)} in stock — quantity can\'t exceed this',
+      );
+    }
+  }
+
+  /// The stepper's −: one fewer; at the last unit it is the red bin, which
+  /// removes the line with the same 5s Undo as the Edit Item sheet (§13.2).
+  void _decrementLine(Map<String, dynamic> item) {
+    if (ref.read(zeroStoresEmptySurfaceProvider)) return;
+    final qty = (item['qty'] as num).toDouble();
+    final cart = ref.read(cartProvider);
+    if (qty <= 1) {
+      final removed = Map<String, dynamic>.from(item);
+      cart.removeItem(item['name'] as String);
+      AppNotification.showAction(
+        context,
+        'Item removed.',
+        actionLabel: 'Undo',
+        onAction: () => ref.read(cartProvider).restoreLine(removed),
+      );
+      return;
+    }
+    cart.updateQty(item['name'] as String, qty - 1);
   }
 
   /// Everything the cart's money display AND the checkout hand-off are computed
@@ -890,10 +884,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   /// checkout quote is built from the cart as it stands when the button is
   /// actually pressed, and means the displayed deposit and the deposit sent to
   /// checkout cannot drift apart.
-  _CartQuote _quote(
-    List<Map<String, dynamic>> items, {
-    required bool isCrate,
-  }) {
+  _CartQuote _quote(List<Map<String, dynamic>> items, {required bool isCrate}) {
     final sub = items.fold<double>(
       0.0,
       (s, i) =>
@@ -1034,42 +1025,49 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
+  /// The menu button before the header tile, under 600dp only (at 600dp+ the
+  /// rail carries the menu).
+  Widget? _leading(BuildContext context) => context.isRailLayout
+      ? null
+      : const SizedBox.square(
+          dimension: kMinInteractiveDimension,
+          child: MenuButton(),
+        );
+
   @override
   Widget build(BuildContext context) {
+    final inPanel = widget.onClosePanel != null;
     if (ref.watch(zeroStoresEmptySurfaceProvider)) {
       return SharedScaffold(
         activeRoute: 'cart',
         backgroundColor: _bg,
-        appBar: AppBar(
-          backgroundColor: _surface,
-          elevation: 0,
-          leading: context.isRailLayout ? null : const MenuButton(),
-          title: AppBarHeader(
-            icon: AppIcons.cart,
-            title: 'Cart',
-            subtitle: ref.watch(activeStoreLabelProvider),
-          ),
-          actions: [
-            const NotificationBell(),
-            if (widget.onClosePanel != null)
-              CartPanelCloseButton(onPressed: widget.onClosePanel!),
-          ],
+        appBar: CartTopBar(
+          height: cartTopBarHeight(context),
+          subtitle: ref.watch(activeStoreLabelProvider),
+          leading: _leading(context),
+          bell: inPanel ? null : const NotificationBell(),
+          onClose: widget.onClosePanel,
         ),
-        body: const SafeArea(
-          child: FirstRunEmptyState(),
-        ),
+        body: const SafeArea(child: FirstRunEmptyState()),
       );
     }
 
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
+    // The lines show in the order they were added and never move when a
+    // quantity changes (#385: sorting by quantity made a line jump to the top
+    // mid-edit). The quote is still built from the quantity-sorted copy it
+    // has always used, so every figure — including the order of its sums and
+    // of the Empty Crates rows — is exactly as before; checkout keeps its own
+    // sort in [_openCheckout].
     final cartItems = List<Map<String, dynamic>>.from(
       ref.read(cartProvider).value,
     );
-    cartItems.sort((a, b) => b['qty'].compareTo(a['qty']));
+    final quoteItems = List<Map<String, dynamic>>.from(cartItems)
+      ..sort((a, b) => b['qty'].compareTo(a['qty']));
     final quote = _quote(
-      cartItems,
+      quoteItems,
       isCrate: businessTracksCrates(ref.watch(currentBusinessProvider)),
     );
     final sub = quote.subtotal;
@@ -1089,897 +1087,247 @@ class _CartScreenState extends ConsumerState<CartScreen>
               0);
     final customerCreditBalance = activeBalanceKobo / 100.0;
     final isOwe = customerCreditBalance < 0;
+    final fixed =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
 
-    final header = AppBarHeader(
-      icon: AppIcons.cart,
-      title: 'Cart',
-      subtitle: ref.watch(activeStoreLabelProvider),
+    final categoryNames = <String, String>{
+      for (final c
+          in ref.watch(allCategoriesProvider).valueOrNull ??
+              const <CategoryData>[])
+        c.id: c.name,
+    };
+
+    final itemCount = cartItems.length;
+    final gutter = context.getRSize(16);
+    final bottomPadding = context.deviceBottomPadding;
+
+    Widget lineAt(int i) {
+      final item = _isClearing ? _animatingItems[i] : cartItems[i];
+      final qty = (item['qty'] as num?)?.toDouble() ?? 0.0;
+      final price = (item['price'] as num?)?.toDouble() ?? 0.0;
+      final gross = qty * price;
+      final discountKobo = (item['discountKobo'] as int?) ?? 0;
+      final net = gross - discountKobo / 100.0;
+      final rawCategory = item['category']?.toString();
+      final visual = categoryVisual(
+        categoryNames[rawCategory] ?? rawCategory,
+        fixed,
+      );
+      // "60cl · Bottle": the product's own subtitle, then its unit (as the
+      // Request Stock tiles). The unit moved here from the front of the name.
+      final detail = [
+        item['subtitle'] as String?,
+        item['unit'] as String?,
+      ].where((s) => s != null && s.trim().isNotEmpty).join(' · ');
+      final card = CartLine(
+        key: cartLineKey(
+          productId: item['id'] as String?,
+          name: item['name'] as String,
+        ),
+        name: productDisplayName(
+          item['name'] as String,
+          item['size'] as String?,
+        ),
+        icon: visual.icon,
+        tileTint: visual.tint,
+        tileIconColor: visual.iconColor,
+        quantityLabel: _qtyLabel(qty),
+        unitPriceLabel: formatCurrency(price),
+        totalLabel: formatCurrency(net),
+        originalTotalLabel: discountKobo > 0 ? formatCurrency(gross) : null,
+        badges: _lineBadges(item),
+        detail: detail.isEmpty ? null : detail,
+        isLastUnit: qty <= 1,
+        onIncrement: _isClearing ? () {} : () => _incrementLine(item),
+        onDecrement: _isClearing ? () {} : () => _decrementLine(item),
+        onTap: _isClearing
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                _editItem(context, item);
+              },
+      );
+
+      if (!_isClearing) return card;
+
+      // Staggered slide-right + fade during clear
+      return AnimatedBuilder(
+        animation: _clearCtrl,
+        builder: (_, child) {
+          const staggerStep = 0.12;
+          final delay = i * staggerStep;
+          final t = ((_clearCtrl.value - delay) / (1.0 - delay)).clamp(
+            0.0,
+            1.0,
+          );
+          final curve = Curves.easeIn.transform(t);
+          return Transform.translate(
+            offset: Offset(curve * context.screenWidth, 0),
+            child: Opacity(
+              opacity: (1.0 - curve).clamp(0.0, 1.0),
+              child: child,
+            ),
+          );
+        },
+        child: card,
+      );
+    }
+
+    // Subtotal, then the crate cards and the discount, in the mockup's order.
+    // Every condition is today's; only the look and position changed (#385).
+    final summary = Padding(
+      padding: EdgeInsets.fromLTRB(gutter, context.getRSize(4), gutter, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CartSubtotalRow(label: 'Subtotal', value: formatCurrency(sub)),
+          // Deliberately NOT behind the registered-customer gate below: a
+          // missing crate value is a product-setup problem, and the cashier
+          // who can see it is the one holding the item. It also has to appear
+          // ABOVE the deposit figures so the ₦0 lines there are explained
+          // rather than read as a real crate value.
+          if (unconfiguredCrateItems.isNotEmpty) ...[
+            SizedBox(height: context.getRSize(12)),
+            CrateValueMissingCard(productNames: unconfiguredCrateItems),
+          ],
+          // §3.13 — the Empty Crates section is hidden for walk-in customers
+          // (no profile = no crate balance/deposit to defer); it shows only
+          // for a registered customer, matching checkout's _depositApplies
+          // gate.
+          if (hasBottles && _activeCustomer != null) ...[
+            SizedBox(height: context.getRSize(12)),
+            EmptyCratesCard(
+              goingOutLabel:
+                  '${_qtyLabel(depositLines.fold<double>(0, (s, l) => s + l.qty))} going out',
+              rows: [
+                for (final line in depositLines)
+                  (
+                    label: line.label,
+                    color: line.color,
+                    qtyLabel: _qtyLabel(line.qty),
+                    amountLabel: formatCurrency(line.amount),
+                  ),
+              ],
+              requiredDepositLabel: formatCurrency(computedDeposit),
+            ),
+          ],
+          if (discountTotal > 0) ...[
+            SizedBox(height: context.getRSize(12)),
+            CartDiscountRow(amountLabel: '−${formatCurrency(discountTotal)}'),
+          ],
+          SizedBox(height: context.getRSize(16)),
+        ],
+      ),
     );
+
+    CartFooter footer({required bool pinned}) => CartFooter(
+      totalLabel: formatCurrency(tot),
+      onSave: _saveCurrentCart,
+      onRecall: _viewSavedCarts,
+      onCheckout: _goToCheckout,
+      bottomPadding: bottomPadding,
+      pinned: pinned,
+    );
+
     return SharedScaffold(
       activeRoute: 'cart',
       backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        leading: context.isRailLayout ? null : const MenuButton(),
-        // In the frame's cart panel the header is where fly-to-cart lands
-        // (#352 PR 3), ahead of the rail's Cart item; its icon tile sits at
-        // the header's left edge.
-        title: widget.onClosePanel == null
-            ? header
-            : FlyTarget(
-                id: FlyTargetId.cart,
-                priority: 1,
-                anchor: Alignment.centerLeft,
-                anchorOffset: Offset(context.getRSize(16), 0),
-                child: header,
-              ),
-        actions: [
-          const NotificationBell(),
-          if (cartItems.isNotEmpty)
-            GestureDetector(
-              onTap: _clearWithAnimation,
-              child: Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: context.getRSize(16),
-                  vertical: context.getRSize(10),
-                ),
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.getRSize(12),
-                  vertical: context.getRSize(4),
-                ),
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.error.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      AppIcons.delete,
-                      color: Theme.of(context).colorScheme.error,
-                      size: context.getRSize(13),
-                    ),
-                    SizedBox(width: context.getRSize(6)),
-                    Text(
-                      'Clear',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontWeight: FontWeight.bold,
-                        fontSize: context.getRFontSize(12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (widget.onClosePanel != null)
-            CartPanelCloseButton(onPressed: widget.onClosePanel!),
-        ],
+      appBar: CartTopBar(
+        height: cartTopBarHeight(context),
+        subtitle: '$itemCount item${itemCount == 1 ? '' : 's'}',
+        leading: _leading(context),
+        bell: inPanel ? null : const NotificationBell(),
+        onClear: cartItems.isEmpty ? null : _clearWithAnimation,
+        onClose: widget.onClosePanel,
       ),
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            // ── Fixed customer tab — full device width ──
-            Container(
-              width: double.infinity,
+            // ── Fixed customer card: it is how a sale goes on a customer's
+            // account, so it never scrolls away (#255).
+            Padding(
               padding: EdgeInsets.fromLTRB(
-                context.getRSize(20),
-                context.getRSize(8),
-                context.getRSize(20),
-                context.getRSize(8),
+                gutter,
+                context.getRSize(12),
+                gutter,
+                context.getRSize(4),
               ),
-              decoration: BoxDecoration(
-                color: _surface,
-                border: Border(bottom: BorderSide(color: _border)),
-              ),
-              child: Container(
-                padding: EdgeInsets.all(context.getRSize(16)),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _border),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(context.getRSize(10)),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        _activeCustomer == null
-                            ? AppIcons.customerRole
-                            : AppIcons.user,
-                        size: context.getRSize(16),
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    SizedBox(width: context.getRSize(14)),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            customerName,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: context.getRFontSize(14),
-                              color: _text,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Row(
-                            children: [
-                              Icon(
-                                AppIcons.naira,
-                                size: context.getRSize(11),
-                                color: customerCreditBalance == 0
-                                    ? success
-                                    : (isOwe ? danger : success),
-                              ),
-                              Flexible(
-                                child: Text(
-                                  ' Bal: $activeCurrencySymbol${customerCreditBalance.abs().toStringAsFixed(0)} ${customerCreditBalance == 0 ? "clear" : (isOwe ? "overdue" : "credit")}',
-                                  style: TextStyle(
-                                    fontSize: context.getRFontSize(12),
-                                    color: customerCreditBalance == 0
-                                        ? success
-                                        : (isOwe ? danger : success),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: context.getRSize(8)),
-                    GestureDetector(
-                      onTap: () => _showChangeCustomerModal(),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: context.getRSize(12),
-                          vertical: context.getRSize(6),
-                        ),
-                        decoration: BoxDecoration(
-                          color: _bg,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: _border),
-                        ),
-                        child: Text(
-                          'Change',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(12),
-                            fontWeight: FontWeight.bold,
-                            color: _text,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              child: CartCustomerCard(
+                name: customerName,
+                balanceLabel:
+                    'Bal: ${formatCurrency(customerCreditBalance.abs())} ${customerCreditBalance == 0 ? "clear" : (isOwe ? "overdue" : "credit")}',
+                balanceColor: isOwe ? fixed.danger : fixed.green,
+                onChange: _showChangeCustomerModal,
               ),
             ),
-            // ── Scrollable content: cart items + totals ──
+            // ── The lines and totals. The footer is pinned under them when
+            // the space can hold both; on a short screen (a phone sideways,
+            // or the keyboard up) it scrolls at the end instead, so the lines
+            // are never starved (PRD #239).
             Expanded(
               child: cartItems.isEmpty
-                  ? _EmptyCartMessage(onRecall: _viewSavedCarts)
-                  : CustomScrollView(
-                      slivers: [
-                        if (_showCartHint)
-                          SliverToBoxAdapter(
-                            child: Container(
-                              margin: EdgeInsets.fromLTRB(
-                                context.getRSize(20),
-                                context.getRSize(8),
-                                context.getRSize(20),
-                                0,
-                              ),
-                              padding: EdgeInsets.all(context.getRSize(12)),
-                              decoration: BoxDecoration(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    AppIcons.infoCircle,
-                                    size: context.getRSize(16),
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                  SizedBox(width: context.getRSize(12)),
-                                  Expanded(
-                                    child: Text(
-                                      'Tap an item to edit quantity, price or discount.',
-                                      style: TextStyle(
-                                        fontSize: context.getRFontSize(13),
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: Icon(
-                                      AppIcons.close,
-                                      size: context.getRSize(16),
-                                      color: Theme.of(context).colorScheme.primary,
-                                    ),
-                                    onPressed: () {
+                  ? EmptyCartMessage(onRecall: _viewSavedCarts)
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final pinned =
+                            constraints.maxHeight >= context.getRSize(440);
+                        final scroll = CustomScrollView(
+                          slivers: [
+                            if (_showCartHint)
+                              SliverPadding(
+                                padding: EdgeInsets.fromLTRB(
+                                  gutter,
+                                  context.getRSize(8),
+                                  gutter,
+                                  0,
+                                ),
+                                sliver: SliverToBoxAdapter(
+                                  child: CartEditHint(
+                                    onDismiss: () {
                                       setState(() => _showCartHint = false);
                                       // Deliberate close retires the hint
-                                      // immediately so it never reappears (the
-                                      // display in initState already counted the
-                                      // view via markShown).
+                                      // immediately so it never reappears
+                                      // (the display in initState already
+                                      // counted the view via markShown).
                                       uiHintService.markDismissed(
                                         UiHintService.hintCartTapEdit,
                                       );
                                     },
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        SliverToBoxAdapter(
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: context.getRSize(20),
-                              vertical: context.getRSize(8),
-                            ),
-                            itemCount: _isClearing
-                                ? _animatingItems.length
-                                : cartItems.length,
-                            separatorBuilder: (_, idx) =>
-                                SizedBox(height: context.getRSize(12)),
-                            itemBuilder: (_, i) {
-                              final item = _isClearing
-                                  ? _animatingItems[i]
-                                  : cartItems[i];
-                              final rawColor = item['color'];
-                              final Color c = rawColor is Color
-                                  ? rawColor
-                                  : rawColor is String
-                                  ? Color(
-                                      int.parse(
-                                        rawColor.replaceFirst('#', '0xFF'),
-                                      ),
-                                    )
-                                  : Theme.of(context).colorScheme.primary;
-                              // Build card once, reused in both paths
-                              final card = InkWell(
-                                key: cartLineKey(
-                                  productId: item['id'] as String?,
-                                  name: item['name'] as String,
-                                ),
-                                borderRadius: BorderRadius.circular(14),
-                                onTap: _isClearing
-                                    ? null
-                                    : () {
-                                        HapticFeedback.mediumImpact();
-                                        _editItem(context, item);
-                                      },
-                                child: Container(
-                                  padding: EdgeInsets.all(context.getRSize(12)),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).cardColor,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: _border.withValues(alpha: 0.5),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: context.getRSize(48),
-                                        height: context.getRSize(48),
-                                        decoration: BoxDecoration(
-                                          color: c.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          item['icon'] == null
-                                              ? AppIcons.box
-                                              : item['icon'] is IconData
-                                              ? item['icon'] as IconData
-                                              : item['icon'] is int
-                                              ? productIconFromCodePoint(
-                                                  item['icon'] as int,
-                                                )
-                                              : AppIcons.box,
-                                          color: c,
-                                          size: context.getRSize(22),
-                                        ),
-                                      ),
-                                      SizedBox(width: context.getRSize(14)),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              productDisplayName(
-                                                item['name'] as String,
-                                                item['size'] as String?,
-                                                unit: item['unit'] as String?,
-                                              ),
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: context.getRFontSize(
-                                                  15,
-                                                ),
-                                                color: _text,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            SizedBox(
-                                              height: context.getRSize(4),
-                                            ),
-                                            Text(
-                                              '${((item['qty'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(1)} × ${formatCurrency(((item['price'] as num?)?.toDouble() ?? 0.0))}',
-                                              style: TextStyle(
-                                                fontSize: context.getRFontSize(
-                                                  13,
-                                                ),
-                                                fontWeight: FontWeight.w600,
-                                                color: _subtext,
-                                              ),
-                                            ),
-                                            if (item['customPriceKobo'] !=
-                                                null) ...[
-                                              SizedBox(
-                                                height: context.getRSize(4),
-                                              ),
-                                              _customPriceBadge(),
-                                            ],
-                                            if (((item['discountKobo']
-                                                        as int?) ??
-                                                    0) >
-                                                0) ...[
-                                              SizedBox(
-                                                height: context.getRSize(4),
-                                              ),
-                                              _discountBadge(item),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                      Builder(
-                                        builder: (context) {
-                                          final gross =
-                                              ((item['qty'] as num?)
-                                                      ?.toDouble() ??
-                                                  0.0) *
-                                              ((item['price'] as num?)
-                                                      ?.toDouble() ??
-                                                  0.0);
-                                          final discountKobo =
-                                              (item['discountKobo'] as int?) ??
-                                              0;
-                                          final net =
-                                              gross - discountKobo / 100.0;
-                                          return Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-                                              if (discountKobo > 0)
-                                                Text(
-                                                  formatCurrency(gross),
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: context
-                                                        .getRFontSize(12),
-                                                    color: _subtext,
-                                                    decoration: TextDecoration
-                                                        .lineThrough,
-                                                  ),
-                                                ),
-                                              FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                child: Text(
-                                                  formatCurrency(net),
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.w900,
-                                                    fontSize: context
-                                                        .getRFontSize(16),
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.primary,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-
-                              if (!_isClearing) return card;
-
-                              // Staggered slide-right + fade during clear
-                              return AnimatedBuilder(
-                                animation: _clearCtrl,
-                                builder: (_, child) {
-                                  const staggerStep = 0.12;
-                                  final delay = i * staggerStep;
-                                  final t =
-                                      ((_clearCtrl.value - delay) /
-                                              (1.0 - delay))
-                                          .clamp(0.0, 1.0);
-                                  final curve = Curves.easeIn.transform(t);
-                                  return Transform.translate(
-                                    offset: Offset(
-                                      curve * context.screenWidth,
-                                      0,
-                                    ),
-                                    child: Opacity(
-                                      opacity: (1.0 - curve).clamp(0.0, 1.0),
-                                      child: child,
-                                    ),
-                                  );
-                                },
-                                child: card,
-                              );
-                            },
-                          ),
-                        ),
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // ── Totals section ──
-                              Container(
-                                padding: EdgeInsets.fromLTRB(
-                                  context.getRSize(20),
-                                  context.getRSize(20),
-                                  context.getRSize(20),
-                                  context.getRSize(100),
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _surface,
-                                  border: Border(
-                                    top: BorderSide(color: _border),
-                                  ),
-                                ),
-                                child: Column(
-                                  children: [
-                                    _totalRow('Subtotal', sub, small: true),
-                                    if (discountTotal > 0) ...[
-                                      SizedBox(height: context.getRSize(6)),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            'Saved',
-                                            style: TextStyle(
-                                              fontSize: context.getRFontSize(
-                                                14,
-                                              ),
-                                              fontWeight: FontWeight.w600,
-                                              color: _success,
-                                            ),
-                                          ),
-                                          Text(
-                                            '−${formatCurrency(discountTotal)}',
-                                            style: TextStyle(
-                                              fontSize: context.getRFontSize(
-                                                15,
-                                              ),
-                                              fontWeight: FontWeight.w800,
-                                              color: _success,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                    SizedBox(height: context.getRSize(8)),
-                                    // Deliberately NOT behind the registered-
-                                    // customer gate below: a missing crate
-                                    // value is a product-setup problem, and the
-                                    // cashier who can see it is the one holding
-                                    // the item. It also has to appear ABOVE the
-                                    // deposit figures so the ₦0 lines there are
-                                    // explained rather than read as a real
-                                    // crate value.
-                                    if (unconfiguredCrateItems.isNotEmpty) ...[
-                                      _CrateValueMissingBanner(
-                                        productNames: unconfiguredCrateItems,
-                                      ),
-                                      SizedBox(height: context.getRSize(8)),
-                                    ],
-                                    // §3.13 — the Empty Crates section is
-                                    // hidden for walk-in customers (no profile
-                                    // = no crate balance/deposit to defer); it
-                                    // shows only for a registered customer,
-                                    // matching checkout's _depositApplies gate.
-                                    if (hasBottles &&
-                                        _activeCustomer != null) ...[
-                                      // ── Empty Crates section ──
-                                      Container(
-                                        width: double.infinity,
-                                        padding: EdgeInsets.all(
-                                          context.getRSize(14),
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context).cardColor,
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          border: Border.all(color: _border),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Container(
-                                                  padding: EdgeInsets.all(
-                                                    context.getRSize(8),
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    gradient: LinearGradient(
-                                                      colors: [
-                                                        Theme.of(
-                                                          context,
-                                                        ).colorScheme.secondary,
-                                                        Theme.of(
-                                                          context,
-                                                        ).colorScheme.primary,
-                                                      ],
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                  ),
-                                                  child: Icon(
-                                                    AppIcons.beerMug,
-                                                    size: context.getRSize(14),
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.onPrimary,
-                                                  ),
-                                                ),
-                                                SizedBox(
-                                                  width: context.getRSize(10),
-                                                ),
-                                                Text(
-                                                  'Empty Crates',
-                                                  style: TextStyle(
-                                                    fontSize: context
-                                                        .getRFontSize(14),
-                                                    fontWeight: FontWeight.w800,
-                                                    color: _text,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            SizedBox(
-                                              height: context.getRSize(12),
-                                            ),
-                                            ...depositLines.map(
-                                              (line) => Padding(
-                                                padding: EdgeInsets.only(
-                                                  bottom: context.getRSize(8),
-                                                ),
-                                                child: Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
-                                                  children: [
-                                                    Expanded(
-                                                      child: Row(
-                                                        children: [
-                                                          Container(
-                                                            width: context
-                                                                .getRSize(8),
-                                                            height: context
-                                                                .getRSize(8),
-                                                            decoration:
-                                                                BoxDecoration(
-                                                                  color: line
-                                                                      .color,
-                                                                  shape: BoxShape
-                                                                      .circle,
-                                                                ),
-                                                          ),
-                                                          SizedBox(
-                                                            width: context
-                                                                .getRSize(8),
-                                                          ),
-                                                          Flexible(
-                                                            child: Text(
-                                                              '${line.label}  ×${line.qty.toStringAsFixed(1)}',
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                              style: TextStyle(
-                                                                fontSize: context
-                                                                    .getRFontSize(
-                                                                      13,
-                                                                    ),
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                                color: _subtext,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      formatCurrency(
-                                                        line.amount,
-                                                      ),
-                                                      style: TextStyle(
-                                                        fontSize: context
-                                                            .getRFontSize(13),
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: _text,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            Container(
-                                              height: 1,
-                                              color: _border,
-                                            ),
-                                            SizedBox(
-                                              height: context.getRSize(8),
-                                            ),
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
-                                              children: [
-                                                Text(
-                                                  'Required Deposit',
-                                                  style: TextStyle(
-                                                    fontSize: context
-                                                        .getRFontSize(13),
-                                                    fontWeight: FontWeight.bold,
-                                                    color: _text,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  formatCurrency(
-                                                    computedDeposit,
-                                                  ),
-                                                  style: TextStyle(
-                                                    fontSize: context
-                                                        .getRFontSize(14),
-                                                    fontWeight: FontWeight.w800,
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.primary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      SizedBox(height: context.getRSize(8)),
-                                    ],
-                                    SizedBox(height: context.getRSize(16)),
-                                    Container(height: 1, color: _border),
-                                    SizedBox(height: context.getRSize(16)),
-                                    _totalRow('Total', tot, large: true),
-                                    SizedBox(height: context.getRSize(16)),
-                                    // ── Save/Recall Cart ──
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: AppButton(
-                                            text: 'Save Cart',
-                                            variant: AppButtonVariant.outline,
-                                            icon: AppIcons.save,
-                                            onPressed: _saveCurrentCart,
-                                          ),
-                                        ),
-                                        SizedBox(width: context.getRSize(12)),
-                                        Expanded(
-                                          child: AppButton(
-                                            text: 'Recall',
-                                            variant: AppButtonVariant.outline,
-                                            icon: AppIcons.history,
-                                            onPressed: _viewSavedCarts,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    SizedBox(height: context.getRSize(16)),
-                                    // ── Proceed to Checkout ──
-                                    AppButton(
-                                      text: 'Proceed to Checkout',
-                                      variant: AppButtonVariant.primary,
-                                      icon: AppIcons.voteCheck,
-                                      onPressed: _goToCheckout,
-                                    ),
-                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ],
+                            SliverPadding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: gutter,
+                                vertical: context.getRSize(8),
+                              ),
+                              sliver: SliverList.separated(
+                                itemCount: _isClearing
+                                    ? _animatingItems.length
+                                    : cartItems.length,
+                                separatorBuilder: (_, _) =>
+                                    SizedBox(height: context.getRSize(12)),
+                                itemBuilder: (_, i) => lineAt(i),
+                              ),
+                            ),
+                            SliverToBoxAdapter(child: summary),
+                            if (!pinned)
+                              SliverToBoxAdapter(child: footer(pinned: false)),
+                          ],
+                        );
+                        if (!pinned) return scroll;
+                        return Column(
+                          children: [
+                            Expanded(child: scroll),
+                            footer(pinned: true),
+                          ],
+                        );
+                      },
                     ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// What the Cart shows with nothing in it: an icon, "Cart is empty", and a
-/// Recall button so a saved cart can be restored before adding items.
-///
-/// Scrolls rather than clips (#255). Centred while there is room; on a short
-/// phone — sideways, under the fixed customer card — the message grows past
-/// the viewport and one scroll reaches Recall. `SliverFillRemaining` sizes to
-/// the larger of the space left and the message itself. The padding keeps
-/// Recall off the bottom bar at the end of a scroll; it never decides whether
-/// a scroll is needed at a supported size.
-class _EmptyCartMessage extends StatelessWidget {
-  final VoidCallback onRecall;
-
-  const _EmptyCartMessage({required this.onRecall});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return CustomScrollView(
-      slivers: [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    AppIcons.cartAdd,
-                    size: context.getRSize(48),
-                    color: t.dividerColor,
-                  ),
-                  SizedBox(height: context.getRSize(16)),
-                  Text(
-                    'Cart is empty',
-                    style: TextStyle(
-                      color: t.textTheme.bodySmall?.color ?? t.iconTheme.color!,
-                      fontWeight: FontWeight.bold,
-                      fontSize: context.getRFontSize(16),
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(20)),
-                  AppButton(
-                    text: 'Recall',
-                    variant: AppButtonVariant.outline,
-                    icon: AppIcons.history,
-                    isFullWidth: false,
-                    onPressed: onRecall,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Tells the cashier that a crate-tracked item in the cart has no crate value
-/// set, and names the items so somebody can go and fix the product.
-///
-/// Informational, not a blocker: the sale still completes and the empties are
-/// still tracked as owed. What is wrong is the MONEY on them — an unconfigured
-/// brand values every crate at ₦0, on this order and on the customer's crate
-/// balance — and that is invisible without this.
-class _CrateValueMissingBanner extends StatelessWidget {
-  /// Deduplicated, sorted product names. Never empty (the caller gates on it).
-  final List<String> productNames;
-
-  const _CrateValueMissingBanner({required this.productNames});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final warning =
-        t.extension<AppSemanticColors>()?.warning ?? AppColors.warning;
-    final isOne = productNames.length == 1;
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: warning.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: warning.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            AppIcons.warning,
-            size: context.getRSize(14),
-            color: warning,
-          ),
-          SizedBox(width: context.getRSize(10)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isOne
-                      ? 'No crate value set for this item'
-                      : 'No crate value set for these items',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w800,
-                    color: t.colorScheme.onSurface,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(4)),
-                Text(
-                  productNames.join(', '),
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.w700,
-                    color: warning,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(6)),
-                Text(
-                  isOne
-                      ? 'Its empty crates are worth nothing until a crate value '
-                            'is set on the product. You can still complete this '
-                            'sale.'
-                      : 'Their empty crates are worth nothing until a crate '
-                            'value is set on each product. You can still '
-                            'complete this sale.',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.w500,
-                    color:
-                        t.textTheme.bodySmall?.color ?? t.iconTheme.color!,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
