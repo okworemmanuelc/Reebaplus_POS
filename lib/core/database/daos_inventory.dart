@@ -698,6 +698,29 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Stream the ids of manufacturers that own at least one non-deleted product
+  /// whose empties are tracked (`unit == 'bottle' && trackEmpties`) — the same
+  /// basis as [watchFullCratesByManufacturer] and the crate rows createOrder
+  /// issues. A can / PET / pack-only manufacturer never appears (#389): it has
+  /// no empty crates, so it doesn't belong on the Empty Crates tab.
+  Stream<Set<String>> watchCrateTrackedManufacturerIds() {
+    final query = selectOnly(products, distinct: true)
+      ..addColumns([products.manufacturerId])
+      ..where(
+        whereBusiness(products) &
+            products.manufacturerId.isNotNull() &
+            products.isDeleted.not() &
+            products.unit.lower().equals('bottle') &
+            products.trackEmpties.equals(true),
+      );
+    return query.watch().map(
+          (rows) => {
+            for (final row in rows)
+              if (row.read(products.manufacturerId) case final String id) id,
+          },
+        );
+  }
+
   /// Stream the business-wide physical empties pool per manufacturer. #159:
   /// DERIVED from the append-only `crate_ledger` (the store-stamped, customer-
   /// less rows) via the Crate Pool seam, not the demoted

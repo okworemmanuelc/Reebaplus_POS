@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #389: Empty Crates lists bottle manufacturers only + Manufacturers tab (2026-10-11)
+Branch `fix/empty-crates-bottle-only-389` off `main` 9a6a3d73, worktree `../drinkPosApp-wt-389`. **No Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages.**
+- **Root cause**: `_cratesTabSlivers` built one card per `_dbManufacturers` row (`inventoryDao.watchAllManufacturers()` — every manufacturer). The card figures were already bottle-only; the list was not.
+- **Rule** (`lib/core/crates/empty_crates_roster.dart`, pure): `showsOnEmptyCrates(hasTrackedBottleProduct, emptyCount, shortCount)`. A brand shows when it owns a non-deleted `bottle` + `trackEmpties` product (new `InventoryDao.watchCrateTrackedManufacturerIds()` → `crateTrackedManufacturerIdsProvider`, `businessScopedStream`), **or** still has empties / an open Crate Shortage in the current view (locked store or All Stores) — so crates never silently vanish when the last bottle product is removed.
+- **Manufacturers tab** (`inventory_manufacturers_tab.dart`, `InventoryManufacturersTab`): after Empty Crates, same visibility (`businessTracksCrates`). Lists every manufacturer as a `SettingsRow` (info tile + "Returnable bottles · Crate value ₦X" for bottle brands, neutral tile + "No returnable bottles" otherwise), 720dp cap, taps open `ManufacturerScreen`. **Add New moved here** from Empty Crates (same `Gates.addManufacturer`): a new manufacturer has no bottle products yet, so it would not show on Empty Crates. Empty Crates heading is now "Bottle manufacturers"; empty state "No bottle manufacturers yet".
+- Tests: `test/inventory/inventory_empty_crates_roster_test.dart` (rule, DAO, tab contents, edge case, tab order/open, 360 @1.3 + 844×390 insets); `add_manufacturer_sheet_test.dart` opens the Manufacturers tab; goldens `test/redesign/goldens/inventory_manufacturers_{390x844,844x390}_{light,dark}.png`.
+
 ### Issue #388: Drawer — remove the close ✕ (2026-10-11)
 - Owner request (PRD #346): the drawer header's ✕ is gone at every size (phone, tablet, wide). The drawer is a pop-over `Drawer` everywhere, so tapping outside, the back button / gesture and a swipe still close it. Lock button kept; the business name's `Expanded` now gets the ✕'s width ("Stallion Global" no longer truncates at 390×844).
 - `DrawerHeaderBlock.onClose` and `AppDrawerKeys.close` removed (no other users). `app_drawer_test.dart`: the ✕ test is replaced by no-✕ + tap-outside tests at 390×844, 844×390 and 1280×800, plus back-button and swipe-shut tests. All 10 `drawer_*` goldens regenerated.
