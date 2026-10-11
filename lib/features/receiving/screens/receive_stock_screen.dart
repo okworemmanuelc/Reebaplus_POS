@@ -8,16 +8,21 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_cart_screen.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_product_grid.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/coach_hint_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 
 class ReceiveStockScreen extends ConsumerStatefulWidget {
   const ReceiveStockScreen({super.key});
@@ -28,7 +33,7 @@ class ReceiveStockScreen extends ConsumerStatefulWidget {
 
 class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
   final TextEditingController _searchController = TextEditingController();
-  
+
   List<ProductDataWithStock> _allProducts = [];
   List<CategoryData> _categories = [];
   String? _selectedCategoryId;
@@ -77,7 +82,16 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
     final storeId = ref.read(lockedStoreProvider).value;
 
     _categoriesSub = db.inventoryDao.watchAllCategories().listen((cats) {
-      if (mounted) setState(() => _categories = cats);
+      if (!mounted) return;
+      setState(() {
+        _categories = cats;
+        // The chosen category was deleted (e.g. by sync): back to "All"
+        // rather than a filter nothing can match (#394; the old lookup threw).
+        if (_selectedCategoryId != null &&
+            !cats.any((c) => c.id == _selectedCategoryId)) {
+          _selectedCategoryId = null;
+        }
+      });
     });
 
     final productStream = storeId != null
@@ -98,7 +112,9 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
     var items = _allProducts.where((item) => !item.product.isDeleted).toList();
 
     if (_selectedCategoryId != null) {
-      items = items.where((item) => item.product.categoryId == _selectedCategoryId).toList();
+      items = items
+          .where((item) => item.product.categoryId == _selectedCategoryId)
+          .toList();
     }
 
     if (_searchQuery.isNotEmpty) {
@@ -126,12 +142,6 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final surfaceCol = Theme.of(context).colorScheme.surface;
-    final cardCol = Theme.of(context).cardColor;
-    final textCol = Theme.of(context).colorScheme.onSurface;
-    final subtextCol = Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!;
-    final borderCol = Theme.of(context).dividerColor;
-
     // §14.7 / §16.7 — defense-in-depth route guard citing the same named gate
     // as the Inventory FAB that opens this screen (Gates.receiveStock). The
     // screen form waits for permissions to resolve (no denial flash) and renders
@@ -143,167 +153,161 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
     // payments.
     return Guarded.screen(
       gate: Gates.receiveStock,
-      builder: (context) => Scaffold(
-      backgroundColor: surfaceCol,
-      appBar: AppBar(
-        title: const Text('Receive Stock', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: surfaceCol,
-        elevation: 0,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: Icon(
-              _isSearching ? AppIcons.close : AppIcons.search,
-              size: 17,
-              color: subtextCol,
+      builder: (context) {
+        final zeroStores = ref.watch(zeroStoresEmptySurfaceProvider);
+        return DecoratedBox(
+          decoration: AppDecorations.pageBackground(context),
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: ReceiveTopBar(
+              height: receiveTopBarHeight(context),
+              icon: AppIcons.receiving,
+              title: 'Receive Stock',
+              // Whose stock the "Current" counts show: the locked store, or
+              // the aggregate under All Stores.
+              subtitle: ref.watch(activeStoreLabelProvider),
+              actions: [
+                ReceiveTopBarAction(
+                  key: ReceiveKeys.searchToggle,
+                  icon: _isSearching ? AppIcons.close : AppIcons.search,
+                  tooltip: _isSearching ? 'Close search' : 'Search',
+                  onPressed: _toggleSearch,
+                ),
+              ],
             ),
-            onPressed: _toggleSearch,
+            bottomNavigationBar: zeroStores ? null : _buildBottomBar(context),
+            body: SafeArea(
+              child: zeroStores
+                  ? const FirstRunEmptyState()
+                  : _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : AppRefreshWrapper(child: _buildScroll(context)),
+            ),
           ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      bottomNavigationBar: ref.watch(zeroStoresEmptySurfaceProvider)
-          ? null
-          : _buildBottomBar(context),
-      body: SafeArea(
-        child: ref.watch(zeroStoresEmptySurfaceProvider)
-            ? const FirstRunEmptyState()
-            : Column(
-                children: [
-            if (_isSearching) _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
-            if (!_isLoading)
-              CategoryFilterBar(
-                categories: ['All', ..._categories.map((c) => c.name)],
-                selectedCategory: _selectedCategoryId == null
-                    ? 'All'
-                    : _categories.firstWhere((c) => c.id == _selectedCategoryId).name,
-                onCategorySelected: (name) {
-                  setState(() {
-                    if (name == 'All') {
-                      _selectedCategoryId = null;
-                    } else {
-                      _selectedCategoryId = _categories.firstWhere((c) => c.name == name).id;
-                    }
-                  });
+        );
+      },
+    );
+  }
+
+  /// One scroll view (PRD #239): search (while open) → category chips → the
+  /// coach hint → the grid, so on a short screen the chrome scrolls away
+  /// rather than starving the grid.
+  Widget _buildScroll(BuildContext context) {
+    final gutter = context.getRSize(16);
+    final categoryNames = {for (final c in _categories) c.id: c.name};
+    final selected = _selectedCategoryId == null
+        ? null
+        : _categories.where((c) => c.id == _selectedCategoryId).firstOrNull;
+    return CustomScrollView(
+      key: ReceiveKeys.scroll,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        if (_isSearching)
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 0),
+            sliver: SliverToBoxAdapter(child: _buildSearchField()),
+          ),
+        SliverPadding(
+          padding: EdgeInsets.only(top: context.getRSize(12)),
+          sliver: SliverToBoxAdapter(
+            child: CategoryFilterBar(
+              categories: ['All', ..._categories.map((c) => c.name)],
+              selectedCategory: selected?.name ?? 'All',
+              onCategorySelected: (name) {
+                setState(() {
+                  _selectedCategoryId = name == 'All'
+                      ? null
+                      : _categories
+                            .where((c) => c.name == name)
+                            .firstOrNull
+                            ?.id;
+                });
+              },
+            ),
+          ),
+        ),
+        if (_showReceiveHint && Gates.editProductPrice.allows(ref))
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              context.getRSize(12),
+              gutter,
+              0,
+            ),
+            sliver: SliverToBoxAdapter(
+              // Only for roles that can edit price, as before.
+              child: CoachHintBanner(
+                key: ReceiveKeys.hint,
+                message: 'Tap and hold a product to edit it.',
+                onDismiss: () {
+                  setState(() => _showReceiveHint = false);
+                  // Deliberate close retires the hint immediately so it never
+                  // reappears (was markShown, which let it surface a second
+                  // time).
+                  uiHintService.markDismissed(
+                    UiHintService.hintReceiveLongpress,
+                  );
                 },
               ),
-            if (!_isLoading &&
-                _showReceiveHint &&
-                Gates.editProductPrice.allows(ref))
-              _buildReceiveHint(),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : AppRefreshWrapper(
-                      child: ReceiveProductGrid(
-                        products: _filteredProducts,
-                        cardCol: cardCol,
-                        textCol: textCol,
-                        subtextCol: subtextCol,
-                        borderCol: borderCol,
-                      ),
-                    ),
             ),
-          ],
+          ),
+        SliverToBoxAdapter(child: SizedBox(height: context.getRSize(16))),
+        ReceiveProductGrid(
+          products: _filteredProducts,
+          categoryNames: categoryNames,
         ),
-      ),
-      ),
+        SliverToBoxAdapter(child: SizedBox(height: gutter)),
+      ],
     );
   }
 
-  // Inline dismissible hint above the product grid telling stock receivers
-  // how to edit a product. Mirrors the cart screen's "tap an item to edit"
-  // banner; only shown to roles that can edit price.
-  Widget _buildReceiveHint() {
-    final primary = Theme.of(context).colorScheme.primary;
-    return Container(
-      margin: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(8),
-        context.getRSize(20),
-        0,
-      ),
-      padding: EdgeInsets.all(context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            AppIcons.infoCircle,
-            size: context.getRSize(16),
-            color: primary,
-          ),
-          SizedBox(width: context.getRSize(12)),
-          Expanded(
-            child: Text(
-              'Tap and hold a product to edit it.',
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                color: primary,
-              ),
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              AppIcons.close,
-              size: context.getRSize(16),
-              color: primary,
-            ),
-            onPressed: () {
-              setState(() => _showReceiveHint = false);
-              // Deliberate close retires the hint immediately so it never
-              // reappears (was markShown, which let it surface a second time).
-              uiHintService.markDismissed(UiHintService.hintReceiveLongpress);
-            },
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-        ],
-      ),
+  Widget _buildSearchField() {
+    return AppInput(
+      key: ReceiveKeys.search,
+      controller: _searchController,
+      autofocus: true,
+      onChanged: (v) => setState(() => _searchQuery = v),
+      hintText: 'Search products...',
+      prefixIcon: Icon(AppIcons.search, size: context.getRSize(18)),
     );
   }
 
-  Widget _buildSearchField(Color surfaceCol, Color cardCol, Color textCol, Color subtextCol) {
-    return Container(
-      color: surfaceCol,
-      padding: EdgeInsets.fromLTRB(context.getRSize(16), 0, context.getRSize(16), context.getRSize(12)),
-      child: AppInput(
-        controller: _searchController,
-        autofocus: true,
-        onChanged: (v) => setState(() => _searchQuery = v),
-        hintText: 'Search products...',
-        prefixIcon: Icon(AppIcons.search, size: context.getRSize(16)),
-      ),
-    );
-  }
-
+  /// "Review Items (N)" at the foot of the screen while the receipt has
+  /// lines; the fly-to target for added products (#394).
   Widget _buildBottomBar(BuildContext context) {
-    final cartLineCount = ref.watch(receiveCartProvider.select((lines) => lines.length));
-    
+    final cartLineCount = ref.watch(
+      receiveCartProvider.select((lines) => lines.length),
+    );
+
     if (cartLineCount == 0) return const SizedBox.shrink();
 
+    final t = Theme.of(context);
+    final gutter = context.getRSize(16);
     return Container(
       padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(16),
-        context.getRSize(16),
-        context.getRSize(16) + context.deviceBottomPadding,
+        gutter,
+        context.getRSize(12),
+        gutter,
+        context.getRSize(12) + context.deviceBottomPadding,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+        color: t.colorScheme.surface,
+        border: Border(top: BorderSide(color: t.dividerColor)),
       ),
-      child: AppButton(
-        text: 'Review Items ($cartLineCount)',
-        icon: AppIcons.cart,
-        isFullWidth: true,
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ReceiveCartScreen()),
-          );
-        },
+      child: FlyTarget(
+        id: FlyTargetId.receiveCart,
+        child: AppButton(
+          key: ReceiveKeys.reviewBar,
+          text: 'Review Items ($cartLineCount)',
+          icon: AppIcons.cart,
+          isFullWidth: true,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ReceiveCartScreen()),
+            );
+          },
+        ),
       ),
     );
   }
