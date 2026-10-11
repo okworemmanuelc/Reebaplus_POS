@@ -1,13 +1,33 @@
 import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 enum AppNotificationType { success, error, info }
 
 class AppNotification {
   static final _state = ValueNotifier<_NotificationData?>(null);
   static OverlayEntry? _overlayEntry;
+
+  /// The Overlay [_overlayEntry] lives in (#384).
+  static OverlayState? _host;
   static Timer? _dismissTimer;
+
+  /// How far below the top safe-area edge a notification starts (#384): past
+  /// the tallest top bar the app draws — the theme's 68dp, grown to fit the
+  /// redesign's scaled header tile (Home, POS, CEO Settings) — plus a small
+  /// gap. It used to start 12dp under the safe area, right on top of every
+  /// screen's title, store name and bell; at tablet widths it became a bar
+  /// across the whole header.
+  static double topOffset(BuildContext context) =>
+      math.max(
+        kToolbarHeight + 12,
+        math.max(context.getRSize(44), kMinInteractiveDimension) +
+            context.getRSize(16),
+      ) +
+      context.getRSize(8);
 
   static void showSuccess(BuildContext context, String message) {
     _show(context, message, AppNotificationType.success);
@@ -66,11 +86,21 @@ class AppNotification {
     // every notification goes silent until a hot restart. Re-insert a fresh
     // entry into the current Overlay whenever the previous one is gone. We don't
     // remove() the stale entry: its Overlay was already disposed with it.
-    if (_overlayEntry == null || !_overlayEntry!.mounted) {
+    //
+    // #384: the entry also moves to the caller's Overlay when that is a
+    // different one. Each MainLayout tab has its own Navigator (so its own
+    // Overlay), and an entry left in another tab's Overlay paints inside that
+    // offstage tab: the message never showed.
+    final host = Overlay.of(context);
+    if (_overlayEntry == null ||
+        !_overlayEntry!.mounted ||
+        !identical(_host, host)) {
+      if (_overlayEntry?.mounted ?? false) _overlayEntry!.remove();
       _overlayEntry = OverlayEntry(
         builder: (context) => _NotificationOverlay(state: _state),
       );
-      Overlay.of(context).insert(_overlayEntry!);
+      host.insert(_overlayEntry!);
+      _host = host;
     }
 
     _state.value = data;
@@ -187,7 +217,10 @@ class _NotificationOverlayState extends State<_NotificationOverlay>
           return const SizedBox.shrink();
         }
         return Positioned(
-          top: MediaQuery.of(context).padding.top + 12,
+          // Under the screen's top bar, never over it (#384).
+          top:
+              MediaQuery.of(context).padding.top +
+              AppNotification.topOffset(context),
           left: 16,
           right: 16,
           child: FadeTransition(

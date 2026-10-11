@@ -23,12 +23,16 @@ const Key kPosHintKey = ValueKey<String>('pos-coach-hint');
 /// The "Select store" button on the All Stores placeholder.
 const Key kPosSelectStoreKey = ValueKey<String>('pos-select-store');
 
-/// The POS top bar's height: the theme's 68dp scaled like the rest of the
-/// screen (so a short sideways phone gives the grid back some room, as the
-/// old 56dp bar did), grown when the scaled header tile or a 48dp control
-/// would touch its edges.
+/// The POS top bar's height: Home's rule (`homeTopBarHeight`, #374: the
+/// theme's 68dp, grown when the scaled header tile or a 48dp control would
+/// touch its edges), except that the 68dp shrinks with the screen's scale on a
+/// short sideways phone, so the grid keeps some room there (the old POS bar
+/// was 56dp). Never taller than Home's, so a toast (`AppNotification`,
+/// placed under the tallest bar) never covers it. Repeated here because a
+/// feature never reaches into another feature's widgets; shared-part
+/// candidate.
 double posTopBarHeight(BuildContext context) => math.max(
-  context.getRSize(kToolbarHeight + 12),
+  math.min(kToolbarHeight + 12, context.getRSize(kToolbarHeight + 12)),
   math.max(context.getRSize(44), kMinInteractiveDimension) +
       context.getRSize(16),
 );
