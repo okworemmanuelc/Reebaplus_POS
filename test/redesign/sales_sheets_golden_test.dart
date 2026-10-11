@@ -13,6 +13,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/features/pos/widgets/barcode_scan_page.dart';
+
+import '../helpers/fake_barcode_scanner.dart';
 import '../helpers/screen_harness.dart';
 import '../pos/sales_sheet_hosts.dart';
 
@@ -87,6 +91,35 @@ void main() {
           await disposeScreen(tester);
         });
       }
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    final themeName = brightness == Brightness.light ? 'light' : 'dark';
+    for (final (sizeName, size, padding) in cases) {
+      testWidgets('barcode_scan $sizeName $themeName', (tester) async {
+        await pumpScreen(
+          tester,
+          env: env,
+          size: size,
+          padding: padding,
+          bottomNavHeight: 0,
+          theme: brightness == Brightness.light
+              ? AppTheme.light()
+              : AppTheme.dark(),
+          screen: BarcodeScanPage(
+            createCamera: () => FakeScanCamera(),
+            onCode: (_, _) async {},
+          ),
+          settle: false,
+        );
+        await settleSheet(tester);
+        await expectLater(
+          find.byType(Navigator).first,
+          matchesGoldenFile('goldens/barcode_scan_${sizeName}_$themeName.png'),
+        );
+        await disposeScreen(tester);
+      });
     }
   }
 }
