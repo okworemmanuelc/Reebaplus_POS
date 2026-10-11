@@ -73,6 +73,11 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 - Expenses with a pending-approval flow, searchable categories, and per-store monthly budgets.
 - Supplier Accounts with a real per-supplier ledger of invoice totals and payments.
 
+### Home quick actions
+
+- A "Quick actions" row on Home (#362, PRD #270), complete: Add Expense, Stock Transfer (2+ non-van stores), Take Stock (Daily Stock Count), Record Payment and Receive Stock (always last). Each tile shows only to people allowed to do that job and opens the existing flow; the row scrolls sideways when the tiles don't fit.
+- Record Payment asks "Customer paid us" or "We paid a supplier" when both are allowed (one side opens its form directly): the customer side is the shared customer payment form with a customer picker, balance line and "Pay full"; the supplier side is the existing supplier payment form with its supplier picker. It shows only when there is a registered customer (not the walk-in) or a supplier to pay.
+
 ### Reporting & Oversight
 
 - Role-aware reports: Daily Reconciliation, Supplier Accounts, Profit (CEO only), and an Approvals queue for stock-keeper adjustments and cashier Quick Sales.
