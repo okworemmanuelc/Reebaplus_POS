@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #388: Drawer — remove the close ✕ (2026-10-11)
+- Owner request (PRD #346): the drawer header's ✕ is gone at every size (phone, tablet, wide). The drawer is a pop-over `Drawer` everywhere, so tapping outside, the back button / gesture and a swipe still close it. Lock button kept; the business name's `Expanded` now gets the ✕'s width ("Stallion Global" no longer truncates at 390×844).
+- `DrawerHeaderBlock.onClose` and `AppDrawerKeys.close` removed (no other users). `app_drawer_test.dart`: the ✕ test is replaced by no-✕ + tap-outside tests at 390×844, 844×390 and 1280×800, plus back-button and swipe-shut tests. All 10 `drawer_*` goldens regenerated.
+
 ### Issue #385: Cart tab + cart panel restyle (2026-10-11) — PRD #346 Wave 1
 Branch `feat/redesign-w1-cart` off `main` 9a6a3d73, worktree `../drinkPosApp-wt-385`. Built in parallel with POS (#384), which owns `pos_home_screen.dart` / `product_grid.dart` / `category_filter_bar.dart`. **Restyle only — no money / crate / deposit / discount calculation changed (`_quote`, `_openCheckout`, save/recall/clear code untouched); no Drift/cloud/sync/permission/status change (no `pos-parity` issue); no new packages.** RELEASE FREEZE ON.
 - **Screen** (`cart_screen.dart`) + new local parts `lib/features/pos/widgets/cart/cart_parts.dart` (`CartTopBar`, `CartClearButton`, `CartCustomerCard`, `CartLineBadge`, `CartSubtotalRow`, `CrateValueMissingCard`, `EmptyCratesCard`, `CartDiscountRow`, `CartFooter`, `CartOutlineButton`, `EmptyCartMessage`, `CartEditHint`, `CartKeys`). Lines use the shared `CartLine` (+ stepper). Conventions in `ui-context.md` "Cart".
