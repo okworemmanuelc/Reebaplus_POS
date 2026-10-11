@@ -1,4 +1,5 @@
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 
 /// A Home quick-action tile (PRD #270, redesign #362). Declared in the row's
 /// fixed order — the declaration order IS the display order: Add Expense,
@@ -88,3 +89,9 @@ QuickActions resolveQuickActions(
     paymentSides: paymentSides,
   );
 }
+
+/// [resolveQuickActions]' `customerCount` from the business's (non-deleted)
+/// customers: everyone but the walk-in, who can't be picked for a payment. A
+/// business whose only customer is the walk-in has no customers to pick.
+int registeredCustomerCount(Iterable<Customer> customers) =>
+    customers.where((c) => !c.isWalkIn).length;

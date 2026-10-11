@@ -376,11 +376,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ).length,
       // The customer payment picker's own list (never the walk-in), so the
       // tile shows exactly when the picker has someone in it.
-      customerCount: ref
-          .watch(customerServiceProvider)
-          .value
-          .where((c) => !c.isWalkIn)
-          .length,
+      customerCount: registeredCustomerCount(
+        ref.watch(customerServiceProvider).value,
+      ),
       supplierCount:
           (ref.watch(allSuppliersProvider).valueOrNull ??
                   const <SupplierData>[])
