@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -30,10 +31,11 @@ double cartPanelWidth(BuildContext context) {
 
 /// The container that hosts the cart on POS at 600dp+ (#352).
 ///
-/// It only frames [child] — the existing Cart screen, whose own header carries
-/// the panel's ✕ (`CartScreen.onClosePanel`); the rest of its restyle is Wave
-/// 1's Cart agent: solid Surface, the slide-in panel shadow and a hairline edge
-/// on the left.
+/// It only frames [child] — the Cart screen, whose own header carries the
+/// panel's ✕ (`CartScreen.onClosePanel`). The frame is a solid Surface with a
+/// hairline edge on the left; the slide-in panel also casts
+/// `AppSchemeColors.panelShadow` over the dimmed grid, while the fixed panel
+/// sits flat beside POS behind its hairline (`wide-pos-cart-*.png`, #385).
 ///
 /// The panel sits at the right edge of the screen, so it owns the right system
 /// inset (a landscape navigation bar): its Surface extends under the inset,
@@ -49,28 +51,32 @@ class CartPanel extends StatelessWidget {
     final t = Theme.of(context);
     final scheme = t.extension<AppSchemeColors>();
     final rightInset = MediaQuery.paddingOf(context).right;
-    return Container(
-      key: const Key('cart-panel'),
-      width: cartPanelWidth(context) + rightInset,
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface,
-        border: Border(left: BorderSide(color: t.dividerColor)),
-        boxShadow: [
-          if (scheme != null)
-            BoxShadow(
-              color: scheme.panelShadow,
-              blurRadius: 24,
-              offset: const Offset(-4, 0),
-            ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.only(right: rightInset),
-        child: MediaQuery.removePadding(
-          context: context,
-          removeLeft: true,
-          removeRight: true,
-          child: child,
+    // Its own layer: the panel repaints alone as the cart changes, and its
+    // goldens capture the panel without the screen beside it.
+    return RepaintBoundary(
+      child: Container(
+        key: const Key('cart-panel'),
+        width: cartPanelWidth(context) + rightInset,
+        decoration: BoxDecoration(
+          color: t.colorScheme.surface,
+          border: Border(left: BorderSide(color: t.dividerColor)),
+          boxShadow: [
+            if (scheme != null && !context.isWideLayout)
+              BoxShadow(
+                color: scheme.panelShadow,
+                blurRadius: 24,
+                offset: const Offset(-4, 0),
+              ),
+          ],
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(right: rightInset),
+          child: MediaQuery.removePadding(
+            context: context,
+            removeLeft: true,
+            removeRight: true,
+            child: child,
+          ),
         ),
       ),
     );
@@ -78,7 +84,8 @@ class CartPanel extends StatelessWidget {
 }
 
 /// The ✕ that hides the cart panel, placed at the end of the hosted Cart
-/// screen's header (#352). A full 48dp tap target.
+/// screen's header (#352): a square outlined button (hairline border on
+/// Surface, #385) inside a full 48dp tap target.
 class CartPanelCloseButton extends StatelessWidget {
   const CartPanelCloseButton({super.key, required this.onPressed});
 
@@ -86,21 +93,38 @@ class CartPanelCloseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(right: context.getRSize(4)),
-      child: IconButton(
-        key: const Key('cart-panel-close'),
-        tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-        constraints: const BoxConstraints(
-          minWidth: kMinInteractiveDimension,
-          minHeight: kMinInteractiveDimension,
+    final t = Theme.of(context);
+    final square = math.min(context.getRSize(40), kMinInteractiveDimension);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+    return Tooltip(
+      message: MaterialLocalizations.of(context).closeButtonTooltip,
+      child: Semantics(
+        button: true,
+        child: InkWell(
+          key: const Key('cart-panel-close'),
+          onTap: onPressed,
+          borderRadius: radius,
+          child: SizedBox.square(
+            dimension: kMinInteractiveDimension,
+            child: Center(
+              child: Container(
+                width: square,
+                height: square,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: t.colorScheme.surface,
+                  borderRadius: radius,
+                  border: Border.all(color: t.dividerColor),
+                ),
+                child: AppIcon(
+                  AppIcons.close,
+                  size: context.getRSize(20),
+                  color: t.colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ),
         ),
-        icon: AppIcon(
-          AppIcons.close,
-          size: context.getRSize(22),
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
-        onPressed: onPressed,
       ),
     );
   }

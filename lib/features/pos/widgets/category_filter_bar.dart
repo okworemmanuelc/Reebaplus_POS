@@ -1,106 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/category_chip.dart';
 
+/// The horizontally scrolling row of category filter chips (#384: the shared
+/// [CategoryChip], with its `categoryVisual` dot). [categories] are the chip
+/// labels in order; the first entry named [allLabel] is the "All" chip, whose
+/// dot follows its text. Every other label is also the category name its dot
+/// colour comes from, so a chip matches the tint of its products' tiles.
+///
+/// Used by POS and Receive Stock; each passes its own labels and keeps its
+/// own filter logic in [onCategorySelected].
 class CategoryFilterBar extends StatelessWidget {
   final List<String> categories;
   final String selectedCategory;
-  final Function(String) onCategorySelected;
-  final Color textCol;
-  final Color borderCol;
+  final ValueChanged<String> onCategorySelected;
+
+  /// The label of the chip that clears the filter (no dot colour of its own).
+  final String allLabel;
 
   const CategoryFilterBar({
     super.key,
     required this.categories,
     required this.selectedCategory,
     required this.onCategorySelected,
-    required this.textCol,
-    required this.borderCol,
+    this.allLabel = 'All',
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: context.getRSize(38),
-      margin: EdgeInsets.only(
-        top: context.getRSize(8),
-        bottom: context.getRSize(16),
-      ),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
-        itemCount: categories.length,
-        separatorBuilder: (context, index) =>
-            SizedBox(width: context.getRSize(10)),
-        itemBuilder: (context, index) {
-          final category = categories[index];
-          final isSelected = category == selectedCategory;
-          return _CategoryChip(
-            label: category,
-            isSelected: isSelected,
-            onTap: () => onCategorySelected(category),
-            textCol: textCol,
-            borderCol: borderCol,
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _CategoryChip extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final Color textCol;
-  final Color borderCol;
-
-  const _CategoryChip({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-    required this.textCol,
-    required this.borderCol,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(25),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(16),
-          vertical: context.getRSize(6),
-        ),
-        decoration: BoxDecoration(
-          color: isSelected ? scheme.primary : scheme.primary.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(25),
-          border: Border.all(
-            color: isSelected ? scheme.primary : Colors.transparent,
-            width: 1.5,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: scheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-              color: isSelected ? scheme.onPrimary : textCol,
+    final gap = context.getRSize(8);
+    // The chips size themselves (each keeps a 48dp tap area), so the row takes
+    // their natural height rather than a fixed one that a large font would
+    // clip.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
+      child: Row(
+        children: [
+          for (var i = 0; i < categories.length; i++) ...[
+            if (i > 0) SizedBox(width: gap),
+            CategoryChip(
+              label: categories[i],
+              categoryName: categories[i] == allLabel ? null : categories[i],
+              selected: categories[i] == selectedCategory,
+              onTap: () => onCategorySelected(categories[i]),
             ),
-          ),
-        ),
+          ],
+        ],
       ),
     );
   }

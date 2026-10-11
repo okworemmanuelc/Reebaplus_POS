@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -492,10 +493,67 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('the ✕ closes the drawer', (tester) async {
+    // No ✕ (#388): the drawer pops over at every size, so tapping outside
+    // it, the back button and a swipe close it.
+    for (final size in const [
+      Size(390, 844),
+      Size(844, 390),
+      Size(1280, 800),
+    ]) {
+      testWidgets(
+        'no ✕ in the header at ${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          await pumpOpenDrawer(tester, env: env, size: size);
+          final header = find.byKey(AppDrawerKeys.header);
+          expect(header, findsOneWidget);
+          expect(
+            find.descendant(
+              of: header,
+              matching: find.byWidgetPredicate(
+                (w) => w is AppIcon && w.icon == AppIcons.close,
+              ),
+            ),
+            findsNothing,
+          );
+          expect(find.byTooltip('Close'), findsNothing);
+          // The lock button stays.
+          expect(find.byKey(AppDrawerKeys.lock), findsOneWidget);
+          await disposeScreen(tester);
+        },
+      );
+
+      testWidgets(
+        'tapping outside closes the drawer at ${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          await pumpOpenDrawer(tester, env: env, size: size);
+          expect(find.byType(Drawer), findsOneWidget);
+          await tester.tapAt(Offset(size.width - 8, size.height / 2));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(find.byType(Drawer), findsNothing);
+          await disposeScreen(tester);
+        },
+      );
+    }
+
+    testWidgets('the back button closes the drawer', (tester) async {
       await pumpOpenDrawer(tester, env: env, size: const Size(390, 844));
       expect(find.byType(Drawer), findsOneWidget);
-      await tester.tap(find.byKey(AppDrawerKeys.close));
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(Drawer), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('swiping the drawer shut closes it', (tester) async {
+      await pumpOpenDrawer(tester, env: env, size: const Size(390, 844));
+      expect(find.byType(Drawer), findsOneWidget);
+      await tester.fling(
+        find.byKey(AppDrawerKeys.header),
+        const Offset(-300, 0),
+        1000,
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(Drawer), findsNothing);

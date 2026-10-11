@@ -40,7 +40,6 @@ abstract final class AppDrawerKeys {
   static const footer = Key('drawer-footer');
   static const profileTile = Key('drawer-profile-tile');
   static const lock = Key('drawer-lock');
-  static const close = Key('drawer-close');
   static const syncBanner = Key('drawer-sync-banner');
   static const storePicker = Key('drawer-store-picker');
   static const display = Key('drawer-display');
@@ -51,7 +50,9 @@ abstract final class AppDrawerKeys {
 typedef DrawerTag = ({String label, TagPillTone tone});
 
 /// The top of the drawer: the business tile (logo, else its initial) and name,
-/// the lock and close buttons, the person's name and tags, then [banner].
+/// the lock button, the person's name and tags, then [banner]. There is no
+/// close button: the drawer pops over at every size, so tapping outside it,
+/// the back button or a swipe closes it (#388).
 class DrawerHeaderBlock extends StatelessWidget {
   const DrawerHeaderBlock({
     super.key,
@@ -62,7 +63,6 @@ class DrawerHeaderBlock extends StatelessWidget {
     required this.terminalLabel,
     required this.onOpenProfile,
     required this.onLock,
-    required this.onClose,
     this.banner,
   });
 
@@ -77,7 +77,6 @@ class DrawerHeaderBlock extends StatelessWidget {
 
   /// Null hides the lock button (nobody is signed in).
   final VoidCallback? onLock;
-  final VoidCallback onClose;
 
   /// The sync banner, when there is one to show.
   final Widget? banner;
@@ -129,16 +128,6 @@ class DrawerHeaderBlock extends StatelessWidget {
               SizedBox(width: context.getRSize(4)),
               _LockButton(onPressed: onLock!),
             ],
-            IconButton(
-              key: AppDrawerKeys.close,
-              tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-              onPressed: onClose,
-              icon: AppIcon(
-                AppIcons.close,
-                size: context.getRSize(24),
-                color: muted,
-              ),
-            ),
           ],
         ),
         SizedBox(height: gap),

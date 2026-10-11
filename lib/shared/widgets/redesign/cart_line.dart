@@ -37,6 +37,8 @@ class CartLine extends StatelessWidget {
     required this.onIncrement,
     required this.onDecrement,
     this.onTap,
+    this.badges = const [],
+    this.originalTotalLabel,
   });
 
   final String name;
@@ -63,6 +65,20 @@ class CartLine extends StatelessWidget {
 
   /// Tap the line (e.g. open the edit sheet).
   final VoidCallback? onTap;
+
+  /// Small tags under "qty × price" (#385: the cart's "Custom price" and
+  /// line-discount badges). None by default.
+  final List<Widget> badges;
+
+  /// The line total before a discount, drawn struck through above
+  /// [totalLabel] (#385). None by default.
+  final String? originalTotalLabel;
+
+  Widget _total(BuildContext context, ThemeData t) => Text(
+    totalLabel,
+    maxLines: 1,
+    style: context.boldStyle(16).copyWith(color: t.colorScheme.primary),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -111,17 +127,37 @@ class CartLine extends StatelessWidget {
                                 .regularStyle(13)
                                 .copyWith(color: muted),
                           ),
+                          if (badges.isNotEmpty) ...[
+                            SizedBox(height: context.getRSize(4)),
+                            Wrap(
+                              spacing: context.getRSize(6),
+                              runSpacing: context.getRSize(4),
+                              children: badges,
+                            ),
+                          ],
                         ],
                       ),
                     ),
                     SizedBox(width: context.getRSize(8)),
-                    Text(
-                      totalLabel,
-                      maxLines: 1,
-                      style: context
-                          .boldStyle(16)
-                          .copyWith(color: t.colorScheme.primary),
-                    ),
+                    if (originalTotalLabel == null)
+                      _total(context, t)
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            originalTotalLabel!,
+                            maxLines: 1,
+                            style: context
+                                .semiBoldStyle(12)
+                                .copyWith(
+                                  color: muted,
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                          ),
+                          _total(context, t),
+                        ],
+                      ),
                   ],
                 ),
                 SizedBox(height: context.getRSize(4)),
