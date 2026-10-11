@@ -572,6 +572,92 @@ void main() {
     });
   });
 
+  group('short screen (sideways phone)', () {
+    testWidgets('844×390 with insets: a full product row on first view, the '
+        'tier controls in the search row', (tester) async {
+      tester.view.padding = const FakeViewPadding(top: 24, right: 48);
+      tester.view.viewPadding = const FakeViewPadding(top: 24, right: 48);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewPadding);
+      final context = await pumpPosFrame(
+        tester,
+        size: const Size(844, 390),
+        padding: const EdgeInsets.only(top: 24, right: 48),
+      );
+      // With a cart, so the View Cart bar takes its slot too.
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(cartProvider).addItem(env.products[1], qty: 1, maxStock: 50);
+      for (var i = 0; i < 4; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      expect(find.byKey(const Key('view-cart-bar')), findsOneWidget);
+
+      final surface = tester.getRect(find.byKey(kPosScrollSurfaceKey));
+      final band = tester.getRect(find.byKey(kPosSearchBandKey));
+      final tile = tester.getRect(tileOf(env.products.first));
+      expect(tile.top, greaterThanOrEqualTo(band.bottom));
+      expect(
+        tile.bottom,
+        lessThanOrEqualTo(surface.bottom),
+        reason: 'a whole tile must show on first view, above the View Cart bar',
+      );
+      expect(tileOf(env.products.first).hitTestable(), findsOneWidget);
+
+      // One row: search, tier, manufacturer, Quick Sale, scan (square).
+      expect(find.byKey(kPosTierRowKey), findsNothing);
+      final search = tester.getRect(find.byKey(kPosSearchFieldKey));
+      for (final key in [
+        kPosTierDropdownKey,
+        kPosManufacturerDropdownKey,
+        kPosQuickSaleKey,
+        kPosScannerKey,
+      ]) {
+        final r = tester.getRect(find.byKey(key));
+        expect(r.center.dy, moreOrLessEquals(search.center.dy, epsilon: 4));
+        expect(r.left, greaterThan(search.right), reason: '$key');
+        expect(r.right, lessThanOrEqualTo(844 - 48), reason: '$key');
+        expect(
+          r.height,
+          greaterThanOrEqualTo(kMinInteractiveDimension),
+          reason: '$key',
+        );
+      }
+      expect(
+        tester.widget<PosBarcodeScanButton>(find.byKey(kPosScannerKey)).shape,
+        PosScanButtonShape.square,
+      );
+      expectNoOverflow(tester, reason: 'POS short layout at 844×390');
+      await disposeScreen(tester);
+    });
+
+    testWidgets('upright phone and tablet keep the separate tier row', (
+      tester,
+    ) async {
+      for (final size in const [Size(390, 844), Size(800, 1280)]) {
+        await pumpPosHome(
+          tester,
+          env: env,
+          size: size,
+          overrides: [hasContent],
+        );
+        expect(find.byKey(kPosTierRowKey), findsOneWidget, reason: '$size');
+        expect(
+          find.descendant(
+            of: find.byKey(kPosTierRowKey),
+            matching: find.byKey(kPosQuickSaleKey),
+          ),
+          findsOneWidget,
+        );
+        await disposePosHome(tester);
+      }
+    });
+  });
+
   group('no overflow', () {
     testWidgets('360dp at text scale 1.3, 3-button nav, then searching with '
         'the keyboard up', (tester) async {
@@ -631,9 +717,15 @@ void main() {
         padding: const EdgeInsets.only(top: 24, right: 48),
       );
       expectNoOverflow(tester, reason: 'POS at 844×390 with insets');
-      expect(find.text('Scan Barcode'), findsOneWidget);
+      // Short screen: the scan button is a square in the one search row.
+      expect(find.text('Scan Barcode'), findsNothing);
       // Everything stays clear of the right navigation bar.
-      for (final key in [kPosScannerKey, kPosQuickSaleKey]) {
+      for (final key in [
+        kPosScannerKey,
+        kPosQuickSaleKey,
+        kPosTierDropdownKey,
+        kPosManufacturerDropdownKey,
+      ]) {
         expect(
           tester.getRect(find.byKey(key)).right,
           lessThanOrEqualTo(844 - 48),

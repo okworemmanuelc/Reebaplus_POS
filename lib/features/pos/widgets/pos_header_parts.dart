@@ -23,6 +23,24 @@ const Key kPosHintKey = ValueKey<String>('pos-coach-hint');
 /// The "Select store" button on the All Stores placeholder.
 const Key kPosSelectStoreKey = ValueKey<String>('pos-select-store');
 
+/// Under this much height (the screen less its top and bottom system insets)
+/// POS lays out for a short screen — a phone held sideways (#384 review): the
+/// tier row joins the search row and the tiles' art shrinks, so a full row of
+/// products shows on first view. A measured height, not `isShortViewport`
+/// (PRD #239); the keyboard never changes it.
+const double kPosShortHeight = 480;
+
+/// Base widths of the price-tier and manufacturer pickers in the short
+/// layout's one row (scaled with `getRSize`).
+const double kPosShortTierWidth = 128;
+const double kPosShortManufacturerWidth = 150;
+
+/// Whether POS lays out for a short screen; see [kPosShortHeight].
+bool posShortHeight(BuildContext context) {
+  final mq = MediaQuery.of(context);
+  return mq.size.height - mq.padding.vertical < kPosShortHeight;
+}
+
 /// The POS top bar's height: Home's rule (`homeTopBarHeight`, #374: the
 /// theme's 68dp, grown when the scaled header tile or a 48dp control would
 /// touch its edges), except that the 68dp shrinks with the screen's scale on a

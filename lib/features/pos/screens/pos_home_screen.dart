@@ -258,6 +258,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     return ListenableBuilder(
       listenable: _controller!,
       builder: (context, _) {
+        // A short screen (a sideways phone) folds the tier row into the
+        // search row (#384 review).
+        final shortHeight = posShortHeight(context);
         // #384: the page sits on the shared soft fade; the top bar is solid
         // Surface and the frozen band takes the fade's top colour, so the grid
         // scrolls under an opaque strip.
@@ -288,8 +291,13 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                   key: kPosScrollSurfaceKey,
                   slivers: [
                     _buildTopBarSliver(context),
-                    SliverToBoxAdapter(child: _buildHeader(context)),
-                    _buildFrozenBandSliver(context, needsStoreSelection),
+                    if (!shortHeight)
+                      SliverToBoxAdapter(child: _buildHeader(context)),
+                    _buildFrozenBandSliver(
+                      context,
+                      needsStoreSelection,
+                      shortHeight: shortHeight,
+                    ),
                     // ONE combined coach banner. Tap adds to the cart;
                     // tap-and-hold opens the qty/discount sheet to add several
                     // at once (it does NOT edit the product — that's done from
@@ -399,11 +407,18 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   ///
   /// Search and category filtering stay one tap away while browsing, which is
   /// what makes it acceptable for the price-tier row above to scroll off.
+  ///
+  /// On a short screen ([posShortHeight], a sideways phone) the tier row's
+  /// controls join the search row — search flexes, the two pickers take
+  /// compact fixed widths, Quick Sale and the scan button stay squares — so
+  /// the cashier sees a full row of products on first view.
   Widget _buildFrozenBandSliver(
     BuildContext context,
-    bool needsStoreSelection,
-  ) {
+    bool needsStoreSelection, {
+    required bool shortHeight,
+  }) {
     final gutter = context.getRSize(16);
+    final gap = context.getRSize(shortHeight ? 8 : 12);
     return PinnedHeaderSliver(
       child: Container(
         key: kPosSearchBandKey,
@@ -431,11 +446,28 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
               child: Row(
                 children: [
                   Expanded(child: _buildSearchField()),
+                  if (shortHeight) ...[
+                    SizedBox(width: gap),
+                    SizedBox(
+                      width: context.getRSize(kPosShortTierWidth),
+                      child: _buildTierDropdown(),
+                    ),
+                    SizedBox(width: gap),
+                    SizedBox(
+                      width: context.getRSize(kPosShortManufacturerWidth),
+                      child: _buildManufacturerDropdown(),
+                    ),
+                    SizedBox(width: gap),
+                    PosQuickSaleButton(
+                      key: kPosQuickSaleKey,
+                      onPressed: () => _showQuickSaleModal(context),
+                    ),
+                  ],
                   if (!needsStoreSelection) ...[
-                    SizedBox(width: context.getRSize(12)),
+                    SizedBox(width: gap),
                     PosBarcodeScanButton(
                       key: kPosScannerKey,
-                      shape: context.isRailLayout
+                      shape: context.isRailLayout && !shortHeight
                           ? PosScanButtonShape.pill
                           : PosScanButtonShape.square,
                       tier: _controller!.selectedGroup,
@@ -656,13 +688,10 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
   /// The price tier, manufacturer filter and Quick Sale — on today's screen,
   /// not in the mockups, so kept (#384) in their own row between the top bar
-  /// and the frozen search band. It scrolls away, as before.
+  /// and the frozen search band. It scrolls away, as before. On a short
+  /// screen ([posShortHeight]) they move into the search row instead and this
+  /// row is not built.
   Widget _buildHeader(BuildContext context) {
-    // §12.2: CEO/Manager switch price tier freely; Cashier is locked to
-    // Retailer (a selected wholesaler customer still auto-applies via the
-    // controller's customer listener).
-    final slug = ref.watch(currentUserRoleProvider)?.slug;
-    final canSwitchTier = slug == 'ceo' || slug == 'manager';
     final gutter = context.getRSize(16);
     return Padding(
       key: kPosTierRowKey,
@@ -674,56 +703,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       ),
       child: Row(
         children: [
-          Expanded(
-            flex: 4,
-            child: _controller!.isLoading
-                ? const SizedBox.shrink()
-                : IgnorePointer(
-                    ignoring: !canSwitchTier,
-                    child: Opacity(
-                      opacity: canSwitchTier ? 1.0 : 0.6,
-                      child: AppDropdown<PriceTier>(
-                        key: kPosTierDropdownKey,
-                        value: _controller!.selectedGroup,
-                        items: const [
-                          DropdownMenuItem(
-                            value: PriceTier.retailer,
-                            child: Text('Retailer'),
-                          ),
-                          DropdownMenuItem(
-                            value: PriceTier.wholesaler,
-                            child: Text('Wholesaler'),
-                          ),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) _controller!.selectGroup(val);
-                        },
-                      ),
-                    ),
-                  ),
-          ),
+          Expanded(flex: 4, child: _buildTierDropdown()),
           SizedBox(width: context.getRSize(8)),
-          Expanded(
-            flex: 5,
-            child: _controller!.isLoading
-                ? const SizedBox.shrink()
-                : AppDropdown<String>(
-                    key: kPosManufacturerDropdownKey,
-                    value: _controller!.selectedManufacturerId,
-                    items: [
-                      const DropdownMenuItem(value: 'All', child: Text('All')),
-                      ..._controller!.manufacturers.map(
-                        (m) => DropdownMenuItem(
-                          value: m.id.toString(),
-                          child: Text(m.name),
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) _controller!.selectManufacturer(val);
-                    },
-                  ),
-          ),
+          Expanded(flex: 5, child: _buildManufacturerDropdown()),
           SizedBox(width: context.getRSize(8)),
           PosQuickSaleButton(
             key: kPosQuickSaleKey,
@@ -731,6 +713,56 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Retailer / Wholesaler. §12.2: CEO/Manager switch price tier freely;
+  /// Cashier is locked to Retailer (a selected wholesaler customer still
+  /// auto-applies via the controller's customer listener).
+  Widget _buildTierDropdown() {
+    final slug = ref.watch(currentUserRoleProvider)?.slug;
+    final canSwitchTier = slug == 'ceo' || slug == 'manager';
+    if (_controller!.isLoading) return const SizedBox.shrink();
+    return IgnorePointer(
+      ignoring: !canSwitchTier,
+      child: Opacity(
+        opacity: canSwitchTier ? 1.0 : 0.6,
+        child: AppDropdown<PriceTier>(
+          key: kPosTierDropdownKey,
+          value: _controller!.selectedGroup,
+          items: const [
+            DropdownMenuItem(
+              value: PriceTier.retailer,
+              child: Text('Retailer'),
+            ),
+            DropdownMenuItem(
+              value: PriceTier.wholesaler,
+              child: Text('Wholesaler'),
+            ),
+          ],
+          onChanged: (val) {
+            if (val != null) _controller!.selectGroup(val);
+          },
+        ),
+      ),
+    );
+  }
+
+  /// The manufacturer filter ("All" first).
+  Widget _buildManufacturerDropdown() {
+    if (_controller!.isLoading) return const SizedBox.shrink();
+    return AppDropdown<String>(
+      key: kPosManufacturerDropdownKey,
+      value: _controller!.selectedManufacturerId,
+      items: [
+        const DropdownMenuItem(value: 'All', child: Text('All')),
+        ..._controller!.manufacturers.map(
+          (m) => DropdownMenuItem(value: m.id.toString(), child: Text(m.name)),
+        ),
+      ],
+      onChanged: (val) {
+        if (val != null) _controller!.selectManufacturer(val);
+      },
     );
   }
 

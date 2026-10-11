@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
+import 'package:reebaplus_pos/features/pos/widgets/pos_header_parts.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
@@ -49,7 +50,8 @@ double posTileExtent(BuildContext context) {
   final scaler = MediaQuery.textScalerOf(context);
   double line(double base) => scaler.scale(context.getRFontSize(base)) * 1.35;
   return context.getRSize(10) * 2 + // tile padding
-      context.getRSize(60) + // art
+      // art: smaller on a short screen, so a full row fits under the band
+      context.getRSize(posShortHeight(context) ? 20 : 60) +
       context.getRSize(10) + // art → name
       line(15) * 2 + // name, up to two lines
       line(12) + // size · pack
