@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
-
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
@@ -322,9 +321,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
         final fixed =
             Theme.of(modalCtx).extension<AppFixedColors>() ??
             AppFixedColors.light;
-        return SizedBox(
+        return Container(
           key: const Key('cart-saved-carts-sheet'),
           height: modalCtx.sheetMaxHeight(0.7),
+          decoration: salesSheetDecoration(modalCtx),
           child: Column(
             children: [
               Padding(
