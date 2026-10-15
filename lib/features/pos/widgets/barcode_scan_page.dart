@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scanner.dart';
 import 'package:reebaplus_pos/features/pos/services/scan_camera.dart';
 import 'package:reebaplus_pos/features/pos/services/scan_gate.dart';
+import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_cart_count.dart';
 
 /// The full-screen scan session (#319). Stays open until the cashier closes it
@@ -134,22 +135,23 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<bool>(
-      authProvider.select((auth) => auth.currentUser == null),
-      (wasLocked, isLocked) {
-        if (isLocked && wasLocked == false) _onLocked();
-      },
-    );
+    ref.listen<bool>(authProvider.select((auth) => auth.currentUser == null), (
+      wasLocked,
+      isLocked,
+    ) {
+      if (isLocked && wasLocked == false) _onLocked();
+    });
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text('Scan barcode'),
-        leading: IconButton(
-          icon: const Icon(AppIcons.close),
+      // The viewfinder stays dark behind the camera preview (judgement call,
+      // #393); the bar above it is the app's solid Surface bar.
+      backgroundColor: Theme.of(context).colorScheme.scrim,
+      appBar: SalesTopBar(
+        height: salesTopBarHeight(context),
+        icon: AppIcons.barcode,
+        title: 'Scan barcode',
+        leading: SalesBackButton(
+          icon: AppIcons.close,
           tooltip: 'Close scanner',
           onPressed: () => Navigator.of(context).pop(),
         ),
@@ -185,7 +187,18 @@ class _TorchButton extends StatelessWidget {
         if (isOn == null) return const SizedBox.shrink();
         // Material icons.
         return IconButton(
-          icon: Icon(isOn ? AppIcons.flashOn : AppIcons.flashOff),
+          constraints: const BoxConstraints(
+            minWidth: kMinInteractiveDimension,
+            minHeight: kMinInteractiveDimension,
+          ),
+          icon: AppIcon(
+            isOn ? AppIcons.flashOn : AppIcons.flashOff,
+            filled: isOn,
+            size: context.getRSize(24),
+            color: isOn
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.onSurface,
+          ),
           tooltip: isOn ? 'Turn torch off' : 'Turn torch on',
           onPressed: () => unawaited(camera.toggleTorch()),
         );
