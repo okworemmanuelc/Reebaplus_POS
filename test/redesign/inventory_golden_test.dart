@@ -108,6 +108,11 @@ void main() {
             brightness: brightness,
           );
           if (tab != 'products') await openTab(tester, label);
+          // The sample movements are days old (time-proof); show that period.
+          if (tab == 'history') {
+            await tester.tap(find.text('7 Days'));
+            await tester.pumpAndSettle();
+          }
           expect(tester.takeException(), isNull);
           await expectLater(
             find.byType(MaterialApp),

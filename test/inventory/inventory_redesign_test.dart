@@ -272,8 +272,8 @@ void main() {
     testWidgets('History period pills switch the period', (tester) async {
       await pump(tester);
       await openTab(tester, 'History');
-      expect(find.text('Stock In'), findsOneWidget);
-      expect(find.text('Amaka Obi'), findsWidgets);
+      // The sample movements are 2–4 days old: none today.
+      expect(find.text('No stock movements found'), findsOneWidget);
       final pill = find.widgetWithText(InventoryPeriodChip, '7 Days');
       expect(
         tester.getSize(pill).height,
@@ -282,6 +282,9 @@ void main() {
       await tester.tap(pill);
       await tester.pumpAndSettle();
       expect(tester.widget<InventoryPeriodChip>(pill).selected, isTrue);
+      expect(find.text('Stock In'), findsOneWidget);
+      expect(find.text('Amaka Obi'), findsWidgets);
+      expect(find.text('3d ago'), findsOneWidget);
       await disposeScreen(tester);
     });
 

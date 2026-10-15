@@ -38,6 +38,8 @@ Future<InventorySample> seedInventorySample(ScreenTestEnvironment env) async {
   final db = env.db;
   final b = env.businessId;
   final now = DateTime.now();
+  // Expiry is a calendar date; the row counts whole days to it, so "Expires
+  // in 10d" holds at any time of day.
   final today = DateTime(now.year, now.month, now.day);
 
   await db.customStatement(
@@ -181,14 +183,16 @@ Future<InventorySample> seedInventorySample(ScreenTestEnvironment env) async {
         );
   }
 
-  // Stock movements for the History tab, minutes ago so the relative date
-  // ("5m") is the same on every run.
-  for (final (product, delta, type, minutesAgo) in const [
-    ('Star Lager', 24, 'purchase_received', 5),
-    ('Gulder', -2, 'adjustment', 12),
-    ('Coca-Cola', -6, 'damage', 25),
+  // Stock movements for the History tab, whole days (plus an hour) ago: the
+  // tab renders anything over 24h as a duration ("3d ago"), which cannot
+  // drift with how long a run takes or the time of day. Show them under the
+  // "7 Days" period — "Today" would depend on the clock.
+  for (final (product, delta, type, daysAgo) in const [
+    ('Star Lager', 24, 'purchase_received', 2),
+    ('Gulder', -2, 'adjustment', 3),
+    ('Coca-Cola', -6, 'damage', 4),
   ]) {
-    final at = now.subtract(Duration(minutes: minutesAgo));
+    final at = now.subtract(Duration(days: daysAgo, hours: 1));
     final adjustmentId = UuidV7.generate();
     await db
         .into(db.stockAdjustments)
