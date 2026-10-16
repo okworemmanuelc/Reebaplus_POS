@@ -527,3 +527,64 @@ class InventoryDetailStatCard extends StatelessWidget {
     );
   }
 }
+
+/// A Total In / Total Out tile (#392): a 32 [IconTile], the muted label and the
+/// figure in ExtraBold 16 that scales down rather than ellipsising (a money
+/// figure is never cut short).
+class SupplierTotalTile extends StatelessWidget {
+  const SupplierTotalTile({
+    super.key,
+    required this.icon,
+    required this.tone,
+    required this.label,
+    required this.value,
+    required this.valueColor,
+  });
+
+  final IconData icon;
+  final IconTileTone tone;
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Container(
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+      padding: EdgeInsets.all(context.getRSize(12)),
+      decoration: AppDecorations.card(context),
+      child: Row(
+        children: [
+          IconTile(icon: icon, tone: tone, size: 32),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.semiBoldStyle(12).copyWith(color: muted),
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: context
+                        .extraBoldStyle(16)
+                        .copyWith(color: valueColor),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
