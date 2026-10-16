@@ -6,12 +6,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/orders/widgets/orders_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
-
-import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -32,9 +38,7 @@ import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart'
     as model;
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
@@ -74,20 +78,21 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
   Future<void> _changeFilter(String tab, String v) async {
     if (v == 'Custom') {
-      final initialRange = tab == 'completed' ? _completedCustomRange : _cancelledCustomRange;
+      final initialRange = tab == 'completed'
+          ? _completedCustomRange
+          : _cancelledCustomRange;
       final range = await showDateRangePicker(
         context: context,
         firstDate: DateTime(2020),
         lastDate: DateTime.now().add(const Duration(days: 365)),
         initialDateRange: initialRange,
-        builder: (context, child) => Theme(
-          data: Theme.of(context),
-          child: child!,
-        ),
+        builder: (context, child) =>
+            Theme(data: Theme.of(context), child: child!),
       );
       if (range != null) {
         setState(() {
-          final rangeStr = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+          final rangeStr =
+              'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
           if (tab == 'completed') {
             _completedCustomRange = range;
             _completedFilter = rangeStr;
@@ -121,7 +126,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   Color get subtextCol =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
-  Color get borderCol => Theme.of(context).colorScheme.primary.withValues(alpha: 0.05);
+  Color get borderCol =>
+      Theme.of(context).colorScheme.primary.withValues(alpha: 0.05);
+  AppFixedColors get _fixed =>
+      Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
 
   @override
   void initState() {
@@ -180,57 +188,60 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       activeRoute: 'orders',
       backgroundColor: _bg,
       appBar: _buildAppBar(context),
-      body: Builder(
-        builder: (context) {
-          if (ref.watch(zeroStoresEmptySurfaceProvider)) {
-            return const FirstRunEmptyState();
-          }
-          final activeStoreId = ref.watch(lockedStoreProvider).value;
+      body: DecoratedBox(
+        decoration: AppDecorations.pageBackground(context),
+        child: Builder(
+          builder: (context) {
+            if (ref.watch(zeroStoresEmptySurfaceProvider)) {
+              return const FirstRunEmptyState();
+            }
+            final activeStoreId = ref.watch(lockedStoreProvider).value;
 
-          return AppRefreshWrapper(
-            onRefresh: () {
-              final completedKey = (
-                status: 'completed',
-                storeId: activeStoreId,
-                dateLabel: _completedFilter,
-                search: _searchQuery,
-              );
-              final cancelledKey = (
-                status: 'cancelled',
-                storeId: activeStoreId,
-                dateLabel: _cancelledFilter,
-                search: _searchQuery,
-              );
-              ref.invalidate(paginatedOrdersProvider(completedKey));
-              ref.invalidate(paginatedOrdersProvider(cancelledKey));
-              ref.invalidate(ordersStatsProvider(completedKey));
-              ref.invalidate(ordersStatsProvider(cancelledKey));
-              ref.invalidate(pendingOrdersProvider(activeStoreId));
-            },
-            child: TabbedSliverScaffold(
-              controller: _tabController,
-              tabBarExtent: math.max(
-                kMinInteractiveDimension,
-                context.getRSize(72.0),
+            return AppRefreshWrapper(
+              onRefresh: () {
+                final completedKey = (
+                  status: 'completed',
+                  storeId: activeStoreId,
+                  dateLabel: _completedFilter,
+                  search: _searchQuery,
+                );
+                final cancelledKey = (
+                  status: 'cancelled',
+                  storeId: activeStoreId,
+                  dateLabel: _cancelledFilter,
+                  search: _searchQuery,
+                );
+                ref.invalidate(paginatedOrdersProvider(completedKey));
+                ref.invalidate(paginatedOrdersProvider(cancelledKey));
+                ref.invalidate(ordersStatsProvider(completedKey));
+                ref.invalidate(ordersStatsProvider(cancelledKey));
+                ref.invalidate(pendingOrdersProvider(activeStoreId));
+              },
+              child: TabbedSliverScaffold(
+                controller: _tabController,
+                tabBarExtent: math.max(
+                  kMinInteractiveDimension,
+                  context.getRSize(72.0),
+                ),
+                tabBar: _buildTabBar(context),
+                tabViews: [
+                  TabSliverView(
+                    storageKey: 'orders-pending',
+                    slivers: _pendingTabSlivers(context, activeStoreId),
+                  ),
+                  TabSliverView(
+                    storageKey: 'orders-completed',
+                    slivers: _completedTabSlivers(context, activeStoreId),
+                  ),
+                  TabSliverView(
+                    storageKey: 'orders-cancelled',
+                    slivers: _cancelledTabSlivers(context, activeStoreId),
+                  ),
+                ],
               ),
-              tabBar: _buildTabBar(context),
-              tabViews: [
-                TabSliverView(
-                  storageKey: 'orders-pending',
-                  slivers: _pendingTabSlivers(context, activeStoreId),
-                ),
-                TabSliverView(
-                  storageKey: 'orders-completed',
-                  slivers: _completedTabSlivers(context, activeStoreId),
-                ),
-                TabSliverView(
-                  storageKey: 'orders-cancelled',
-                  slivers: _cancelledTabSlivers(context, activeStoreId),
-                ),
-              ],
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -238,52 +249,77 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   // ─────────────────────────── APP BAR ────────────────────────────────────
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: surfaceCol,
-      elevation: 0,
-      iconTheme: IconThemeData(color: textCol),
+    return OrdersTopBar(
+      key: OrdersKeys.topBar,
+      height: ordersTopBarHeight(context),
+      icon: AppIcons.receipt,
+      title: 'Orders',
+      subtitle: ref.watch(activeStoreLabelProvider),
       leading: context.isRailLayout ? null : const MenuButton(),
-      title: AppBarHeader(
-        icon: AppIcons.receipt,
-        title: 'Orders',
-        subtitle: ref.watch(activeStoreLabelProvider),
-      ),
-      centerTitle: true,
-      actions: const [NotificationBell(), SizedBox(width: 8)],
+      actions: const [NotificationBell()],
     );
   }
 
   Widget _buildTabBar(BuildContext context) {
+    final t = Theme.of(context);
+    final iconSize = context.getRSize(18);
     return Material(
+      key: OrdersKeys.tabBar,
       color: surfaceCol,
-      child: TabBar(
-        controller: _tabController,
-        dividerColor: Colors.transparent,
-        labelColor: Theme.of(context).colorScheme.primary,
-        unselectedLabelColor: subtextCol,
-        indicatorColor: Theme.of(context).colorScheme.primary,
-        indicatorWeight: 3,
-        labelStyle: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: context.getRFontSize(14),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: t.dividerColor)),
         ),
-        tabs: const [
-          Tab(
-            icon: Icon(AppIcons.box, size: 16),
-            text: 'Pending',
-          ),
-          Tab(
-            icon: Icon(AppIcons.auditCheck, size: 16),
-            text: 'Completed',
-          ),
-          Tab(
-            icon: Icon(AppIcons.block, size: 16),
-            text: 'Cancelled',
-          ),
-        ],
+        child: TabBar(
+          controller: _tabController,
+          dividerColor: Colors.transparent,
+          labelColor: t.colorScheme.primary,
+          unselectedLabelColor: subtextCol,
+          indicatorColor: t.colorScheme.primary,
+          indicatorWeight: 3,
+          labelStyle: context.boldStyle(14),
+          unselectedLabelStyle: context.semiBoldStyle(14),
+          tabs: [
+            Tab(
+              icon: Icon(AppIcons.box, size: iconSize),
+              text: 'Pending',
+            ),
+            Tab(
+              icon: Icon(AppIcons.auditCheck, size: iconSize),
+              text: 'Completed',
+            ),
+            Tab(
+              icon: Icon(AppIcons.block, size: iconSize),
+              text: 'Cancelled',
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  /// Centres [child] at most 720 wide (settings-list width) with a 16 gutter.
+  Widget _capped(Widget child) => LayoutBuilder(
+    builder: (context, c) => Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: ordersCapPadding(c.maxWidth, context.getRSize(16)),
+      ),
+      child: child,
+    ),
+  );
+
+  /// The summary strip under the tab bar, capped and spaced like a card list.
+  Widget _summary(List<_StatItem> stats) => Padding(
+    padding: EdgeInsets.only(top: context.getRSize(16)),
+    child: _capped(
+      OrdersSummaryStrip(
+        stats: [
+          for (final s in stats)
+            (label: s.label, value: s.value, color: s.color),
+        ],
+      ),
+    ),
+  );
 
   // ─────────────────────────── SEARCH BAR ─────────────────────────────────
 
@@ -301,82 +337,56 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         selectedFilter != null &&
         onSelectFilter != null &&
         filterOptions != null;
-    return Container(
-      color: surfaceCol,
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(10),
-        context.getRSize(16),
-        context.getRSize(10),
-      ),
-      child: Row(
-        children: [
-          Expanded(child: _buildSearchField(context)),
-          if (showFilter) ...[
-            SizedBox(width: context.getRSize(10)),
-            _buildFilterDropdown(
-              context,
-              selected: selectedFilter,
-              options: filterOptions,
-              onSelect: onSelectFilter,
-            ),
+    return Padding(
+      padding: EdgeInsets.only(top: context.getRSize(12)),
+      child: _capped(
+        Row(
+          children: [
+            Expanded(child: _buildSearchField(context)),
+            if (showFilter) ...[
+              SizedBox(width: context.getRSize(10)),
+              _buildFilterDropdown(
+                context,
+                selected: selectedFilter,
+                options: filterOptions,
+                onSelect: onSelectFilter,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildSearchField(BuildContext context) {
-    return TextField(
+    return AppInput(
+      key: OrdersKeys.search,
       controller: _searchController,
       onChanged: _onSearchChanged,
-      style: TextStyle(color: textCol, fontSize: context.getRFontSize(14)),
-      decoration: InputDecoration(
-        hintText: 'Search by customer or order #',
-        hintStyle: TextStyle(
-          color: subtextCol,
-          fontSize: context.getRFontSize(13),
-        ),
-        prefixIcon: Icon(
-          AppIcons.search,
-          size: context.getRSize(15),
-          color: subtextCol,
-        ),
-        suffixIcon: _searchQuery.isNotEmpty
-            ? GestureDetector(
-                onTap: () {
-                  _searchController.clear();
-                  setState(() => _searchQuery = '');
-                },
-                child: Icon(
-                  AppIcons.close,
-                  size: context.getRSize(14),
-                  color: subtextCol,
-                ),
-              )
-            : null,
-        filled: true,
-        fillColor: _bg,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(16),
-          vertical: context.getRSize(10),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: borderCol),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: borderCol),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: Theme.of(context).colorScheme.primary,
-            width: 1.5,
-          ),
-        ),
+      hintText: 'Search by customer or order #',
+      prefixIcon: Icon(
+        AppIcons.search,
+        size: context.getRSize(18),
+        color: subtextCol,
       ),
+      suffixIcon: _searchQuery.isNotEmpty
+          ? IconButton(
+              tooltip: 'Clear search',
+              constraints: const BoxConstraints(
+                minWidth: kMinInteractiveDimension,
+                minHeight: kMinInteractiveDimension,
+              ),
+              onPressed: () {
+                _searchController.clear();
+                setState(() => _searchQuery = '');
+              },
+              icon: Icon(
+                AppIcons.close,
+                size: context.getRSize(18),
+                color: subtextCol,
+              ),
+            )
+          : null,
     );
   }
 
@@ -391,10 +401,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }) {
     final isCustom = selected.startsWith('Custom:');
     final dropdownValue = isCustom ? 'Custom' : selected;
-    final selectedVal = options.contains(dropdownValue) ? dropdownValue : options.first;
+    final selectedVal = options.contains(dropdownValue)
+        ? dropdownValue
+        : options.first;
 
     return SizedBox(
-      width: context.getRSize(140),
+      key: OrdersKeys.period,
+      width: context.getRSize(150),
       child: AppDropdown<String>(
         value: selectedVal,
         items: options
@@ -409,7 +422,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         ),
         prefixIcon: Icon(
           AppIcons.calendar,
-          size: context.getRSize(13),
+          size: context.getRSize(16),
           color: subtextCol,
         ),
       ),
@@ -470,7 +483,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         ];
 
         return [
-          SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
+          SliverToBoxAdapter(child: _summary(stats)),
           SliverToBoxAdapter(child: _buildSearchBar(context)),
           ..._buildOrderSlivers(context, list, status: 'pending'),
         ];
@@ -478,7 +491,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     );
   }
 
-  List<Widget> _completedTabSlivers(BuildContext context, String? activeStoreId) {
+  List<Widget> _completedTabSlivers(
+    BuildContext context,
+    String? activeStoreId,
+  ) {
     final canSeeMoney = Gates.seeOrderMoney.allows(ref);
     final canSeeExtendedRanges = Gates.seeExtendedDateRanges.allows(ref);
     final key = (
@@ -506,7 +522,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       ],
       data: (stats) {
         final statItems = [
-          _StatItem(label: 'Completed', value: '${stats.count}', color: success),
+          _StatItem(
+            label: 'Completed',
+            value: '${stats.count}',
+            color: _fixed.green,
+          ),
           if (canSeeMoney) ...[
             _StatItem(
               label: 'Revenue',
@@ -516,7 +536,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             _StatItem(
               label: 'Collected',
               value: formatCurrency(stats.amountPaidKobo / 100.0),
-              color: success,
+              color: _fixed.green,
             ),
             _StatItem(
               label: 'Crate Deposits',
@@ -536,7 +556,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         }
 
         return [
-          SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
+          SliverToBoxAdapter(child: _summary(statItems)),
           SliverToBoxAdapter(
             child: _buildSearchBar(
               context,
@@ -558,7 +578,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     );
   }
 
-  List<Widget> _cancelledTabSlivers(BuildContext context, String? activeStoreId) {
+  List<Widget> _cancelledTabSlivers(
+    BuildContext context,
+    String? activeStoreId,
+  ) {
     final canSeeMoney = Gates.seeOrderMoney.allows(ref);
     final canSeeExtendedRanges = Gates.seeExtendedDateRanges.allows(ref);
     final key = (
@@ -586,7 +609,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       ],
       data: (stats) {
         final statItems = [
-          _StatItem(label: 'Cancelled', value: '${stats.count}', color: danger),
+          _StatItem(
+            label: 'Cancelled',
+            value: '${stats.count}',
+            color: _fixed.danger,
+          ),
           // #196 — "Refunds Issued" now shows the MONEY handed back on these
           // orders (un-voided `payment_transactions.type == 'refund'` rows,
           // the same basis as the Daily Reconciliation), not a count of the
@@ -597,12 +624,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             _StatItem(
               label: 'Value Forfeited',
               value: formatCurrency(stats.totalAmountKobo / 100.0),
-              color: danger,
+              color: _fixed.danger,
             ),
             _StatItem(
               label: 'Refunds Issued',
               value: formatCurrency(stats.refundsIssuedKobo / 100.0),
-              color: blueMain,
+              color: _fixed.info,
             ),
           ],
         ];
@@ -617,7 +644,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         }
 
         return [
-          SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
+          SliverToBoxAdapter(child: _summary(statItems)),
           SliverToBoxAdapter(
             child: _buildSearchBar(
               context,
@@ -645,7 +672,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     required String status,
     required bool isLoadingMore,
     required bool hasMore,
-    required ({String status, String? storeId, String dateLabel, String search}) key,
+    required ({String status, String? storeId, String dateLabel, String search})
+    key,
   }) {
     if (list.isEmpty) {
       IconData icon;
@@ -666,22 +694,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: context.getRSize(48), color: borderCol),
-                SizedBox(height: context.getRSize(16)),
-                Text(
-                  text,
-                  style: TextStyle(
-                    color: subtextCol,
-                    fontSize: context.getRFontSize(16),
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+            child: OrdersEmptyState(icon: icon, text: text),
           ),
         ),
       ];
@@ -696,50 +709,60 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final childCount = list.length + (isLoadingMore ? 1 : 0);
 
     return [
-      SliverPadding(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(16),
-          context.getRSize(16),
-          context.getRSize(16),
-          context.getRSize(100) + context.bottomInset,
-        ),
-        sliver: SliverList(
-          delegate: SliverChildBuilderDelegate((context, index) {
-            // Trigger load more near the bottom
-            if (hasMore && !isLoadingMore && index >= list.length - 5) {
-              Future.microtask(() {
-                if (mounted) {
-                  ref.read(paginatedOrdersProvider(key).notifier).loadMore();
+      SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final side = ordersCapPadding(
+            constraints.crossAxisExtent,
+            context.getRSize(16),
+          );
+          return SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              side,
+              context.getRSize(16),
+              side,
+              context.getRSize(100) + context.bottomInset,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                // Trigger load more near the bottom
+                if (hasMore && !isLoadingMore && index >= list.length - 5) {
+                  Future.microtask(() {
+                    if (mounted) {
+                      ref
+                          .read(paginatedOrdersProvider(key).notifier)
+                          .loadMore();
+                    }
+                  });
                 }
-              });
-            }
 
-            if (index == list.length) {
-              return Padding(
-                padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
-                child: const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-            }
+                if (index == list.length) {
+                  return Padding(
+                    padding: EdgeInsets.symmetric(
+                      vertical: context.getRSize(16),
+                    ),
+                    child: const Center(child: CircularProgressIndicator()),
+                  );
+                }
 
-            final item = list[index];
-            return _OrderCard(
-              orderWithItems: item,
-              status: status,
-              onMarkAsDelivered: (status == 'pending' && canConfirm)
-                  ? () => _markAsDelivered(item)
-                  : null,
-              onRefund: (status == 'pending' && canRefund)
-                  ? () => _refundPendingOrder(item.order)
-                  : null,
-              onAssignRider: status == 'pending'
-                  ? (orderId) => _showRiderSelection(context, orderId)
-                  : null,
-              onViewReceipt: () => _viewReceipt(context, item),
-            );
-          }, childCount: childCount),
-        ),
+                final item = list[index];
+                return _OrderCard(
+                  orderWithItems: item,
+                  status: status,
+                  onMarkAsDelivered: (status == 'pending' && canConfirm)
+                      ? () => _markAsDelivered(item)
+                      : null,
+                  onRefund: (status == 'pending' && canRefund)
+                      ? () => _refundPendingOrder(item.order)
+                      : null,
+                  onAssignRider: status == 'pending'
+                      ? (orderId) => _showRiderSelection(context, orderId)
+                      : null,
+                  onViewReceipt: () => _viewReceipt(context, item),
+                );
+              }, childCount: childCount),
+            ),
+          );
+        },
       ),
     ];
   }
@@ -775,22 +798,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: context.getRSize(48), color: borderCol),
-                SizedBox(height: context.getRSize(16)),
-                Text(
-                  text,
-                  style: TextStyle(
-                    color: subtextCol,
-                    fontSize: context.getRFontSize(16),
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+            child: OrdersEmptyState(icon: icon, text: text),
           ),
         ),
       ];
@@ -802,37 +810,45 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final canConfirm = Gates.confirmOrder.allows(ref);
 
     return [
-      SliverPadding(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(16),
-          context.getRSize(16),
-          context.getRSize(16),
-          context.getRSize(100) + context.bottomInset,
-        ),
-        sliver: SliverList(
-          delegate: SliverChildBuilderDelegate((context, index) {
-            final item = list[index];
-            return _OrderCard(
-              orderWithItems: item,
-              status: status,
-              onMarkAsDelivered: (status == 'pending' && canConfirm)
-                  ? () => _markAsDelivered(item)
-                  : null,
-              // §19.7: Refund replaces the old Cancel button on the Pending
-              // tab and is hidden unless the user may cancel a sale. It
-              // reverses the sale (stock, payment, both wallet legs) and moves
-              // the order to Cancelled. The Completed and Cancelled tabs have
-              // no Refund button (§19.8).
-              onRefund: (status == 'pending' && canRefund)
-                  ? () => _refundPendingOrder(item.order)
-                  : null,
-              onAssignRider: status == 'pending'
-                  ? (orderId) => _showRiderSelection(context, orderId)
-                  : null,
-              onViewReceipt: () => _viewReceipt(context, item),
-            );
-          }, childCount: list.length),
-        ),
+      SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final side = ordersCapPadding(
+            constraints.crossAxisExtent,
+            context.getRSize(16),
+          );
+          return SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              side,
+              context.getRSize(16),
+              side,
+              context.getRSize(100) + context.bottomInset,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = list[index];
+                return _OrderCard(
+                  orderWithItems: item,
+                  status: status,
+                  onMarkAsDelivered: (status == 'pending' && canConfirm)
+                      ? () => _markAsDelivered(item)
+                      : null,
+                  // §19.7: Refund replaces the old Cancel button on the Pending
+                  // tab and is hidden unless the user may cancel a sale. It
+                  // reverses the sale (stock, payment, both wallet legs) and moves
+                  // the order to Cancelled. The Completed and Cancelled tabs have
+                  // no Refund button (§19.8).
+                  onRefund: (status == 'pending' && canRefund)
+                      ? () => _refundPendingOrder(item.order)
+                      : null,
+                  onAssignRider: status == 'pending'
+                      ? (orderId) => _showRiderSelection(context, orderId)
+                      : null,
+                  onViewReceipt: () => _viewReceipt(context, item),
+                );
+              }, childCount: list.length),
+            ),
+          );
+        },
       ),
     ];
   }
@@ -937,10 +953,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           builder: (ctx, setDialogState) {
             final reason = reasonController.text.trim();
             return AlertDialog(
-              backgroundColor: surfaceCol,
               title: Text(
                 'Refund ${order.orderNumber}',
-                style: TextStyle(color: textCol, fontWeight: FontWeight.bold),
+                style: ctx.screenTitleStyle.copyWith(color: textCol),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -951,28 +966,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     'is restored. The customer\'s credit balance returns to its pre-sale '
                     'balance, and the cash leaves today\'s till. The order then '
                     'moves to Cancelled.',
-                    style: TextStyle(color: subtextCol, fontSize: 13),
+                    style: ctx.regularStyle(13).copyWith(color: subtextCol),
                   ),
                   SizedBox(height: context.getRSize(16)),
-                  TextField(
+                  AppInput(
+                    key: const Key('orders-refund-reason'),
                     controller: reasonController,
                     autofocus: true,
                     minLines: 1,
                     maxLines: 3,
-                    style: TextStyle(color: textCol),
+                    labelText: 'Reason (required)',
                     onChanged: (_) => setDialogState(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'Reason (required)',
-                      labelStyle: TextStyle(color: subtextCol),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: borderCol),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Theme.of(ctx).colorScheme.primary,
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -980,14 +984,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 AppButton(
                   text: 'Back',
                   variant: AppButtonVariant.ghost,
-                  size: AppButtonSize.small,
+                  isFullWidth: false,
                   onPressed: () => Navigator.pop(ctx),
                 ),
                 AppButton(
                   text: 'Issue Refund',
                   icon: AppIcons.refresh,
                   variant: AppButtonVariant.danger,
-                  size: AppButtonSize.small,
+                  isFullWidth: false,
                   onPressed: reason.isEmpty
                       ? null
                       : () {
@@ -1070,11 +1074,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              height: context.getRHeight(0.85),
+              key: OrdersKeys.receiptSheet,
+              height: context.sheetMaxHeight(0.85),
               decoration: BoxDecoration(
                 color: surfaceCol,
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
+                  top: Radius.circular(AppSpacing.borderRadiusXL),
                 ),
               ),
               child: Column(
@@ -1084,10 +1089,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                       vertical: context.getRSize(12),
                     ),
                     width: context.getRSize(40),
-                    height: context.getRSize(5),
+                    height: context.getRSize(4),
                     decoration: BoxDecoration(
-                      color: borderCol,
-                      borderRadius: BorderRadius.circular(10),
+                      color: Theme.of(context).dividerColor,
+                      borderRadius: BorderRadius.circular(
+                        AppSpacing.borderRadiusS,
+                      ),
                     ),
                   ),
                   Expanded(
@@ -1331,13 +1338,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         final selectedDevice = await showModalBottomSheet<BluetoothInfo>(
           context: context,
           isScrollControlled: true,
-          backgroundColor: surfaceCol,
-          constraints: BoxConstraints(
-            maxHeight: context.sheetMaxHeight(0.5),
-          ),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          ),
+          constraints: BoxConstraints(maxHeight: context.sheetMaxHeight(0.5)),
           builder: (pickerCtx) => PrinterPicker(
             onSelected: (device) => Navigator.pop(pickerCtx, device),
           ),
@@ -1443,85 +1444,6 @@ class _StatItem {
   const _StatItem({required this.label, required this.value, this.color});
 }
 
-class _SummaryStrip extends StatelessWidget {
-  final List<_StatItem> stats;
-  const _SummaryStrip({required this.stats});
-
-  @override
-  Widget build(BuildContext context) {
-    final surfaceCol = Theme.of(context).colorScheme.surface;
-    final borderCol = Theme.of(context).dividerColor;
-    final subtextCol =
-        Theme.of(context).textTheme.bodySmall?.color ??
-        Theme.of(context).iconTheme.color!;
-
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(12),
-        context.getRSize(16),
-        context.getRSize(12),
-      ),
-      decoration: BoxDecoration(
-        color: surfaceCol,
-        border: Border(bottom: BorderSide(color: borderCol)),
-      ),
-      child: Row(
-        children: stats.map((stat) {
-          final isLast = stat == stats.last;
-          return Expanded(
-            child: Container(
-              margin: isLast
-                  ? EdgeInsets.zero
-                  : EdgeInsets.only(right: context.getRSize(1)),
-              padding: EdgeInsets.symmetric(
-                vertical: context.getRSize(8),
-                horizontal: context.getRSize(4),
-              ),
-              decoration: isLast
-                  ? null
-                  : BoxDecoration(
-                      border: Border(right: BorderSide(color: borderCol)),
-                    ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      stat.value,
-                      style: TextStyle(
-                        color:
-                            stat.color ?? Theme.of(context).colorScheme.onSurface,
-                        fontWeight: FontWeight.bold,
-                        fontSize: context.getRFontSize(13),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    stat.label,
-                    style: TextStyle(
-                      color: subtextCol,
-                      fontSize: context.getRFontSize(10),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
 // ═══════════════════════════ ORDER CARD ═════════════════════════════════════
 
 class _OrderCard extends ConsumerWidget {
@@ -1543,17 +1465,19 @@ class _OrderCard extends ConsumerWidget {
     required this.onViewReceipt,
   });
 
-  // Returns a color for the payment type badge
-  Color _paymentColor(String paymentType, Color primaryColor) {
+  // The payment badge's tone (fixed colours; the same buckets as before).
+  TagPillTone _paymentTone(String paymentType) {
     final lower = paymentType.toLowerCase();
     // Mixed cash + wallet (e.g. 'Cash / Transfer / Wallet') is a partial
     // payment — cash now, the shortfall booked to the wallet as debt. Match it
     // before the plain 'wallet' check, which would otherwise claim it.
-    if (lower.contains('wallet') && lower.contains('cash')) return primaryColor;
-    if (lower.contains('wallet')) return blueMain;
-    if (lower.contains('partial')) return primaryColor;
-    if (lower.contains('credit')) return danger;
-    return success; // Full Cash / Card
+    if (lower.contains('wallet') && lower.contains('cash')) {
+      return TagPillTone.info;
+    }
+    if (lower.contains('wallet')) return TagPillTone.info;
+    if (lower.contains('partial')) return TagPillTone.info;
+    if (lower.contains('credit')) return TagPillTone.danger;
+    return TagPillTone.green; // Full Cash / Card
   }
 
   // Returns a short label for the payment type badge
@@ -1594,13 +1518,12 @@ class _OrderCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final textCol = Theme.of(context).colorScheme.onSurface;
-    final subtextCol =
-        Theme.of(context).textTheme.bodySmall?.color ??
-        Theme.of(context).iconTheme.color!;
-    final borderCol = Theme.of(context).dividerColor;
-    final surfaceCol = Theme.of(context).colorScheme.surface;
-    final primary = Theme.of(context).colorScheme.primary;
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final textCol = t.colorScheme.onSurface;
+    final subtextCol = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final borderCol = t.dividerColor;
+    final primary = t.colorScheme.primary;
 
     final order = orderWithItems.order;
     final customer = orderWithItems.customer;
@@ -1618,15 +1541,8 @@ class _OrderCard extends ConsumerWidget {
         order.cancellationReason != null &&
         order.cancellationReason!.isNotEmpty;
 
-    // Accent color for the left border stripe
-    final Color accentColor;
-    if (status == 'pending') {
-      accentColor = primary;
-    } else if (status == 'completed') {
-      accentColor = success;
-    } else {
-      accentColor = danger;
-    }
+    // Accent colour for the left stripe (fixed colours, #393).
+    final accentColor = orderStatusColor(context, status);
 
     // Financial values. No per-order "owes" figure (§19.2): the sale is settled
     // at checkout — received, or charged through the credit balance (§14.3) — so the
@@ -1666,612 +1582,480 @@ class _OrderCard extends ConsumerWidget {
     final displayItems = items.length > 2 ? items.sublist(0, 2) : items;
     final extraCount = items.length - displayItems.length;
 
-    return GlassyCard(
-      key: orderRowKey(order.id),
-      margin: EdgeInsets.only(bottom: context.getRSize(16)),
-      padding: EdgeInsets.zero,
-      radius: 16.0,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onViewReceipt,
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Left accent stripe
-                Container(
-                  width: 4, 
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                    ),
-                  ),
-                ),
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 
-                // Card content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                        // ── Header: Customer + badges ──────────────────────
-                        Padding(
-                          padding: EdgeInsets.all(context.getRSize(14)),
-                          child: Row(
-                            children: [
-                              // Customer profile (avatar + name/address). For a
-                              // named customer this taps through to their detail
-                              // screen; a null onTap (walk-in) lets the tap fall
-                              // through to the card's onViewReceipt.
-                              Expanded(
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(10),
-                                  onTap: customer == null
-                                      ? null
-                                      : () => Navigator.of(context).push(
-                                          slideDownRoute(
-                                            CustomerDetailScreen(
-                                              customer: Customer.fromDb(
-                                                customer,
+    return Padding(
+      key: orderRowKey(order.id),
+      padding: EdgeInsets.only(bottom: context.getRSize(12)),
+      child: DecoratedBox(
+        decoration: AppDecorations.card(
+          context,
+          radius: AppSpacing.borderRadiusL,
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: onViewReceipt,
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Left accent stripe (status colour).
+                    Container(width: context.getRSize(4), color: accentColor),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── Header: Customer + rider / status ─────────────
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              context.getRSize(12),
+                              context.getRSize(10),
+                              context.getRSize(8),
+                              context.getRSize(10),
+                            ),
+                            child: Row(
+                              children: [
+                                // Customer profile. For a named customer this
+                                // taps through to their detail screen; a null
+                                // onTap (walk-in) lets the tap fall through to
+                                // the card's onViewReceipt.
+                                Expanded(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(
+                                      AppSpacing.borderRadiusM,
+                                    ),
+                                    onTap: customer == null
+                                        ? null
+                                        : () => Navigator.of(context).push(
+                                            slideDownRoute(
+                                              CustomerDetailScreen(
+                                                customer: Customer.fromDb(
+                                                  customer,
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                  child: Row(
-                                    children: [
-                                      // Avatar
-                                      Container(
-                                        padding: EdgeInsets.all(
-                                          context.getRSize(9),
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: primary.withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            10,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        minHeight: kMinInteractiveDimension,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          IconTile(
+                                            icon: AppIcons.user,
+                                            tone: customer == null
+                                                ? IconTileTone.neutral
+                                                : IconTileTone.info,
+                                            size: 40,
                                           ),
+                                          SizedBox(width: context.getRSize(10)),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Text(
+                                                  customer?.name ??
+                                                      'Walk-in Customer',
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: context
+                                                      .boldStyle(15)
+                                                      .copyWith(color: textCol),
+                                                ),
+                                                if (customer?.addressText !=
+                                                        null &&
+                                                    customer!.addressText !=
+                                                        'N/A')
+                                                  Text(
+                                                    customer.addressText,
+                                                    style: context
+                                                        .regularStyle(12)
+                                                        .copyWith(
+                                                          color: subtextCol,
+                                                        ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: context.getRSize(8)),
+
+                                // Right side: rider (pending) or status pill.
+                                if (status == 'pending')
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        key: OrdersKeys.rider,
+                                        tooltip: order.riderName,
+                                        constraints: const BoxConstraints(
+                                          minWidth: kMinInteractiveDimension,
+                                          minHeight: kMinInteractiveDimension,
                                         ),
-                                        child: Icon(
-                                          AppIcons.user,
-                                          size: context.getRSize(15),
+                                        icon: AppIcon(
+                                          AppIcons.driver,
+                                          size: context.getRSize(20),
                                           color: primary,
                                         ),
+                                        onPressed: () =>
+                                            onAssignRider?.call(order.id),
                                       ),
-                                      SizedBox(width: context.getRSize(10)),
+                                      Text(
+                                        order.riderName,
+                                        style: context
+                                            .semiBoldStyle(10)
+                                            .copyWith(color: subtextCol),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  Padding(
+                                    padding: EdgeInsets.only(
+                                      right: context.getRSize(4),
+                                    ),
+                                    child: OrderStatusPill(
+                                      status: order.status,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
 
-                                      // Name + address
+                          Divider(height: 1, color: borderCol),
+
+                          // ── Order number, date/time, creator, payment ─────
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              context.getRSize(12),
+                              context.getRSize(10),
+                              context.getRSize(12),
+                              0,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Order #${order.orderNumber}',
+                                        style: context.monoStyle.copyWith(
+                                          color: textCol,
+                                        ),
+                                      ),
+                                      SizedBox(height: context.getRSize(2)),
+                                      Text(
+                                        '$dateStr · $timeStr',
+                                        style: context
+                                            .regularStyle(12)
+                                            .copyWith(color: subtextCol),
+                                      ),
+                                      // §19.4: who created the order — shown on
+                                      // every tab, for every role.
+                                      Row(
+                                        children: [
+                                          AppIcon(
+                                            AppIcons.user,
+                                            size: context.getRSize(12),
+                                            color: subtextCol,
+                                          ),
+                                          SizedBox(width: context.getRSize(4)),
+                                          Flexible(
+                                            child: Text(
+                                              'By $creatorName',
+                                              style: context
+                                                  .regularStyle(12)
+                                                  .copyWith(color: subtextCol),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(width: context.getRSize(8)),
+                                TagPill(
+                                  label: _paymentLabel(order.paymentType),
+                                  tone: _paymentTone(order.paymentType),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // ── Items list ───────────────────────────────────
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              context.getRSize(12),
+                              context.getRSize(10),
+                              context.getRSize(12),
+                              0,
+                            ),
+                            child: Column(
+                              children: [
+                                ...displayItems.map((richItem) {
+                                  final item = richItem.item;
+                                  return Padding(
+                                    padding: EdgeInsets.only(
+                                      bottom: context.getRSize(4),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: context.getRSize(5),
+                                          height: context.getRSize(5),
+                                          margin: EdgeInsets.only(
+                                            right: context.getRSize(8),
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: subtextCol,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            '${item.quantity}× ${richItem.displayName}',
+                                            style: context
+                                                .mediumStyle(13)
+                                                .copyWith(color: textCol),
+                                          ),
+                                        ),
+                                        if (canSeeMoney)
+                                          Text(
+                                            formatCurrency(
+                                              item.totalKobo / 100.0,
+                                            ),
+                                            style: context
+                                                .semiBoldStyle(13)
+                                                .copyWith(color: textCol),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                                if (extraCount > 0)
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(
+                                        left: context.getRSize(13),
+                                        top: context.getRSize(2),
+                                      ),
+                                      child: Text(
+                                        '+$extraCount more item${extraCount > 1 ? 's' : ''}',
+                                        style: context
+                                            .regularStyle(12)
+                                            .copyWith(
+                                              color: subtextCol,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              context.getRSize(12),
+                              context.getRSize(10),
+                              context.getRSize(12),
+                              context.getRSize(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (canSeeMoney || showCancelReason) ...[
+                                  Divider(height: 1, color: borderCol),
+                                  SizedBox(height: context.getRSize(10)),
+                                ],
+
+                                // ── Totals (money — hidden below Manager) ──
+                                if (canSeeMoney)
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              customer?.name ??
-                                                  'Walk-in Customer',
-                                              style: TextStyle(
-                                                color: textCol,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: context.getRFontSize(
-                                                  14,
+                                            Wrap(
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              children: [
+                                                Text(
+                                                  'Total  ',
+                                                  style: context
+                                                      .semiBoldStyle(12)
+                                                      .copyWith(
+                                                        color: subtextCol,
+                                                      ),
                                                 ),
-                                              ),
-                                            ),
-                                            if (customer?.addressText != null &&
-                                                customer!.addressText != 'N/A')
-                                              Text(
-                                                customer.addressText,
-                                                style: TextStyle(
-                                                  color: subtextCol,
-                                                  fontSize: context.getRFontSize(
-                                                    12,
+                                                Text(
+                                                  formatCurrency(
+                                                    order.netAmountKobo / 100.0,
                                                   ),
+                                                  style: context
+                                                      .extraBoldStyle(16)
+                                                      .copyWith(color: primary),
                                                 ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
+                                              ],
+                                            ),
+                                            SizedBox(
+                                              height: context.getRSize(2),
+                                            ),
+                                            Text(
+                                              'Paid: ${formatCurrency(order.amountPaidKobo / 100.0)}',
+                                              style: context
+                                                  .regularStyle(12)
+                                                  .copyWith(color: subtextCol),
+                                            ),
                                           ],
                                         ),
                                       ),
+                                      // Debt badge (named customers, balance < 0)
+                                      if (showCreditDebt)
+                                        TagPill(
+                                          label:
+                                              'Debt: ${formatCurrency(creditBalanceKobo.abs() / 100.0)}',
+                                          tone: TagPillTone.danger,
+                                          icon: AppIcons.creditBalance,
+                                        ),
                                     ],
                                   ),
-                                ),
-                              ),
-                              SizedBox(width: context.getRSize(8)),
 
-                              // Right side: rider (pending) or status badge (others)
-                              if (status == 'pending')
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    IconButton(
-                                      icon: Icon(
-                                        AppIcons.driver,
-                                        size: context.getRSize(18),
-                                        color: primary,
-                                      ),
-                                      onPressed: () =>
-                                          onAssignRider?.call(order.id),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                                    SizedBox(height: context.getRSize(2)),
-                                    Text(
-                                      order.riderName,
-                                      style: TextStyle(
-                                        fontSize: context.getRFontSize(9),
-                                        color: subtextCol,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else
-                                _StatusBadge(status: order.status),
-                            ],
-                          ),
-                        ),
-
-                        Divider(height: 1, color: borderCol),
-
-                        // ── Order ID, date/time, and payment badge ─────────
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            context.getRSize(14),
-                            context.getRSize(10),
-                            context.getRSize(14),
-                            0,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Order #${order.orderNumber}',
-                                      style: TextStyle(
-                                        color: subtextCol,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: context.getRFontSize(12),
-                                      ),
-                                    ),
-                                    Text(
-                                      '$dateStr · $timeStr',
-                                      style: TextStyle(
-                                        color: subtextCol,
-                                        fontSize: context.getRFontSize(11),
-                                      ),
-                                    ),
-                                    // §19.4: who created the order — shown on
-                                    // every tab, for every role.
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          AppIcons.user,
-                                          size: context.getRSize(9),
-                                          color: subtextCol,
-                                        ),
-                                        SizedBox(width: context.getRSize(4)),
-                                        Flexible(
-                                          child: Text(
-                                            'By $creatorName',
-                                            style: TextStyle(
-                                              color: subtextCol,
-                                              fontSize: context.getRFontSize(
-                                                11,
-                                              ),
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // Payment type badge
-                              _PaymentBadge(
-                                label: _paymentLabel(order.paymentType),
-                                color: _paymentColor(
-                                  order.paymentType,
-                                  primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // ── Items list ─────────────────────────────────────
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            context.getRSize(14),
-                            context.getRSize(10),
-                            context.getRSize(14),
-                            0,
-                          ),
-                          child: Column(
-                            children: [
-                              ...displayItems.map((richItem) {
-                                final item = richItem.item;
-                                return Padding(
-                                  padding: EdgeInsets.only(
-                                    bottom: context.getRSize(4),
-                                  ),
-                                  child: Row(
+                                // ── Discount (money — hidden below Manager) ─
+                                if (canSeeMoney && hasDiscount) ...[
+                                  SizedBox(height: context.getRSize(6)),
+                                  Row(
                                     children: [
-                                      Container(
-                                        width: context.getRSize(4),
-                                        height: context.getRSize(4),
-                                        margin: EdgeInsets.only(
-                                          right: context.getRSize(8),
-                                          top: context.getRSize(1),
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: subtextCol.withValues(
-                                            alpha: 0.5,
-                                          ),
-                                          shape: BoxShape.circle,
-                                        ),
+                                      AppIcon(
+                                        AppIcons.tag,
+                                        size: context.getRSize(14),
+                                        color: f.green,
                                       ),
+                                      SizedBox(width: context.getRSize(5)),
+                                      Text(
+                                        'Discount: -${formatCurrency(order.discountKobo / 100.0)}',
+                                        style: context
+                                            .semiBoldStyle(12)
+                                            .copyWith(color: f.green),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+
+                                // §19.2: no per-order "Owes" badge — settled at
+                                // checkout; customer debt shows via the wallet
+                                // badge above (rule #4), only when balance < 0.
+
+                                // ── Cancellation reason ───────────────────
+                                if (showCancelReason) ...[
+                                  if (canSeeMoney)
+                                    SizedBox(height: context.getRSize(6)),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      AppIcon(
+                                        AppIcons.infoCircle,
+                                        size: context.getRSize(14),
+                                        color: subtextCol,
+                                      ),
+                                      SizedBox(width: context.getRSize(5)),
                                       Expanded(
                                         child: Text(
-                                          '${item.quantity}× ${richItem.displayName}',
-                                          style: TextStyle(
-                                            color: textCol,
-                                            fontSize: context.getRFontSize(13),
-                                          ),
+                                          order.cancellationReason!,
+                                          style: context
+                                              .regularStyle(12)
+                                              .copyWith(
+                                                color: subtextCol,
+                                                fontStyle: FontStyle.italic,
+                                              ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      if (canSeeMoney)
-                                        Text(
-                                          formatCurrency(
-                                            item.totalKobo / 100.0,
-                                          ),
-                                          style: TextStyle(
-                                            color: textCol,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: context.getRFontSize(13),
-                                          ),
-                                        ),
                                     ],
                                   ),
-                                );
-                              }),
-                              if (extraCount > 0)
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: EdgeInsets.only(
-                                      left: context.getRSize(12),
-                                      top: context.getRSize(2),
-                                    ),
-                                    child: Text(
-                                      '+$extraCount more item${extraCount > 1 ? 's' : ''}',
-                                      style: TextStyle(
-                                        color: subtextCol,
-                                        fontSize: context.getRFontSize(12),
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            context.getRSize(14),
-                            context.getRSize(10),
-                            context.getRSize(14),
-                            context.getRSize(14),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (canSeeMoney || showCancelReason) ...[
-                                Divider(height: 1, color: borderCol),
-                                SizedBox(height: context.getRSize(10)),
-                              ],
-
-                              // ── Totals row (money — hidden below Manager) ──
-                              if (canSeeMoney)
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Text(
-                                              'Total  ',
-                                              style: TextStyle(
-                                                color: subtextCol,
-                                                fontSize: context.getRFontSize(
-                                                  12,
-                                                ),
-                                              ),
-                                            ),
-                                            Text(
-                                              formatCurrency(
-                                                order.netAmountKobo / 100.0,
-                                              ),
-                                              style: TextStyle(
-                                                color: primary,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: context.getRFontSize(
-                                                  15,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        SizedBox(height: context.getRSize(2)),
-                                        Text(
-                                          'Paid: ${formatCurrency(order.amountPaidKobo / 100.0)}',
-                                          style: TextStyle(
-                                            color: subtextCol,
-                                            fontSize: context.getRFontSize(12),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    // Debt badge (named customers, negative balance)
-                                    if (showCreditDebt)
-                                      _CreditDebtBadge(
-                                        balanceKobo: creditBalanceKobo,
-                                      ),
-                                  ],
-                                ),
-
-                              // ── Discount row (money — hidden below Manager) ─
-                              if (canSeeMoney && hasDiscount) ...[
-                                SizedBox(height: context.getRSize(6)),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      AppIcons.tag,
-                                      size: context.getRSize(11),
-                                      color: success,
-                                    ),
-                                    SizedBox(width: context.getRSize(5)),
-                                    Text(
-                                      'Discount: -${formatCurrency(order.discountKobo / 100.0)}',
-                                      style: TextStyle(
-                                        color: success,
-                                        fontSize: context.getRFontSize(12),
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-
-                              // §19.2: no per-order "Owes" badge — settled at
-                              // checkout; customer debt shows via the wallet
-                              // badge above (rule #4), only when balance < 0.
-
-                              // ── Cancellation reason ────────────────────
-                              if (showCancelReason) ...[
-                                if (canSeeMoney)
-                                  SizedBox(height: context.getRSize(6)),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(
-                                      AppIcons.infoCircle,
-                                      size: context.getRSize(11),
-                                      color: subtextCol,
-                                    ),
-                                    SizedBox(width: context.getRSize(5)),
-                                    Expanded(
-                                      child: Text(
-                                        order.cancellationReason!,
-                                        style: TextStyle(
-                                          color: subtextCol,
-                                          fontSize: context.getRFontSize(12),
-                                          fontStyle: FontStyle.italic,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-
-                        // ── Footer actions (pending only) ──────────────────
-                        if (status == 'pending')
-                          Container(
-                            padding: EdgeInsets.fromLTRB(
-                              context.getRSize(14),
-                              context.getRSize(12),
-                              context.getRSize(14),
-                              context.getRSize(14),
-                            ),
-                            decoration: BoxDecoration(
-                              color: surfaceCol,
-                              border: Border(top: BorderSide(color: borderCol)),
-                            ),
-                            child: Row(
-                              children: [
-                                // §19.7: Refund (CEO + Manager only — null hides
-                                // it). Replaces the former Cancel button.
-                                if (onRefund != null) ...[
-                                  Expanded(
-                                    child: AppButton(
-                                      text: 'Refund',
-                                      icon: AppIcons.refresh,
-                                      variant: AppButtonVariant.danger,
-                                      size: AppButtonSize.xsmall,
-                                      onPressed: onRefund,
-                                    ),
-                                  ),
-                                  SizedBox(width: context.getRSize(12)),
                                 ],
-                                if (onMarkAsDelivered != null)
-                                  Expanded(
-                                    child: AppButton(
-                                      text: 'Confirm',
-                                      icon: AppIcons.vanDelivery,
-                                      size: AppButtonSize.xsmall,
-                                      onPressed: onMarkAsDelivered,
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
-                      ],
+
+                          // ── Footer actions (pending only) ─────────────────
+                          if (status == 'pending' &&
+                              (onRefund != null || onMarkAsDelivered != null))
+                            Container(
+                              padding: EdgeInsets.fromLTRB(
+                                context.getRSize(12),
+                                context.getRSize(10),
+                                context.getRSize(12),
+                                context.getRSize(12),
+                              ),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  top: BorderSide(color: borderCol),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  // §19.7: Refund (CEO + Manager only — null
+                                  // hides it). Replaces the former Cancel button.
+                                  if (onRefund != null) ...[
+                                    Expanded(
+                                      child: AppButton(
+                                        key: OrdersKeys.refund,
+                                        text: 'Refund',
+                                        icon: AppIcons.refresh,
+                                        variant: AppButtonVariant.danger,
+                                        height: kMinInteractiveDimension,
+                                        onPressed: onRefund,
+                                      ),
+                                    ),
+                                    SizedBox(width: context.getRSize(12)),
+                                  ],
+                                  if (onMarkAsDelivered != null)
+                                    Expanded(
+                                      child: AppButton(
+                                        key: OrdersKeys.confirm,
+                                        text: 'Confirm',
+                                        icon: AppIcons.vanDelivery,
+                                        height: kMinInteractiveDimension,
+                                        onPressed: onMarkAsDelivered,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      );
-    }
-}
-
-// ═══════════════════════════ HELPER WIDGETS ══════════════════════════════════
-
-class _StatusBadge extends StatelessWidget {
-  final String status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final Color color;
-    final IconData icon;
-    final String label;
-
-    switch (status) {
-      case 'completed':
-        color = success;
-        icon = AppIcons.check;
-        label = 'DONE';
-        break;
-      // LEGACY ROWS ONLY (#196): `refunded` is a retired status — refunds have
-      // been `payment_transactions` rows since PRD #155 and nothing writes it
-      // any more. The branch stays because the Cancelled tab still LISTS
-      // historic orders that carry it (see the DAO's legacy tolerance), and
-      // badging one "CANCELLED" would misstate what happened to the money.
-      case 'refunded':
-        color = blueMain;
-        icon = AppIcons.refresh;
-        label = 'REFUNDED';
-        break;
-      default:
-        color = danger;
-        icon = AppIcons.block;
-        label = 'CANCELLED';
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(5),
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: context.getRSize(10), color: color),
-          SizedBox(width: context.getRSize(5)),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: context.getRFontSize(10),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PaymentBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _PaymentBadge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(4),
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.1)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: context.getRFontSize(10),
-        ),
-      ),
-    );
-  }
-}
-
-
-class _CreditDebtBadge extends StatelessWidget {
-  final int balanceKobo;
-  const _CreditDebtBadge({required this.balanceKobo});
-
-  @override
-  Widget build(BuildContext context) {
-    // balanceKobo is negative — show the debt amount positively
-    final debtAmount = balanceKobo.abs();
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(5),
-      ),
-      decoration: BoxDecoration(
-        color: danger.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: danger.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            AppIcons.creditBalance,
-            size: context.getRSize(10),
-            color: danger,
-          ),
-          SizedBox(width: context.getRSize(4)),
-          Text(
-            'Debt: ${formatCurrency(debtAmount / 100.0)}',
-            style: TextStyle(
-              color: danger,
-              fontWeight: FontWeight.bold,
-              fontSize: context.getRFontSize(10),
-            ),
-          ),
-        ],
       ),
     );
   }

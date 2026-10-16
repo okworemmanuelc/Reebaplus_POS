@@ -389,9 +389,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     // resize lifts the sheet above the keyboard). Same fix the cart's
     // change-customer sheet uses.
     return Container(
-      constraints: BoxConstraints(
-        maxHeight: context.sheetMaxHeight(0.9),
-      ),
+      constraints: BoxConstraints(maxHeight: context.sheetMaxHeight(0.9)),
       decoration: BoxDecoration(
         color: _bg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
