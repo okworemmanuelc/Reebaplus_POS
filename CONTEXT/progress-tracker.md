@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #413 PR 2: Daily Reconciliation list + detail + changed-since-review badge (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-recon`, stacked on `feat/redesign-w2-reports` (PR #415). **Restyle only: `recon_data.dart` untouched; every figure and card order unchanged; no cash balance (Hard Rule #8); no gate, write path, Drift/cloud/sync change.**
+- List: `ReportTopBar`, period `AppDropdown` (still `showDateRangePicker` for Custom, explicit item styles), day cards with `StatusPill` (Mismatch) and the badge, 720 raw cap, Export CSV kept.
+- Detail: raw 960 column; cards in two columns (reading order kept) when the measured width is >= 900; Colors.blueAccent/redAccent, semantic and `colorScheme.error` replaced by `AppFixedColors`.
+- `ChangedSinceReviewBadge` is now a warning `TagPill` (same label, same two call sites).
+- Tests: `test/dashboard/recon_screens_redesign_test.dart`; goldens `test/redesign/recon_golden_test.dart` (16 images).
+
 ### Issue #413 PR 1: Dashboard reports restyle, hub + Sales Detail + Profit + Crate Deposits + Supplier Accounts (Wave 2 B, 2026-10-16)
 Branch `feat/redesign-w2-reports`, worktree `../drinkPosApp-wt-413`. **Restyle only: no figure, gate, write path, Drift/cloud/sync change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.** PR 2 (Daily Reconciliation list + detail) and PR 3 (Stock Approvals) follow.
 - New `dashboard/widgets/report_parts.dart` (local; shared-part candidates `ReportTopBar` and the figure / row / empty parts): top bar, 48dp back and export, `reportGutter` (720 list cap, measured), `ReportHeadlineCard`, `ReportChip`, `ReportValueRow`, `ReportHubCard`, `ReportEmpty`.
