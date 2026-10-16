@@ -427,7 +427,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           ],
                         ]) ...[
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               for (final (i, opt) in pair.indexed) ...[
                                 if (i > 0) SizedBox(width: ctx.getRSize(10)),
