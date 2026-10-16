@@ -330,14 +330,18 @@ void main() {
         container: container,
         child: MaterialApp(
           home: Scaffold(
-            body: ReceiveProductGrid(
-              products: [
-                ProductDataWithStock(product: gridProduct(), totalStock: 10),
+            // The grid is a sliver since #394 (one scroll view, PRD #239).
+            body: CustomScrollView(
+              slivers: [
+                ReceiveProductGrid(
+                  products: [
+                    ProductDataWithStock(
+                      product: gridProduct(),
+                      totalStock: 10,
+                    ),
+                  ],
+                ),
               ],
-              cardCol: Colors.white,
-              textCol: Colors.black,
-              subtextCol: Colors.grey,
-              borderCol: Colors.grey,
             ),
           ),
         ),

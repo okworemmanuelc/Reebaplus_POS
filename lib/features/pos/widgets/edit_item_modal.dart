@@ -6,7 +6,13 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -225,7 +231,6 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final border = t.dividerColor;
     final text = t.colorScheme.onSurface;
     final primary = t.colorScheme.primary;
 
@@ -243,7 +248,8 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     final hasCustomPrice = canSetCustomPrice && customKobo > 0;
 
     // Define the custom price floor
-    final floorKobo = (catalogUnitPriceKobo * (100 - maxPercent) / 100.0).round();
+    final floorKobo = (catalogUnitPriceKobo * (100 - maxPercent) / 100.0)
+        .round();
 
     // Auto-snap the custom price input to the floor when custom price is below floor.
     if (hasCustomPrice && customKobo < floorKobo) {
@@ -284,7 +290,8 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
 
     // Option A: clamp the discount so that the effective unit price after discount
     // does not dip below floorKobo.
-    final maxLineDiscountKobo = ((effectiveUnitPriceKobo - floorKobo) * qty).round();
+    final maxLineDiscountKobo = ((effectiveUnitPriceKobo - floorKobo) * qty)
+        .round();
     final discountKobo = resolved.discountKobo.clamp(0, maxLineDiscountKobo);
 
     // Auto-snap the percent input to the role cap when exceeded (§13.2).
@@ -299,146 +306,59 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
       });
     }
 
+    final muted = t.textTheme.bodySmall?.color ?? text;
     return Container(
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 30,
-            offset: const Offset(0, -10),
-          ),
-        ],
-      ),
+      key: EditItemKeys.sheet,
+      decoration: salesSheetDecoration(context),
       // Scrolls so the fixed-height content never overflows when the keyboard
       // shrinks the sheet. Bottom padding is nav-only (deviceBottomPadding) —
       // MainLayout's Scaffold resize lifts the sheet above the keyboard, and the
       // scroll view lets the last field clear it.
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-          context.getRSize(24),
-          context.getRSize(16),
-          context.getRSize(24),
-          context.deviceBottomPadding + context.getRSize(24),
+          context.getRSize(20),
+          context.getRSize(12),
+          context.getRSize(20),
+          context.deviceBottomPadding + context.getRSize(20),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Drag Handle
-            Center(
-              child: Container(
-                width: context.getRSize(40),
-                height: context.getRSize(4),
-                decoration: BoxDecoration(
-                  color: border.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+            SalesSheetHeader(
+              title: widget.isNew ? 'Add to Cart' : 'Edit Quantity',
+              subtitle: widget.item['name'] as String?,
+              leading: IconTile(
+                icon: widget.isNew ? AppIcons.cartAdd : AppIcons.edit,
+                size: 44,
               ),
-            ),
-            SizedBox(height: context.getRSize(24)),
-
-            // Header with Icon
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(context.getRSize(14)),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        primary.withValues(alpha: 0.2),
-                        primary.withValues(alpha: 0.1),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Icon(
-                    AppIcons.pharmacy,
-                    size: context.getRSize(20),
-                    color: primary,
-                  ),
-                ),
-                SizedBox(width: context.getRSize(16)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.isNew ? 'Add to Cart' : 'Edit Quantity',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(20),
-                          fontWeight: FontWeight.w900,
-                          color: text,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      Text(
-                        widget.item['name'],
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(14),
-                          color: text.withValues(alpha: 0.5),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Material(
-                  color: border.withValues(alpha: 0.1),
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(
-                      AppIcons.close,
-                      size: context.getRSize(20),
-                      color: text.withValues(alpha: 0.5),
-                    ),
-                  ),
+              trailing: [
+                SalesBackButton(
+                  key: EditItemKeys.close,
+                  icon: AppIcons.close,
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
-            SizedBox(height: context.getRSize(32)),
+            SizedBox(height: context.getRSize(20)),
 
-            // Premium Quantity Selector
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(12),
-                vertical: context.getRSize(12),
-              ),
-              decoration: BoxDecoration(
-                color: t.colorScheme.surface,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: border.withValues(alpha: 0.6),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: primary.withValues(alpha: 0.05),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  _qtyBtn(
-                    AppIcons.minus,
-                    () => _updateQty(-1),
-                    color: Colors.red,
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  Expanded(
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        vertical: context.getRSize(4),
-                      ),
-                      decoration: BoxDecoration(
-                        color: border.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+            // Quantity: − field + (the Cart line's stepper look, 48dp).
+            DecoratedBox(
+              key: EditItemKeys.quantity,
+              decoration: AppDecorations.card(context),
+              child: Padding(
+                padding: EdgeInsets.all(context.getRSize(10)),
+                child: Row(
+                  children: [
+                    SalesStepButton(
+                      key: EditItemKeys.minus,
+                      icon: AppIcons.minus,
+                      tooltip: 'Less',
+                      onPressed: () => _updateQty(-1),
+                    ),
+                    SizedBox(width: context.getRSize(10)),
+                    Expanded(
                       child: AppInput(
                         controller: _qtyCtrl,
                         autofocus: true,
@@ -449,25 +369,23 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                           CurrencyInputFormatter(grouping: false),
                         ],
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(32),
-                          fontWeight: FontWeight.w900,
-                          color: primary,
-                          letterSpacing: 1,
-                        ),
+                        style: context
+                            .extraBoldStyle(28)
+                            .copyWith(color: primary),
                         border: InputBorder.none,
                         fillColor: Colors.transparent,
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  _qtyBtn(
-                    AppIcons.add,
-                    () => _updateQty(1),
-                    color: Colors.green,
-                  ),
-                ],
+                    SizedBox(width: context.getRSize(10)),
+                    SalesStepButton(
+                      key: EditItemKeys.plus,
+                      icon: AppIcons.add,
+                      tooltip: 'More',
+                      onPressed: () => _updateQty(1),
+                    ),
+                  ],
+                ),
               ),
             ),
             // Micro-adjustment chips — only when the product allows
@@ -489,11 +407,8 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               SizedBox(height: context.getRSize(10)),
               Text(
                 '${_trimNum(_inCartAtOpen)} already in cart',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  fontWeight: FontWeight.w700,
-                  color: primary,
-                ),
+                textAlign: TextAlign.center,
+                style: context.boldStyle(12).copyWith(color: primary),
               ),
             ],
             // Available-stock cap hint — only in add mode (§16).
@@ -501,15 +416,12 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               SizedBox(height: context.getRSize(10)),
               Text(
                 '${_trimNum(widget.maxStock)} in stock — quantity can\'t exceed this',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  fontWeight: FontWeight.w600,
-                  color: text.withValues(alpha: 0.5),
-                ),
+                textAlign: TextAlign.center,
+                style: context.semiBoldStyle(12).copyWith(color: muted),
               ),
             ],
 
-            SizedBox(height: context.getRSize(28)),
+            SizedBox(height: context.getRSize(20)),
 
             // ── Custom Price (§13.4) ──────────────────────────────────────────
             // Only for users granted `sales.set_custom_price`. Lets the line be
@@ -523,7 +435,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                 maxPercent: maxPercent,
                 customKobo: customKobo,
               ),
-              SizedBox(height: context.getRSize(28)),
+              SizedBox(height: context.getRSize(20)),
             ],
 
             // ── Apply Discount (§13.2) ────────────────────────────────────────
@@ -535,7 +447,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               cappedByRole: resolved.cappedByRole,
             ),
 
-            SizedBox(height: context.getRSize(32)),
+            SizedBox(height: context.getRSize(24)),
 
             // Action Buttons
             if (widget.isNew)
@@ -546,7 +458,6 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                     child: AppButton(
                       text: 'Cancel',
                       variant: AppButtonVariant.ghost,
-                      height: context.getRSize(56),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
@@ -556,7 +467,6 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                     child: AppButton(
                       text: 'Add to Cart',
                       variant: AppButtonVariant.primary,
-                      height: context.getRSize(56),
                       onPressed: () {
                         final cart = ref.read(cartProvider);
                         final id = widget.newProduct!.id;
@@ -611,7 +521,6 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                       text: 'Remove',
                       variant: AppButtonVariant.danger,
                       icon: AppIcons.delete,
-                      height: context.getRSize(56),
                       onPressed: () {
                         ref.read(cartProvider).removeItem(widget.item['name']);
                         // Return the removed line so the cart can offer Undo.
@@ -625,7 +534,6 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                     child: AppButton(
                       text: 'Save Changes',
                       variant: AppButtonVariant.primary,
-                      height: context.getRSize(56),
                       onPressed: () {
                         final cart = ref.read(cartProvider);
                         final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
@@ -670,51 +578,40 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     required int customKobo,
   }) {
     final t = Theme.of(context);
-    final text = t.colorScheme.onSurface;
     final primary = t.colorScheme.primary;
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
 
     final showCustomWarning = hasCustomPrice && customKobo <= floorKobo;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'CUSTOM PRICE',
-          style: TextStyle(
-            fontSize: context.getRFontSize(12),
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.5,
-            color: text.withValues(alpha: 0.5),
-          ),
-        ),
-        SizedBox(height: context.getRSize(6)),
+        _sectionLabel('CUSTOM PRICE'),
+        SizedBox(height: context.getRSize(4)),
         Text(
           'Designated price: ${formatCurrency(catalogUnitPriceKobo / 100.0)}',
-          style: TextStyle(
-            fontSize: context.getRFontSize(12),
-            fontWeight: FontWeight.w600,
-            color: text.withValues(alpha: 0.5),
-          ),
+          style: context.semiBoldStyle(12).copyWith(color: muted),
         ),
         SizedBox(height: context.getRSize(10)),
         Row(
           children: [
             Container(
-              width: context.getRSize(44),
-              height: context.getRSize(44),
+              width: kMinInteractiveDimension,
+              height: kMinInteractiveDimension,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
+                color: Color.alphaBlend(
+                  t.extension<AppSchemeColors>()?.primaryTint ??
+                      primary.withValues(alpha: 0.12),
+                  t.colorScheme.surface,
+                ),
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
                 border: Border.all(color: primary.withValues(alpha: 0.5)),
               ),
               child: Text(
                 activeCurrencySymbol,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(16),
-                  fontWeight: FontWeight.w800,
-                  color: primary,
-                ),
+                style: context.extraBoldStyle(16).copyWith(color: primary),
               ),
             ),
             SizedBox(width: context.getRSize(12)),
@@ -735,22 +632,14 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
           Text(
             'Selling at ${formatCurrency(effectiveUnitPriceKobo / 100.0)} per '
             'unit (was ${formatCurrency(catalogUnitPriceKobo / 100.0)}).',
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w700,
-              color: primary,
-            ),
+            style: context.boldStyle(13).copyWith(color: primary),
           ),
         ],
         if (showCustomWarning) ...[
           SizedBox(height: context.getRSize(4)),
           Text(
             'Lowest allowed price is ${formatCurrency(floorKobo / 100.0)} (max discount $maxPercent%).',
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).extension<AppSemanticColors>()?.warning ?? Colors.orange.shade700,
-            ),
+            style: context.semiBoldStyle(12).copyWith(color: f.warning),
           ),
         ],
       ],
@@ -765,35 +654,32 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     required bool cappedByRole,
   }) {
     final t = Theme.of(context);
-    final text = t.colorScheme.onSurface;
-    final border = t.dividerColor;
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
 
     // Cashier (or any role capped at 0%): blocked entirely (§13.2).
     if (!canDiscount) {
       return Container(
+        key: EditItemKeys.discountBlocked,
         width: double.infinity,
-        padding: EdgeInsets.all(context.getRSize(14)),
+        padding: EdgeInsets.all(context.getRSize(12)),
         decoration: BoxDecoration(
-          color: border.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: border.withValues(alpha: 0.15)),
+          color: f.neutralTile,
+          borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+          border: Border.all(color: t.dividerColor),
         ),
         child: Row(
           children: [
-            Icon(
+            AppIcon(
               AppIcons.lock,
-              size: context.getRSize(14),
-              color: text.withValues(alpha: 0.45),
+              size: context.getRSize(18),
+              color: f.neutralIcon,
             ),
             SizedBox(width: context.getRSize(10)),
             Expanded(
               child: Text(
                 'Discounts not allowed at your role. Ask Manager.',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.w600,
-                  color: text.withValues(alpha: 0.6),
-                ),
+                style: context.semiBoldStyle(13).copyWith(color: muted),
               ),
             ),
           ],
@@ -806,15 +692,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'APPLY DISCOUNT',
-          style: TextStyle(
-            fontSize: context.getRFontSize(12),
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.5,
-            color: text.withValues(alpha: 0.5),
-          ),
-        ),
+        _sectionLabel('APPLY DISCOUNT'),
         SizedBox(height: context.getRSize(10)),
         Row(
           children: [
@@ -841,61 +719,73 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
           Text(
             'Saving ${formatCurrency(discountKobo / 100.0)} — '
             'new line total: ${formatCurrency(newLineTotal / 100.0)}',
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w700,
-              color: Colors.green.shade600,
-            ),
+            style: context.boldStyle(13).copyWith(color: f.green),
           ),
         if (cappedByRole)
           Padding(
             padding: EdgeInsets.only(top: context.getRSize(4)),
             child: Text(
               'Maximum discount is $maxPercent%. Capped.',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                fontWeight: FontWeight.w600,
-                color: Colors.orange.shade700,
-              ),
+              style: context.semiBoldStyle(12).copyWith(color: f.warning),
             ),
           ),
       ],
     );
   }
 
+  /// A muted uppercase group label ("CUSTOM PRICE", "APPLY DISCOUNT").
+  Widget _sectionLabel(String text) {
+    final t = Theme.of(context);
+    return Text(
+      text,
+      style: context
+          .boldStyle(12)
+          .copyWith(
+            letterSpacing: 0.5,
+            color: t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface,
+          ),
+    );
+  }
+
+  /// The % / currency toggle: a 48dp square, selected = primary tint + border.
   Widget _kindChip(String label, String kind) {
     final t = Theme.of(context);
     final selected = _discountKind == kind;
     final primary = t.colorScheme.primary;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => setState(() => _discountKind = kind),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: context.getRSize(44),
-          height: context.getRSize(44),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected
-                ? primary.withValues(alpha: 0.12)
-                : t.dividerColor.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected
-                  ? primary.withValues(alpha: 0.5)
-                  : t.dividerColor.withValues(alpha: 0.15),
-              width: selected ? 1.5 : 1,
-            ),
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Material(
+        color: selected
+            ? Color.alphaBlend(
+                t.extension<AppSchemeColors>()?.primaryTint ??
+                    primary.withValues(alpha: 0.12),
+                t.colorScheme.surface,
+              )
+            : t.colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(
+            color: selected ? primary : t.dividerColor,
+            width: selected ? 1.5 : 1,
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(16),
-              fontWeight: FontWeight.w800,
-              color: selected
-                  ? primary
-                  : t.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+        child: InkWell(
+          key: EditItemKeys.kind(kind),
+          onTap: () => setState(() => _discountKind = kind),
+          borderRadius: radius,
+          child: SizedBox(
+            width: kMinInteractiveDimension,
+            height: kMinInteractiveDimension,
+            child: Center(
+              child: Text(
+                label,
+                style: context
+                    .extraBoldStyle(16)
+                    .copyWith(color: selected ? primary : muted),
+              ),
             ),
           ),
         ),
@@ -903,55 +793,49 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     );
   }
 
-  Widget _qtyBtn(IconData icon, VoidCallback onTap, {required Color color}) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          width: context.getRSize(60),
-          height: context.getRSize(60),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: isDark ? 0.15 : 0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
-          ),
-          child: Icon(icon, size: context.getRSize(20), color: color),
-        ),
-      ),
-    );
-  }
-
+  /// A ±0.5 chip for fractional sales, 48dp tall.
   Widget _microAdjustChip(String label, VoidCallback onTap) {
     final t = Theme.of(context);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
     return Material(
-      color: Colors.transparent,
+      color: t.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: radius,
+        side: BorderSide(color: t.dividerColor),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: context.getRSize(16),
-            vertical: context.getRSize(8),
+        borderRadius: radius,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: kMinInteractiveDimension,
+            minWidth: kMinInteractiveDimension,
           ),
-          decoration: BoxDecoration(
-            color: t.dividerColor.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: t.dividerColor.withValues(alpha: 0.1)),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w700,
-              color: t.colorScheme.onSurface.withValues(alpha: 0.7),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
+            child: Center(
+              widthFactor: 1,
+              child: Text(
+                label,
+                style: context
+                    .boldStyle(13)
+                    .copyWith(color: t.colorScheme.onSurface),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Keys the Edit Item tests find the parts by (#393).
+abstract final class EditItemKeys {
+  static const sheet = Key('edit-item-sheet');
+  static const close = Key('edit-item-close');
+  static const quantity = Key('edit-item-quantity');
+  static const minus = Key('edit-item-minus');
+  static const plus = Key('edit-item-plus');
+  static const discountBlocked = Key('edit-item-discount-blocked');
+  static Key kind(String kind) => Key('edit-item-kind-$kind');
 }

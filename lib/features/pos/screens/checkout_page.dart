@@ -19,9 +19,17 @@ import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+    show kSettingsMaxContentWidth;
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/section_header.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -34,7 +42,6 @@ import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
-import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CheckoutPage — shown after "Proceed to Checkout" in the cart.
@@ -139,7 +146,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
   Color get _primary => Theme.of(context).colorScheme.primary;
-  Color get _onPrimary => Theme.of(context).colorScheme.onPrimary;
 
   @override
   void initState() {
@@ -326,8 +332,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// till. The two are equal because since #202 the cart's goods total is
   /// exactly subtotal − discounts, with no third term (see
   /// `ReceiptTotals.totalKobo`).
-  int get _discountTotalKobo =>
-      widget.cart.fold<int>(0, (s, i) => s + ((i['discountKobo'] as int?) ?? 0));
+  int get _discountTotalKobo => widget.cart.fold<int>(
+    0,
+    (s, i) => s + ((i['discountKobo'] as int?) ?? 0),
+  );
 
   /// True when the crate deposit is captured for this sale: a registered
   /// customer (walk-ins have no wallet to hold it, rule #14) paying Cash /
@@ -369,254 +377,213 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     ); // rebuild money displays when currency changes
     return Scaffold(
       backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            AppIcons.arrowBackIosNew,
-            size: context.getRSize(20),
-            color: _text,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          _paymentConfirmed
-              ? 'Receipt'
-              : 'Checkout – ${formatCurrency(_totalKobo / 100)}',
-          style: TextStyle(
-            fontSize: context.getRFontSize(18),
-            fontWeight: FontWeight.w800,
-            color: _text,
-          ),
-        ),
-        centerTitle: false,
+      appBar: SalesTopBar(
+        key: CheckoutKeys.topBar,
+        height: salesTopBarHeight(context),
+        icon: _paymentConfirmed ? AppIcons.receipt : AppIcons.cartCheckout,
+        title: _paymentConfirmed ? 'Receipt' : 'Checkout',
+        // The payable total, live (it moves with the crate deposit).
+        subtitle: _paymentConfirmed ? null : formatCurrency(_totalKobo / 100),
+        leading: SalesBackButton(onPressed: () => Navigator.pop(context)),
       ),
-      body: SafeArea(
-        top: false,
-        child: _paymentConfirmed ? _buildReceiptView() : _buildCheckoutForm(),
+      body: DecoratedBox(
+        decoration: AppDecorations.pageBackground(context),
+        child: SafeArea(
+          top: false,
+          child: _paymentConfirmed ? _buildReceiptView() : _buildCheckoutForm(),
+        ),
       ),
     );
   }
+
+  /// Caps [child] at the settings-list width (720) and centres it; on a
+  /// narrower screen (or in the cart panel) it fills the width.
+  Widget _capped(Widget child) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: kSettingsMaxContentWidth),
+      child: child,
+    ),
+  );
+
+  AppFixedColors get _fixed =>
+      Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CHECKOUT FORM
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildCheckoutForm() {
     return SingleChildScrollView(
+      key: CheckoutKeys.form,
       padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(20),
-        context.getRSize(20),
+        context.getRSize(16),
+        context.getRSize(16),
+        context.getRSize(16),
         context.getRSize(40) + context.deviceBottomPadding,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Order Summary ─────────────────────────────────────────────
-          _sectionLabel('Order Summary'),
-          SizedBox(height: context.getRSize(12)),
-          Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _border),
+      child: _capped(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Order Summary ─────────────────────────────────────────────
+            _sectionLabel('Order Summary'),
+            SizedBox(height: context.getRSize(10)),
+            DecoratedBox(
+              key: CheckoutKeys.summary,
+              decoration: AppDecorations.card(context),
+              child: Column(
+                children: [
+                  SizedBox(height: context.getRSize(4)),
+                  ...widget.cart.map(_orderItemTile),
+                  SizedBox(height: context.getRSize(4)),
+                  Divider(height: 1, color: _border),
+                  _summaryRow('Subtotal', widget.subtotal),
+                  // #200 / US 33 — the discount is already out of Total but was
+                  // not on this card, so the summary showed a Total below its
+                  // own Subtotal with nothing explaining it. Same line the
+                  // receipt this screen is about to print now shows.
+                  if (_discountTotalKobo > 0)
+                    _summaryRow('Discount', -_discountTotalKobo / 100.0),
+                  if (_depositTotalKobo > 0)
+                    _summaryRow('Crate Deposit', _depositTotalKobo / 100.0),
+                  Divider(height: 1, color: _border),
+                  _summaryRow(
+                    'Total',
+                    _totalKobo / 100.0,
+                    bold: true,
+                    accent: true,
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              children: [
-                ...widget.cart.map(_orderItemTile),
-                Divider(height: 1, color: _border),
-                _summaryRow('Subtotal', widget.subtotal),
-                // #200 / US 33 — the discount is already out of Total but was
-                // not on this card, so the summary showed a Total below its own
-                // Subtotal with nothing explaining it. Same line the receipt
-                // this screen is about to print now shows.
-                if (_discountTotalKobo > 0)
-                  _summaryRow('Discount', -_discountTotalKobo / 100.0),
-                if (_depositTotalKobo > 0)
-                  _summaryRow('Crate Deposit', _depositTotalKobo / 100.0),
-                Divider(height: 1, color: _border),
-                _summaryRow(
-                  'Total',
-                  _totalKobo / 100.0,
-                  bold: true,
-                  accent: true,
-                ),
-              ],
-            ),
-          ),
 
-          // ── Crates Taken & Deposit ────────────────────────────────────
-          if (_isCrateBusiness && widget.crateLines.isNotEmpty) ...[
-            SizedBox(height: context.getRSize(28)),
-            // Carried through from the cart: a brand with no deposit rate set
-            // shows ₦0 in both sections below, which reads like a deliberate
-            // "no deposit" rather than missing setup. Name the brands first.
-            if (_unratedCrateBrands.isNotEmpty) ...[
-              _buildMissingCrateValueNotice(),
-              SizedBox(height: context.getRSize(12)),
+            // ── Crates Taken & Deposit ────────────────────────────────────
+            if (_isCrateBusiness && widget.crateLines.isNotEmpty) ...[
+              SizedBox(height: context.getRSize(24)),
+              // Carried through from the cart: a brand with no deposit rate set
+              // shows ₦0 in both sections below, which reads like a deliberate
+              // "no deposit" rather than missing setup. Name the brands first.
+              if (_unratedCrateBrands.isNotEmpty) ...[
+                _buildMissingCrateValueNotice(),
+                SizedBox(height: context.getRSize(12)),
+              ],
+              if (_depositApplies)
+                _buildCrateDepositSection()
+              else
+                _buildReadOnlyCratesSection(),
             ],
-            if (_depositApplies)
-              _buildCrateDepositSection()
-            else
-              _buildReadOnlyCratesSection(),
-          ],
 
-          SizedBox(height: context.getRSize(28)),
-          // ── Customer Info ─────────────────────────────────────────────
-          _sectionLabel('Customer'),
-          SizedBox(height: context.getRSize(12)),
-          Container(
-            padding: EdgeInsets.all(context.getRSize(14)),
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _border),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(context.getRSize(10)),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    _isWalkIn
-                        ? AppIcons.customerRole
-                        : AppIcons.user,
-                    size: context.getRSize(16),
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                SizedBox(width: context.getRSize(14)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _customerDisplayName,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: context.getRFontSize(14),
-                          color: _text,
-                        ),
+            SizedBox(height: context.getRSize(24)),
+            // ── Customer Info ─────────────────────────────────────────────
+            _sectionLabel('Customer'),
+            SizedBox(height: context.getRSize(10)),
+            DecoratedBox(
+              key: CheckoutKeys.customer,
+              decoration: AppDecorations.card(context),
+              child: Padding(
+                padding: EdgeInsets.all(context.getRSize(12)),
+                child: Row(
+                  children: [
+                    IconTile(
+                      icon: _isWalkIn ? AppIcons.customerRole : AppIcons.user,
+                      tone: _isWalkIn
+                          ? IconTileTone.neutral
+                          : IconTileTone.info,
+                      size: 40,
+                    ),
+                    SizedBox(width: context.getRSize(10)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _customerDisplayName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.boldStyle(15).copyWith(color: _text),
+                          ),
+                          if (!_isWalkIn && widget.customer != null) ...[
+                            SizedBox(height: context.getRSize(2)),
+                            Builder(
+                              builder: (_) {
+                                final w = _walletBalanceFor(
+                                  widget.customer!.id,
+                                );
+                                return Text(
+                                  // Sign + colour convey credit vs debt — no
+                                  // suffix.
+                                  'Credits Balance: ${formatCurrency(w)}',
+                                  style: context
+                                      .semiBoldStyle(12)
+                                      .copyWith(
+                                        color: _balanceColor(w, zero: _subtext),
+                                      ),
+                                );
+                              },
+                            ),
+                          ],
+                        ],
                       ),
-                      if (!_isWalkIn && widget.customer != null) ...[
-                        SizedBox(height: context.getRSize(2)),
-                        Builder(
-                          builder: (_) {
-                            final w = _walletBalanceFor(widget.customer!.id);
-                            return Text(
-                              // Sign + colour convey credit vs debt — no suffix.
-                              'Credits Balance: ${formatCurrency(w)}',
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(12),
-                                color: w < 0
-                                    ? danger
-                                    : w > 0
-                                    ? success
-                                    : _subtext,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
 
-          SizedBox(height: context.getRSize(28)),
-          // ── Payment Method ────────────────────────────────────────────
-          _sectionLabel('Payment Method'),
-          SizedBox(height: context.getRSize(12)),
+            SizedBox(height: context.getRSize(24)),
+            // ── Payment Method ────────────────────────────────────────────
+            _sectionLabel('Payment Method'),
+            SizedBox(height: context.getRSize(10)),
 
-          _buildPaymentMethods(),
+            _buildPaymentMethods(),
 
-          SizedBox(height: context.getRSize(32)),
-          AppButton(
-            text: 'Confirm Payment',
-            variant: AppButtonVariant.primary,
-            isLoading: _isProcessing,
-            icon: AppIcons.check,
-            onPressed: _confirmPayment,
-          ),
-        ],
+            SizedBox(height: context.getRSize(28)),
+            AppButton(
+              key: CheckoutKeys.confirm,
+              text: 'Confirm Payment',
+              variant: AppButtonVariant.primary,
+              isLoading: _isProcessing,
+              icon: AppIcons.check,
+              onPressed: _confirmPayment,
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  /// Credit (green), debt (red) or nothing ([zero], plain text by default) —
+  /// the sign of [value].
+  Color _balanceColor(double value, {Color? zero}) => value < 0
+      ? _fixed.danger
+      : value > 0
+      ? _fixed.green
+      : (zero ?? _text);
 
   /// Brands in this sale whose per-crate deposit rate is unset (ADR 0023 rule 2
   /// — `manufacturers.deposit_amount_kobo`). Their crates are still recorded,
   /// but valued at nothing: `createOrder` writes `depositRateKobo: 0` on the
   /// order's crate line and, with no deposit paid, issues the crate debt at ₦0.
   /// Sorted for a stable read.
-  List<String> get _unratedCrateBrands =>
-      <String>{
-        for (final line in widget.crateLines)
-          if (((line['rateKobo'] as int?) ?? 0) <= 0)
-            (line['name'] as String?) ?? 'Brand',
-      }.toList()..sort();
+  List<String> get _unratedCrateBrands => <String>{
+    for (final line in widget.crateLines)
+      if (((line['rateKobo'] as int?) ?? 0) <= 0)
+        (line['name'] as String?) ?? 'Brand',
+  }.toList()..sort();
 
   /// Names the unrated brands at the point of payment. Informational — the sale
   /// completes either way; see [_unratedCrateBrands] for what it costs.
   Widget _buildMissingCrateValueNotice() {
-    final warning =
-        Theme.of(context).extension<AppSemanticColors>()?.warning ??
-        AppColors.warning;
     final brands = _unratedCrateBrands;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: warning.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: warning.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            AppIcons.warning,
-            size: context.getRSize(14),
-            color: warning,
-          ),
-          SizedBox(width: context.getRSize(10)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  brands.length == 1
-                      ? 'No crate value set for ${brands.single}'
-                      : 'No crate value set for: ${brands.join(', ')}',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w800,
-                    color: _text,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(6)),
-                Text(
-                  'These crates are recorded as taken, but worth nothing until '
-                  'a crate value is set for the brand. You can complete this '
-                  'sale — no deposit will be collected for them.',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return SalesNotice(
+      key: CheckoutKeys.crateValueMissing,
+      tone: SalesNoticeTone.warning,
+      title: brands.length == 1
+          ? 'No crate value set for ${brands.single}'
+          : 'No crate value set for: ${brands.join(', ')}',
+      message:
+          'These crates are recorded as taken, but worth nothing until '
+          'a crate value is set for the brand. You can complete this '
+          'sale — no deposit will be collected for them.',
     );
   }
 
@@ -627,74 +594,27 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// "Crate deposit held"), not income — it's settled when the empties come back.
   Widget _buildCrateDepositSection() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      key: CheckoutKeys.crateDeposit,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _sectionLabel('Crate Deposit'),
-        SizedBox(height: context.getRSize(6)),
+        SizedBox(height: context.getRSize(4)),
         Text(
           'Refundable deposit held for the empties. Each brand starts at '
           '${formatCurrency(0)} — tap a brand to enter how much was paid.',
-          style: TextStyle(fontSize: context.getRFontSize(12), color: _subtext),
+          style: context.regularStyle(12).copyWith(color: _subtext),
         ),
-        SizedBox(height: context.getRSize(12)),
+        SizedBox(height: context.getRSize(10)),
         // Full/expected deposit reference (rate × crates across all brands).
-        Container(
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(
-            horizontal: context.getRSize(14),
-            vertical: context.getRSize(12),
-          ),
-          decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  'Full deposit if collected',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w700,
-                    color: _text,
-                  ),
-                ),
-              ),
-              Text(
-                formatCurrency(_fullDepositKobo / 100.0),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(15),
-                  fontWeight: FontWeight.w800,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ],
-          ),
+        _amountBox(
+          'Full deposit if collected',
+          formatCurrency(_fullDepositKobo / 100.0),
+          _primary,
         ),
-        SizedBox(height: context.getRSize(12)),
-        Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _border),
-          ),
-          child: Column(
-            children: [
-              for (int i = 0; i < widget.crateLines.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: _border),
-                _crateDepositRow(widget.crateLines[i]),
-              ],
-            ],
-          ),
-        ),
+        SizedBox(height: context.getRSize(10)),
+        _crateCard([
+          for (final line in widget.crateLines) _crateDepositRow(line),
+        ]),
       ],
     );
   }
@@ -704,33 +624,83 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// (walk-ins, Wallet, or Credit Sale modes).
   Widget _buildReadOnlyCratesSection() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      key: CheckoutKeys.cratesTaken,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _sectionLabel('Empty Crates Being Taken'),
-        SizedBox(height: context.getRSize(6)),
+        SizedBox(height: context.getRSize(4)),
         Text(
           _isWalkIn
               ? 'Walk-in customers do not pay a crate deposit. Ensure empties are returned.'
               : 'No deposit is collected for this payment mode. Crates will be tracked on the customer\'s balance.',
-          style: TextStyle(fontSize: context.getRFontSize(12), color: _subtext),
+          style: context.regularStyle(12).copyWith(color: _subtext),
         ),
-        SizedBox(height: context.getRSize(12)),
-        Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _border),
-          ),
-          child: Column(
-            children: [
-              for (int i = 0; i < widget.crateLines.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: _border),
-                _readOnlyCrateRow(widget.crateLines[i]),
-              ],
-            ],
-          ),
-        ),
+        SizedBox(height: context.getRSize(10)),
+        _crateCard([
+          for (final line in widget.crateLines) _readOnlyCrateRow(line),
+        ]),
       ],
+    );
+  }
+
+  /// One flat card holding the per-brand crate rows, hairlines between them.
+  Widget _crateCard(List<Widget> rows) {
+    return DecoratedBox(
+      decoration: AppDecorations.card(context),
+      child: Column(
+        children: [
+          for (int i = 0; i < rows.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: _border),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// The brand's crate tile + name + detail line, shared by both crate rows.
+  Widget _crateRowBody(
+    String name,
+    String detail, {
+    List<Widget> trailing = const [],
+  }) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(12),
+          vertical: context.getRSize(10),
+        ),
+        child: Row(
+          children: [
+            const IconTile(
+              icon: AppIcons.crates,
+              tone: IconTileTone.warning,
+              size: 40,
+            ),
+            SizedBox(width: context.getRSize(10)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.boldStyle(14).copyWith(color: _text),
+                  ),
+                  SizedBox(height: context.getRSize(2)),
+                  Text(
+                    detail,
+                    style: context.regularStyle(12).copyWith(color: _subtext),
+                  ),
+                ],
+              ),
+            ),
+            ...trailing,
+          ],
+        ),
+      ),
     );
   }
 
@@ -738,56 +708,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final name = (line['name'] as String?) ?? 'Brand';
     final crates = (line['crates'] as num?)?.toDouble() ?? 0;
 
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(context.getRSize(8)),
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              AppIcons.beerMug,
-              size: context.getRSize(14),
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          SizedBox(width: context.getRSize(12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(14),
-                    color: _text,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(2)),
-                Text(
-                  '${crates.toStringAsFixed(crates == crates.roundToDouble() ? 0 : 1)} '
-                  'crate${crates == 1 ? '' : 's'} taken',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return _crateRowBody(
+      name,
+      '${crates.toStringAsFixed(crates == crates.roundToDouble() ? 0 : 1)} '
+      'crate${crates == 1 ? '' : 's'} taken',
     );
   }
 
@@ -802,70 +726,23 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final isNone = paidKobo == 0;
     final tag = isNone ? 'No deposit' : (isFull ? 'Full' : 'Part');
 
-    return InkWell(
-      onTap: () => _editBrandDeposit(mfrId, name, fullKobo),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(16),
-          vertical: context.getRSize(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(context.getRSize(8)),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                AppIcons.beerMug,
-                size: context.getRSize(14),
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: context.getRFontSize(14),
-                      color: _text,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    '${crates.toStringAsFixed(crates == crates.roundToDouble() ? 0 : 1)} '
-                    'crate${crates == 1 ? '' : 's'} · Full ${formatCurrency(fullKobo / 100.0)} · $tag',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        key: CheckoutKeys.depositRow(mfrId),
+        onTap: () => _editBrandDeposit(mfrId, name, fullKobo),
+        child: _crateRowBody(
+          name,
+          '${crates.toStringAsFixed(crates == crates.roundToDouble() ? 0 : 1)} '
+          'crate${crates == 1 ? '' : 's'} · Full ${formatCurrency(fullKobo / 100.0)} · $tag',
+          trailing: [
+            SizedBox(width: context.getRSize(8)),
             Text(
               formatCurrency(paidKobo / 100.0),
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: context.getRFontSize(14),
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              style: context.boldStyle(14).copyWith(color: _primary),
             ),
-            SizedBox(width: context.getRSize(8)),
-            Icon(
-              AppIcons.edit,
-              size: context.getRSize(13),
-              color: _subtext,
-            ),
+            SizedBox(width: context.getRSize(6)),
+            AppIcon(AppIcons.edit, size: context.getRSize(16), color: _subtext),
           ],
         ),
       ),
@@ -884,12 +761,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
       builder: (sheetCtx) {
-        return Padding(
+        return SingleChildScrollView(
+          key: CheckoutKeys.depositSheet,
           // nav-only inset (NOT deviceBottomInset). This sheet is shown from
           // Checkout, which is pushed on the TAB navigator under MainLayout —
           // whose Scaffold (resizeToAvoidBottomInset defaults true) already
@@ -899,44 +773,30 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           // clears the system nav bar when the keyboard is down and collapses to
           // 0 when it's up (the resize covers that case).
           padding: EdgeInsets.fromLTRB(
-            context.getRSize(24),
-            context.getRSize(16),
-            context.getRSize(24),
-            context.deviceBottomPadding + context.getRSize(24),
+            context.getRSize(20),
+            context.getRSize(12),
+            context.getRSize(20),
+            context.deviceBottomPadding + context.getRSize(20),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: context.getRSize(40),
-                  height: context.getRSize(4),
-                  decoration: BoxDecoration(
-                    color: _border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              SalesSheetHeader(
+                title: 'Deposit — $name',
+                leading: const IconTile(
+                  icon: AppIcons.crates,
+                  tone: IconTileTone.warning,
+                  size: 44,
                 ),
               ),
-              SizedBox(height: context.getRSize(20)),
-              Text(
-                'Deposit — $name',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(18),
-                  fontWeight: FontWeight.w800,
-                  color: _text,
-                ),
-              ),
-              SizedBox(height: context.getRSize(6)),
+              SizedBox(height: context.getRSize(8)),
               Text(
                 'Full deposit is ${formatCurrency(fullKobo / 100.0)}. '
                 'Leave blank or 0 for no deposit (crates tracked instead).',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  color: _subtext,
-                ),
+                style: context.regularStyle(13).copyWith(color: _subtext),
               ),
-              SizedBox(height: context.getRSize(20)),
+              SizedBox(height: context.getRSize(16)),
               AppInput(
                 controller: ctrl,
                 keyboardType: const TextInputType.numberWithOptions(
@@ -947,17 +807,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 prefixText: '$activeCurrencySymbol ',
                 hintText: '0',
               ),
-              SizedBox(height: context.getRSize(12)),
+              SizedBox(height: context.getRSize(8)),
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, kMinInteractiveDimension),
+                    foregroundColor: _primary,
+                    textStyle: context.boldStyle(13),
+                  ),
                   onPressed: () {
                     ctrl.text = (fullKobo ~/ 100).toString();
                   },
-                  icon: Icon(
-                    AppIcons.magic,
-                    size: context.getRSize(13),
-                  ),
+                  icon: AppIcon(AppIcons.magic, size: context.getRSize(16)),
                   label: Text('Use full (${formatCurrency(fullKobo / 100.0)})'),
                 ),
               ),
@@ -1027,24 +889,28 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _surface,
-        title: const Text('Prices changed'),
+        title: Text(
+          'Prices changed',
+          style: ctx.screenTitleStyle.copyWith(color: _text),
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'The following items were updated since you added '
                 'them to the cart:',
+                style: ctx.regularStyle(14).copyWith(color: _text),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: ctx.getRSize(12)),
               ...stale.map(
                 (s) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: EdgeInsets.symmetric(vertical: ctx.getRSize(4)),
                   child: Text(
                     '${s.productName}: ${formatCurrency(s.oldPriceKobo / 100.0)} '
                     '→ ${formatCurrency(s.newPriceKobo / 100.0)}',
+                    style: ctx.semiBoldStyle(14).copyWith(color: _text),
                   ),
                 ),
               ),
@@ -1052,13 +918,17 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ),
         ),
         actions: [
-          TextButton(
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            isFullWidth: false,
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
           ),
-          TextButton(
+          AppButton(
+            text: 'Accept new prices',
+            variant: AppButtonVariant.primary,
+            isFullWidth: false,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Accept new prices'),
           ),
         ],
       ),
@@ -1359,8 +1229,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Widget _buildReceiptView() {
     return Column(
       children: [
-        // Persistent blue print-progress banner. Fades in/out (house rule:
-        // fade transitions, no rotating spinners) and stays while _isPrinting.
+        // Persistent print-progress banner. Fades in/out (house rule: fade
+        // transitions, no rotating spinners) and stays while _isPrinting.
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           transitionBuilder: (child, anim) =>
@@ -1369,30 +1239,32 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ),
         Expanded(
           child: SingleChildScrollView(
-            padding: EdgeInsets.all(context.getRSize(20)),
-            child: Screenshot(
-              controller: _screenshotCtrl,
-              child: ReceiptWidget(
-                orderId: _currentOrderId,
-                cart: widget.cart,
-                subtotal: widget.subtotal,
-                discount: _discountTotalKobo / 100.0,
-                crateDeposit: _depositTotalKobo / 100.0,
-                total: _totalKobo / 100.0,
-                paymentMethod: _receiptPaymentLabel,
-                customerName: _customerDisplayName,
-                customerAddress: _initialCustomer?.addressText ?? 'N/A',
-                customerPhone: _initialCustomer?.phone,
-                cashReceived: _amountPaid,
-                walletBalance: _receiptCreditBalance,
-                showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
-                riderName: 'Pick-up Order',
-                manufacturerNames: _manufacturerNames,
-                storeAddress: _storeAddress,
-                businessName: ref.watch(currentBusinessNameProvider),
-                logoPath: ref
-                    .watch(currentBusinessLogoPathProvider)
-                    .valueOrNull,
+            padding: EdgeInsets.all(context.getRSize(16)),
+            child: _capped(
+              Screenshot(
+                controller: _screenshotCtrl,
+                child: ReceiptWidget(
+                  orderId: _currentOrderId,
+                  cart: widget.cart,
+                  subtotal: widget.subtotal,
+                  discount: _discountTotalKobo / 100.0,
+                  crateDeposit: _depositTotalKobo / 100.0,
+                  total: _totalKobo / 100.0,
+                  paymentMethod: _receiptPaymentLabel,
+                  customerName: _customerDisplayName,
+                  customerAddress: _initialCustomer?.addressText ?? 'N/A',
+                  customerPhone: _initialCustomer?.phone,
+                  cashReceived: _amountPaid,
+                  walletBalance: _receiptCreditBalance,
+                  showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
+                  riderName: 'Pick-up Order',
+                  manufacturerNames: _manufacturerNames,
+                  storeAddress: _storeAddress,
+                  businessName: ref.watch(currentBusinessNameProvider),
+                  logoPath: ref
+                      .watch(currentBusinessLogoPathProvider)
+                      .valueOrNull,
+                ),
               ),
             ),
           ),
@@ -1402,33 +1274,37 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     );
   }
 
-  /// Blue in-progress banner pinned at the top of the receipt while a print is
-  /// running. A static print glyph (not a spinner) keeps to the house loading
-  /// convention; the AnimatedSwitcher in _buildReceiptView fades it in/out.
+  /// Primary-tint in-progress banner pinned at the top of the receipt while a
+  /// print is running. A static print glyph (not a spinner) keeps to the house
+  /// loading convention; the AnimatedSwitcher in _buildReceiptView fades it.
   Widget _buildPrintingBanner() {
+    final tint =
+        Theme.of(context).extension<AppSchemeColors>()?.primaryTint ??
+        _primary.withValues(alpha: 0.12);
     return Container(
+      key: CheckoutKeys.printingBanner,
       width: double.infinity,
-      color: _primary,
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(tint, _surface),
+        border: Border(bottom: BorderSide(color: _border)),
+      ),
       padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(20),
+        horizontal: context.getRSize(16),
         vertical: context.getRSize(12),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          AppIcon(
             AppIcons.print,
-            size: context.getRSize(16),
-            color: _onPrimary,
+            filled: true,
+            size: context.getRSize(18),
+            color: _primary,
           ),
           SizedBox(width: context.getRSize(10)),
           Text(
             'Printing receipt…',
-            style: TextStyle(
-              color: _onPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: context.getRFontSize(14),
-            ),
+            style: context.boldStyle(14).copyWith(color: _primary),
           ),
         ],
       ),
@@ -1437,58 +1313,60 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   Widget _buildReceiptActions() {
     return Container(
+      key: CheckoutKeys.receiptActions,
       padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
         context.getRSize(16),
-        context.getRSize(20),
-        context.getRSize(32) + context.deviceBottomPadding,
+        context.getRSize(14),
+        context.getRSize(16),
+        context.getRSize(16) + context.deviceBottomPadding,
       ),
       decoration: BoxDecoration(
         color: _surface,
         border: Border(top: BorderSide(color: _border)),
       ),
-      child: Column(
-        children: [
-          Text(
-            'Receipt Options',
-            style: TextStyle(
-              fontSize: context.getRFontSize(16),
-              fontWeight: FontWeight.bold,
-              color: _text,
+      child: _capped(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Receipt Options',
+              style: context.boldStyle(16).copyWith(color: _text),
             ),
-          ),
-          SizedBox(height: context.getRSize(16)),
-          Row(
-            children: [
-              Expanded(
-                child: _receiptButton(
-                  'Print Receipt',
-                  AppIcons.print,
-                  Theme.of(context).colorScheme.primary,
-                  _printReceipt,
+            SizedBox(height: context.getRSize(12)),
+            Row(
+              children: [
+                Expanded(
+                  child: _receiptButton(
+                    'Print Receipt',
+                    AppIcons.print,
+                    _primary,
+                    _printReceipt,
+                  ),
                 ),
-              ),
-              SizedBox(width: context.getRSize(12)),
-              Expanded(
-                child: _receiptButton(
-                  'Share Receipt',
-                  AppIcons.share,
-                  success,
-                  _shareReceipt,
+                SizedBox(width: context.getRSize(12)),
+                Expanded(
+                  child: _receiptButton(
+                    'Share Receipt',
+                    AppIcons.share,
+                    _fixed.green,
+                    _shareReceipt,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          AppButton(
-            text: 'Done — Back to POS',
-            variant: AppButtonVariant.ghost,
-            onPressed: () {
-              if (!mounted) return;
-              Navigator.of(context).pop();
-              ref.read(navigationProvider).setIndex(1);
-            },
-          ),
-        ],
+              ],
+            ),
+            SizedBox(height: context.getRSize(8)),
+            AppButton(
+              text: 'Done — Back to POS',
+              variant: AppButtonVariant.ghost,
+              onPressed: () {
+                if (!mounted) return;
+                Navigator.of(context).pop();
+                ref.read(navigationProvider).setIndex(1);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1499,28 +1377,46 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     Color color,
     VoidCallback onTap,
   ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: context.getRSize(14)),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.25)),
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+    return Semantics(
+      button: true,
+      child: Material(
+        color: Color.alphaBlend(color.withValues(alpha: 0.10), _surface),
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: color.withValues(alpha: 0.30)),
         ),
-        child: Column(
-          children: [
-            Icon(icon, size: context.getRSize(20), color: color),
-            SizedBox(height: context.getRSize(6)),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: context.getRFontSize(11),
-                fontWeight: FontWeight.bold,
-                color: color,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: context.getRSize(8),
+                vertical: context.getRSize(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppIcon(
+                    icon,
+                    filled: true,
+                    size: context.getRSize(22),
+                    color: color,
+                  ),
+                  SizedBox(height: context.getRSize(6)),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: context.boldStyle(13).copyWith(color: color),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1575,29 +1471,30 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
       // Built per paper width: the picker fallback below may land on a
       // different printer with a different roll, and rebuilds for it.
-      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
-          ThermalReceiptService.buildReceipt(
-            orderId: _currentOrderId,
-            cart: widget.cart,
-            subtotal: widget.subtotal,
-            discount: _discountTotalKobo / 100.0,
-            crateDeposit: _depositTotalKobo / 100.0,
-            total: _totalKobo / 100.0,
-            paymentMethod: _receiptPaymentLabel,
-            customerName: _customerDisplayName,
-            customerAddress: widget.customer?.addressText,
-            customerPhone: widget.customer?.phone,
-            cashReceived: _amountPaid,
-            // Use the post-sale snapshot (set at confirm) — the live provider has
-            // already updated, so recomputing here would double-count the legs.
-            walletBalance: _receiptCreditBalance,
-            showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
-            riderName: 'Pick-up Order',
-            storeAddress: _storeAddress,
-            businessName: ref.read(currentBusinessNameProvider),
-            manufacturerNames: _manufacturerNames,
-            paperSize: paperSize,
-          );
+      Future<List<int>> buildBytes(
+        ReceiptPaperSize paperSize,
+      ) => ThermalReceiptService.buildReceipt(
+        orderId: _currentOrderId,
+        cart: widget.cart,
+        subtotal: widget.subtotal,
+        discount: _discountTotalKobo / 100.0,
+        crateDeposit: _depositTotalKobo / 100.0,
+        total: _totalKobo / 100.0,
+        paymentMethod: _receiptPaymentLabel,
+        customerName: _customerDisplayName,
+        customerAddress: widget.customer?.addressText,
+        customerPhone: widget.customer?.phone,
+        cashReceived: _amountPaid,
+        // Use the post-sale snapshot (set at confirm) — the live provider has
+        // already updated, so recomputing here would double-count the legs.
+        walletBalance: _receiptCreditBalance,
+        showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
+        riderName: 'Pick-up Order',
+        storeAddress: _storeAddress,
+        businessName: ref.read(currentBusinessNameProvider),
+        manufacturerNames: _manufacturerNames,
+        paperSize: paperSize,
+      );
 
       // Auto-print: reuse the live connection, otherwise auto-connect to the
       // last-used / paired printer, asking once for a new printer's paper
@@ -1634,13 +1531,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _surface,
-      constraints: BoxConstraints(
-        maxHeight: context.sheetMaxHeight(0.5),
-      ),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      constraints: BoxConstraints(maxHeight: context.sheetMaxHeight(0.5)),
       builder: (_) => PrinterPicker(
         onSelected: (device) async {
           if (!mounted) return;
@@ -1702,40 +1593,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// resulting credit balance is printed on the receipt (§15.1). Off by default.
   Widget _buildCreditInfoCheckbox() {
     final on = _addCreditInfoToReceipt;
-    return GestureDetector(
+    return SalesChoiceCard(
+      key: CheckoutKeys.creditInfo,
+      label: 'Add credit balance to receipt',
+      icon: on ? AppIcons.checkBox : AppIcons.checkBoxOutlineBlank,
+      selected: on,
       onTap: () =>
           setState(() => _addCreditInfoToReceipt = !_addCreditInfoToReceipt),
-      child: Container(
-        padding: EdgeInsets.all(context.getRSize(14)),
-        decoration: BoxDecoration(
-          color: on ? _primary.withValues(alpha: 0.08) : _surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: on ? _primary : _border,
-            width: on ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              on ? AppIcons.checkBox : AppIcons.checkBoxOutlineBlank,
-              size: context.getRSize(22),
-              color: on ? _primary : _subtext,
-            ),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: Text(
-                'Add credit balance to receipt',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w600,
-                  color: _text,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1746,30 +1610,35 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // nor the credit-sale card.
   Widget _buildPaymentMethods() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _methodChip(
-                'Cash / Transfer',
-                AppIcons.cash,
-                _mode == PayMode.cashTransfer,
-                () => setState(() => _mode = PayMode.cashTransfer),
-              ),
-            ),
-            if (!_isWalkIn) ...[
-              SizedBox(width: context.getRSize(10)),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Expanded(
                 child: _methodChip(
-                  'Pay with Credit',
-                  AppIcons.creditBalance,
-                  _mode == PayMode.wallet,
-                  () => setState(() => _mode = PayMode.wallet),
+                  'Cash / Transfer',
+                  AppIcons.cash,
+                  _mode == PayMode.cashTransfer,
+                  () => setState(() => _mode = PayMode.cashTransfer),
+                  key: CheckoutKeys.modeCash,
                 ),
               ),
+              if (!_isWalkIn) ...[
+                SizedBox(width: context.getRSize(10)),
+                Expanded(
+                  child: _methodChip(
+                    'Pay with Credit',
+                    AppIcons.creditBalance,
+                    _mode == PayMode.wallet,
+                    () => setState(() => _mode = PayMode.wallet),
+                    key: CheckoutKeys.modeWallet,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
 
         // Cash / Transfer → amount input + live resulting-balance preview.
@@ -1790,7 +1659,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
         // §14.1 — "Add credit balance to receipt" (off by default, registered only).
         if (!_isWalkIn) ...[
-          SizedBox(height: context.getRSize(20)),
+          SizedBox(height: context.getRSize(16)),
           _buildCreditInfoCheckbox(),
         ],
       ],
@@ -1802,48 +1671,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     String label,
     IconData icon,
     bool selected,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
+    VoidCallback onTap, {
+    Key? key,
+  }) {
+    return SalesChoiceCard(
+      key: key,
+      label: label,
+      icon: icon,
+      selected: selected,
+      centered: true,
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(14),
-          vertical: context.getRSize(12),
-        ),
-        decoration: BoxDecoration(
-          color: selected ? _primary.withValues(alpha: 0.10) : _surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? _primary : _border,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: context.getRSize(16),
-              color: selected ? _primary : _subtext,
-            ),
-            SizedBox(width: context.getRSize(8)),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-                  color: selected ? _primary : _subtext,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1853,66 +1690,25 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return Row(
       children: [
         Expanded(
-          child: _tenderSegment(
+          child: _methodChip(
             'Cash',
             AppIcons.cash,
             _tender == 'cash',
             () => setState(() => _tender = 'cash'),
+            key: CheckoutKeys.tenderCash,
           ),
         ),
         SizedBox(width: context.getRSize(10)),
         Expanded(
-          child: _tenderSegment(
+          child: _methodChip(
             'Transfer',
             AppIcons.swap,
             _tender == 'transfer',
             () => setState(() => _tender = 'transfer'),
+            key: CheckoutKeys.tenderTransfer,
           ),
         ),
       ],
-    );
-  }
-
-  /// One tender segment (Cash / Transfer). Styled like [_methodChip] but tighter.
-  Widget _tenderSegment(
-    String label,
-    IconData icon,
-    bool selected,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: EdgeInsets.symmetric(vertical: context.getRSize(10)),
-        decoration: BoxDecoration(
-          color: selected ? _primary.withValues(alpha: 0.10) : _surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? _primary : _border,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: context.getRSize(14),
-              color: selected ? _primary : _subtext,
-            ),
-            SizedBox(width: context.getRSize(8)),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-                color: selected ? _primary : _subtext,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1928,15 +1724,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(height: context.getRSize(16)),
+        SizedBox(height: context.getRSize(12)),
         // #175 — Cash / Transfer tender picker. The chosen tender is written to
         // payment_transactions.method so a transfer is kept out of the cash
         // drawer figure. Cash is the default.
         _tenderPicker(),
-        SizedBox(height: context.getRSize(16)),
+        SizedBox(height: context.getRSize(14)),
         AppInput(
+          key: CheckoutKeys.amountPaid,
           controller: _cashReceivedCtrl,
           labelText: 'Amount Paid',
           hintText: 'Enter amount paid',
@@ -1945,10 +1742,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           inputFormatters: [CurrencyInputFormatter()],
           onChanged: (v) => setState(() {}),
           suffixIcon: TextButton(
+            key: CheckoutKeys.autoFill,
             style: TextButton.styleFrom(
               padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              // A 48dp target (it was shrink-wrapped below it).
+              minimumSize: const Size(0, kMinInteractiveDimension),
+              foregroundColor: _primary,
             ),
             onPressed: () {
               final val = suggestedKobo / 100.0;
@@ -1964,11 +1763,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             },
             child: Text(
               'Auto-fill ${formatCurrency(suggestedKobo / 100.0)}',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              style: context.boldStyle(12).copyWith(color: _primary),
             ),
           ),
         ),
@@ -1978,11 +1773,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
             child: Text(
               'Walk-in customers must pay the full ${formatCurrency(widget.total)}.',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                color: _subtext,
-                fontStyle: FontStyle.italic,
-              ),
+              style: context
+                  .regularStyle(12)
+                  .copyWith(color: _subtext, fontStyle: FontStyle.italic),
             ),
           ),
         ] else ...[
@@ -1998,7 +1791,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Widget _resultPreview() {
     final projectedKobo = _projectedCreditKobo; // negative = debt
     final projected = projectedKobo / 100.0;
-    final isDebt = projectedKobo < 0;
     final diffKobo = (_cashReceivedValue * 100).round() - _totalKobo;
 
     String hint;
@@ -2015,28 +1807,31 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _previewBox(
           'Resulting Credits Balance',
           projected,
-          isDebt ? danger : (projected > 0 ? success : _text),
+          _balanceColor(projected),
         ),
         SizedBox(height: context.getRSize(6)),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-          child: Text(
-            hint,
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              color: _subtext,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ),
+        _previewHint(hint),
         if (_overDebtLimit)
           _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
       ],
+    );
+  }
+
+  /// The muted italic line under a preview box.
+  Widget _previewHint(String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
+      child: Text(
+        text,
+        style: context
+            .regularStyle(12)
+            .copyWith(color: _subtext, fontStyle: FontStyle.italic),
+      ),
     );
   }
 
@@ -2049,34 +1844,22 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final isDebt = projectedKobo < 0;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: context.getRSize(12)),
-        _previewBox(
-          'Credits Balance',
-          balance,
-          balance < 0 ? danger : (balance > 0 ? success : _text),
-        ),
+        _previewBox('Credits Balance', balance, _balanceColor(balance)),
         SizedBox(height: context.getRSize(8)),
         _previewBox(
           'Resulting Credits Balance',
           projected,
-          isDebt ? danger : (projected > 0 ? success : _text),
+          _balanceColor(projected),
         ),
         SizedBox(height: context.getRSize(6)),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-          child: Text(
-            isDebt
-                ? 'Credit balance can\'t cover the order — the shortfall is added '
-                      'as debt.'
-                : 'The order is charged to the credit balance.',
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              color: _subtext,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
+        _previewHint(
+          isDebt
+              ? 'Credit balance can\'t cover the order — the shortfall is added '
+                    'as debt.'
+              : 'The order is charged to the credit balance.',
         ),
         if (_overDebtLimit)
           _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
@@ -2088,15 +1871,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Widget _buildCreditPreview() {
     final projectedKobo = _projectedCreditKobo; // current − total
     final projected = projectedKobo / 100.0;
-    final isDebt = projectedKobo < 0;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _previewBox(
           'Resulting Credits Balance',
           projected,
-          isDebt ? danger : (projected > 0 ? success : _text),
+          _balanceColor(projected),
         ),
         if (_overDebtLimit)
           _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
@@ -2106,39 +1888,36 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   /// A label / value box used by the payment previews. The value's sign and
   /// colour distinguish credit from debt — no "(credit)/(debt)" suffix.
-  Widget _previewBox(String label, double value, Color valueColor) {
+  Widget _previewBox(String label, double value, Color valueColor) =>
+      _amountBox(label, formatCurrency(value), valueColor);
+
+  /// A pale primary box: a Bold label on the left, a figure on the right.
+  Widget _amountBox(String label, String value, Color valueColor) {
+    final tint =
+        Theme.of(context).extension<AppSchemeColors>()?.primaryTint ??
+        _primary.withValues(alpha: 0.12);
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
+        horizontal: context.getRSize(14),
         vertical: context.getRSize(12),
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-        ),
+        color: Color.alphaBlend(tint, _surface),
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+        border: Border.all(color: _primary.withValues(alpha: 0.20)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Flexible(
+          Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.w700,
-                color: _text,
-              ),
+              style: context.boldStyle(13).copyWith(color: _text),
             ),
           ),
+          SizedBox(width: context.getRSize(8)),
           Text(
-            formatCurrency(value),
-            style: TextStyle(
-              fontSize: context.getRFontSize(15),
-              fontWeight: FontWeight.w800,
-              color: valueColor,
-            ),
+            value,
+            style: context.extraBoldStyle(15).copyWith(color: valueColor),
           ),
         ],
       ),
@@ -2156,33 +1935,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               '${formatCurrency(((-projectedKobo) - limitKobo) / 100.0)}.';
     return Padding(
       padding: EdgeInsets.only(top: context.getRSize(8)),
-      child: Container(
-        padding: EdgeInsets.all(context.getRSize(12)),
-        decoration: BoxDecoration(
-          color: danger.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: danger.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              AppIcons.warning,
-              size: context.getRSize(14),
-              color: danger,
-            ),
-            SizedBox(width: context.getRSize(10)),
-            Expanded(
-              child: Text(
-                msg,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  fontWeight: FontWeight.w600,
-                  color: danger,
-                ),
-              ),
-            ),
-          ],
-        ),
+      child: SalesNotice(
+        key: CheckoutKeys.debtLimit,
+        tone: SalesNoticeTone.danger,
+        message: msg,
+        messageInTone: true,
       ),
     );
   }
@@ -2190,99 +1947,21 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// "Register as Credit Sale" — the one retained payment card (registered
   /// customers only). Nothing is paid now; the whole total becomes wallet debt.
   Widget _creditSaleCard() {
-    final active = _mode == PayMode.credit;
-    return GestureDetector(
+    return SalesChoiceCard(
+      key: CheckoutKeys.modeCredit,
+      label: 'Register as Credit Sale',
+      subtitle:
+          'Nothing paid now — full amount added to the credit balance as debt',
+      icon: AppIcons.bill,
+      selected: _mode == PayMode.credit,
+      trailingCheck: true,
       onTap: () => setState(() => _mode = PayMode.credit),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: EdgeInsets.all(context.getRSize(14)),
-        decoration: BoxDecoration(
-          color: active
-              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
-              : _surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: active ? _primary : _border,
-            width: active ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: context.getRSize(42),
-              height: context.getRSize(42),
-              decoration: BoxDecoration(
-                color: (active ? _primary : _subtext).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                AppIcons.bill,
-                size: context.getRSize(18),
-                color: active ? _primary : _subtext,
-              ),
-            ),
-            SizedBox(width: context.getRSize(14)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Register as Credit Sale',
-                    style: TextStyle(
-                      fontWeight: active ? FontWeight.bold : FontWeight.w600,
-                      fontSize: context.getRFontSize(14),
-                      color: active ? _primary : _text,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    'Nothing paid now — full amount added to the credit balance as debt',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: context.getRSize(22),
-              height: context.getRSize(22),
-              decoration: BoxDecoration(
-                color: active ? _primary : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: active ? _primary : _border,
-                  width: 2,
-                ),
-              ),
-              child: active
-                  ? Icon(
-                      AppIcons.check,
-                      size: context.getRSize(14),
-                      color: _onPrimary,
-                    )
-                  : null,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
   // ── Shared widgets ─────────────────────────────────────────────────────────
 
-  Widget _sectionLabel(String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: context.getRFontSize(16),
-        fontWeight: FontWeight.w800,
-        color: _text,
-      ),
-    );
-  }
+  Widget _sectionLabel(String text) => SectionHeader(title: text);
 
   Widget _orderItemTile(Map<String, dynamic> item) {
     // Robustly parse values to prevent crashes on malformed data
@@ -2298,83 +1977,54 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
     final int lineTotal = (price * qty).toInt();
 
-    final rawColor = item['color'];
-    Color itemColor = Theme.of(context).colorScheme.primary;
-    if (rawColor is Color) {
-      itemColor = rawColor;
-    } else if (rawColor is String && rawColor.isNotEmpty) {
-      try {
-        final hex = rawColor.startsWith('#')
-            ? rawColor.replaceFirst('#', '0xFF')
-            : rawColor.length == 6 || rawColor.length == 8
-            ? '0xFF$rawColor'
-            : rawColor;
-        itemColor = Color(
-          int.parse(hex.startsWith('0x') ? hex : '0xFF$hex', radix: 16),
-        );
-      } catch (_) {
-        itemColor = Theme.of(context).colorScheme.primary;
-      }
-    }
-
-    final rawIcon = item['icon'];
-    final itemIcon = rawIcon is IconData
-        ? rawIcon
-        : rawIcon is int
-        ? productIconFromCodePoint(rawIcon)
-        : AppIcons.box;
+    // The category tile, as the Cart's lines (#385).
+    final rawCategory = item['category']?.toString();
+    final categoryNames = <String, String>{
+      for (final c
+          in ref.watch(allCategoriesProvider).valueOrNull ??
+              const <CategoryData>[])
+        c.id: c.name,
+    };
+    final visual = categoryVisual(
+      categoryNames[rawCategory] ?? rawCategory,
+      _fixed,
+    );
 
     return Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(10),
+        horizontal: context.getRSize(12),
+        vertical: context.getRSize(8),
       ),
       child: Row(
         children: [
-          Container(
-            width: context.getRSize(38),
-            height: context.getRSize(38),
-            decoration: BoxDecoration(
-              color: itemColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(itemIcon, color: itemColor, size: context.getRSize(18)),
+          IconTile(
+            icon: visual.icon,
+            tint: visual.tint,
+            iconColor: visual.iconColor,
+            size: 40,
           ),
-          SizedBox(width: context.getRSize(12)),
+          SizedBox(width: context.getRSize(10)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   item['name'],
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(14),
-                    color: _text,
-                  ),
-                  maxLines: 1,
+                  style: context.boldStyle(14).copyWith(color: _text),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   '${qty.toStringAsFixed(1)} × ${formatCurrency(price)}',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext,
-                  ),
+                  style: context.regularStyle(12).copyWith(color: _subtext),
                 ),
               ],
             ),
           ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              formatCurrency(lineTotal),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: context.getRFontSize(14),
-                color: _text,
-              ),
-            ),
+          SizedBox(width: context.getRSize(8)),
+          Text(
+            formatCurrency(lineTotal),
+            style: context.boldStyle(14).copyWith(color: _text),
           ),
         ],
       ),
@@ -2389,30 +2039,58 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }) {
     return Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
+        horizontal: context.getRSize(14),
         vertical: context.getRSize(10),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(bold ? 16 : 14),
-              fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-              color: bold ? _text : _subtext,
+          Expanded(
+            child: Text(
+              label,
+              style: bold
+                  ? context.boldStyle(16).copyWith(color: _text)
+                  : context.semiBoldStyle(14).copyWith(color: _subtext),
             ),
           ),
+          SizedBox(width: context.getRSize(8)),
           Text(
             formatCurrency(value),
-            style: TextStyle(
-              fontSize: context.getRFontSize(bold ? 18 : 14),
-              fontWeight: FontWeight.w800,
-              color: accent ? _primary : _text,
-            ),
+            style: bold
+                ? context
+                      .extraBoldStyle(20)
+                      .copyWith(color: accent ? _primary : _text)
+                : context
+                      .boldStyle(14)
+                      .copyWith(color: accent ? _primary : _text),
           ),
         ],
       ),
     );
   }
+}
+
+/// Keys the Checkout tests find the parts by (#393).
+abstract final class CheckoutKeys {
+  static const topBar = Key('checkout-top-bar');
+  static const form = Key('checkout-form');
+  static const summary = Key('checkout-summary');
+  static const crateValueMissing = Key('checkout-crate-value-missing');
+  static const crateDeposit = Key('checkout-crate-deposit');
+  static const cratesTaken = Key('checkout-crates-taken');
+  static Key depositRow(String manufacturerId) =>
+      Key('checkout-deposit-row-$manufacturerId');
+  static const depositSheet = Key('checkout-deposit-sheet');
+  static const customer = Key('checkout-customer');
+  static const modeCash = Key('checkout-mode-cash');
+  static const modeWallet = Key('checkout-mode-wallet');
+  static const modeCredit = Key('checkout-mode-credit');
+  static const tenderCash = Key('checkout-tender-cash');
+  static const tenderTransfer = Key('checkout-tender-transfer');
+  static const amountPaid = Key('checkout-amount-paid');
+  static const autoFill = Key('checkout-auto-fill');
+  static const debtLimit = Key('checkout-debt-limit');
+  static const creditInfo = Key('checkout-credit-info');
+  static const confirm = Key('checkout-confirm');
+  static const printingBanner = Key('checkout-printing-banner');
+  static const receiptActions = Key('checkout-receipt-actions');
 }

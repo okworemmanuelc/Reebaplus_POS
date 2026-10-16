@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/settings_row.dart';
 
 /// What a permitted person chose to do with an unknown scanned barcode (#321).
 enum ScanUnknownChoice { addNew, linkExisting }
@@ -54,126 +58,47 @@ class ScanUnknownChoiceSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final border = t.dividerColor;
-    final text = t.colorScheme.onSurface;
-    final primary = t.colorScheme.primary;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
 
     return Container(
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 30,
-            offset: const Offset(0, -10),
-          ),
-        ],
-      ),
+      decoration: salesSheetDecoration(context),
       // Scrolls so it never overflows a short (landscape) viewport. Bottom
       // padding is nav-only (deviceBottomPadding), like EditItemModal.
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-          context.getRSize(24),
-          context.getRSize(16),
-          context.getRSize(24),
-          context.deviceBottomPadding + context.getRSize(24),
+          context.getRSize(20),
+          context.getRSize(12),
+          context.getRSize(20),
+          context.deviceBottomPadding + context.getRSize(20),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Drag Handle
-            Center(
-              child: Container(
-                width: context.getRSize(40),
-                height: context.getRSize(4),
-                decoration: BoxDecoration(
-                  color: border.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            SizedBox(height: context.getRSize(24)),
-
-            // Header with Icon
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(context.getRSize(14)),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        primary.withValues(alpha: 0.2),
-                        primary.withValues(alpha: 0.1),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Icon(
-                    AppIcons.barcode,
-                    size: context.getRSize(20),
-                    color: primary,
-                  ),
-                ),
-                SizedBox(width: context.getRSize(16)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'New barcode',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(20),
-                          fontWeight: FontWeight.w900,
-                          color: text,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      Text(
-                        code,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(14),
-                          color: text.withValues(alpha: 0.5),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Material(
-                  color: border.withValues(alpha: 0.1),
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(
-                      AppIcons.close,
-                      size: context.getRSize(20),
-                      color: text.withValues(alpha: 0.5),
-                    ),
-                  ),
+            SalesSheetHeader(
+              title: 'New barcode',
+              subtitle: code,
+              leading: const IconTile(icon: AppIcons.barcode, size: 44),
+              trailing: [
+                SalesBackButton(
+                  icon: AppIcons.close,
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
             SizedBox(height: context.getRSize(12)),
             Text(
               'No product has this barcode yet.',
-              style: TextStyle(
-                fontSize: context.getRFontSize(14),
-                color: text.withValues(alpha: 0.7),
-                fontWeight: FontWeight.w600,
-              ),
+              style: context.semiBoldStyle(14).copyWith(color: muted),
             ),
-            SizedBox(height: context.getRSize(20)),
+            SizedBox(height: context.getRSize(16)),
 
             if (canAdd) ...[
-              _ScanUnknownOption(
+              SettingsRow(
                 key: kScanUnknownAddNewKey,
                 icon: AppIcons.addSquare,
+                tone: IconTileTone.green,
                 title: 'Add as new product',
                 subtitle: 'Create a product with this barcode',
                 onTap: () => Navigator.pop(context, ScanUnknownChoice.addNew),
@@ -181,86 +106,16 @@ class ScanUnknownChoiceSheet extends StatelessWidget {
               SizedBox(height: context.getRSize(10)),
             ],
             if (canLink)
-              _ScanUnknownOption(
+              SettingsRow(
                 key: kScanUnknownLinkKey,
                 icon: AppIcons.link,
+                tone: IconTileTone.info,
                 title: 'Link to an existing product',
                 subtitle: 'Save this barcode on a product you already have',
                 onTap: () =>
                     Navigator.pop(context, ScanUnknownChoice.linkExisting),
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One tappable option row of [ScanUnknownChoiceSheet].
-class _ScanUnknownOption extends StatelessWidget {
-  const _ScanUnknownOption({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final border = t.dividerColor;
-    final text = t.colorScheme.onSurface;
-    final primary = t.colorScheme.primary;
-
-    return Material(
-      color: border.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.all(context.getRSize(14)),
-          child: Row(
-            children: [
-              Icon(icon, size: context.getRSize(22), color: primary),
-              SizedBox(width: context.getRSize(14)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(15),
-                        fontWeight: FontWeight.w800,
-                        color: text,
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(4)),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(12),
-                        fontWeight: FontWeight.w600,
-                        color: text.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                AppIcons.chevronRight,
-                size: context.getRSize(13),
-                color: text.withValues(alpha: 0.4),
-              ),
-            ],
-          ),
         ),
       ),
     );

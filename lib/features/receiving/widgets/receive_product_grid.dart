@@ -1,338 +1,218 @@
-import 'dart:io';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reebaplus_pos/core/theme/app_icons.dart';
+
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
-import 'package:reebaplus_pos/features/receiving/widgets/new_product_card.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
+import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/new_product_card.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart';
 
+/// The key on Receive Stock's tile for [productId] (#394).
+ValueKey<String> receiveProductTileKey(String productId) =>
+    ValueKey<String>('receive-product-tile-$productId');
+
+/// The narrowest a tile column gets before the grid drops a column (POS's and
+/// Request Stock's 170).
+const double kReceiveTileMinWidth = 170;
+
+/// Columns for a grid [width] dp wide (gutters included): as many
+/// [kReceiveTileMinWidth] columns as fit, at least 2 (a phone) and at most 6
+/// (#394).
+int receiveGridColumns(double width) =>
+    (width / kReceiveTileMinWidth).floor().clamp(2, 6);
+
+/// A tile's height: its text at the current text scale plus the art, which
+/// shrinks on a short sideways phone ([receiveShortHeight]) so a full row of
+/// tiles shows on first view.
+double receiveTileExtent(BuildContext context) {
+  final scaler = MediaQuery.textScalerOf(context);
+  double line(double base) => scaler.scale(context.getRFontSize(base)) * 1.35;
+  return context.getRSize(10) * 2 + // tile padding
+      context.getRSize(receiveShortHeight(context) ? 28 : 90) + // art
+      context.getRSize(10) + // art → name
+      line(15) * 2 + // name, up to two lines
+      line(12) + // size · unit
+      context.getRSize(8) +
+      line(12) +
+      context.getRSize(6) + // stock pill
+      4; // the in-cart border
+}
+
+/// "60cl · Bottle": the product's size and unit, blanks skipped — the same
+/// two values the receive card showed before (#394).
+String? receiveTileSubtitle(ProductData product) {
+  final parts = [
+    product.size,
+    product.unit,
+  ].where((s) => s != null && s.trim().isNotEmpty).map((s) => s!.trim());
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// Receive Stock's product grid (#394), as a sliver inside the screen's one
+/// scroll view (PRD #239: the chrome scrolls away rather than starving the
+/// grid). The first cell is the New Product card when the user may add
+/// products (`Gates.addProduct`); stock keepers without it still tap existing
+/// products to receive quantity. Each product is the shared [ProductTile]:
+/// "Current: N" (or "No stock") in the pill, the quantity on the receipt as
+/// the badge, no price. Out of stock stays fully tappable — restocking an
+/// empty product is the point.
 class ReceiveProductGrid extends ConsumerWidget {
-  final List<ProductDataWithStock> products;
-  final Color cardCol;
-  final Color textCol;
-  final Color subtextCol;
-  final Color borderCol;
-  final int gridColumns;
-  final bool showHint;
-  final VoidCallback? onHintTap;
-
   const ReceiveProductGrid({
     super.key,
     required this.products,
-    required this.cardCol,
-    required this.textCol,
-    required this.subtextCol,
-    required this.borderCol,
-    this.gridColumns = 3,
-    this.showHint = false,
-    this.onHintTap,
+    this.categoryNames = const {},
   });
+
+  final List<ProductDataWithStock> products;
+
+  /// Category id → name, for the tile's category colour and icon.
+  final Map<String, String> categoryNames;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Creating a NEW product from the receive grid is the Add Product gate.
-    // Stock keepers without it can still tap existing products to receive
-    // quantity — they just don't get the "New Product" card.
     final canAddProduct = Gates.addProduct.allows(ref);
-    // The grid's real width: the screen minus the app frame's side rail
-    // (#352). Read from the layout, not the screen.
-    return LayoutBuilder(
-      builder: (context, constraints) =>
-          _buildGrid(context, constraints.maxWidth, canAddProduct),
-    );
-  }
-
-  Widget _buildGrid(
-    BuildContext context,
-    double availableWidth,
-    bool canAddProduct,
-  ) {
-    int effectiveColumns = gridColumns;
-
-    if (availableWidth < 380) {
-      if (effectiveColumns > 2) effectiveColumns = 2;
-    } else if (availableWidth > 600) {
-      final dynamicColumns = (availableWidth / 180).floor();
-      effectiveColumns = max(effectiveColumns, dynamicColumns);
-    }
-
-    final totalPadding = context.getRSize(16);
-    final totalSpacing = context.getRSize(8) * (effectiveColumns - 1);
-    final cellWidth = (availableWidth - totalPadding - totalSpacing) / effectiveColumns;
-    final aspect = cellWidth / context.getRSize(210);
-
-    // Add 1 for the NewProductCard
-    return GridView.builder(
-      padding: EdgeInsets.all(context.getRSize(8)),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: effectiveColumns,
-        childAspectRatio: aspect,
-        crossAxisSpacing: context.getRSize(8),
-        mainAxisSpacing: context.getRSize(8),
-      ),
-      itemCount: products.length + (canAddProduct ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (canAddProduct && index == 0) {
-          return NewProductCard(
-            cardCol: cardCol,
-            textCol: textCol,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (ctx) => AddProductScreen(
-                    receiveMode: true,
-                    onProductAdded: (product) {
-                      // Cart addition is handled inside AddProductScreen
-                    },
-                  ),
-                ),
+    final gutter = context.getRSize(16);
+    final gap = context.getRSize(12);
+    // Columns from the grid's whole width, gutters included (POS's
+    // `columnsFor` reads the same width): 4 beside the rail at 800dp.
+    return SliverLayoutBuilder(
+      builder: (context, constraints) => SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: gutter),
+        sliver: SliverGrid.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: receiveGridColumns(constraints.crossAxisExtent),
+            mainAxisExtent: receiveTileExtent(context),
+            crossAxisSpacing: gap,
+            mainAxisSpacing: gap,
+          ),
+          itemCount: products.length + (canAddProduct ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (canAddProduct && index == 0) {
+              return NewProductCard(
+                key: ReceiveKeys.newProduct,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (ctx) => AddProductScreen(
+                        receiveMode: true,
+                        onProductAdded: (product) {
+                          // Cart addition is handled inside AddProductScreen
+                        },
+                      ),
+                    ),
+                  );
+                },
               );
-            },
-          );
-        }
-        final item = products[canAddProduct ? index - 1 : index];
-        return _ReceiveProductCard(
-          item: item,
-          cardCol: cardCol,
-          textCol: textCol,
-          subtextCol: subtextCol,
-          borderCol: borderCol,
-          showHint: showHint,
-          onHintTap: onHintTap,
-        );
-      },
+            }
+            final item = products[canAddProduct ? index - 1 : index];
+            return _ReceiveProductTile(
+              key: receiveProductTileKey(item.product.id),
+              item: item,
+              categoryName: categoryNames[item.product.categoryId],
+            );
+          },
+        ),
+      ),
     );
   }
 }
 
-class _ReceiveProductCard extends ConsumerWidget {
-  final ProductDataWithStock item;
-  final Color cardCol;
-  final Color textCol;
-  final Color subtextCol;
-  final Color borderCol;
-  final bool showHint;
-  final VoidCallback? onHintTap;
-
-  const _ReceiveProductCard({
+class _ReceiveProductTile extends ConsumerStatefulWidget {
+  const _ReceiveProductTile({
+    super.key,
     required this.item,
-    required this.cardCol,
-    required this.textCol,
-    required this.subtextCol,
-    required this.borderCol,
-    this.showHint = false,
-    this.onHintTap,
+    required this.categoryName,
   });
 
+  final ProductDataWithStock item;
+  final String? categoryName;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final product = item.product;
-    final cartLines = ref.watch(receiveCartProvider);
-    final cartLine = cartLines.where((l) => l.productId == product.id).firstOrNull;
-    final inCart = cartLine != null;
-    final cartQty = cartLine?.qty ?? 0;
-    
-    // Out of stock is fully tappable here.
-    final bool isOutOfStock = item.totalStock <= 0;
+  ConsumerState<_ReceiveProductTile> createState() =>
+      _ReceiveProductTileState();
+}
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        GestureDetector(
-          onLongPress: () {
-            HapticFeedback.mediumImpact();
-            // Fire-time re-check: a stale card can't open the edit sheet after
-            // the grant was revoked mid-session.
-            if (!Gates.editProductPrice.allowsNow(ref)) {
-              showGateDenied(context, Gates.editProductPrice);
-              return;
-            }
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (ctx) => UpdateProductSheet(
-                product: product,
-                totalStock: item.totalStock,
-                receiveMode: true,
-                onProductUpdated: (updatedProduct) {
-                  // Cart addition is handled inside UpdateProductSheet
-                },
-              ),
-            );
-          },
-          child: InkWell(
-            onTap: () {
-              ref.read(receiveCartProvider.notifier).addOrIncrement(product);
-            },
-            borderRadius: BorderRadius.circular(16),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              decoration: BoxDecoration(
-                color: cardCol,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: inCart ? Theme.of(context).colorScheme.primary : Colors.transparent,
-                  width: inCart ? 2.0 : 1.0,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: inCart
-                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
-                        : Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: _buildGridLayout(context, product, item.totalStock, isOutOfStock),
-            ),
-          ),
-        ),
-        if (inCart)
-          Positioned(
-            top: -8,
-            right: -8,
-            child: Container(
-              width: context.getRSize(30),
-              height: context.getRSize(30),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.45),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  cartQty.toString(),
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimary,
-                    fontSize: context.getRFontSize(11),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        // Info Icon
-        if (showHint && !isOutOfStock)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: GestureDetector(
-              onTap: onHintTap,
-              child: Container(
-                padding: EdgeInsets.all(context.getRSize(4)),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  AppIcons.infoCircle,
-                  size: context.getRSize(10),
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
+class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
+  /// This tile's flight to the "Review Items" bar, if one is in the air (as
+  /// POS's and Request Stock's tiles).
+  FlyToCartFlight? _flight;
+
+  @override
+  void dispose() {
+    _flight?.cancel();
+    super.dispose();
   }
 
-  Widget _buildGridLayout(BuildContext context, ProductData product, int totalStock, bool isOutOfStock) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: Center(
-              child: product.imagePath != null
-                  ? Image.file(
-                      File(product.imagePath!),
-                      width: double.infinity,
-                      height: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (ctx, _, __) => _buildPlaceholderText(context, product.name),
-                    )
-                  : _buildPlaceholderText(context, product.name),
-            ),
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.all(context.getRSize(12)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                product.name,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w800,
-                  color: textCol,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: context.getRSize(2)),
-              Text(
-                '${product.size != null && product.size!.isNotEmpty ? '${product.size} ' : ''}${product.unit ?? ''}'.trim(),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(11),
-                  color: subtextCol,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: context.getRSize(8)),
-              Text(
-                isOutOfStock ? 'No stock' : 'Current: $totalStock',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(11),
-                  color: isOutOfStock ? Theme.of(context).colorScheme.error : subtextCol,
-                  fontWeight: isOutOfStock ? FontWeight.bold : FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+  void _add() {
+    // The add happens first and never waits on the animation.
+    ref.read(receiveCartProvider.notifier).addOrIncrement(widget.item.product);
+    // A tile tapped again replaces its own flight.
+    _flight?.cancel();
+    _flight = null;
+    // Launched after the next frame: on the first add the "Review Items" bar
+    // (the target) only appears in that frame, and a flight resolves its
+    // target at launch. No target, reduced motion or an unmounted tile → no
+    // flight, silently.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _flight?.cancel();
+      _flight = flyToTarget(context, target: FlyTargetId.receiveCart);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  Widget _buildPlaceholderText(BuildContext context, String name) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: context.getRSize(8)),
-      child: Text(
-        name,
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: context.getRFontSize(16),
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
-        ),
+  void _edit() {
+    HapticFeedback.mediumImpact();
+    // Fire-time re-check: a stale card can't open the edit sheet after the
+    // grant was revoked mid-session.
+    if (!Gates.editProductPrice.allowsNow(ref)) {
+      showGateDenied(context, Gates.editProductPrice);
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => UpdateProductSheet(
+        product: widget.item.product,
+        totalStock: widget.item.totalStock,
+        receiveMode: true,
+        onProductUpdated: (updatedProduct) {
+          // Cart addition is handled inside UpdateProductSheet
+        },
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.item.product;
+    final totalStock = widget.item.totalStock;
+    final cartQty = ref.watch(
+      receiveCartProvider.select(
+        (lines) =>
+            lines.where((l) => l.productId == product.id).firstOrNull?.qty ?? 0,
+      ),
+    );
+    final isOutOfStock = totalStock <= 0;
+    return ProductTile(
+      name: product.name,
+      subtitle: receiveTileSubtitle(product),
+      stockLabel: isOutOfStock ? 'No stock' : 'Current: $totalStock',
+      stockLevel: isOutOfStock ? StockLevel.out : StockLevel.ok,
+      categoryName: widget.categoryName,
+      photoPath: product.imagePath,
+      inCartQty: cartQty,
+      tappableWhenOut: true,
+      onTap: _add,
+      onLongPress: _edit,
     );
   }
 }
