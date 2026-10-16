@@ -1170,11 +1170,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: _buildAppBar(context),
-        body: AppRefreshWrapper(
-          onRefresh: () => _loadData(),
-          child: _contentReady
-              ? _buildContent(theme, showCrates)
-              : const Center(child: CircularProgressIndicator()),
+        // Sideways, the system bar sits on the right: keep the cards out of
+        // it (the lists add the bottom inset themselves).
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: AppRefreshWrapper(
+            onRefresh: () => _loadData(),
+            child: _contentReady
+                ? _buildContent(theme, showCrates)
+                : const Center(child: CircularProgressIndicator()),
+          ),
         ),
       ),
     );
