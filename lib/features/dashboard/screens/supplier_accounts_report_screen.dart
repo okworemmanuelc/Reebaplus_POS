@@ -4,11 +4,13 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/report_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 /// §25.2 — Supplier Accounts Report. One row per supplier showing the current
 /// outstanding balance, total paid, and total received (invoice totals), scoped
@@ -22,14 +24,11 @@ class SupplierAccountsReportScreen extends ConsumerStatefulWidget {
       _SupplierAccountsReportScreenState();
 }
 
-class _SupplierAccountsReportScreenState extends ConsumerState<SupplierAccountsReportScreen> {
-  bool _isScrolled = false;
-
+class _SupplierAccountsReportScreenState
+    extends ConsumerState<SupplierAccountsReportScreen> {
   @override
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider);
-    final bg = Theme.of(context).scaffoldBackgroundColor;
-    final surface = Theme.of(context).colorScheme.surface;
     final text = Theme.of(context).colorScheme.onSurface;
     final subtext =
         Theme.of(context).textTheme.bodySmall?.color ??
@@ -45,90 +44,76 @@ class _SupplierAccountsReportScreenState extends ConsumerState<SupplierAccountsR
     final rows = _aggregate(suppliers, entries);
 
     return ColoredBox(
-      color: bg,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: Container(
         decoration: AppDecorations.pageBackground(context),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: _isScrolled
-              ? surface.withValues(alpha: 0.8)
-              : Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(AppIcons.arrowBackIosNew, color: text, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Text(
-            'Supplier Accounts Report',
-            style: TextStyle(
-              color: text,
-              fontSize: context.getRFontSize(18),
-              fontWeight: FontWeight.w800,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: ReportTopBar(
+            key: ReportKeys.topBar,
+            height: reportTopBarHeight(context),
+            header: ScreenHeader(
+              leading: const ReportBackButton(),
+              icon: AppIcons.bank,
+              title: 'Supplier Accounts Report',
+              subtitle: scopeLabel,
             ),
           ),
-        ),
-        body: NotificationListener<ScrollUpdateNotification>(
-          onNotification: (notif) {
-            if (notif.metrics.pixels > 10 && !_isScrolled) {
-              setState(() => _isScrolled = true);
-            } else if (notif.metrics.pixels <= 10 && _isScrolled) {
-              setState(() => _isScrolled = false);
-            }
-            return false;
-          },
-          child: Column(
-            children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  context.getRSize(20),
-                  context.getRSize(12),
-                  context.getRSize(20),
-                  context.getRSize(4),
-                ),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Balances for: $scopeLabel',
-                    style: TextStyle(
-                      color: subtext,
-                      fontSize: context.getRFontSize(12),
-                      fontWeight: FontWeight.w600,
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final gutter = reportGutter(context, constraints.maxWidth);
+              return Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      gutter,
+                      context.getRSize(12),
+                      gutter,
+                      context.getRSize(4),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: rows.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No suppliers added yet',
-                          style: TextStyle(color: subtext),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: EdgeInsets.fromLTRB(
-                          context.getRSize(16),
-                          context.getRSize(8),
-                          context.getRSize(16),
-                          context.getRSize(24) + context.deviceBottomPadding,
-                        ),
-                        itemCount: rows.length,
-                        itemBuilder: (_, i) => _SupplierReportRow(
-                          row: rows[i],
-                          text: text,
-                          subtext: subtext,
-                          border: Theme.of(context).dividerColor,
-                        ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Balances for: $scopeLabel',
+                        style: context
+                            .semiBoldStyle(12)
+                            .copyWith(color: subtext),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-              ),
-            ],
+                    ),
+                  ),
+                  Expanded(
+                    child: rows.isEmpty
+                        ? const ReportEmpty(
+                            icon: AppIcons.bank,
+                            message: 'No suppliers added yet',
+                          )
+                        : ListView.separated(
+                            padding: EdgeInsets.fromLTRB(
+                              gutter,
+                              context.getRSize(8),
+                              gutter,
+                              context.getRSize(24) +
+                                  context.deviceBottomPadding,
+                            ),
+                            itemCount: rows.length,
+                            separatorBuilder: (_, _) =>
+                                SizedBox(height: context.getRSize(12)),
+                            itemBuilder: (_, i) => _SupplierReportRow(
+                              row: rows[i],
+                              text: text,
+                              subtext: subtext,
+                              border: Theme.of(context).dividerColor,
+                            ),
+                          ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -203,8 +188,9 @@ class _SupplierReportRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     final owed = row.balanceKobo < 0;
-    final balColor = owed ? danger : (row.balanceKobo > 0 ? success : subtext);
     // Positive = we paid the supplier in advance (a prepayment), not credit we
     // hold on their behalf; negative = a debt we owe for unpaid goods.
     final balLabel = owed
@@ -212,38 +198,40 @@ class _SupplierReportRow extends StatelessWidget {
         : (row.balanceKobo > 0
               ? 'Prepaid ${formatCurrency(row.balanceKobo / 100)}'
               : 'Settled');
+    final tone = owed
+        ? TagPillTone.danger
+        : (row.balanceKobo > 0 ? TagPillTone.green : TagPillTone.neutral);
 
-    return GlassyCard(
-      margin: EdgeInsets.only(bottom: context.getRSize(12)),
-      padding: EdgeInsets.all(context.getRSize(16)),
-      backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.4),
-      border: Border.all(
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-      ),
+    return ReportCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              IconTile(
+                icon: AppIcons.bank,
+                tone: owed
+                    ? IconTileTone.danger
+                    : (row.balanceKobo > 0
+                          ? IconTileTone.green
+                          : IconTileTone.neutral),
+                size: 40,
+              ),
+              SizedBox(width: context.getRSize(12)),
               Expanded(
                 child: Text(
                   row.name,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(16),
-                    color: text,
-                  ),
-                  maxLines: 1,
+                  style: context.boldStyle(15).copyWith(color: text),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               SizedBox(width: context.getRSize(8)),
-              Text(
-                balLabel,
-                style: TextStyle(
-                  color: balColor,
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.w800,
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: TagPill(label: balLabel, tone: tone),
                 ),
               ),
             ],
@@ -256,7 +244,7 @@ class _SupplierReportRow extends StatelessWidget {
                   context,
                   'Total received',
                   formatCurrency(row.receivedKobo / 100),
-                  danger,
+                  f.danger,
                 ),
               ),
               Expanded(
@@ -264,7 +252,7 @@ class _SupplierReportRow extends StatelessWidget {
                   context,
                   'Total paid',
                   formatCurrency(row.paidKobo / 100),
-                  success,
+                  f.green,
                 ),
               ),
             ],
@@ -283,17 +271,15 @@ class _SupplierReportRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(color: subtext, fontSize: context.getRFontSize(11)),
-        ),
+        Text(label, style: context.mediumStyle(12).copyWith(color: subtext)),
         SizedBox(height: context.getRSize(2)),
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor,
-            fontSize: context.getRFontSize(14),
-            fontWeight: FontWeight.w700,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: context.extraBoldStyle(14).copyWith(color: valueColor),
           ),
         ),
       ],
