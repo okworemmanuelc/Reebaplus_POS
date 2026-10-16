@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/screen_header.dart';
@@ -151,4 +154,116 @@ abstract final class ReceiveKeys {
   static const scroll = Key('receive-scroll');
   static const reviewBar = Key('receive-review-bar');
   static const newProduct = Key('receive-new-product');
+  static const clear = Key('receive-clear');
+  static const cartList = Key('receive-cart-list');
+  static const cartFooter = Key('receive-cart-footer');
+  static const continueButton = Key('receive-continue');
+  static const checkoutScroll = Key('receive-checkout-scroll');
+  static const confirmButton = Key('receive-confirm');
+  static const supplierField = Key('receive-supplier-field');
+  static const supplierClear = Key('receive-supplier-clear');
+  static const dateField = Key('receive-date-field');
+  static const paymentMethod = Key('receive-payment-method');
+  static const editSheet = Key('receive-edit-sheet');
+  static const editClose = Key('receive-edit-close');
+  static const editMinus = Key('receive-edit-minus');
+  static const editPlus = Key('receive-edit-plus');
+  static const supplierSheet = Key('receive-supplier-sheet');
+}
+
+/// The key on the receive cart's line for [productId] (#394).
+ValueKey<String> receiveCartLineKey(String productId) =>
+    ValueKey<String>('receive-cart-line-$productId');
+
+/// The key on the supplier picker's row for [supplierId] (#394).
+ValueKey<String> receiveSupplierRowKey(String supplierId) =>
+    ValueKey<String>('receive-supplier-$supplierId');
+
+/// The widest the receive cart and checkout content gets (#394, the
+/// batch-wide list / form cap): `kSettingsMaxContentWidth`'s 720dp, as CEO
+/// Settings and Inventory → Manufacturers use it. Repeated as a value because a
+/// feature does not import another feature's screen.
+const double kReceiveMaxContentWidth = 720;
+
+/// The widest a receiving bottom sheet gets (#394): 640dp, centred.
+const double kReceiveSheetMaxWidth = 640;
+
+/// Side padding that keeps content [width] dp wide within
+/// [kReceiveMaxContentWidth], centred, never under the `getRSize(16)` gutter.
+double receiveSidePadding(BuildContext context, double width) =>
+    math.max(context.getRSize(16), (width - kReceiveMaxContentWidth) / 2);
+
+/// The receive cart's red-tint "Clear" pill (#394): a copy of the Cart's
+/// `CartClearButton` (a feature does not import another feature's widgets);
+/// shared-part candidate. 48dp tap target.
+class ReceiveClearButton extends StatelessWidget {
+  const ReceiveClearButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+    return Semantics(
+      button: true,
+      child: InkWell(
+        key: ReceiveKeys.clear,
+        onTap: onPressed,
+        borderRadius: radius,
+        child: SizedBox(
+          height: kMinInteractiveDimension,
+          child: Center(
+            child: Container(
+              height: math.min(context.getRSize(40), kMinInteractiveDimension),
+              // Tighter than the Cart's pill so "Receive Stock Cart" keeps
+              // its whole title on a 390dp phone.
+              padding: EdgeInsets.symmetric(horizontal: context.getRSize(8)),
+              decoration: BoxDecoration(
+                color: f.dangerTint,
+                borderRadius: radius,
+                border: Border.all(color: f.dangerOutline),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppIcon(
+                    AppIcons.delete,
+                    size: context.getRSize(16),
+                    color: f.danger,
+                  ),
+                  SizedBox(width: context.getRSize(4)),
+                  Text(
+                    'Clear',
+                    maxLines: 1,
+                    style: context.boldStyle(14).copyWith(color: f.danger),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The hairline handle at the top of a receiving bottom sheet (40×4).
+class ReceiveSheetHandle extends StatelessWidget {
+  const ReceiveSheetHandle({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: context.getRSize(40),
+        height: context.getRSize(4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).dividerColor,
+          borderRadius: BorderRadius.circular(AppSpacing.borderRadiusS),
+        ),
+      ),
+    );
+  }
 }

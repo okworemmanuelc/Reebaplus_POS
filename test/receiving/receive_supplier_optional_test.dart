@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_checkout_screen.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -210,9 +211,8 @@ void main() {
     expect(find.text('Amount Paid Now'), findsOneWidget);
 
     // Clear (×) the supplier — back to a cash purchase, payment gone.
-    await tester.tap(find.byWidgetPredicate(
-      (w) => w is InkWell && w.customBorder is CircleBorder,
-    ));
+    // #394: the ✕ is now a 48dp IconButton (was a small round InkWell).
+    await tester.tap(find.byKey(ReceiveKeys.supplierClear));
     await tester.pumpAndSettle();
     expect(find.text('Select supplier'), findsOneWidget);
     expect(find.text('Amount Paid Now'), findsNothing);
