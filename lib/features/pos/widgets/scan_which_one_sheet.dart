@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
 
 /// Key prefix for a "Which one?" row; the product id follows (tests find a row
@@ -37,115 +42,38 @@ class ScanWhichOneSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final border = t.dividerColor;
-    final text = t.colorScheme.onSurface;
-    final primary = t.colorScheme.primary;
-
     return Container(
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 30,
-            offset: const Offset(0, -10),
-          ),
-        ],
-      ),
+      decoration: salesSheetDecoration(context),
       // Scrolls so a long list never overflows a short (landscape) viewport.
       // Bottom padding is nav-only (deviceBottomPadding), like EditItemModal.
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-          context.getRSize(24),
-          context.getRSize(16),
-          context.getRSize(24),
-          context.deviceBottomPadding + context.getRSize(24),
+          context.getRSize(20),
+          context.getRSize(12),
+          context.getRSize(20),
+          context.deviceBottomPadding + context.getRSize(20),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Drag Handle
-            Center(
-              child: Container(
-                width: context.getRSize(40),
-                height: context.getRSize(4),
-                decoration: BoxDecoration(
-                  color: border.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            SizedBox(height: context.getRSize(24)),
-
-            // Header with Icon
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(context.getRSize(14)),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        primary.withValues(alpha: 0.2),
-                        primary.withValues(alpha: 0.1),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Icon(
-                    AppIcons.barcode,
-                    size: context.getRSize(20),
-                    color: primary,
-                  ),
-                ),
-                SizedBox(width: context.getRSize(16)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Which one?',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(20),
-                          fontWeight: FontWeight.w900,
-                          color: text,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      Text(
-                        '${choices.length} products have this barcode',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(14),
-                          color: text.withValues(alpha: 0.5),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Material(
-                  color: border.withValues(alpha: 0.1),
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(
-                      AppIcons.close,
-                      size: context.getRSize(20),
-                      color: text.withValues(alpha: 0.5),
-                    ),
-                  ),
+            SalesSheetHeader(
+              title: 'Which one?',
+              subtitle: '${choices.length} products have this barcode',
+              leading: const IconTile(icon: AppIcons.barcode, size: 44),
+              trailing: [
+                SalesBackButton(
+                  icon: AppIcons.close,
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
-            SizedBox(height: context.getRSize(20)),
+            SizedBox(height: context.getRSize(16)),
 
             for (final choice in choices) ...[
               _ScanChoiceRow(choice: choice),
-              SizedBox(height: context.getRSize(10)),
+              SizedBox(height: context.getRSize(8)),
             ],
           ],
         ),
@@ -164,64 +92,71 @@ class _ScanChoiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final border = t.dividerColor;
     final text = t.colorScheme.onSurface;
+    final muted = t.textTheme.bodySmall?.color ?? text;
     final product = choice.product;
     // Same size + unit descriptor the POS grid tile shows under the name.
     final size = '${product.size ?? ''} ${product.unit ?? ''}'.trim();
     final reason = _reasonOf(choice.outcome);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 
-    return Material(
-      color: border.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        key: ValueKey<String>('$kScanChoiceKeyPrefix${product.id}'),
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => Navigator.pop(context, product),
-        child: Opacity(
-          opacity: choice.isSellable ? 1 : 0.45,
-          child: Padding(
-            padding: EdgeInsets.all(context.getRSize(14)),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        size.isEmpty ? product.name : '${product.name} · $size',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(15),
-                          fontWeight: FontWeight.w800,
-                          color: text,
-                        ),
+    return DecoratedBox(
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusL,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          key: ValueKey<String>('$kScanChoiceKeyPrefix${product.id}'),
+          borderRadius: radius,
+          onTap: () => Navigator.pop(context, product),
+          child: Opacity(
+            opacity: choice.isSellable ? 1 : 0.45,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: kMinInteractiveDimension,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(context.getRSize(12)),
+                child: Row(
+                  children: [
+                    const IconTile(icon: AppIcons.box, size: 40),
+                    SizedBox(width: context.getRSize(10)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            size.isEmpty
+                                ? product.name
+                                : '${product.name} · $size',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.boldStyle(15).copyWith(color: text),
+                          ),
+                          SizedBox(height: context.getRSize(2)),
+                          Text(
+                            reason == null
+                                ? '${choice.stock} in stock here'
+                                : '${choice.stock} in stock here · $reason',
+                            style: context
+                                .regularStyle(12)
+                                .copyWith(color: muted),
+                          ),
+                        ],
                       ),
-                      SizedBox(height: context.getRSize(4)),
-                      Text(
-                        reason == null
-                            ? '${choice.stock} in stock here'
-                            : '${choice.stock} in stock here · $reason',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(12),
-                          fontWeight: FontWeight.w600,
-                          color: text.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                    SizedBox(width: context.getRSize(10)),
+                    Text(
+                      formatCurrency(choice.unitPriceKobo / 100.0),
+                      style: context
+                          .boldStyle(15)
+                          .copyWith(color: t.colorScheme.primary),
+                    ),
+                  ],
                 ),
-                SizedBox(width: context.getRSize(12)),
-                Text(
-                  formatCurrency(choice.unitPriceKobo / 100.0),
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(15),
-                    fontWeight: FontWeight.w900,
-                    color: text,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
