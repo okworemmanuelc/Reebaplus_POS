@@ -14,7 +14,9 @@ import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_de
 import 'package:reebaplus_pos/features/dashboard/widgets/changed_since_review_badge.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/report_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 /// Daily Reconciliation entry list (§25.9). Store-scoped via the §12.1 picker and
@@ -34,7 +36,6 @@ class _DailyReconciliationListScreenState
     extends ConsumerState<DailyReconciliationListScreen> {
   ReconGrouping _grouping = ReconGrouping.day;
   DateTimeRange? _customRange;
-  bool _isScrolled = false;
 
   @override
   void initState() {
@@ -57,7 +58,7 @@ class _DailyReconciliationListScreenState
     final periodName = _customRange != null
         ? 'custom'
         : _grouping.label.toLowerCase();
-    
+
     final subjectScope = _customRange != null
         ? '$scope — ${DateFormat('MMM d').format(_customRange!.start)} to ${DateFormat('MMM d, yyyy').format(_customRange!.end)}'
         : '$scope — by ${_grouping.label}';
@@ -115,7 +116,7 @@ class _DailyReconciliationListScreenState
 
     final Object currentValue = _customRange != null ? 'custom' : _grouping;
     final List<ReconBucket> buckets;
-    
+
     if (_customRange != null) {
       buckets = buildReconBuckets(
         ref,
@@ -144,136 +145,101 @@ class _DailyReconciliationListScreenState
         ? ref.watch(changedReviewedDaysProvider)
         : const <String>{};
 
-    return ColoredBox(
-      color: theme.scaffoldBackgroundColor,
-      child: Container(
-        decoration: AppDecorations.pageBackground(context),
-        child: SharedScaffold(
-          activeRoute: 'dashboard',
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            elevation: 0,
-            backgroundColor: _isScrolled
-                ? theme.colorScheme.surface.withValues(alpha: 0.8)
-                : Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            leading: BackButton(color: primary),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Daily Reconciliation',
-                  style: context.h3.copyWith(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  scopeLabel,
-                  style: context.bodySmall.copyWith(color: theme.hintColor),
-                ),
-              ],
-            ),
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: SharedScaffold(
+        activeRoute: 'dashboard',
+        backgroundColor: Colors.transparent,
+        appBar: ReportTopBar(
+          key: ReportKeys.topBar,
+          height: reportTopBarHeight(context),
+          header: ScreenHeader(
+            leading: const ReportBackButton(),
+            icon: AppIcons.auditCheck,
+            title: 'Daily Reconciliation',
+            subtitle: scopeLabel,
             actions: [
-              IconButton(
+              ReportBarAction(
+                key: ReportKeys.export,
+                icon: AppIcons.fileCsv,
                 tooltip: 'Export CSV',
-                icon: Icon(
-                  AppIcons.fileCsv,
-                  size: 18,
-                  color: primary,
-                ),
                 onPressed: buckets.isEmpty
                     ? null
                     : () => _exportCsv(buckets, scopeLabel),
               ),
-              SizedBox(width: context.getRSize(8)),
             ],
           ),
-          body: NotificationListener<ScrollUpdateNotification>(
-            onNotification: (notif) {
-              if (notif.metrics.pixels > 10 && !_isScrolled) {
-                setState(() => _isScrolled = true);
-              } else if (notif.metrics.pixels <= 10 && _isScrolled) {
-                setState(() => _isScrolled = false);
-              }
-              return false;
-            },
-            child: Column(
+        ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final gutter = reportGutter(context, constraints.maxWidth);
+            final onSurface = theme.colorScheme.onSurface;
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
+                  padding: EdgeInsets.fromLTRB(
+                    gutter,
+                    context.getRSize(12),
+                    gutter,
+                    context.getRSize(4),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(height: context.getRSize(8)),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppDropdown<Object>(
-                              labelText: 'Period',
-                              value: currentValue,
-                              items: [
-                                ...groupings.map(
-                                  (g) => DropdownMenuItem<Object>(
-                                    value: g,
-                                    child: Text(
-                                      g.label,
-                                      style: theme.textTheme.bodyMedium,
-                                    ),
-                                  ),
-                                ),
-                                DropdownMenuItem<Object>(
-                                  value: 'custom',
-                                  child: Text(
-                                    'Custom range',
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                ),
-                              ],
-                              onChanged: (v) => _handlePeriodChange(v, theme),
+                      AppDropdown<Object>(
+                        key: ReportKeys.period,
+                        labelText: 'Period',
+                        value: currentValue,
+                        items: [
+                          ...groupings.map(
+                            (g) => DropdownMenuItem<Object>(
+                              value: g,
+                              child: Text(
+                                g.label,
+                                style: context
+                                    .mediumStyle(14)
+                                    .copyWith(color: onSurface),
+                              ),
                             ),
                           ),
-                          SizedBox(width: context.getRSize(16)),
-                          const Expanded(child: SizedBox()),
+                          DropdownMenuItem<Object>(
+                            value: 'custom',
+                            child: Text(
+                              'Custom range',
+                              style: context
+                                  .mediumStyle(14)
+                                  .copyWith(color: onSurface),
+                            ),
+                          ),
                         ],
+                        onChanged: (v) => _handlePeriodChange(v, theme),
                       ),
                       if (_customRange != null) ...[
                         SizedBox(height: context.getRSize(8)),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: context.getRSize(12),
-                            vertical: context.getRSize(6),
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(context.radiusL),
-                            border: Border.all(
-                              color: primary.withValues(alpha: 0.1),
-                            ),
-                          ),
-                          child: Text(
-                            '${DateFormat('MMM d, yyyy').format(_customRange!.start)} – ${DateFormat('MMM d, yyyy').format(_customRange!.end)}',
-                            style: context.bodySmall.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: primary,
-                            ),
-                          ),
+                        ReportChip(
+                          '${DateFormat('MMM d, yyyy').format(_customRange!.start)} – ${DateFormat('MMM d, yyyy').format(_customRange!.end)}',
                         ),
                       ],
-                      SizedBox(height: context.getRSize(20)),
                     ],
                   ),
                 ),
                 Expanded(
                   child: buckets.isEmpty
-                      ? _emptyState(theme)
+                      ? const ReportEmpty(
+                          icon: AppIcons.auditCheck,
+                          message: 'No data for this period.',
+                        )
                       : ListView.separated(
                           padding: EdgeInsets.fromLTRB(
-                            context.getRSize(16),
-                            0,
-                            context.getRSize(16),
-                            context.spacingM + context.deviceBottomPadding,
+                            gutter,
+                            context.getRSize(8),
+                            gutter,
+                            context.getRSize(16) + context.deviceBottomPadding,
                           ),
                           itemCount: buckets.length,
-                          separatorBuilder: (_, __) => SizedBox(height: context.getRSize(12)),
+                          separatorBuilder: (_, __) =>
+                              SizedBox(height: context.getRSize(12)),
                           itemBuilder: (_, i) => _bucketCard(
                             theme,
                             buckets[i],
@@ -282,29 +248,9 @@ class _DailyReconciliationListScreenState
                         ),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
-      ),
-    );
-  }
-
-  Widget _emptyState(ThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            AppIcons.auditCheck,
-            size: 40,
-            color: theme.hintColor.withValues(alpha: 0.5),
-          ),
-          SizedBox(height: context.spacingM),
-          Text(
-            'No data for this period.',
-            style: context.bodyMedium.copyWith(color: theme.hintColor),
-          ),
-        ],
       ),
     );
   }
@@ -318,76 +264,89 @@ class _DailyReconciliationListScreenState
     // #192 — this day was reviewed and has moved since. Neutral WARNING
     // treatment (not the error red a stock mismatch gets): history mutating
     // after a review is a "look again", not a fault.
-    final movedSinceReview = b.grouping == ReconGrouping.day &&
+    final movedSinceReview =
+        b.grouping == ReconGrouping.day &&
         changedDays.contains(reconDayKey(b.start));
-    return GlassyCard(
-      radius: context.radiusL,
-      padding: EdgeInsets.zero,
-      border: Border.all(
-        color: mismatch
-            ? theme.colorScheme.error.withValues(alpha: 0.3)
-            : theme.colorScheme.primary.withValues(alpha: 0.05),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(context.radiusL),
-        onTap: () => Navigator.push(
-          context,
-          slideDownRoute(
-            DailyReconciliationDetailScreen(
-              start: b.start,
-              endExclusive: b.endExclusive,
-              grouping: b.grouping,
-              title: b.label,
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
+    return DecoratedBox(
+      decoration: AppDecorations.card(
+        context,
+      ).copyWith(border: mismatch ? Border.all(color: f.dangerOutline) : null),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: () => Navigator.push(
+            context,
+            slideDownRoute(
+              DailyReconciliationDetailScreen(
+                start: b.start,
+                endExclusive: b.endExclusive,
+                grouping: b.grouping,
+                title: b.label,
+              ),
             ),
           ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(context.spacingM),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      b.label,
-                      style: context.bodyMedium.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(14)),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          b.label,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: context
+                              .boldStyle(16)
+                              .copyWith(color: theme.colorScheme.onSurface),
+                        ),
+                        SizedBox(height: context.getRSize(4)),
+                        Text(
+                          '${fmtNumber(b.itemsSold)} items sold',
+                          style: context
+                              .regularStyle(13)
+                              .copyWith(color: muted),
+                        ),
+                        if (movedSinceReview || mismatch) ...[
+                          SizedBox(height: context.getRSize(8)),
+                          Wrap(
+                            spacing: context.getRSize(8),
+                            runSpacing: context.getRSize(6),
+                            children: [
+                              if (movedSinceReview)
+                                const ChangedSinceReviewBadge(
+                                  label: 'Changed since review',
+                                ),
+                              if (mismatch)
+                                const StatusPill(
+                                  label: 'Mismatch',
+                                  tone: TagPillTone.danger,
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
-                    SizedBox(height: context.getRSize(4)),
-                    Text(
-                      '${fmtNumber(b.itemsSold)} items sold',
-                      style: context.bodySmall.copyWith(color: theme.hintColor),
-                    ),
-                  ],
-                ),
+                  ),
+                  SizedBox(width: context.getRSize(8)),
+                  AppIcon(
+                    AppIcons.chevronRight,
+                    color: muted,
+                    size: context.getRSize(22),
+                  ),
+                ],
               ),
-              if (movedSinceReview) ...[
-                const ChangedSinceReviewBadge(label: 'Changed since review'),
-                SizedBox(width: context.getRSize(8)),
-              ],
-              if (mismatch)
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: context.getRSize(8),
-                    vertical: context.getRSize(4),
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.error.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Mismatch',
-                    style: context.bodySmall.copyWith(
-                      color: theme.colorScheme.error,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              SizedBox(width: context.getRSize(8)),
-              Icon(AppIcons.chevronRight, color: theme.hintColor),
-            ],
+            ),
           ),
         ),
       ),
