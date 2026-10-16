@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #411: Payments (Supplier Accounts) restyle (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-payments` off `main` fed219a5, worktree `../drinkPosApp-wt-411`. One PR. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.**
+- New `lib/features/payments/widgets/payments_parts.dart` (shared-part candidates): `PaymentsTopBar`/`paymentsTopBarHeight`, `PaymentsLiveBell`, `PaymentsBackButton`, `paymentsGutter` (720 cap), `PaymentsSupplierRow`, `PaymentsFigureCard`, `PaymentsEmptyMessage`, sheet parts (`paymentsSheetKeyboardLift`, `paymentsSheetDecoration`, `PaymentsSheetHeader`, `PaymentsFormSheetLayout`, `PaymentsSheetFooter`, `PaymentsChooserFrame`, `PaymentsStoreBanner`, `PaymentsReceiptBox`).
+- Supplier Accounts + Transaction History: solid top bar with `ScreenHeader`, 720-capped flat card lists, `SettingsRow` history link, `SectionHeader`; the `_isScrolled` tint is gone. `SupplierLedgerEntryTile` (also used by Supplier Detail) is flat cards with an `IconTile`; the six Supplier Detail ledger goldens were regenerated for it.
+- Sheets: supplier form, Record Invoice, Record Payment keep their draggable sheets and tap-out; they now use the theme sheet shape, a `ScreenHeader`, and lift the button above the keyboard. The Record Activity chooser is a theme sheet of two `SettingsRow`s. Payment method stays an `AppDropdown`. The confirm dialog uses the theme dialog and has no text box.
+- Untouched: the balance sign mapping (wallet: negative = Owed, positive = Credit), `Gates.seeExtendedDateRanges`, the store lock, every write path and signature.
+- Tests: `test/payments/payments_redesign_test.dart` (32), goldens `test/redesign/payments_golden_test.dart` (32).
+
 ### Release 2.0 (v2.0.0+10) — Google Play Store Public Release (2026-10-11)
 - **Version Bump**: Bumped version in `pubspec.yaml` to `2.0.0+10` (versionName `2.0`, versionCode `10`).
 - **Release Build**: Generated signed production Android App Bundle (`app-release.aab`, 99.2 MB) at `build/app/outputs/bundle/release/app-release.aab` via `flutter build appbundle --release --build-name=2.0 --build-number=10`.
