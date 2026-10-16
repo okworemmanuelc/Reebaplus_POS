@@ -15,7 +15,6 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/features/customers/widgets/customer_parts.dart';
-import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 import '../helpers/customer_detail_fixture.dart';
 import '../helpers/screen_harness.dart';
