@@ -554,7 +554,15 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         ),
         items: [
           for (final s in _stores)
-            DropdownMenuItem(value: s.id, child: Text(s.name)),
+            DropdownMenuItem(
+              value: s.id,
+              child: Text(
+                s.name,
+                style: context
+                    .mediumStyle(15)
+                    .copyWith(color: Theme.of(context).colorScheme.onSurface),
+              ),
+            ),
         ],
         onChanged: (v) => setState(() => _flowStoreId = v),
       ),
@@ -630,10 +638,23 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
               child: AppDropdown<String>(
                 key: ReceiveKeys.paymentMethod,
                 value: _paymentMethod,
-                items: const [
-                  DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                  DropdownMenuItem(value: 'transfer', child: Text('Transfer')),
-                  DropdownMenuItem(value: 'pos', child: Text('POS')),
+                items: [
+                  for (final (value, label) in const [
+                    ('cash', 'Cash'),
+                    ('transfer', 'Transfer'),
+                    ('pos', 'POS'),
+                  ])
+                    DropdownMenuItem(
+                      value: value,
+                      child: Text(
+                        label,
+                        style: context
+                            .mediumStyle(15)
+                            .copyWith(
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                      ),
+                    ),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _paymentMethod = v);

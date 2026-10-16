@@ -217,7 +217,9 @@ class ReceiveClearButton extends StatelessWidget {
           child: Center(
             child: Container(
               height: math.min(context.getRSize(40), kMinInteractiveDimension),
-              padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
+              // Tighter than the Cart's pill so "Receive Stock Cart" keeps
+              // its whole title on a 390dp phone.
+              padding: EdgeInsets.symmetric(horizontal: context.getRSize(8)),
               decoration: BoxDecoration(
                 color: f.dangerTint,
                 borderRadius: radius,
@@ -228,10 +230,10 @@ class ReceiveClearButton extends StatelessWidget {
                 children: [
                   AppIcon(
                     AppIcons.delete,
-                    size: context.getRSize(18),
+                    size: context.getRSize(16),
                     color: f.danger,
                   ),
-                  SizedBox(width: context.getRSize(6)),
+                  SizedBox(width: context.getRSize(4)),
                   Text(
                     'Clear',
                     maxLines: 1,
