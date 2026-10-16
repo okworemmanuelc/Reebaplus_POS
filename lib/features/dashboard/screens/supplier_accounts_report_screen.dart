@@ -219,8 +219,7 @@ class _SupplierReportRow extends StatelessWidget {
                 size: 40,
               ),
               SizedBox(width: context.getRSize(12)),
-              Flexible(
-                flex: 3,
+              Expanded(
                 child: Text(
                   row.name,
                   style: context.boldStyle(15).copyWith(color: text),
@@ -229,8 +228,8 @@ class _SupplierReportRow extends StatelessWidget {
                 ),
               ),
               SizedBox(width: context.getRSize(8)),
-              Flexible(
-                flex: 2,
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: context.getRSize(170)),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
