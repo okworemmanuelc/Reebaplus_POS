@@ -1467,31 +1467,36 @@ class _OrderCard extends ConsumerWidget {
     required this.onViewReceipt,
   });
 
-  // The payment badge's tone (fixed colours; the same buckets as before).
+  // Part paid now, the rest booked to the customer's credit: checkout's
+  // 'Cash / Credit' / 'Transfer / Credit', the legacy 'Cash / Transfer /
+  // Wallet', or 'mixed'. Owner (#402): badge these "Partial".
+  bool _isPartialPayment(String lower) =>
+      lower.contains('partial') ||
+      lower.contains('mixed') ||
+      (lower.contains('/') &&
+          (lower.contains('credit') || lower.contains('wallet')));
+
+  // The payment badge's tone (fixed colours).
   TagPillTone _paymentTone(String paymentType) {
     final lower = paymentType.toLowerCase();
-    // Mixed cash + wallet (e.g. 'Cash / Transfer / Wallet') is a partial
-    // payment — cash now, the shortfall booked to the wallet as debt. Match it
-    // before the plain 'wallet' check, which would otherwise claim it.
-    if (lower.contains('wallet') && lower.contains('cash')) {
-      return TagPillTone.info;
-    }
+    if (_isPartialPayment(lower)) return TagPillTone.info;
     if (lower.contains('wallet')) return TagPillTone.info;
-    if (lower.contains('partial')) return TagPillTone.info;
+    if (lower.contains('credit payment')) return TagPillTone.info;
     if (lower.contains('credit')) return TagPillTone.danger;
-    return TagPillTone.green; // Full Cash / Card
+    return TagPillTone.green; // paid in full: Cash / Transfer / Card
   }
 
-  // Returns a short label for the payment type badge
+  // Returns a short label for the payment type badge. Owner (#402): a
+  // transfer shows "Transfer" and a part payment "Partial" (both used to
+  // read "Cash" / "Credit").
   String _paymentLabel(String paymentType) {
     final lower = paymentType.toLowerCase();
-    // Mixed cash + wallet (e.g. 'Cash / Transfer / Wallet') → Partial. Checked
-    // before plain 'wallet' so the combined label isn't badged as a pure wallet
-    // payment.
-    if (lower.contains('wallet') && lower.contains('cash')) return 'Partial';
-    if (lower.contains('wallet')) return 'Credit Payment';
-    if (lower.contains('partial')) return 'Partial';
+    if (_isPartialPayment(lower)) return 'Partial';
+    if (lower.contains('wallet') || lower.contains('credit payment')) {
+      return 'Credit Payment';
+    }
     if (lower.contains('credit')) return 'Credit';
+    if (lower.contains('transfer')) return 'Transfer';
     return 'Cash';
   }
 
