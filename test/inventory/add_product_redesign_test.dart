@@ -5,7 +5,6 @@
 
 import 'dart:io';
 
-import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -290,7 +289,7 @@ void main() {
             '360x740 @1.3',
             const Size(360, 740),
             _gesture,
-            TextScaler.linear(1.3),
+            const TextScaler.linear(1.3),
           ),
           ('390x844 gesture', const Size(390, 844), _gesture, null),
           ('390x844 3-button', const Size(390, 844), _threeButton, null),
