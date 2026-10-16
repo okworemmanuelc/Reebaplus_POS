@@ -27,7 +27,8 @@ enum StockLevel { ok, low, out }
 /// Below: the name, a muted [subtitle] ("60cl · Crate of 12"), the price in
 /// primary and a stock pill with a dot. Without a [priceLabel] (#380: Request
 /// Stock, where nothing is sold) the stock pill sits alone at the start. [inCartQty] > 0 draws the primary
-/// border and the count badge. Out of stock dims the tile and ignores taps.
+/// border and the count badge. Out of stock dims the tile and ignores taps,
+/// unless [tappableWhenOut] (#394: Receive Stock restocks empty products).
 /// The whole tile is one tap target.
 class ProductTile extends StatelessWidget {
   const ProductTile({
@@ -43,6 +44,7 @@ class ProductTile extends StatelessWidget {
     this.inCartLabel,
     this.onTap,
     this.onLongPress,
+    this.tappableWhenOut = false,
   });
 
   final String name;
@@ -66,6 +68,12 @@ class ProductTile extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
+  /// Out of stock still takes taps and holds, is not dimmed and has no
+  /// "Out of stock" overlay; the danger stock pill still shows (#394: Receive
+  /// Stock, where an empty product is the one being restocked). Off by
+  /// default.
+  final bool tappableWhenOut;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
@@ -73,7 +81,9 @@ class ProductTile extends StatelessWidget {
     final scheme = t.extension<AppSchemeColors>();
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final visual = categoryVisual(categoryName, f);
-    final out = stockLevel == StockLevel.out;
+    // Out of stock as far as taps, dimming and the overlay go; the pill
+    // colour still follows [stockLevel].
+    final out = stockLevel == StockLevel.out && !tappableWhenOut;
     final inCart = inCartQty > 0;
     final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
 
