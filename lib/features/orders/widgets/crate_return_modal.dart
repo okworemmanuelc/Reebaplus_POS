@@ -12,6 +12,12 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/orders/widgets/orders_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 
 /// §13.4 reconciliation — split a legacy order's recorded crate deposit
 /// ([totalDeposit] kobo) across its brands by [weights] (full value or crate
@@ -103,8 +109,6 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
-  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _card => Theme.of(context).cardColor;
   Color get _border => Theme.of(context).dividerColor;
 
   @override
@@ -280,44 +284,65 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
   /// customer's credit balance (spendable credit) or out of the till as cash.
   Widget _buildRefundModeToggle() {
     Widget chip(
+      Key key,
       String label,
       IconData icon,
       bool selected,
       VoidCallback onTap,
     ) {
-      final primary = Theme.of(context).colorScheme.primary;
+      final t = Theme.of(context);
+      final primary = t.colorScheme.primary;
+      final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+      final base = AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusM,
+      );
       return Expanded(
-        child: GestureDetector(
-          onTap: _saving ? null : onTap,
+        child: Semantics(
+          selected: selected,
+          button: true,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: EdgeInsets.symmetric(vertical: context.getRSize(10)),
-            decoration: BoxDecoration(
-              color: selected ? primary.withValues(alpha: 0.10) : _card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selected ? primary : _border,
-                width: selected ? 2 : 1,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: context.getRSize(14),
-                  color: selected ? primary : _subtext,
-                ),
-                SizedBox(width: context.getRSize(8)),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? primary : _subtext,
-                    fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-                    fontSize: context.getRFontSize(13),
+            duration: AppAnimations.fast,
+            decoration: selected
+                ? base.copyWith(
+                    color: Color.alphaBlend(
+                      t.extension<AppSchemeColors>()?.primaryTint ??
+                          primary.withValues(alpha: 0.12),
+                      t.colorScheme.surface,
+                    ),
+                    border: Border.all(color: primary, width: 1.5),
+                  )
+                : base,
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                key: key,
+                borderRadius: radius,
+                onTap: _saving ? null : onTap,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minHeight: kMinInteractiveDimension,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      AppIcon(
+                        icon,
+                        filled: selected,
+                        size: context.getRSize(20),
+                        color: selected ? primary : _subtext,
+                      ),
+                      SizedBox(width: context.getRSize(8)),
+                      Text(
+                        label,
+                        style: context
+                            .semiBoldStyle(14)
+                            .copyWith(color: selected ? primary : _text),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -336,16 +361,13 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
         children: [
           Text(
             'Refund deposit to',
-            style: TextStyle(
-              color: _subtext,
-              fontSize: context.getRFontSize(12),
-              fontWeight: FontWeight.w600,
-            ),
+            style: context.semiBoldStyle(13).copyWith(color: _subtext),
           ),
           SizedBox(height: context.getRSize(8)),
           Row(
             children: [
               chip(
+                OrdersKeys.refundCredit,
                 'Credit',
                 AppIcons.creditBalance,
                 !_refundAsCash,
@@ -359,6 +381,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
               if (Gates.refundCustomerWallet.allows(ref)) ...[
                 SizedBox(width: context.getRSize(10)),
                 chip(
+                  OrdersKeys.refundCash,
                   'Cash',
                   AppIcons.cash,
                   _refundAsCash,
@@ -374,9 +397,6 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    // amber unused after AppButton migration
-
     // Height-capped, content-sized sheet (NOT DraggableScrollableSheet): a
     // draggable sheet auto-EXPANDS from initialChildSize toward maxChildSize
     // whenever a descendant is scrolled into view — exactly what the framework
@@ -389,22 +409,25 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     // resize lifts the sheet above the keyboard). Same fix the cart's
     // change-customer sheet uses.
     return Container(
+      key: OrdersKeys.crateReturnSheet,
       constraints: BoxConstraints(maxHeight: context.sheetMaxHeight(0.9)),
       decoration: BoxDecoration(
-        color: _bg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.borderRadiusXL),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Drag handle
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            width: 40,
-            height: 4,
+            margin: EdgeInsets.symmetric(vertical: context.getRSize(12)),
+            width: context.getRSize(40),
+            height: context.getRSize(4),
             decoration: BoxDecoration(
               color: _border,
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusS),
             ),
           ),
 
@@ -413,32 +436,33 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
             padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
             child: Row(
               children: [
-                Icon(
-                  AppIcons.box,
-                  color: Colors.orange,
-                  size: context.getRSize(18),
+                const IconTile(
+                  icon: AppIcons.crates,
+                  tone: IconTileTone.warning,
+                  size: 44,
                 ),
-                SizedBox(width: context.getRSize(10)),
-                Text(
-                  'Record Crate Returns',
-                  style: TextStyle(
-                    color: _text,
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(17),
+                SizedBox(width: context.getRSize(12)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Record Crate Returns',
+                        style: context.screenTitleStyle.copyWith(color: _text),
+                      ),
+                      SizedBox(height: context.getRSize(2)),
+                      Text(
+                        'Enter returned crates per manufacturer.',
+                        style: context
+                            .semiBoldStyle(13)
+                            .copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ),
-          ),
-          SizedBox(height: context.getRSize(4)),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-            child: Text(
-              'Enter returned crates per manufacturer.',
-              style: TextStyle(
-                color: _subtext,
-                fontSize: context.getRFontSize(13),
-              ),
             ),
           ),
           SizedBox(height: context.getRSize(14)),
@@ -456,14 +480,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
                     padding: EdgeInsets.all(context.getRSize(20)),
                     children: [
                       for (final row in _rows)
-                        _ManufacturerReturnTile(
-                          row: row,
-                          card: _card,
-                          border: _border,
-                          text: _text,
-                          subtext: _subtext,
-                          primary: primary,
-                        ),
+                        _ManufacturerReturnTile(row: row),
                     ],
                   ),
           ),
@@ -515,84 +532,58 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
 
 class _ManufacturerReturnTile extends StatelessWidget {
   final _ManufacturerRow row;
-  final Color card, border, text, subtext, primary;
 
-  const _ManufacturerReturnTile({
-    required this.row,
-    required this.card,
-    required this.border,
-    required this.text,
-    required this.subtext,
-    required this.primary,
-  });
+  const _ManufacturerReturnTile({required this.row});
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(12)),
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border),
+      margin: EdgeInsets.only(bottom: context.getRSize(10)),
+      padding: EdgeInsets.all(context.getRSize(12)),
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusL,
       ),
       child: Row(
         children: [
-          // Manufacturer icon badge
-          Container(
-            width: context.getRSize(40),
-            height: context.getRSize(40),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5A623).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              AppIcons.manufacturer,
-              size: context.getRSize(16),
-              color: const Color(0xFFF5A623),
-            ),
+          const IconTile(
+            icon: AppIcons.manufacturer,
+            tone: IconTileTone.warning,
+            size: 40,
           ),
-          SizedBox(width: context.getRSize(12)),
+          SizedBox(width: context.getRSize(10)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   row.name,
-                  style: TextStyle(
-                    color: text,
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(14),
-                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: context
+                      .boldStyle(14)
+                      .copyWith(color: t.colorScheme.onSurface),
                 ),
                 SizedBox(height: context.getRSize(2)),
                 Text(
                   'Took ${row.expectedQty} crate${row.expectedQty == 1 ? '' : 's'} · ${row.trackTag}'
                   '${row.isMoneyTrack ? ' ${formatCurrency(row.paidKobo / 100.0)}' : ''}',
-                  style: TextStyle(
-                    color: subtext,
-                    fontSize: context.getRFontSize(12),
-                  ),
+                  style: context.regularStyle(12).copyWith(color: muted),
                 ),
               ],
             ),
           ),
+          SizedBox(width: context.getRSize(8)),
           SizedBox(
             width: context.getRSize(80),
             child: AppInput(
+              key: Key('crate-return-count-${row.manufacturerId}'),
               controller: row.controller,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               textAlign: TextAlign.center,
-              contentPadding: EdgeInsets.symmetric(
-                vertical: context.getRSize(10),
-                horizontal: context.getRSize(8),
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: border),
-              ),
-              fillColor: Colors.transparent,
             ),
           ),
         ],
