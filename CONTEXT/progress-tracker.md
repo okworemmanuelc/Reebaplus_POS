@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #392 PR 4: Supplier Detail, Manufacturer screen + crate sheets restyle (Wave 2 A, 2026-10-16)
+Branch `feat/redesign-w2-inventory-4`, stacked on PR 2 (`feat/redesign-w2-inventory-2`), worktree `../drinkPosApp-wt-392d`. Last #392 PR next to PR 3 (Product Detail + Stock Count, parallel branch). **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.**
+- New `inventory/widgets/supplier_parts.dart`: detail parts (`InventoryDetailColumn` 960 cap, `InventoryDetailHeaderCards` side by side at >= 900 measured, `InventoryDetailTabBar`, `InventoryDetailRowCard`, `InventoryDetailStatCard`, `SupplierTotalTile`) and crate-sheet parts (`CrateSheetFrame`, `CrateRecordBox`, `CrateFactRow`, `CrateSheetActions`, `inventorySheetKeyboardLift`).
+- Supplier Detail + Manufacturer screen: `InventoryTopBar` with a 48dp back, 960-capped body, `StatCard`/slim header figures, flat card rows, `SettingsRow` actions, fixed colours (no `GlassyCard`, no `colors.dart`).
+- Crate sheets (buy, damaged, count, value change), Add Manufacturer, catalogue report and the Supplier record-crates / float / entry-options sheets: theme sheet (own 28dp Surface removed), `useSafeArea`, `InventorySheetHeader`, 48dp targets. **Bug fixed:** modal sheets were not lifted above the keyboard (a 300dp keyboard hid Add Manufacturer's Name field); they now lift via `inventorySheetKeyboardLift`.
+- Dialogs: delete-supplier, void-entry and the crate-money confirm are `scrollable`.
+- Tests: `test/inventory/supplier_manufacturer_redesign_test.dart` (40, incl. keyboard-up on every sheet with a text box at 390x844 / 360x640 @1.15), goldens `test/redesign/supplier_manufacturer_golden_test.dart` (48). `SupplierDetailScreen.initialTimeFilter` is a `@visibleForTesting` seam so a golden never depends on today.
+
 ### Issue #392 PR 2: Add Product + Update Product sheet restyle (Wave 2 A, 2026-10-16)
 Branch `feat/redesign-w2-inventory-2` off `main` 8f5f7395, worktree `../drinkPosApp-wt-392b`. PR 2 of 4. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, no shared-part change.**
 - Form parts added to `inventory_parts.dart` (`InventoryFormCard`, `InventoryFieldLabel`, `InventoryFieldHelper`, `InventoryNotice`, `InventorySuggestionList`/`Tile`, `InventoryDateField`, `InventoryCheckRow`, `InventoryFieldClear`, `InventorySearchIcon`, `InventoryFormFooter`); conventions in `ui-context.md` "Inventory".
