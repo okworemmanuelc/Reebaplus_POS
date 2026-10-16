@@ -8,7 +8,10 @@
 //
 //     flutter test --update-goldens test/redesign/add_product_golden_test.dart
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/permissions/gate.dart';
@@ -44,8 +47,22 @@ void main() {
 
   tearDown(() => env.dispose());
 
-  setUpAll(() => WidgetsApp.debugAllowBannerOverride = false);
-  tearDownAll(() => WidgetsApp.debugAllowBannerOverride = true);
+  // The Update sheet resolves the saved photo's device path on open.
+  late Directory docs;
+  const pathProvider = MethodChannel('plugins.flutter.io/path_provider');
+
+  setUpAll(() {
+    WidgetsApp.debugAllowBannerOverride = false;
+    docs = Directory.systemTemp.createTempSync('add_product_golden');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProvider, (_) async => docs.path);
+  });
+  tearDownAll(() {
+    WidgetsApp.debugAllowBannerOverride = true;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathProvider, null);
+    docs.deleteSync(recursive: true);
+  });
 
   const all = <(String, Size, FakeViewPadding)>[
     ('390x844', Size(390, 844), FakeViewPadding(top: 24, bottom: 24)),
@@ -128,6 +145,9 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('More details'));
         await tester.pumpAndSettle();
+        // Bring the opened section (photo first) into view.
+        await tester.ensureVisible(find.text('Add photo'));
+        await tester.pumpAndSettle();
         await snap(tester, 'add_product_more_${sizeName}_$theme');
       });
 
@@ -162,14 +182,27 @@ void main() {
           brightness: brightness,
           bottomNavHeight: kBottomNavBodyHeight,
         );
-        // Gulder has no expiry date, so nothing in the sheet depends on today.
+        // Coca-Cola (first row by name) has no expiry date, so nothing in
+        // the sheet depends on today.
         final row = find.byKey(
-          inventoryProductRowKey(sample.productIds['Gulder']!),
+          inventoryProductRowKey(sample.productIds['Coca-Cola']!),
         );
-        await tester.ensureVisible(row);
-        await tester.pumpAndSettle();
+        // Sideways, the figure cards push the rows below the fold: drag the
+        // page up until the first row is on screen.
+        bool onScreen() =>
+            row.evaluate().isNotEmpty &&
+            tester.getCenter(row).dy < size.height - 60;
+        for (var i = 0; i < 10 && !onScreen(); i++) {
+          await tester.drag(
+            find.byType(NestedScrollView),
+            const Offset(0, -120),
+          );
+          await tester.pumpAndSettle();
+        }
         await tester.longPress(row);
-        await tester.pumpAndSettle();
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
         expect(find.byType(UpdateProductSheet), findsOneWidget);
         await snap(tester, 'update_product_sheet_${sizeName}_$theme');
       });

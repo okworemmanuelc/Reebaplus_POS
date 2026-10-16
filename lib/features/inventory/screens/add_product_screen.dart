@@ -1388,9 +1388,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           icon: isExisting ? AppIcons.inventory : AppIcons.tag,
           title: isExisting ? 'Add Stock' : 'Add ${_lexicon.item}',
           height: inventoryTopBarHeight(context),
-          leading: const SizedBox.square(
-            dimension: kMinInteractiveDimension,
-            child: BackButton(),
+          // Same pop as the old BackButton, drawn with the app's icon set
+          // like CEO Settings' back button.
+          leading: IconButton(
+            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+            constraints: const BoxConstraints(
+              minWidth: kMinInteractiveDimension,
+              minHeight: kMinInteractiveDimension,
+            ),
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: AppIcon(
+              AppIcons.arrowBack,
+              size: context.getRSize(24),
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
         ),
         body: SafeArea(
