@@ -235,3 +235,295 @@ class CrateSheetActions extends StatelessWidget {
     );
   }
 }
+
+// ── Detail-screen parts (Supplier Detail, Manufacturer) ─────────────────────
+
+/// The widest a detail screen's content grows (#392, batch-wide rule): a fixed
+/// 960, not scaled, centred on wider screens.
+const double kInventoryDetailMaxContentWidth = 960;
+
+/// The measured content width from which a detail screen's header cards sit
+/// side by side (below it they stack).
+const double kInventoryDetailSideBySideWidth = 900;
+
+/// Centres [child] in at most [kInventoryDetailMaxContentWidth]. The top bar
+/// stays full width; only the body is capped.
+class InventoryDetailColumn extends StatelessWidget {
+  const InventoryDetailColumn({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: kInventoryDetailMaxContentWidth,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// A detail screen's header cards (#392): side by side, equal width, when the
+/// MEASURED width is at least [kInventoryDetailSideBySideWidth]; stacked
+/// otherwise. A `LayoutBuilder`, never a viewport predicate. Each builder gets
+/// whether to be compact: regular `StatCard`s side by side, slim rows when
+/// stacked so the stack stays short enough to leave the tabs room on a
+/// sideways phone.
+class InventoryDetailHeaderCards extends StatelessWidget {
+  const InventoryDetailHeaderCards({super.key, required this.builders});
+
+  final List<Widget Function(bool compact)> builders;
+
+  @override
+  Widget build(BuildContext context) {
+    final gutter = context.getRSize(16);
+    final gap = context.getRSize(12);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= kInventoryDetailSideBySideWidth;
+        final children = [for (final build in builders) build(!wide)];
+        return Padding(
+          padding: EdgeInsets.fromLTRB(gutter, gap, gutter, gap),
+          child: wide
+              ? IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < children.length; i++) ...[
+                        if (i > 0) SizedBox(width: gap),
+                        Expanded(child: children[i]),
+                      ],
+                    ],
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < children.length; i++) ...[
+                      if (i > 0) SizedBox(height: gap),
+                      children[i],
+                    ],
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+/// The tab bar of a detail screen (#392): the Inventory tab bar's look (Bold /
+/// SemiBold 14 labels, primary underline) on the page, with a hairline under
+/// it. Labels start at the column's edge.
+class InventoryDetailTabBar extends StatelessWidget {
+  const InventoryDetailTabBar({
+    super.key,
+    required this.controller,
+    required this.labels,
+  });
+
+  final TabController controller;
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Container(
+      decoration: BoxDecoration(
+        color: t.colorScheme.surface,
+        border: Border(bottom: BorderSide(color: t.dividerColor)),
+      ),
+      child: TabBar(
+        controller: controller,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        dividerColor: Colors.transparent,
+        labelColor: t.colorScheme.primary,
+        unselectedLabelColor: muted,
+        labelStyle: context.boldStyle(14),
+        unselectedLabelStyle: context.semiBoldStyle(14),
+        indicatorColor: t.colorScheme.primary,
+        indicatorWeight: 3,
+        tabs: [for (final label in labels) Tab(text: label)],
+      ),
+    );
+  }
+}
+
+/// One row card on a detail screen's list (#392): a 40 [IconTile], Bold 15
+/// title, muted subtitle, a [trailing] figure and an optional [footer] under
+/// the row (action buttons). A flat card with the 16 / 5 list margins.
+class InventoryDetailRowCard extends StatelessWidget {
+  const InventoryDetailRowCard({
+    super.key,
+    required this.icon,
+    required this.tone,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.footer,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final IconTileTone tone;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final Widget? footer;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final row = Row(
+      children: [
+        IconTile(icon: icon, tone: tone, size: 40),
+        SizedBox(width: context.getRSize(12)),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: context
+                    .boldStyle(15)
+                    .copyWith(color: t.colorScheme.onSurface),
+              ),
+              if (subtitle != null) ...[
+                SizedBox(height: context.getRSize(2)),
+                Text(
+                  subtitle!,
+                  style: context.regularStyle(12).copyWith(color: muted),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (trailing != null) ...[
+          SizedBox(width: context.getRSize(8)),
+          trailing!,
+        ],
+      ],
+    );
+    final body = Padding(
+      padding: EdgeInsets.all(context.getRSize(14)),
+      child: footer == null
+          ? row
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                row,
+                SizedBox(height: context.getRSize(10)),
+                footer!,
+              ],
+            ),
+    );
+    return Container(
+      margin: EdgeInsets.symmetric(
+        horizontal: context.getRSize(16),
+        vertical: context.getRSize(5),
+      ),
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+      decoration: AppDecorations.card(context),
+      child: onTap == null
+          ? body
+          : Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
+                onTap: onTap,
+                child: body,
+              ),
+            ),
+    );
+  }
+}
+
+/// A detail header figure (#392): the Home [StatCard] when [compact] is false,
+/// a slim one-line-figure row (36 tile, muted label over an ExtraBold figure,
+/// optional pill) when true. Same data either way.
+class InventoryDetailStatCard extends StatelessWidget {
+  const InventoryDetailStatCard({
+    super.key,
+    required this.compact,
+    required this.icon,
+    required this.tone,
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    this.pillLabel,
+    this.pillTone = TagPillTone.neutral,
+  });
+
+  final bool compact;
+  final IconData icon;
+  final IconTileTone tone;
+  final String title;
+  final String value;
+  final String subtitle;
+  final String? pillLabel;
+  final TagPillTone pillTone;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!compact) {
+      return StatCard(
+        icon: icon,
+        tone: tone,
+        title: title,
+        value: value,
+        subtitle: subtitle,
+        pillLabel: pillLabel,
+        pillTone: pillTone,
+      );
+    }
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(14),
+        vertical: context.getRSize(10),
+      ),
+      decoration: AppDecorations.card(context),
+      child: Row(
+        children: [
+          IconTile(icon: icon, tone: tone, size: 36),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$title · $subtitle',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.semiBoldStyle(12).copyWith(color: muted),
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context
+                      .extraBoldStyle(18)
+                      .copyWith(color: t.colorScheme.onSurface),
+                ),
+              ],
+            ),
+          ),
+          if (pillLabel != null) ...[
+            SizedBox(width: context.getRSize(8)),
+            StatusPill(label: pillLabel!, tone: pillTone, dense: true),
+          ],
+        ],
+      ),
+    );
+  }
+}

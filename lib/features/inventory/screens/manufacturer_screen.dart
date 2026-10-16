@@ -9,15 +9,20 @@ import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/buy_crates_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/count_manufacturer_empties_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manufacturer_settings_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/record_damaged_crates_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/crate_shortage_write_off_sheet.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/shared/widgets/reverse_crate_write_off_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
@@ -33,10 +38,7 @@ import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 class ManufacturerScreen extends ConsumerStatefulWidget {
   final ManufacturerData manufacturer;
 
-  const ManufacturerScreen({
-    super.key,
-    required this.manufacturer,
-  });
+  const ManufacturerScreen({super.key, required this.manufacturer});
 
   @override
   ConsumerState<ManufacturerScreen> createState() => _ManufacturerScreenState();
@@ -74,19 +76,13 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     super.dispose();
   }
 
-  double get _tabBarBottomMargin => context.getRSize(8);
-  static const double _tabBarBorderWidth = 1;
-  double get _tabBarChromeExtent => _tabBarBottomMargin + 2 * _tabBarBorderWidth;
-
   @override
   Widget build(BuildContext context) {
     return Guarded.screen(
       gate: Gates.viewInventory,
       builder: (context) => _build(context),
       denied: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.manufacturer.name),
-        ),
+        appBar: AppBar(title: Text(widget.manufacturer.name)),
         body: const Center(
           child: Text('You do not have permission to view inventory.'),
         ),
@@ -101,31 +97,38 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     if (!tracksCrates) {
       return Scaffold(
         key: const ValueKey(kManufacturerScreenKey),
-        appBar: AppBar(
-          title: Text(widget.manufacturer.name),
-        ),
+        appBar: AppBar(title: Text(widget.manufacturer.name)),
         body: const Center(
-          child: Text('Crate management is only available for businesses that track crates.'),
+          child: Text(
+            'Crate management is only available for businesses that track crates.',
+          ),
         ),
       );
     }
 
     final mfrList = ref.watch(allManufacturersProvider).valueOrNull;
-    final mfr = mfrList?.where((m) => m.id == widget.manufacturer.id).firstOrNull ??
+    final mfr =
+        mfrList?.where((m) => m.id == widget.manufacturer.id).firstOrNull ??
         widget.manufacturer;
 
     final positionAsync = ref.watch(manufacturerCratePositionProvider(mfr.id));
-    final position = positionAsync.valueOrNull ??
-        ManufacturerCratePosition.zero(mfr.id, crateValueKobo: mfr.depositAmountKobo);
+    final position =
+        positionAsync.valueOrNull ??
+        ManufacturerCratePosition.zero(
+          mfr.id,
+          crateValueKobo: mfr.depositAmountKobo,
+        );
 
     final attributionAsync = ref.watch(customerDepositAttributionProvider);
-    final attribution = attributionAsync.valueOrNull ??
-        const CustomerDepositAttribution.zero();
+    final attribution =
+        attributionAsync.valueOrNull ?? const CustomerDepositAttribution.zero();
 
-    final products = ref.watch(manufacturerProductsProvider(mfr.id)).valueOrNull ??
+    final products =
+        ref.watch(manufacturerProductsProvider(mfr.id)).valueOrNull ??
         const <ProductDataWithStock>[];
 
-    final movements = ref.watch(manufacturerCrateMovementsProvider(mfr.id)).valueOrNull ??
+    final movements =
+        ref.watch(manufacturerCrateMovementsProvider(mfr.id)).valueOrNull ??
         const <CrateMovementHistoryEntry>[];
 
     final canSeeCustomerDepositMoney = Gates.crateDepositsReport.allows(ref);
@@ -137,110 +140,96 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     return Scaffold(
       key: const ValueKey(kManufacturerScreenKey),
       backgroundColor: theme.scaffoldBackgroundColor,
-      body: SafeArea(
-        bottom: false,
-        child: TabbedSliverScaffold(
-          controller: _tabController,
-          tabBarExtent: context.getRSize(60),
-          tabBarChromeExtent: _tabBarChromeExtent,
-          headerSlivers: [
-            SliverToBoxAdapter(
-              child: _buildHeader(
-                context,
-                theme,
-                mfr,
-                position,
-                canSeeCustomerDepositMoney,
-              ),
-            ),
-          ],
-          tabBar: Container(
-            color: Colors.transparent,
-            padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
-            child: _buildTabBar(theme, showSettings: showSettings),
+      appBar: InventoryTopBar(
+        icon: AppIcons.manufacturer,
+        title: mfr.name,
+        subtitle: ref.watch(activeStoreLabelProvider),
+        height: inventoryTopBarHeight(context),
+        leading: IconButton(
+          tooltip: 'Back',
+          constraints: const BoxConstraints(
+            minWidth: kMinInteractiveDimension,
+            minHeight: kMinInteractiveDimension,
           ),
-          tabViews: [
-            TabSliverView(
-              storageKey: kManufacturerCratesStorageKey,
-              slivers: _cratesTabSlivers(
-                context,
-                theme,
-                position,
-                canSeeCustomerDepositMoney,
-                attribution,
-                mfr,
-              ),
-            ),
-            TabSliverView(
-              storageKey: kManufacturerProductsStorageKey,
-              slivers: _productsTabSlivers(context, theme, products, mfr),
-            ),
-            TabSliverView(
-              storageKey: kManufacturerHistoryStorageKey,
-              slivers: _historyTabSlivers(context, theme, movements),
-            ),
-            if (showSettings)
-              TabSliverView(
-                storageKey: kManufacturerSettingsStorageKey,
-                slivers: [
-                  ManufacturerSettingsSlivers(
-                    manufacturer: mfr,
-                    position: position,
+          icon: const Icon(AppIcons.arrowBack),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        actions: const [InventoryLiveBell()],
+      ),
+      body: Container(
+        decoration: AppDecorations.pageBackground(context),
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          // A detail screen: the body caps at a fixed 960 and centres (#392).
+          child: InventoryDetailColumn(
+            child: TabbedSliverScaffold(
+              controller: _tabController,
+              // The hairline under the tab bar is reserved on top of the 48dp
+              // floor, so every tab keeps its full target.
+              tabBarExtent: kMinInteractiveDimension,
+              tabBarChromeExtent: 1,
+              headerSlivers: [
+                SliverToBoxAdapter(
+                  child: _buildHeader(
+                    context,
+                    theme,
+                    mfr,
+                    position,
+                    canSeeCustomerDepositMoney,
                   ),
+                ),
+              ],
+              tabBar: InventoryDetailTabBar(
+                controller: _tabController,
+                labels: [
+                  'Crates',
+                  'Products',
+                  'History',
+                  if (showSettings) 'Settings',
                 ],
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabBar(ThemeData theme, {required bool showSettings}) {
-    return Container(
-      margin: EdgeInsets.only(bottom: _tabBarBottomMargin),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.1),
-          width: _tabBarBorderWidth,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: TabBar(
-          controller: _tabController,
-          indicatorSize: TabBarIndicatorSize.tab,
-          indicatorPadding: EdgeInsets.all(context.getRSize(4)),
-          indicator: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              tabViews: [
+                TabSliverView(
+                  storageKey: kManufacturerCratesStorageKey,
+                  slivers: _cratesTabSlivers(
+                    context,
+                    theme,
+                    position,
+                    canSeeCustomerDepositMoney,
+                    attribution,
+                    mfr,
+                  ),
+                ),
+                TabSliverView(
+                  storageKey: kManufacturerProductsStorageKey,
+                  slivers: _productsTabSlivers(context, theme, products, mfr),
+                ),
+                TabSliverView(
+                  storageKey: kManufacturerHistoryStorageKey,
+                  slivers: _historyTabSlivers(context, theme, movements),
+                ),
+                if (showSettings)
+                  TabSliverView(
+                    storageKey: kManufacturerSettingsStorageKey,
+                    slivers: [
+                      ManufacturerSettingsSlivers(
+                        manufacturer: mfr,
+                        position: position,
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
-          labelColor: theme.colorScheme.primary,
-          unselectedLabelColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-          labelStyle: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: context.getRFontSize(13),
-          ),
-          unselectedLabelStyle: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: context.getRFontSize(13),
-          ),
-          dividerColor: Colors.transparent,
-          tabs: [
-            const Tab(text: 'Crates'),
-            const Tab(text: 'Products'),
-            const Tab(text: 'History'),
-            if (showSettings) const Tab(text: 'Settings'),
-          ],
         ),
       ),
     );
   }
 
+  /// The two header figures (#392): the crate value and the total crates with
+  /// their value. Side by side when the measured width is at least 900,
+  /// stacked below. Same figures as before, same deposit-money gate.
   Widget _buildHeader(
     BuildContext context,
     ThemeData theme,
@@ -257,101 +246,27 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     final totalCrateValueNaira = totalCrateValueKobo / 100;
     final hasShort = pos.short.count > 0;
 
-    return Container(
-      margin: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(12),
-        context.getRSize(16),
-        context.getRSize(12),
-      ),
-      padding: EdgeInsets.all(context.getRSize(16)),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.dividerColor.withValues(alpha: 0.15),
+    return InventoryDetailHeaderCards(
+      builders: [
+        (compact) => InventoryDetailStatCard(
+          compact: compact,
+          icon: AppIcons.manufacturer,
+          tone: IconTileTone.info,
+          title: 'Crate value',
+          value: formatCurrency(crateValueNaira),
+          subtitle: 'Per crate',
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(AppIcons.arrowBack),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              SizedBox(width: context.getRSize(12)),
-              Container(
-                width: context.getRSize(40),
-                height: context.getRSize(40),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  AppIcons.manufacturer,
-                  color: theme.colorScheme.secondary,
-                  size: context.getRSize(16),
-                ),
-              ),
-              SizedBox(width: context.getRSize(12)),
-              Expanded(
-                child: Text(
-                  mfr.name,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: context.getRSize(12)),
-          Text(
-            'Crate value: ${formatCurrency(crateValueNaira)}',
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ),
-          SizedBox(height: context.getRSize(4)),
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: '${pos.totalCrates} crates • ${formatCurrency(totalCrateValueNaira)} total value',
-                ),
-                if (hasShort)
-                  TextSpan(
-                    text: ' • ${pos.short.count} short',
-                    style: const TextStyle(
-                      color: AppColors.warning,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-              ],
-            ),
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-            ),
-          ),
-        ],
-      ),
+        (compact) => InventoryDetailStatCard(
+          compact: compact,
+          icon: AppIcons.warehouse,
+          tone: IconTileTone.green,
+          title: 'Total crates',
+          value: '${pos.totalCrates} crates',
+          subtitle: '${formatCurrency(totalCrateValueNaira)} total value',
+          pillLabel: hasShort ? '${pos.short.count} short' : null,
+          pillTone: TagPillTone.warning,
+        ),
+      ],
     );
   }
 
@@ -370,7 +285,9 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     final canBuy = Gates.confirmCrateDeposit.allows(ref);
     final lockedStoreId = ref.watch(lockedStoreProvider).value;
     final shortage = ref.watch(crateShortageRollupProvider(lockedStoreId));
-    final reversible = shortage.valueOrNull?.brand(mfr.id)?.reversibleCrates ?? 0;
+    final reversible =
+        shortage.valueOrNull?.brand(mfr.id)?.reversibleCrates ?? 0;
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     return [
       if (canCount || canBuy)
         SliverToBoxAdapter(
@@ -424,9 +341,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
             ),
           ),
         ),
-      SliverToBoxAdapter(
-        child: SizedBox(height: context.getRSize(4)),
-      ),
+      SliverToBoxAdapter(child: SizedBox(height: context.getRSize(4))),
       SliverToBoxAdapter(
         child: _buildStatusCard(
           context: context,
@@ -436,7 +351,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           countText: '${pos.inWarehouse.count} crates',
           moneyText: formatCurrency(pos.inWarehouse.moneyKobo / 100),
           icon: AppIcons.warehouse,
-          iconColor: theme.colorScheme.primary,
+          tone: IconTileTone.info,
         ),
       ),
       SliverToBoxAdapter(
@@ -448,7 +363,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           countText: '${pos.fullCratesInStock.count} crates',
           moneyText: formatCurrency(pos.fullCratesInStock.moneyKobo / 100),
           icon: AppIcons.inventory,
-          iconColor: AppColors.success,
+          tone: IconTileTone.green,
         ),
       ),
       SliverToBoxAdapter(
@@ -462,7 +377,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
               ? formatCurrency(pos.withCustomersOnDeposit.moneyKobo / 100)
               : null,
           icon: AppIcons.settlement,
-          iconColor: Colors.teal,
+          tone: IconTileTone.malt,
         ),
       ),
       SliverToBoxAdapter(
@@ -474,7 +389,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           countText: '${pos.withCustomersNoDeposit.count} crates',
           moneyText: formatCurrency(pos.withCustomersNoDeposit.moneyKobo / 100),
           icon: AppIcons.customers,
-          iconColor: Colors.deepPurple,
+          tone: IconTileTone.neutral,
         ),
       ),
       SliverToBoxAdapter(
@@ -488,8 +403,8 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
               ? formatCurrency(pos.short.moneyKobo / 100)
               : null,
           icon: AppIcons.warning,
-          iconColor: AppColors.warning,
-          countColor: pos.short.count > 0 ? AppColors.warning : null,
+          tone: IconTileTone.warning,
+          countColor: pos.short.count > 0 ? f.warning : null,
           actions: [
             if (canBuy && pos.short.count > 0)
               AppButton(
@@ -497,7 +412,6 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                 text: 'Write off',
                 icon: AppIcons.removeCircle,
                 variant: AppButtonVariant.danger,
-                size: AppButtonSize.small,
                 isFullWidth: false,
                 onPressed: () => CrateShortageWriteOffSheet.show(
                   context,
@@ -510,7 +424,6 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
                 text: 'Reverse write-off',
                 icon: AppIcons.refresh,
                 variant: AppButtonVariant.outline,
-                size: AppButtonSize.small,
                 isFullWidth: false,
                 onPressed: () => ReverseCrateWriteOffSheet.show(
                   context,
@@ -529,8 +442,8 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           countText: '${pos.damaged.count} crates',
           moneyText: formatCurrency(pos.damaged.moneyKobo / 100),
           icon: AppIcons.damaged,
-          iconColor: theme.colorScheme.error,
-          countColor: pos.damaged.count > 0 ? theme.colorScheme.error : null,
+          tone: IconTileTone.danger,
+          countColor: pos.damaged.count > 0 ? f.danger : null,
         ),
       ),
       if (canSeeCustomerDepositMoney && attribution.unattributedKobo > 0)
@@ -540,44 +453,18 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
               context.getRSize(16),
               context.getRSize(12),
               context.getRSize(16),
-              context.getRSize(16),
+              context.getRSize(4),
             ),
-            child: Container(
+            child: InventoryNotice(
               key: const ValueKey(kManufacturerAttributionNoteKey),
-              padding: EdgeInsets.all(context.getRSize(12)),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    AppIcons.infoCircle,
-                    size: context.getRSize(16),
-                    color: theme.colorScheme.primary,
-                  ),
-                  SizedBox(width: context.getRSize(8)),
-                  Expanded(
-                    child: Text(
-                      '${formatCurrency(attribution.unattributedKobo / 100)} customer deposit held across brands is not attributed to a specific manufacturer.',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(11),
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              icon: AppIcons.infoCircle,
+              tone: IconTileTone.info,
+              message:
+                  '${formatCurrency(attribution.unattributedKobo / 100)} customer deposit held across brands is not attributed to a specific manufacturer.',
             ),
           ),
         ),
-      SliverToBoxAdapter(
-        child: SizedBox(height: context.getRSize(16)),
-      ),
+      _bottomSpacer(context),
     ];
   }
 
@@ -589,86 +476,29 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     required String countText,
     String? moneyText,
     required IconData icon,
-    required Color iconColor,
+    required IconTileTone tone,
     Color? countColor,
     List<Widget> actions = const [],
   }) {
-    final row = Row(
-        children: [
-          Container(
-            width: context.getRSize(40),
-            height: context.getRSize(40),
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: iconColor, size: context.getRSize(16)),
-          ),
-          SizedBox(width: context.getRSize(12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(14),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (moneyText != null) ...[
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    moneyText,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          SizedBox(width: context.getRSize(8)),
-          Text(
-            countText,
-            style: TextStyle(
-              fontSize: context.getRFontSize(15),
-              fontWeight: FontWeight.w800,
-              color: countColor ?? theme.colorScheme.onSurface,
-            ),
-          ),
-        ],
-    );
-    return Container(
+    return InventoryDetailRowCard(
       key: ValueKey(kManufacturerStatusKeyPrefix + keySuffix),
-      margin: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(5),
+      icon: icon,
+      tone: tone,
+      title: title,
+      subtitle: moneyText,
+      trailing: Text(
+        countText,
+        style: context
+            .extraBoldStyle(15)
+            .copyWith(color: countColor ?? theme.colorScheme.onSurface),
       ),
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.dividerColor.withValues(alpha: 0.12),
-        ),
-      ),
-      child: actions.isEmpty
-          ? row
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                row,
-                SizedBox(height: context.getRSize(10)),
-                // Wrap, not Row: two buttons can't fit side by side at 320dp.
-                Wrap(
-                  spacing: context.getRSize(8),
-                  runSpacing: context.getRSize(8),
-                  children: actions,
-                ),
-              ],
+      // Wrap, not Row: two buttons can't fit side by side at 320dp.
+      footer: actions.isEmpty
+          ? null
+          : Wrap(
+              spacing: context.getRSize(8),
+              runSpacing: context.getRSize(8),
+              children: actions,
             ),
     );
   }
@@ -681,121 +511,47 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
   ) {
     if (products.isEmpty) {
       return [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(context.getRSize(32)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    AppIcons.wineBottle,
-                    size: context.getRSize(40),
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
-                  ),
-                  SizedBox(height: context.getRSize(12)),
-                  Text(
-                    'No products found for this manufacturer',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontSize: context.getRFontSize(13),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.all(context.getRSize(16)),
+            child: const InventoryEmptyCard(
+              icon: AppIcons.wineBottle,
+              title: 'No products found for this manufacturer',
             ),
           ),
         ),
       ];
     }
 
-    final crateValueText = 'Crate: ${formatCurrency(mfr.depositAmountKobo / 100)}';
+    final crateValueText =
+        'Crate: ${formatCurrency(mfr.depositAmountKobo / 100)}';
 
     return [
-      SliverToBoxAdapter(
-        child: SizedBox(height: context.getRSize(8)),
-      ),
+      SliverToBoxAdapter(child: SizedBox(height: context.getRSize(8))),
       SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final product = products[index].product;
-            return Container(
-              key: ValueKey('$kManufacturerProductKeyPrefix${product.id}'),
-              margin: EdgeInsets.symmetric(
-                horizontal: context.getRSize(16),
-                vertical: context.getRSize(5),
-              ),
-              padding: EdgeInsets.all(context.getRSize(14)),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: theme.dividerColor.withValues(alpha: 0.12),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: context.getRSize(36),
-                    height: context.getRSize(36),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      AppIcons.wineBottle,
-                      color: theme.colorScheme.primary,
-                      size: context.getRSize(14),
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          product.name,
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (product.size?.isNotEmpty == true || product.subtitle?.isNotEmpty == true) ...[
-                          SizedBox(height: context.getRSize(2)),
-                          Text(
-                            product.size?.isNotEmpty == true
-                                ? product.size!
-                                : product.subtitle!,
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(11),
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(8)),
-                  Text(
-                    crateValueText,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-          childCount: products.length,
-        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final product = products[index].product;
+          final detail = product.size?.isNotEmpty == true
+              ? product.size
+              : (product.subtitle?.isNotEmpty == true
+                    ? product.subtitle
+                    : null);
+          return InventoryDetailRowCard(
+            key: ValueKey('$kManufacturerProductKeyPrefix${product.id}'),
+            icon: AppIcons.wineBottle,
+            tone: IconTileTone.info,
+            title: product.name,
+            subtitle: detail,
+            trailing: Text(
+              crateValueText,
+              style: context
+                  .semiBoldStyle(12)
+                  .copyWith(color: theme.colorScheme.primary),
+            ),
+          );
+        }, childCount: products.length),
       ),
-      SliverToBoxAdapter(
-        child: SizedBox(height: context.getRSize(16)),
-      ),
+      _bottomSpacer(context),
     ];
   }
 
@@ -806,30 +562,12 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
   ) {
     if (movements.isEmpty) {
       return [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(context.getRSize(32)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    AppIcons.history,
-                    size: context.getRSize(40),
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
-                  ),
-                  SizedBox(height: context.getRSize(12)),
-                  Text(
-                    'No crate movements recorded yet',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontSize: context.getRFontSize(13),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.all(context.getRSize(16)),
+            child: const InventoryEmptyCard(
+              icon: AppIcons.history,
+              title: 'No crate movements recorded yet',
             ),
           ),
         ),
@@ -837,102 +575,47 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
     }
 
     final dateFormat = DateFormat('MMM d, y • HH:mm');
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
 
     return [
-      SliverToBoxAdapter(
-        child: SizedBox(height: context.getRSize(8)),
-      ),
+      SliverToBoxAdapter(child: SizedBox(height: context.getRSize(8))),
       SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final entry = movements[index];
-            final delta = entry.quantityDelta;
-            final isPositive = delta > 0;
-            final deltaText = isPositive ? '+$delta crates' : '$delta crates';
-            final deltaColor = isPositive ? AppColors.success : theme.colorScheme.error;
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final entry = movements[index];
+          final delta = entry.quantityDelta;
+          final isPositive = delta > 0;
+          final deltaText = isPositive ? '+$delta crates' : '$delta crates';
+          final deltaColor = isPositive ? f.green : f.danger;
 
-            final details = [
-              dateFormat.format(entry.createdAt),
-              if (entry.performedByName?.isNotEmpty == true) 'by ${entry.performedByName}',
-              // A movement no store can be resolved for (e.g. an approved
-              // return with no order) appears only under All Stores; say so.
-              entry.storeName?.isNotEmpty == true ? entry.storeName! : 'No store',
-            ].join(' • ');
+          final details = [
+            dateFormat.format(entry.createdAt),
+            if (entry.performedByName?.isNotEmpty == true)
+              'by ${entry.performedByName}',
+            // A movement no store can be resolved for (e.g. an approved
+            // return with no order) appears only under All Stores; say so.
+            entry.storeName?.isNotEmpty == true ? entry.storeName! : 'No store',
+          ].join(' • ');
 
-            return Container(
-              key: ValueKey('$kManufacturerHistoryRowKeyPrefix${entry.id}'),
-              margin: EdgeInsets.symmetric(
-                horizontal: context.getRSize(16),
-                vertical: context.getRSize(5),
-              ),
-              padding: EdgeInsets.all(context.getRSize(14)),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: theme.dividerColor.withValues(alpha: 0.12),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: context.getRSize(36),
-                    height: context.getRSize(36),
-                    decoration: BoxDecoration(
-                      color: (isPositive ? AppColors.success : theme.colorScheme.error)
-                          .withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      isPositive
-                          ? AppIcons.arrowDown
-                          : AppIcons.arrowUp,
-                      color: isPositive ? AppColors.success : theme.colorScheme.error,
-                      size: context.getRSize(14),
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          entry.movementLabel,
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        SizedBox(height: context.getRSize(2)),
-                        Text(
-                          details,
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(11),
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(8)),
-                  Text(
-                    deltaText,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      fontWeight: FontWeight.w800,
-                      color: deltaColor,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-          childCount: movements.length,
-        ),
+          return InventoryDetailRowCard(
+            key: ValueKey('$kManufacturerHistoryRowKeyPrefix${entry.id}'),
+            icon: isPositive ? AppIcons.arrowDown : AppIcons.arrowUp,
+            tone: isPositive ? IconTileTone.green : IconTileTone.danger,
+            title: entry.movementLabel,
+            subtitle: details,
+            trailing: Text(
+              deltaText,
+              style: context.extraBoldStyle(13).copyWith(color: deltaColor),
+            ),
+          );
+        }, childCount: movements.length),
       ),
-      SliverToBoxAdapter(
-        child: SizedBox(height: context.getRSize(16)),
-      ),
+      _bottomSpacer(context),
     ];
   }
+
+  /// The end of a tab's list: 16 and the device bottom padding, so the last
+  /// card clears the system navigation bar (the old spacer was 16 only).
+  Widget _bottomSpacer(BuildContext context) => SliverToBoxAdapter(
+    child: SizedBox(height: context.getRSize(16) + context.deviceBottomPadding),
+  );
 }

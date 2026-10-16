@@ -7,12 +7,14 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/crate_money_arrangement_section.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/crate_value_change_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -183,7 +185,9 @@ class _ManufacturerSettingsSliversState
         newKobo,
         name: name,
       );
-      await ref.read(activityLogProvider).logAction(
+      await ref
+          .read(activityLogProvider)
+          .logAction(
             'update_manufacturer',
             '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} updated '
                 'settings for ${mfr.name}',
@@ -220,8 +224,7 @@ class _ManufacturerSettingsSliversState
           if (canEdit)
             Form(
               key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: InventoryFormCard(
                 children: [
                   AppInput(
                     key: const ValueKey(kManufacturerSettingsNameFieldKey),
@@ -233,7 +236,9 @@ class _ManufacturerSettingsSliversState
                   ),
                   SizedBox(height: context.getRSize(12)),
                   AppInput(
-                    key: const ValueKey(kManufacturerSettingsCrateValueFieldKey),
+                    key: const ValueKey(
+                      kManufacturerSettingsCrateValueFieldKey,
+                    ),
                     controller: _valueCtrl,
                     labelText: 'Crate value ($activeCurrencySymbol)',
                     hintText: 'e.g. 1,500',
@@ -256,17 +261,13 @@ class _ManufacturerSettingsSliversState
               ),
             ),
           if (Gates.crateMoneyArrangement.allows(ref)) ...[
-            if (canEdit) ...[
-              SizedBox(height: context.getRSize(20)),
-              const Divider(),
-            ],
-            SizedBox(height: context.getRSize(8)),
+            SizedBox(height: context.getRSize(canEdit ? 20 : 8)),
             Text(
               'Saves on its own — not part of Save above',
               key: const ValueKey(kManufacturerSettingsArrangementKey),
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: context
+                  .extraBoldStyle(14)
+                  .copyWith(color: theme.colorScheme.onSurface),
             ),
             CrateMoneyArrangementSection(manufacturer: widget.manufacturer),
           ],
