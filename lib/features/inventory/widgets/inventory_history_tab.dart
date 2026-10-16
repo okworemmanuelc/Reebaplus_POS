@@ -4,9 +4,14 @@ import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// The Inventory screen's History tab.
 ///
@@ -38,8 +43,6 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     final wId = widget.storeId is String && widget.storeId.toString() == 'all'
         ? null
         : widget.storeId;
@@ -59,7 +62,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
     }
 
     if (pageState.transactions.isEmpty) {
-      return _buildEmptyState(context, colorScheme);
+      return _buildEmptyState(context);
     }
 
     final stats = statsAsync.valueOrNull ?? StockHistoryStats.empty();
@@ -69,129 +72,113 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
     final txns = pageState.transactions;
     final childCount = txns.length + (pageState.isLoadingMore ? 1 : 0);
 
-    return SliverMainAxisGroup(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Column(
-            children: [
-              _buildPeriodSelector(context, colorScheme),
-              SizedBox(height: context.spacingS),
-              _buildSummaryRow(context, colorScheme, totalIn, totalOut),
-              SizedBox(height: context.spacingS),
-              _buildTableHeader(context, colorScheme),
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = inventoryGutter(context, constraints.crossAxisExtent);
+        return SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            context.getRSize(12),
+            gutter,
+            context.getRSize(120) + context.deviceBottomPadding,
+          ),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildPeriodSelector(context),
+                    SizedBox(height: context.getRSize(12)),
+                    _buildSummaryRow(context, totalIn, totalOut),
+                    SizedBox(height: context.getRSize(16)),
+                    _buildTableHeader(context),
+                  ],
+                ),
+              ),
+              // The rows sit in the same flat card as the header (#392).
+              DecoratedSliver(
+                decoration: _tableBodyDecoration(context),
+                sliver: SliverList.builder(
+                  itemCount: childCount,
+                  itemBuilder: (context, index) {
+                    if (pageState.hasMore &&
+                        !pageState.isLoadingMore &&
+                        index >= txns.length - 5) {
+                      Future.microtask(() {
+                        if (mounted) {
+                          ref
+                              .read(
+                                paginatedStockHistoryProvider((
+                                  storeId: wId,
+                                  period: _selectedPeriod,
+                                )).notifier,
+                              )
+                              .loadMore();
+                        }
+                      });
+                    }
+
+                    if (index == txns.length) {
+                      return Padding(
+                        padding: EdgeInsets.symmetric(
+                          vertical: context.spacingM,
+                        ),
+                        child: const Center(child: CircularProgressIndicator()),
+                      );
+                    }
+
+                    return _buildTransactionRow(context, txns[index], index);
+                  },
+                ),
+              ),
             ],
           ),
-        ),
-        SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: context.spacingM),
-          sliver: SliverList.builder(
-            itemCount: childCount,
-            itemBuilder: (context, index) {
-              if (pageState.hasMore &&
-                  !pageState.isLoadingMore &&
-                  index >= txns.length - 5) {
-                Future.microtask(() {
-                  if (mounted) {
-                    ref
-                        .read(
-                          paginatedStockHistoryProvider(
-                            (storeId: wId, period: _selectedPeriod),
-                          ).notifier,
-                        )
-                        .loadMore();
-                  }
-                });
-              }
-
-              if (index == txns.length) {
-                return Padding(
-                  padding: EdgeInsets.symmetric(vertical: context.spacingM),
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                );
-              }
-
-              return _buildTransactionRow(
-                context,
-                colorScheme,
-                txns[index],
-                index,
-              );
-            },
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
-  // ── Period chips (scrollable for small screens) ──────────────────────────
-  Widget _buildPeriodSelector(BuildContext context, ColorScheme colorScheme) {
-    return SizedBox(
-      height: context.getRSize(40),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: context.spacingM),
-        separatorBuilder: (_, __) => SizedBox(width: context.spacingXs),
-        itemCount: _periods.length,
-        itemBuilder: (_, i) {
-          final period = _periods[i];
-          final isSelected = period == _selectedPeriod;
-          return ChoiceChip(
-            label: Text(
-              period,
-              style: context.bodySmall.copyWith(
-                color: isSelected
-                    ? Colors.white
-                    : colorScheme.onSurface.withValues(alpha: 0.7),
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              ),
+  // ── Period pills (scroll sideways on small screens) ──────────────────────
+  Widget _buildPeriodSelector(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var i = 0; i < _periods.length; i++) ...[
+            if (i > 0) SizedBox(width: context.getRSize(8)),
+            InventoryPeriodChip(
+              label: _periods[i],
+              selected: _periods[i] == _selectedPeriod,
+              onTap: () => _onPeriodChanged(_periods[i]),
             ),
-            selected: isSelected,
-            selectedColor: colorScheme.primary,
-            backgroundColor: colorScheme.surface,
-            side: BorderSide(
-              color: isSelected
-                  ? colorScheme.primary
-                  : colorScheme.outline.withValues(alpha: 0.3),
-            ),
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            onSelected: (_) => _onPeriodChanged(period),
-          );
-        },
+          ],
+        ],
       ),
     );
   }
 
   // ── Summary cards ────────────────────────────────────────────────────────
-  Widget _buildSummaryRow(
-    BuildContext context,
-    ColorScheme colorScheme,
-    int totalIn,
-    int totalOut,
-  ) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: context.spacingM),
+  Widget _buildSummaryRow(BuildContext context, int totalIn, int totalOut) {
+    return IntrinsicHeight(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: _summaryCard(
-              context,
-              'Stock In',
-              '+${fmtNumber(totalIn)} units',
-              AppColors.success,
-              AppIcons.arrowDown,
+            child: InventoryFigureCard(
+              label: 'Stock In',
+              value: '+${fmtNumber(totalIn)} units',
+              icon: AppIcons.arrowDown,
+              tone: IconTileTone.green,
             ),
           ),
-          SizedBox(width: context.spacingS),
+          SizedBox(width: context.getRSize(12)),
           Expanded(
-            child: _summaryCard(
-              context,
-              'Stock Out',
-              '-${fmtNumber(totalOut)} units',
-              AppColors.danger,
-              AppIcons.arrowUp,
+            child: InventoryFigureCard(
+              label: 'Stock Out',
+              value: '-${fmtNumber(totalOut)} units',
+              icon: AppIcons.arrowUp,
+              tone: IconTileTone.danger,
             ),
           ),
         ],
@@ -199,77 +186,33 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
     );
   }
 
-  Widget _summaryCard(
-    BuildContext context,
-    String label,
-    String value,
-    Color color,
-    IconData icon,
-  ) {
-    return Container(
-      padding: EdgeInsets.all(context.spacingS),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(context.radiusM),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: context.getRSize(14)),
-              SizedBox(width: context.spacingXs),
-              Flexible(
-                child: Text(
-                  label,
-                  style: context.bodySmall.copyWith(
-                    color: color,
-                    fontSize: context.getRFontSize(11),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: context.spacingXs),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: context.bodyMedium.copyWith(
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  /// The card under the header: the flat card's fill, border and shadow with
+  /// only the bottom corners rounded, so header + rows read as one table.
+  BoxDecoration _tableBodyDecoration(BuildContext context) {
+    const radius = Radius.circular(AppSpacing.borderRadiusXL);
+    return AppDecorations.card(
+      context,
+    ).copyWith(borderRadius: const BorderRadius.vertical(bottom: radius));
   }
 
   // ── Table header (all flex-based) ────────────────────────────────────────
-  Widget _buildTableHeader(BuildContext context, ColorScheme colorScheme) {
-    final headerStyle = context.bodySmall.copyWith(
-      fontWeight: FontWeight.w600,
-      fontSize: context.getRFontSize(10),
-      color: colorScheme.onSurface.withValues(alpha: 0.5),
-    );
+  Widget _buildTableHeader(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final headerStyle = context
+        .semiBoldStyle(11)
+        .copyWith(color: muted, letterSpacing: 0.5);
+    const radius = Radius.circular(AppSpacing.borderRadiusXL);
 
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: context.spacingM),
       padding: EdgeInsets.symmetric(
-        horizontal: context.spacingS,
-        vertical: context.spacingS,
+        horizontal: context.getRSize(12),
+        vertical: context.getRSize(12),
       ),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(context.radiusM),
-        ),
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outline.withValues(alpha: 0.2)),
-        ),
+      decoration: AppDecorations.card(context).copyWith(
+        color: t.colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: radius),
+        boxShadow: const [],
       ),
       child: Row(
         children: [
@@ -292,24 +235,25 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
   // ── Transaction row (all flex-based) ─────────────────────────────────────
   Widget _buildTransactionRow(
     BuildContext context,
-    ColorScheme colorScheme,
     StockTransactionWithDetails tx,
     int index,
   ) {
-    final isEven = index % 2 == 0;
-    final typeColor = _getMovementColor(tx);
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final (tint, ink) = _movementTone(tx).resolve(f);
     final sign = tx.isInflow ? '+' : '';
     final dateStr = _formatDate(tx.createdAt);
 
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: context.spacingS,
-        vertical: context.spacingS,
+        horizontal: context.getRSize(12),
+        vertical: context.getRSize(10),
       ),
       decoration: BoxDecoration(
-        color: isEven
-            ? colorScheme.onSurface.withValues(alpha: 0.02)
-            : Colors.transparent,
+        border: index == 0
+            ? null
+            : Border(top: BorderSide(color: t.dividerColor)),
       ),
       child: Row(
         children: [
@@ -320,10 +264,9 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
               tx.productName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: context.bodySmall.copyWith(
-                fontWeight: FontWeight.w500,
-                fontSize: context.getRFontSize(11),
-              ),
+              style: context
+                  .semiBoldStyle(12)
+                  .copyWith(color: t.colorScheme.onSurface),
             ),
           ),
           // Movement type badge
@@ -334,32 +277,30 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
               children: [
                 if (tx.isAdjustment)
                   Padding(
-                    padding: const EdgeInsets.only(right: 2),
-                    child: Icon(
+                    padding: EdgeInsets.only(right: context.getRSize(2)),
+                    child: AppIcon(
                       AppIcons.warning,
-                      color: AppColors.warning,
-                      size: context.getRSize(10),
+                      color: f.warning,
+                      size: context.getRSize(12),
                     ),
                   ),
                 Flexible(
                   child: Container(
                     padding: EdgeInsets.symmetric(
-                      horizontal: context.getRSize(4),
-                      vertical: 1,
+                      horizontal: context.getRSize(6),
+                      vertical: context.getRSize(2),
                     ),
                     decoration: BoxDecoration(
-                      color: typeColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
+                      color: tint,
+                      borderRadius: BorderRadius.circular(
+                        AppSpacing.borderRadiusS,
+                      ),
                     ),
                     child: Text(
                       tx.movementLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.bodySmall.copyWith(
-                        color: typeColor,
-                        fontSize: context.getRFontSize(9),
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: context.semiBoldStyle(10).copyWith(color: ink),
                     ),
                   ),
                 ),
@@ -372,11 +313,9 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
             child: Text(
               '$sign${tx.quantityDelta}',
               textAlign: TextAlign.center,
-              style: context.bodySmall.copyWith(
-                color: tx.isInflow ? AppColors.success : AppColors.danger,
-                fontWeight: FontWeight.bold,
-                fontSize: context.getRFontSize(11),
-              ),
+              style: context
+                  .boldStyle(12)
+                  .copyWith(color: tx.isInflow ? f.green : f.danger),
             ),
           ),
           // User
@@ -386,10 +325,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
               tx.performedByName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: context.bodySmall.copyWith(
-                color: colorScheme.onSurface.withValues(alpha: 0.6),
-                fontSize: context.getRFontSize(9),
-              ),
+              style: context.regularStyle(11).copyWith(color: muted),
             ),
           ),
           // Date
@@ -398,10 +334,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
             child: Text(
               dateStr,
               textAlign: TextAlign.end,
-              style: context.bodySmall.copyWith(
-                color: colorScheme.onSurface.withValues(alpha: 0.5),
-                fontSize: context.getRFontSize(9),
-              ),
+              style: context.regularStyle(11).copyWith(color: muted),
             ),
           ),
         ],
@@ -409,22 +342,24 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
     );
   }
 
-  Color _getMovementColor(StockTransactionWithDetails tx) {
+  /// The movement's fixed tone (unchanged mapping: out = red, in = green,
+  /// adjustment = amber, else blue).
+  IconTileTone _movementTone(StockTransactionWithDetails tx) {
     switch (tx.movementType) {
       case 'sale':
       case 'transfer_out':
       case 'damage':
-        return AppColors.danger;
+        return IconTileTone.danger;
       case 'purchase_received':
       case 'transfer_in':
       case 'return':
-        return AppColors.success;
+        return IconTileTone.green;
       case 'adjustment':
-        return AppColors.warning;
+        return IconTileTone.warning;
       case 'transfer_cancelled':
-        return AppColors.info;
+        return IconTileTone.info;
       default:
-        return AppColors.info;
+        return IconTileTone.info;
     }
   }
 
@@ -440,43 +375,58 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
     return DateFormat('dd/MM').format(dt);
   }
 
-  Widget _buildEmptyState(BuildContext context, ColorScheme colorScheme) {
-    return SliverMainAxisGroup(
-      slivers: [
-        SliverToBoxAdapter(
-          child: _buildPeriodSelector(context, colorScheme),
-        ),
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  AppIcons.history,
-                  size: context.getRSize(48),
-                  color: colorScheme.onSurface.withValues(alpha: 0.2),
-                ),
-                SizedBox(height: context.spacingM),
-                Text(
-                  'No stock movements found',
-                  style: context.bodyMedium.copyWith(
-                    color: colorScheme.onSurface.withValues(alpha: 0.4),
-                  ),
-                ),
-                SizedBox(height: context.spacingXs),
-                Text(
-                  'Stock movements from sales, adjustments,\nand transfers will appear here.',
-                  textAlign: TextAlign.center,
-                  style: context.bodySmall.copyWith(
-                    color: colorScheme.onSurface.withValues(alpha: 0.3),
-                  ),
-                ),
-              ],
+  Widget _buildEmptyState(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = inventoryGutter(context, constraints.crossAxisExtent);
+        return SliverMainAxisGroup(
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                context.getRSize(12),
+                gutter,
+                0,
+              ),
+              sliver: SliverToBoxAdapter(child: _buildPeriodSelector(context)),
             ),
-          ),
-        ),
-      ],
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: gutter),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const IconTile(
+                        icon: AppIcons.history,
+                        tone: IconTileTone.neutral,
+                        size: 64,
+                      ),
+                      SizedBox(height: context.spacingM),
+                      Text(
+                        'No stock movements found',
+                        textAlign: TextAlign.center,
+                        style: context
+                            .boldStyle(15)
+                            .copyWith(color: t.colorScheme.onSurface),
+                      ),
+                      SizedBox(height: context.spacingXs),
+                      Text(
+                        'Stock movements from sales, adjustments,\nand transfers will appear here.',
+                        textAlign: TextAlign.center,
+                        style: context.regularStyle(13).copyWith(color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
