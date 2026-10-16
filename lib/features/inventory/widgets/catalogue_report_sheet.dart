@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
 import 'package:reebaplus_pos/core/services/catalogue_report.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -131,7 +132,9 @@ class _CatalogueReportSheetState extends ConsumerState<CatalogueReportSheet> {
         context.getRSize(20),
         context.getRSize(12),
         context.getRSize(20),
-        context.getRSize(20) + context.deviceBottomPadding,
+        context.getRSize(20) +
+            context.deviceBottomPadding +
+            inventorySheetKeyboardLift(context),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

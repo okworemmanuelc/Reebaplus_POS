@@ -15,6 +15,17 @@ import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 // a shared-part candidate; they live here because a Wave 2 feature never adds
 // files to the shared folder.
 
+/// How far a bottom sheet with a text box lifts its content above the keyboard
+/// (#392 PR 4). A modal sheet sits on the root navigator, above `MainLayout`'s
+/// Scaffold, so nothing resizes it for the keyboard and the focused field sits
+/// under it (measured: a 390x844 phone with a 300dp keyboard hid Add
+/// Manufacturer's Name field at 571..624 against a keyboard top of 544). The
+/// Supplier Detail sheets already did this by hand. Pair it with
+/// `deviceBottomPadding`, which collapses to 0 while the keyboard is up, so
+/// the two never double-count.
+double inventorySheetKeyboardLift(BuildContext context) =>
+    MediaQuery.viewInsetsOf(context).bottom;
+
 /// The Surface-less body of a crate sheet (#392): the theme supplies the sheet
 /// shape and colour (the old sheets drew a 28dp Surface of their own), so this
 /// is a keyed, scrolling column — [InventorySheetHeader], then [children] —
@@ -45,7 +56,9 @@ class CrateSheetFrame extends StatelessWidget {
           gutter,
           context.getRSize(12),
           gutter,
-          context.getRSize(24) + context.deviceBottomPadding,
+          context.getRSize(24) +
+              context.deviceBottomPadding +
+              inventorySheetKeyboardLift(context),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

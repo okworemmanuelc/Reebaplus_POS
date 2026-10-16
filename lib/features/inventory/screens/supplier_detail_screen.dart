@@ -47,7 +47,16 @@ const String kSupplierCratesStorageKey = 'supplier-detail-crates';
 class SupplierDetailScreen extends ConsumerStatefulWidget {
   final String supplierId;
 
-  const SupplierDetailScreen({super.key, required this.supplierId});
+  /// The period the ledger opens on. Always the §30.6 default in the app; a
+  /// test passes an unbounded period so a golden never depends on today's date.
+  @visibleForTesting
+  final String initialTimeFilter;
+
+  const SupplierDetailScreen({
+    super.key,
+    required this.supplierId,
+    this.initialTimeFilter = 'This Month',
+  });
 
   @override
   ConsumerState<SupplierDetailScreen> createState() =>
@@ -56,7 +65,7 @@ class SupplierDetailScreen extends ConsumerStatefulWidget {
 
 class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     with SingleTickerProviderStateMixin {
-  String _timeFilter = 'This Month'; // §30.6/§30.11 default
+  late String _timeFilter; // §30.6/§30.11 default: 'This Month'
   DateTimeRange? _customRange;
 
   /// Ledger + Empty Crates. Only read when the business tracks crates; the
@@ -66,6 +75,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   @override
   void initState() {
     super.initState();
+    _timeFilter = widget.initialTimeFilter;
     _tabController = TabController(length: 2, vsync: this);
   }
 

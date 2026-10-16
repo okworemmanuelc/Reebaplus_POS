@@ -181,7 +181,6 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final crateValue = formatCurrency(
       widget.manufacturer.depositAmountKobo / 100,
     );
@@ -223,7 +222,6 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
                 textInputAction: TextInputAction.next,
                 validator: _validateQuantity,
                 onChanged: (_) => setState(() {}),
-                fillColor: theme.cardColor,
               ),
               SizedBox(height: context.getRSize(12)),
               AppInput(
@@ -237,7 +235,6 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
                 inputFormatters: [CurrencyInputFormatter()],
                 validator: _validatePrice,
                 onChanged: (_) => setState(() {}),
-                fillColor: theme.cardColor,
               ),
               SizedBox(height: context.getRSize(16)),
               CrateRecordBox(

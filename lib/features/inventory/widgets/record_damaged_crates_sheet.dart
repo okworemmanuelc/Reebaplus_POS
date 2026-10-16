@@ -284,7 +284,6 @@ class _RecordDamagedCratesSheetState
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return CrateSheetFrame(
       frameKey: const ValueKey(kRecordDamagedCratesSheetKey),
       title: 'Record damaged empties',
@@ -333,7 +332,6 @@ class _RecordDamagedCratesSheetState
                 textInputAction: TextInputAction.next,
                 validator: _validateQuantity,
                 onChanged: (_) => setState(() {}),
-                fillColor: theme.cardColor,
               ),
               SizedBox(height: context.getRSize(12)),
               AppDropdown<String>(

@@ -232,7 +232,6 @@ class _ManufacturerSettingsSliversState
                     labelText: 'Name',
                     textInputAction: TextInputAction.next,
                     validator: _validateName,
-                    fillColor: theme.cardColor,
                   ),
                   SizedBox(height: context.getRSize(12)),
                   AppInput(
@@ -247,7 +246,6 @@ class _ManufacturerSettingsSliversState
                     ),
                     inputFormatters: [CurrencyInputFormatter()],
                     validator: _validateValue,
-                    fillColor: theme.cardColor,
                   ),
                   SizedBox(height: context.getRSize(16)),
                   AppButton(
