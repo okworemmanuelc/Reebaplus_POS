@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #412: Expenses + Add Expense restyle (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-expenses`, worktree `../drinkPosApp-wt-412`. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue).**
+- New `lib/features/expenses/widgets/expense_parts.dart` (top bar, 720 gutter helper, card shell, status pill, chart palette, empty message, progress bar; shared-part candidates).
+- Expenses: solid top bar + `ScreenHeader`; flat total + budget cards; `TabBar` kept inside `TabbedSliverScaffold` (primary label/indicator); pending block on `warning*`; rows are flat cards with a category `IconTile` and a `TagPill` status; Stats cards flat; budget + reject pop-ups use `AppInput` (still `scrollable: true`); lists cap at raw 720 via per-sliver side gutters (no scroll view gets a height). `kExpenseRowKeyPrefix` unchanged.
+- Add Expense: `ScreenHeader` top bar with a 48dp back arrow, 720 form cap, same fields (category chips, payment dropdown, date field, receipt card); the date picker now inherits the theme.
+- Tests: `test/expenses/expenses_restyle_test.dart`; goldens `expenses_*` / `add_expense_*` (4 sizes x light/dark, fixed March 2026 dates via a Custom period; the form golden is Edit mode so its date is fixed).
+
 ### Release 2.0 (v2.0.0+10) — Google Play Store Public Release (2026-10-11)
 - **Version Bump**: Bumped version in `pubspec.yaml` to `2.0.0+10` (versionName `2.0`, versionCode `10`).
 - **Release Build**: Generated signed production Android App Bundle (`app-release.aab`, 99.2 MB) at `build/app/outputs/bundle/release/app-release.aab` via `flutter build appbundle --release --build-name=2.0 --build-number=10`.
