@@ -72,6 +72,7 @@ class _CrateReturnApprovalScreenState
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('Reject Crate Return'),
         content: TextField(
           controller: controller,

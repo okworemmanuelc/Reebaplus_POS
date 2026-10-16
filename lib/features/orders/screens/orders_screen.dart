@@ -937,6 +937,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           builder: (ctx, setDialogState) {
             final reason = reasonController.text.trim();
             return AlertDialog(
+              scrollable: true,
               backgroundColor: surfaceCol,
               title: Text(
                 'Refund ${order.orderNumber}',

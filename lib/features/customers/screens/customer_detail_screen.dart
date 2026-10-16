@@ -785,6 +785,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: theme.colorScheme.surface,
         title: const Text('Void this credit top-up?'),
         content: Column(

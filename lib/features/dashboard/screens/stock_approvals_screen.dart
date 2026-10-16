@@ -1049,6 +1049,7 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       backgroundColor: context.surfaceColor,
       title: Text(
         'Reject request',
