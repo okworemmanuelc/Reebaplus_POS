@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
@@ -9,6 +12,7 @@ import 'package:reebaplus_pos/core/services/barcode_suggestion.dart';
 import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
 import 'package:reebaplus_pos/core/services/catalogue_report.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -29,7 +33,8 @@ class CatalogueReportSheet extends ConsumerStatefulWidget {
       'Tick what is wrong.';
   static const nothingShared = 'Nothing from this barcode is shared right now.';
   static const offline = 'Connect to the internet to send this report.';
-  static const loadFailed = "Couldn't load the shared details. Try again later.";
+  static const loadFailed =
+      "Couldn't load the shared details. Try again later.";
   static const sendFailed = "Couldn't send the report. Try again.";
   static const notShared = 'Not shared';
   static const noteLabel = 'Note (optional)';
@@ -118,58 +123,36 @@ class _CatalogueReportSheetState extends ConsumerState<CatalogueReportSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final lookup = _lookup;
-    // A Material (not a decorated Container) so the checkbox tiles' ink shows.
-    return Material(
-      color: theme.scaffoldBackgroundColor,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
-          context.getRSize(16),
-          context.getRSize(20),
-          context.getRSize(20) + context.deviceBottomPadding,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.dividerColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+    // The theme supplies the sheet's Surface and shape; this is a scrolling
+    // column with the handle + title header (#392 PR 4).
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(20),
+        context.getRSize(12),
+        context.getRSize(20),
+        context.getRSize(20) + context.deviceBottomPadding,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const InventorySheetHeader(title: CatalogueReportSheet.title),
+          SizedBox(height: context.getRSize(12)),
+          switch (lookup) {
+            null => const _Loading(),
+            CatalogueFound(:final suggestion) => _form(context, suggestion),
+            CatalogueNothingShared() => const _Message(
+              CatalogueReportSheet.nothingShared,
             ),
-            SizedBox(height: context.getRSize(16)),
-            Text(
-              CatalogueReportSheet.title,
-              style: TextStyle(
-                fontSize: context.getRFontSize(18),
-                fontWeight: FontWeight.w800,
-                color: theme.colorScheme.onSurface,
-              ),
+            CatalogueUnreachable() => const _Message(
+              CatalogueReportSheet.offline,
             ),
-            SizedBox(height: context.getRSize(12)),
-            switch (lookup) {
-              null => const _Loading(),
-              CatalogueFound(:final suggestion) => _form(context, suggestion),
-              CatalogueNothingShared() => const _Message(
-                CatalogueReportSheet.nothingShared,
-              ),
-              CatalogueUnreachable() => const _Message(
-                CatalogueReportSheet.offline,
-              ),
-              CatalogueLookupFailed() => const _Message(
-                CatalogueReportSheet.loadFailed,
-              ),
-            },
-          ],
-        ),
+            CatalogueLookupFailed() => const _Message(
+              CatalogueReportSheet.loadFailed,
+            ),
+          },
+        ],
       ),
     );
   }
@@ -182,9 +165,9 @@ class _CatalogueReportSheetState extends ConsumerState<CatalogueReportSheet> {
       children: [
         Text(
           CatalogueReportSheet.intro,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontSize: context.getRFontSize(13),
-          ),
+          style: context
+              .regularStyle(13)
+              .copyWith(color: theme.textTheme.bodySmall?.color),
         ),
         SizedBox(height: context.getRSize(12)),
         _SharedValues(shown: shown),
@@ -204,7 +187,6 @@ class _CatalogueReportSheetState extends ConsumerState<CatalogueReportSheet> {
             title: Text(CatalogueReportSheet.reasonLabel(reason)),
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
-            dense: true,
           ),
         SizedBox(height: context.getRSize(8)),
         AppInput(
@@ -214,17 +196,18 @@ class _CatalogueReportSheetState extends ConsumerState<CatalogueReportSheet> {
           maxLines: 3,
           minLines: 2,
           inputFormatters: [
-            LengthLimitingTextInputFormatter(CatalogueReportSheet.noteMaxLength),
+            LengthLimitingTextInputFormatter(
+              CatalogueReportSheet.noteMaxLength,
+            ),
           ],
         ),
         if (error != null) ...[
           SizedBox(height: context.getRSize(12)),
           Text(
             error,
-            style: TextStyle(
-              color: theme.colorScheme.error,
-              fontSize: context.getRFontSize(13),
-            ),
+            style: context
+                .semiBoldStyle(13)
+                .copyWith(color: theme.colorScheme.error),
           ),
         ],
         SizedBox(height: context.getRSize(16)),
@@ -259,38 +242,42 @@ class _SharedValues extends StatelessWidget {
         color: theme.textTheme.bodySmall?.color,
       ),
     );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: photoUrl == null
-              ? placeholder
-              : Image.network(
-                  photoUrl,
-                  key: const ValueKey('catalogue-report-photo'),
-                  width: size,
-                  height: size,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => placeholder,
-                ),
-        ),
-        SizedBox(width: context.getRSize(12)),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ValueRow(label: 'Name', value: shown.name),
-              SizedBox(height: context.getRSize(6)),
-              _ValueRow(label: 'Unit', value: shown.unit),
-              if (photoUrl == null) ...[
-                SizedBox(height: context.getRSize(6)),
-                const _ValueRow(label: 'Photo', value: null),
-              ],
-            ],
+    return Container(
+      padding: EdgeInsets.all(context.getRSize(12)),
+      decoration: AppDecorations.card(context),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+            child: photoUrl == null
+                ? placeholder
+                : Image.network(
+                    photoUrl,
+                    key: const ValueKey('catalogue-report-photo'),
+                    width: size,
+                    height: size,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => placeholder,
+                  ),
           ),
-        ),
-      ],
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ValueRow(label: 'Name', value: shown.name),
+                SizedBox(height: context.getRSize(6)),
+                _ValueRow(label: 'Unit', value: shown.unit),
+                if (photoUrl == null) ...[
+                  SizedBox(height: context.getRSize(6)),
+                  const _ValueRow(label: 'Photo', value: null),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -310,18 +297,22 @@ class _ValueRow extends StatelessWidget {
         children: [
           TextSpan(
             text: '$label: ',
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontSize: context.getRFontSize(13),
-            ),
+            style: context
+                .regularStyle(13)
+                .copyWith(color: theme.textTheme.bodySmall?.color),
           ),
           TextSpan(
             text: shownValue ?? CatalogueReportSheet.notShared,
-            style: TextStyle(
-              fontSize: context.getRFontSize(14),
-              fontWeight: shownValue == null ? FontWeight.w400 : FontWeight.w700,
-              fontStyle: shownValue == null ? FontStyle.italic : FontStyle.normal,
-              color: theme.colorScheme.onSurface,
-            ),
+            style:
+                (shownValue == null
+                        ? context.regularStyle(14)
+                        : context.boldStyle(14))
+                    .copyWith(
+                      fontStyle: shownValue == null
+                          ? FontStyle.italic
+                          : FontStyle.normal,
+                      color: theme.colorScheme.onSurface,
+                    ),
           ),
         ],
       ),
@@ -352,10 +343,9 @@ class _Message extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
       child: Text(
         text,
-        style: TextStyle(
-          fontSize: context.getRFontSize(14),
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
+        style: context
+            .regularStyle(14)
+            .copyWith(color: Theme.of(context).colorScheme.onSurface),
       ),
     );
   }

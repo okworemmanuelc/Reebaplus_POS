@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/crates/crate_value_change_impact.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
 
 /// Test keys for [CrateValueChangeSheet] (#295).
 const String kCrateValueChangeSheetKey = 'crate_value_change_sheet';
@@ -39,7 +41,7 @@ class CrateValueChangeSheet extends StatelessWidget {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      useSafeArea: true,
       builder: (_) => CrateValueChangeSheet(
         brandName: brandName,
         impact: impact,
@@ -58,49 +60,28 @@ class CrateValueChangeSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.7);
     final lines = [...impact.statusMoves, ?impact.supplierDebt];
-    return Container(
-      key: const ValueKey(kCrateValueChangeSheetKey),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(24),
-          context.getRSize(24),
-          context.getRSize(24),
-          context.getRSize(24) + context.deviceBottomPadding,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final body = context
+        .regularStyle(14)
+        .copyWith(color: theme.colorScheme.onSurface);
+    final heading = context
+        .extraBoldStyle(14)
+        .copyWith(color: theme.colorScheme.onSurface);
+    return CrateSheetFrame(
+      frameKey: const ValueKey(kCrateValueChangeSheetKey),
+      title: 'Change crate value?',
+      subtitle:
+          '$brandName: ${formatCurrency(impact.oldKobo / 100)} → '
+          '${formatCurrency(impact.newKobo / 100)} per crate',
+      children: [
+        InventoryFormCard(
           children: [
-            Text(
-              'Change crate value?',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            SizedBox(height: context.getRSize(4)),
-            Text(
-              '$brandName: ${formatCurrency(impact.oldKobo / 100)} → '
-              '${formatCurrency(impact.newKobo / 100)} per crate',
-              style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-            ),
-            SizedBox(height: context.getRSize(16)),
-            Text(
-              'What moves',
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+            Text('What moves', style: heading),
             SizedBox(height: context.getRSize(6)),
             if (lines.isEmpty)
               Text(
                 'No crates are counted for this brand yet, so no figure moves.',
-                style: theme.textTheme.bodyMedium,
+                style: body,
               )
             else
               for (final m in lines)
@@ -111,14 +92,14 @@ class CrateValueChangeSheet extends StatelessWidget {
                     '${formatCurrency(m.beforeKobo / 100)} to '
                     '${formatCurrency(m.afterKobo / 100)} '
                     '(${_signed(m.deltaKobo)})',
-                    style: theme.textTheme.bodyMedium,
+                    style: body,
                   ),
                 ),
             SizedBox(height: context.getRSize(4)),
             Text(
               'Daily Reconciliation shows these same crates at the new value '
               '(${_signed(impact.totalDeltaKobo)} in total).',
-              style: theme.textTheme.bodyMedium,
+              style: body,
             ),
             if (unsetLines > 0) ...[
               SizedBox(height: context.getRSize(8)),
@@ -128,55 +109,40 @@ class CrateValueChangeSheet extends StatelessWidget {
                 '${formatCurrency(impact.newKobo / 100)}. No money is collected '
                 'or refunded for them.',
                 key: const ValueKey(kCrateValueChangeUnsetLinesKey),
-                style: theme.textTheme.bodyMedium,
+                style: body,
               ),
             ],
-            SizedBox(height: context.getRSize(16)),
-            Text(
-              'What does not move',
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+          ],
+        ),
+        SizedBox(height: context.getRSize(12)),
+        InventoryFormCard(
+          children: [
+            Text('What does not move', style: heading),
             SizedBox(height: context.getRSize(6)),
             Text(
               'Past sales, damages, write-offs and refunds stay at the value '
               'they were recorded at. Customer deposit already paid stays as '
               'paid.',
-              style: theme.textTheme.bodyMedium,
+              style: body,
             ),
             SizedBox(height: context.getRSize(8)),
             Text(
               'New sales, including carts already open, charge the new value.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            SizedBox(height: context.getRSize(24)),
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton(
-                    key: const ValueKey(kCrateValueChangeCancelKey),
-                    text: 'Cancel',
-                    variant: AppButtonVariant.outline,
-                    onPressed: () => Navigator.pop(context, false),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(12)),
-                Expanded(
-                  child: AppButton(
-                    key: const ValueKey(kCrateValueChangeConfirmKey),
-                    text: 'Change value',
-                    variant: AppButtonVariant.primary,
-                    onPressed: () => Navigator.pop(context, true),
-                  ),
-                ),
-              ],
+              style: context
+                  .extraBoldStyle(14)
+                  .copyWith(color: theme.colorScheme.onSurface),
             ),
           ],
         ),
-      ),
+        SizedBox(height: context.getRSize(24)),
+        CrateSheetActions(
+          cancelKey: const ValueKey(kCrateValueChangeCancelKey),
+          confirmKey: const ValueKey(kCrateValueChangeConfirmKey),
+          confirmText: 'Change value',
+          onCancel: () => Navigator.pop(context, false),
+          onConfirm: () => Navigator.pop(context, true),
+        ),
+      ],
     );
   }
 }

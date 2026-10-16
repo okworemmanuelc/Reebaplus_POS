@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/factory_barcode.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -27,23 +28,28 @@ class CatalogueReportLink extends StatelessWidget {
     }
     final color = Theme.of(context).textTheme.bodySmall?.color;
     return Padding(
-      padding: EdgeInsets.only(top: context.getRSize(16)),
+      padding: EdgeInsets.only(top: context.getRSize(8)),
       child: Center(
         child: TextButton.icon(
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, kMinInteractiveDimension),
+            tapTargetSize: MaterialTapTargetSize.padded,
+          ),
           onPressed: () => _open(context, code),
-          icon: Icon(
+          icon: AppIcon(
             AppIcons.flag,
-            size: context.getRSize(12),
+            size: context.getRSize(14),
             color: color,
           ),
           label: Text(
             label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              color: color,
-              decoration: TextDecoration.underline,
-              decorationColor: color,
-            ),
+            style: context
+                .mediumStyle(12)
+                .copyWith(
+                  color: color,
+                  decoration: TextDecoration.underline,
+                  decorationColor: color,
+                ),
           ),
         ),
       ),
@@ -54,7 +60,7 @@ class CatalogueReportLink extends StatelessWidget {
     final sent = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      useSafeArea: true,
       builder: (_) => CatalogueReportSheet(barcode: code),
     );
     if (sent == true && context.mounted) {

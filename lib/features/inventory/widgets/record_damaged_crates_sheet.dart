@@ -7,12 +7,14 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -35,10 +37,7 @@ const String kRecordDamagedCancelButtonKey = 'record_damaged_cancel_button';
 /// - Validated against the store's warehouse count; damage above warehouse count is rejected.
 /// - Saves via [CratePoolDao.recordDamage], logs activity, and notifies managers and CEO.
 class RecordDamagedCratesSheet extends ConsumerStatefulWidget {
-  const RecordDamagedCratesSheet({
-    super.key,
-    required this.manufacturer,
-  });
+  const RecordDamagedCratesSheet({super.key, required this.manufacturer});
 
   final ManufacturerData manufacturer;
 
@@ -50,7 +49,7 @@ class RecordDamagedCratesSheet extends ConsumerStatefulWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      useSafeArea: true,
       builder: (_) => RecordDamagedCratesSheet(manufacturer: manufacturer),
     );
   }
@@ -257,11 +256,13 @@ class _RecordDamagedCratesSheetState
 
     try {
       final reasonLabel = _reasonLabel;
-      await ref.read(activityLogProvider).logAction(
-        'stock_damage',
-        'Damaged empties recorded: $quantity × ${widget.manufacturer.name} ($reasonLabel)',
-        storeId: _storeId,
-      );
+      await ref
+          .read(activityLogProvider)
+          .logAction(
+            'stock_damage',
+            'Damaged empties recorded: $quantity × ${widget.manufacturer.name} ($reasonLabel)',
+            storeId: _storeId,
+          );
       await _notifyManagersAndCeo(
         db,
         type: 'stock_damage',
@@ -284,40 +285,17 @@ class _RecordDamagedCratesSheetState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      key: const ValueKey(kRecordDamagedCratesSheetKey),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(24),
-          context.getRSize(24),
-          context.getRSize(24),
-          context.getRSize(24) + context.deviceBottomPadding,
-        ),
-        child: Form(
+    return CrateSheetFrame(
+      frameKey: const ValueKey(kRecordDamagedCratesSheetKey),
+      title: 'Record damaged empties',
+      subtitle: widget.manufacturer.name,
+      children: [
+        Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Record damaged empties',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: context.getRSize(4)),
-              Text(
-                widget.manufacturer.name,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                ),
-              ),
-              SizedBox(height: context.getRSize(20)),
               if (_mustPickStore) ...[
                 AppDropdown<String>(
                   key: const ValueKey(kRecordDamagedStorePickerKey),
@@ -364,70 +342,30 @@ class _RecordDamagedCratesSheetState
                 labelText: 'Reason',
                 items: [
                   for (final r in _reasons)
-                    DropdownMenuItem(
-                      value: r.code,
-                      child: Text(r.label),
-                    ),
+                    DropdownMenuItem(value: r.code, child: Text(r.label)),
                 ],
                 onChanged: (v) => setState(() => _reason = v ?? _reason),
               ),
               SizedBox(height: context.getRSize(16)),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(context.getRSize(12)),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'This is what will be recorded',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(4)),
-                    Text(
-                      _lossPreviewLine(),
-                      key: const ValueKey(kRecordDamagedLossPreviewKey),
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
+              CrateRecordBox(
+                message: _lossPreviewLine(),
+                messageKey: const ValueKey(kRecordDamagedLossPreviewKey),
+                tone: IconTileTone.warning,
+                icon: AppIcons.warning,
               ),
               SizedBox(height: context.getRSize(24)),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      key: const ValueKey(kRecordDamagedCancelButtonKey),
-                      text: 'Cancel',
-                      variant: AppButtonVariant.outline,
-                      onPressed: _saving ? null : () => Navigator.pop(context),
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  Expanded(
-                    child: AppButton(
-                      key: const ValueKey(kRecordDamagedSaveButtonKey),
-                      text: 'Record damage',
-                      variant: AppButtonVariant.primary,
-                      isLoading: _saving,
-                      onPressed: _isLoadingWarehouse ? null : _save,
-                    ),
-                  ),
-                ],
+              CrateSheetActions(
+                cancelKey: const ValueKey(kRecordDamagedCancelButtonKey),
+                confirmKey: const ValueKey(kRecordDamagedSaveButtonKey),
+                confirmText: 'Record damage',
+                confirming: _saving,
+                onCancel: _saving ? null : () => Navigator.pop(context),
+                onConfirm: _isLoadingWarehouse ? null : _save,
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 }
