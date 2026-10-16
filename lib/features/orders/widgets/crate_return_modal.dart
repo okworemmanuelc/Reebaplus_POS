@@ -505,7 +505,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
                     variant: AppButtonVariant.ghost,
                     onPressed: _saving
                         ? null
-                        : () => Navigator.pop(context, false),
+                        : () => Navigator.pop(context), // null = dismissed
                   ),
                 ),
                 SizedBox(width: context.getRSize(12)),

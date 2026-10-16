@@ -260,6 +260,30 @@ void main() {
       await finish(tester);
     });
 
+    testWidgets('crate return sheet: Skip closes it without confirming or '
+        'recording a crate return', (tester) async {
+      await pumpOrders(tester, env: env, screen: const OrdersScreen());
+      final confirm = inCard(
+        kPendingCrateOrderId,
+        find.byKey(OrdersKeys.confirm),
+      );
+      await centre(tester, confirm);
+      await tester.tap(confirm);
+      await settleOrders(tester);
+      expect(find.byKey(OrdersKeys.crateReturnSheet), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(AppButton, 'Skip'));
+      await settleOrders(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(OrdersKeys.crateReturnSheet), findsNothing);
+      // Still pending: Skip is a cancel, not a confirm with no crates.
+      expect(
+        inCard(kPendingCrateOrderId, find.byKey(OrdersKeys.confirm)),
+        findsOneWidget,
+      );
+      await finish(tester);
+    });
+
     testWidgets('crate return sheet: no Cash refund without the wallet '
         'withdraw grant', (tester) async {
       await pumpOrders(
