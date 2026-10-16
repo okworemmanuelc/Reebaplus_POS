@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #392 PR 2: Add Product + Update Product sheet restyle (Wave 2 A, 2026-10-16)
+Branch `feat/redesign-w2-inventory-2` off `main` 8f5f7395, worktree `../drinkPosApp-wt-392b`. PR 2 of 4. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, no shared-part change.**
+- Form parts added to `inventory_parts.dart` (`InventoryFormCard`, `InventoryFieldLabel`, `InventoryFieldHelper`, `InventoryNotice`, `InventorySuggestionList`/`Tile`, `InventoryDateField`, `InventoryCheckRow`, `InventoryFieldClear`, `InventorySearchIcon`, `InventoryFormFooter`); conventions in `ui-context.md` "Inventory".
+- Add Product (fast + classic): top bar, 720 cap, cards, footer; wording, field order, gates and the single unit `AppDropdown` unchanged. Photo field + catalogue note restyled.
+- Update Product sheet: `sheetMaxHeight(0.92)` (was `getRHeight`), bottom inset moved inside the Surface, 48dp photo button, form parts.
+- Tests: `test/inventory/add_product_redesign_test.dart` (23), goldens `test/redesign/add_product_golden_test.dart` (20).
+- Next: PR 3 (Product Detail + Stock Count) after owner approval; owner question on the unreachable Update Stock sheet still open.
+
 ### Issue #392 PR 1: Inventory screen restyle (Wave 2 A, 2026-10-12)
 Branch `feat/redesign-w2-inventory-1` off `main` 2ec88349, worktree `../drinkPosApp-wt-392`. PR 1 of 4 (screen + tabs + Manage Categories + Add Manufacturer). **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, no shared-part change.**
 - New local parts `lib/features/inventory/widgets/inventory_parts.dart`: `InventoryTopBar` (Home's solid bar + `ScreenHeader`), `InventoryBarAction`, `InventoryLiveBell`, `InventoryFigureCard` (selectable compact figure), `InventoryProductRow` (photo, else `categoryVisual` tile — `colorHex` no longer drawn in the row), `InventoryEmptyCard`, `InventorySheetHeader`, `InventoryPeriodChip`; `kInventoryMaxContentWidth` (= 720) + `inventoryGutter`. All shared-part candidates.
