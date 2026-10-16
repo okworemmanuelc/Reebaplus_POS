@@ -335,7 +335,17 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       key: ReportKeys.period,
       value: _period.startsWith('Custom:') ? 'Custom' : _period,
       items: kDatePeriodLabels
-          .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+          .map(
+            (p) => DropdownMenuItem(
+              value: p,
+              child: Text(
+                p,
+                style: context
+                    .mediumStyle(14)
+                    .copyWith(color: Theme.of(context).colorScheme.onSurface),
+              ),
+            ),
+          )
           .toList(),
       onChanged: (v) async {
         if (v == 'Custom') {
