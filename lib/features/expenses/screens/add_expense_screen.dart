@@ -299,11 +299,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       ),
       child: Row(
         children: [
-          Icon(
-            AppIcons.store,
-            size: context.getRSize(13),
-            color: primary,
-          ),
+          Icon(AppIcons.store, size: context.getRSize(13), color: primary),
           SizedBox(width: context.getRSize(8)),
           Expanded(
             child: Text.rich(

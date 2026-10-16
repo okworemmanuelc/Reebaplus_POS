@@ -6,7 +6,10 @@ import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -16,7 +19,10 @@ import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/expenses/screens/add_expense_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/features/expenses/widgets/expense_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -68,7 +74,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   late TabController _tabController;
   String _periodFilter = 'This Month'; // §20.1/§30.6 default
   DateTimeRange? _customRange;
-  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
@@ -102,8 +107,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
   /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
   /// are capped to Today/This Week/This Month).
-  List<String> get _periodOptions =>
-      datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
+  List<String> get _periodOptions => datePeriodLabelsForRole(
+    managerUp: Gates.seeExtendedDateRanges.allows(ref),
+  );
 
   /// [_periodFilter] clamped into [_periodOptions], so the dropdown value and
   /// the list filter agree for capped viewers.
@@ -124,6 +130,29 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     return u.name;
   }
 
+  Widget _page({
+    required PreferredSizeWidget appBar,
+    required Widget body,
+    Widget? fab,
+  }) {
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        drawer: context.isRailLayout
+            ? null
+            : const AppDrawer(activeRoute: 'expenses'),
+        appBar: appBar,
+        body: DrawerHost(
+          // Side insets (a cutout, a sideways nav bar) are cleared here; under
+          // MainLayout they are already removed, so this is a no-op there.
+          child: SafeArea(top: false, bottom: false, child: body),
+        ),
+        floatingActionButton: fab,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(
@@ -140,29 +169,22 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     // cites Gates.addExpense.
     return Guarded.screen(
       gate: Gates.viewExpenses,
-      loading: Scaffold(
-        backgroundColor: _bg,
-        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'expenses'),
+      loading: _page(
         appBar: _buildAppBar(context),
-        body: const DrawerHost(child: SizedBox.shrink()),
+        body: const SizedBox.shrink(),
       ),
-      denied: Scaffold(
-        backgroundColor: _bg,
-        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'expenses'),
+      denied: _page(
         appBar: _buildAppBar(context),
-        body: DrawerHost(child: Center(
+        body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Text(
               'You don’t have access to Expenses.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _subtext,
-                fontSize: context.getRFontSize(14),
-              ),
+              style: context.regularStyle(14).copyWith(color: _subtext),
             ),
           ),
-        )),
+        ),
       ),
       builder: _buildExpenses,
     );
@@ -172,11 +194,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   /// granted. Split out of [build] so the `Guarded.screen` guard above owns
   /// the permissions-ready / denial decision.
   Widget _buildExpenses(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'expenses'),
+    return _page(
       appBar: _buildAppBar(context),
-      body: DrawerHost(child: Builder(
+      body: Builder(
         builder: (context) {
           if (ref.watch(zeroStoresEmptySurfaceProvider)) {
             return const FirstRunEmptyState();
@@ -231,10 +251,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           // One scrollable surface (PRD #239 / #256): the Total Expenses figure
           // with its period selector and the Monthly Budget card scroll away,
           // the tab bar pins beneath them, and each tab is its own scroll view.
-          // Previously this was a Column whose fixed header sat above an
-          // Expanded TabBarView, so the header took its height off the top and
-          // left the list whatever remained — 1.8dp of 1,137dp at 800x360, a
-          // list that renders nothing and reports nothing.
+          // Every sliver is capped at 720dp and centred through its own side
+          // gutter (width only — no scroll view is given a height).
           return AppRefreshWrapper(
             child: TabbedSliverScaffold(
               controller: _tabController,
@@ -247,12 +265,23 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               ),
               headerSlivers: [
                 SliverToBoxAdapter(
-                  child: _buildHeaderArea(
-                    context,
-                    approvedTotalKobo: approvedTotal,
-                    budgetSpentKobo: budgetSpentKobo,
-                    budgetPendingKobo: budgetPendingKobo,
-                    scopeLabel: showScope ? scopeLabel : null,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: expenseGutter(
+                          context,
+                          constraints.maxWidth,
+                        ),
+                        vertical: context.getRSize(16),
+                      ),
+                      child: _buildHeaderArea(
+                        context,
+                        approvedTotalKobo: approvedTotal,
+                        budgetSpentKobo: budgetSpentKobo,
+                        budgetPendingKobo: budgetPendingKobo,
+                        scopeLabel: showScope ? scopeLabel : null,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -283,8 +312,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             ),
           );
         },
-      )),
-      floatingActionButton: (ref.watch(allStoresProvider).valueOrNull?.isNotEmpty == true &&
+      ),
+      fab:
+          (ref.watch(allStoresProvider).valueOrNull?.isNotEmpty == true &&
               !ref.watch(zeroStoresEmptySurfaceProvider) &&
               Gates.addExpense.allows(ref))
           ? AppFAB(
@@ -298,112 +328,20 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: _surface,
-      elevation: 0,
-      iconTheme: IconThemeData(color: _text),
-      leading: context.isRailLayout ? null : Builder(
-        builder: (ctx) => InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => Scaffold.of(ctx).openDrawer(),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  height: 2.5,
-                  width: context.getRSize(22),
-                  decoration: BoxDecoration(
-                    color: _text,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Container(
-                  height: 2.5,
-                  width: context.getRSize(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Container(
-                  height: 2.5,
-                  width: context.getRSize(22),
-                  decoration: BoxDecoration(
-                    color: _text,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        const NotificationBell(),
-        SizedBox(width: context.getRSize(8)),
-      ],
-      title: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(context.getRSize(8)),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.error.withValues(alpha: 0.8),
-                  danger,
-                ],
+    return ExpenseTopBar(
+      key: ExpenseKeys.topBar,
+      height: expenseTopBarHeight(context),
+      header: ScreenHeader(
+        icon: AppIcons.expenses,
+        title: 'Expenses',
+        subtitle: ref.watch(activeStoreLabelProvider),
+        leading: context.isRailLayout
+            ? null
+            : const SizedBox.square(
+                dimension: kMinInteractiveDimension,
+                child: MenuButton(),
               ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.error.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Icon(
-              AppIcons.expenses,
-              color: Colors.white,
-              size: context.getRSize(16),
-            ),
-          ),
-          SizedBox(width: context.getRSize(12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'Expenses',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(18),
-                      fontWeight: FontWeight.w800,
-                      color: _text,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ),
-                Text(
-                  ref.watch(activeStoreLabelProvider),
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(11),
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
+        actions: const [ExpenseLiveBell()],
       ),
     );
   }
@@ -413,31 +351,26 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   /// scaffold it is the pinned header below the scroll-away summary, so it
   /// stays visible while the content beneath it scrolls (PRD #239 / #256).
   Widget _buildTabBar(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
       decoration: BoxDecoration(
         color: _surface,
         border: Border(bottom: BorderSide(color: _border)),
       ),
-      child: TabBar(
-        controller: _tabController,
-        labelColor: Theme.of(context).colorScheme.error,
-        unselectedLabelColor: _subtext,
-        indicatorColor: Theme.of(context).colorScheme.error,
-        indicatorWeight: 3,
-        labelStyle: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: context.getRFontSize(14),
+      child: ExpenseWidthCap(
+        child: TabBar(
+          controller: _tabController,
+          labelColor: primary,
+          unselectedLabelColor: _subtext,
+          indicatorColor: primary,
+          indicatorWeight: 3,
+          labelStyle: context.boldStyle(13),
+          unselectedLabelStyle: context.semiBoldStyle(13),
+          tabs: const [
+            Tab(icon: Icon(AppIcons.list, size: 16), text: 'Expenses'),
+            Tab(icon: Icon(AppIcons.chartPie, size: 16), text: 'Stats'),
+          ],
         ),
-        tabs: const [
-          Tab(
-            icon: Icon(AppIcons.list, size: 16),
-            text: 'Expenses',
-          ),
-          Tab(
-            icon: Icon(AppIcons.chartPie, size: 16),
-            text: 'Stats',
-          ),
-        ],
       ),
     );
   }
@@ -449,126 +382,111 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     required int budgetPendingKobo,
     String? scopeLabel,
   }) {
-    return Container(
-      color: _surface,
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Bounded so a large total or a long store name shrinks or
-                // truncates instead of pushing the period selector off a
-                // 320dp-wide phone.
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Total Expenses',
-                        style: TextStyle(
-                          color: _subtext,
-                          fontSize: context.getRFontSize(13),
-                          fontWeight: FontWeight.w600,
-                        ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ExpenseCardShell(
+          key: ExpenseKeys.totalCard,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Bounded so a large total or a long store name shrinks or
+              // truncates instead of pushing the period selector off a
+              // 320dp-wide phone.
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total Expenses',
+                      style: context
+                          .semiBoldStyle(13)
+                          .copyWith(color: _subtext),
+                    ),
+                    SizedBox(height: context.getRSize(4)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        formatCurrency(approvedTotalKobo / 100.0),
+                        style: context.boldStyle(24).copyWith(color: _text),
                       ),
+                    ),
+                    // §20.8 — active-store scope caption (only when the picker
+                    // is in play, i.e. more than one selectable store).
+                    if (scopeLabel != null) ...[
                       SizedBox(height: context.getRSize(4)),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          formatCurrency(approvedTotalKobo / 100.0),
-                          style: TextStyle(
-                            color: _text,
-                            fontSize: context.getRFontSize(24),
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: -0.5,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            AppIcons.store,
+                            size: context.getRSize(10),
+                            color: _subtext,
                           ),
-                        ),
+                          SizedBox(width: context.getRSize(5)),
+                          Flexible(
+                            child: Text(
+                              scopeLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context
+                                  .semiBoldStyle(11)
+                                  .copyWith(color: _subtext),
+                            ),
+                          ),
+                        ],
                       ),
-                      // §20.8 — active-store scope caption (only when the picker
-                      // is in play, i.e. more than one selectable store).
-                      if (scopeLabel != null) ...[
-                        SizedBox(height: context.getRSize(4)),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              AppIcons.store,
-                              size: context.getRSize(10),
-                              color: _subtext,
-                            ),
-                            SizedBox(width: context.getRSize(5)),
-                            Flexible(
-                              child: Text(
-                                scopeLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: _subtext,
-                                  fontSize: context.getRFontSize(11),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
-                SizedBox(width: context.getRSize(12)),
-                AppDropdown<String>(
-                  value: _effectivePeriod.startsWith('Custom:') ? 'Custom' : _effectivePeriod,
-                  width: context.getRSize(130),
-                  items: _periodOptions.map((String val) {
-                    return DropdownMenuItem<String>(
-                      value: val,
-                      child: Text(val),
+              ),
+              SizedBox(width: context.getRSize(12)),
+              AppDropdown<String>(
+                value: _effectivePeriod.startsWith('Custom:')
+                    ? 'Custom'
+                    : _effectivePeriod,
+                width: context.getRSize(130),
+                items: _periodOptions.map((String val) {
+                  return DropdownMenuItem<String>(value: val, child: Text(val));
+                }).toList(),
+                onChanged: (val) async {
+                  if (val == 'Custom') {
+                    final range = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      initialDateRange: _customRange,
+                      builder: (context, child) =>
+                          Theme(data: Theme.of(context), child: child!),
                     );
-                  }).toList(),
-                  onChanged: (val) async {
-                    if (val == 'Custom') {
-                      final range = await showDateRangePicker(
-                        context: context,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                        initialDateRange: _customRange,
-                        builder: (context, child) => Theme(
-                          data: Theme.of(context),
-                          child: child!,
-                        ),
-                      );
-                      if (range != null) {
-                        setState(() {
-                          _customRange = range;
-                          _periodFilter = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
-                        });
-                      }
-                    } else if (val != null) {
+                    if (range != null) {
                       setState(() {
-                        _periodFilter = val;
-                        _customRange = null;
+                        _customRange = range;
+                        _periodFilter =
+                            'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
                       });
                     }
-                  },
-                ),
-              ],
-            ),
+                  } else if (val != null) {
+                    setState(() {
+                      _periodFilter = val;
+                      _customRange = null;
+                    });
+                  }
+                },
+              ),
+            ],
           ),
-          // §20.1/§20.3: monthly budget bar — always visible; reflects the
-          // current calendar month regardless of the selected period.
-          _buildBudgetBar(
-            context,
-            spentKobo: budgetSpentKobo,
-            pendingKobo: budgetPendingKobo,
-          ),
-        ],
-      ),
+        ),
+        SizedBox(height: context.getRSize(12)),
+        // §20.1/§20.3: monthly budget bar — always visible; reflects the
+        // current calendar month regardless of the selected period.
+        _buildBudgetBar(
+          context,
+          spentKobo: budgetSpentKobo,
+          pendingKobo: budgetPendingKobo,
+        ),
+      ],
     );
   }
 
@@ -586,17 +504,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     final scopeStoreId = ref.watch(expenseScopeStoreIdProvider);
     final goalKobo = resolveMonthlyBudgetKobo(budgets, scopeStoreId);
 
-    return Container(
-      margin: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(8),
-      ),
-      padding: EdgeInsets.all(context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: _bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _border),
-      ),
+    return ExpenseCardShell(
+      key: ExpenseKeys.budgetCard,
       child: goalKobo == null
           ? _buildBudgetUnset(context, isCeo: isCeo, scopeStoreId: scopeStoreId)
           : _buildBudgetSet(
@@ -625,7 +534,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             children: [
               Icon(
                 AppIcons.target,
-                size: context.getRSize(12),
+                size: context.getRSize(14),
                 color: _subtext,
               ),
               SizedBox(width: context.getRSize(8)),
@@ -634,11 +543,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                   'No monthly budget set',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: context.boldStyle(13).copyWith(color: _subtext),
                 ),
               ),
             ],
@@ -665,8 +570,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     required int pendingKobo,
     required int goalKobo,
   }) {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     final percent = (spentKobo / goalKobo).clamp(0.0, 1.2);
     final isOver = spentKobo > goalKobo;
+    final tone = isOver ? f.danger : f.green;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -676,19 +584,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           children: [
             Row(
               children: [
-                Icon(
-                  AppIcons.target,
-                  size: context.getRSize(12),
-                  color: isOver ? danger : success,
-                ),
+                Icon(AppIcons.target, size: context.getRSize(14), color: tone),
                 SizedBox(width: context.getRSize(8)),
                 Text(
                   'Monthly Budget',
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: context.boldStyle(13).copyWith(color: _subtext),
                 ),
               ],
             ),
@@ -696,62 +596,40 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               children: [
                 Text(
                   '${(percent * 100).toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: isOver ? danger : success,
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: context.boldStyle(13).copyWith(color: tone),
                 ),
-                if (isCeo) ...[
-                  SizedBox(width: context.getRSize(6)),
+                if (isCeo)
                   InkWell(
                     onTap: () => _openBudgetDialog(scopeStoreId, goalKobo),
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: EdgeInsets.all(context.getRSize(4)),
+                    borderRadius: BorderRadius.circular(
+                      AppSpacing.borderRadiusM,
+                    ),
+                    child: SizedBox.square(
+                      dimension: kMinInteractiveDimension,
                       child: Icon(
                         AppIcons.edit,
-                        size: context.getRSize(11),
+                        size: context.getRSize(14),
                         color: _subtext,
                       ),
                     ),
                   ),
-                ],
               ],
             ),
           ],
         ),
-        SizedBox(height: context.getRSize(10)),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: percent > 1.0 ? 1.0 : percent,
-            backgroundColor: _border,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              isOver ? danger : success,
-            ),
-            minHeight: context.getRSize(6),
-          ),
-        ),
+        SizedBox(height: context.getRSize(8)),
+        ExpenseProgressBar(value: percent > 1.0 ? 1.0 : percent, color: tone),
         SizedBox(height: context.getRSize(8)),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               'Spent: ${formatCurrency(spentKobo / 100.0)}',
-              style: TextStyle(
-                color: _text,
-                fontSize: context.getRFontSize(11),
-                fontWeight: FontWeight.w600,
-              ),
+              style: context.semiBoldStyle(12).copyWith(color: _text),
             ),
             Text(
               'Goal: ${formatCurrency(goalKobo / 100.0)}',
-              style: TextStyle(
-                color: _subtext,
-                fontSize: context.getRFontSize(11),
-                fontWeight: FontWeight.w600,
-              ),
+              style: context.semiBoldStyle(12).copyWith(color: _subtext),
             ),
           ],
         ),
@@ -759,11 +637,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           SizedBox(height: context.getRSize(6)),
           Text(
             '${formatCurrency(pendingKobo / 100.0)} pending approval',
-            style: TextStyle(
-              color: amberPrimaryDark,
-              fontSize: context.getRFontSize(11),
-              fontWeight: FontWeight.w600,
-            ),
+            style: context.semiBoldStyle(12).copyWith(color: f.warning),
           ),
         ],
       ],
@@ -782,7 +656,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           backgroundColor: _surface,
           title: Text(
             'Monthly budget',
-            style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+            style: ctx.boldStyle(18).copyWith(color: _text),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -790,31 +664,19 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             children: [
               Text(
                 'Set the monthly spending goal for this view.',
-                style: TextStyle(color: _subtext, fontSize: 13),
+                style: ctx.regularStyle(13).copyWith(color: _subtext),
               ),
               SizedBox(height: context.getRSize(16)),
-              TextField(
+              AppInput(
+                key: ExpenseKeys.budgetField,
                 controller: controller,
                 autofocus: true,
+                labelText: 'Amount (naira)',
+                prefixText: '$activeCurrencySymbol ',
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
                 inputFormatters: [CurrencyInputFormatter()],
-                style: TextStyle(color: _text),
-                decoration: InputDecoration(
-                  prefixText: '$activeCurrencySymbol ',
-                  prefixStyle: TextStyle(color: _text),
-                  labelText: 'Amount (naira)',
-                  labelStyle: TextStyle(color: _subtext),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: _border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: Theme.of(ctx).colorScheme.primary,
-                    ),
-                  ),
-                ),
               ),
             ],
           ),
@@ -896,82 +758,83 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     final sortedCategories = grouped.keys.toList()..sort();
 
     return [
-      SliverPadding(
-        // Clears the Add Expense FAB and the device's gesture inset so the last
-        // row is never permanently covered.
-        padding: EdgeInsets.only(
-          bottom: context.getRSize(100) + context.deviceBottomPadding,
-        ),
-        sliver: SliverList.list(
-          children: [
-            if (pending.isNotEmpty)
-              _buildPendingApprovals(
-                context,
-                pending,
-                categoryNames,
-                users,
-                storeNameById,
-                showRowStore,
-              ),
-            ...sortedCategories.expand((cat) {
-              final catList = grouped[cat]!
-                ..sort(
-                  (a, b) =>
-                      b.expense.expenseDate.compareTo(a.expense.expenseDate),
+      SliverLayoutBuilder(
+        builder: (context, constraints) => SliverPadding(
+          // Capped at 720dp and centred through the side gutter; the bottom
+          // clears the Add Expense FAB and the device's gesture inset so the
+          // last row is never permanently covered.
+          padding: EdgeInsets.only(
+            left: expenseGutter(context, constraints.crossAxisExtent),
+            right: expenseGutter(context, constraints.crossAxisExtent),
+            bottom: context.getRSize(100) + context.deviceBottomPadding,
+          ),
+          sliver: SliverList.list(
+            children: [
+              if (pending.isNotEmpty)
+                _buildPendingApprovals(
+                  context,
+                  pending,
+                  categoryNames,
+                  users,
+                  storeNameById,
+                  showRowStore,
+                ),
+              ...sortedCategories.expand((cat) {
+                final catList = grouped[cat]!
+                  ..sort(
+                    (a, b) =>
+                        b.expense.expenseDate.compareTo(a.expense.expenseDate),
+                  );
+                final catSum = catList.fold<int>(
+                  0,
+                  (s, e) => s + e.expense.amountKobo,
                 );
-              final catSum = catList.fold<int>(
-                0,
-                (s, e) => s + e.expense.amountKobo,
-              );
-              return [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(20),
-                    context.getRSize(20),
-                    context.getRSize(20),
-                    context.getRSize(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          cat.toUpperCase(),
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: _subtext,
-                            fontSize: context.getRFontSize(12),
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
+                return [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      context.getRSize(4),
+                      context.getRSize(20),
+                      context.getRSize(4),
+                      context.getRSize(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: SectionHeader(
+                            title: cat.toUpperCase(),
+                            variant: SectionHeaderVariant.group,
                           ),
                         ),
-                      ),
-                      Text(
-                        formatCurrency(catSum / 100.0),
-                        style: TextStyle(
-                          color: _subtext,
-                          fontSize: context.getRFontSize(13),
-                          fontWeight: FontWeight.bold,
+                        SizedBox(width: context.getRSize(8)),
+                        Text(
+                          formatCurrency(catSum / 100.0),
+                          style: context
+                              .boldStyle(13)
+                              .copyWith(color: _subtext),
                         ),
+                      ],
+                    ),
+                  ),
+                  ...catList.map(
+                    (e) => Padding(
+                      padding: EdgeInsets.only(bottom: context.getRSize(12)),
+                      child: _buildExpenseCard(
+                        context,
+                        e,
+                        categoryNames,
+                        users,
+                        withMenu: true,
+                        storeName: showRowStore
+                            ? _storeLabel(e, storeNameById)
+                            : null,
                       ),
-                    ],
+                    ),
                   ),
-                ),
-                ...catList.map(
-                  (e) => _buildExpenseCard(
-                    context,
-                    e,
-                    categoryNames,
-                    users,
-                    withMenu: true,
-                    storeName: showRowStore
-                        ? _storeLabel(e, storeNameById)
-                        : null,
-                  ),
-                ),
-              ];
-            }),
-          ],
+                ];
+              }),
+            ],
+          ),
         ),
       ),
     ];
@@ -985,31 +848,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   Widget _emptySliver(BuildContext context, String message) {
     return SliverFillRemaining(
       hasScrollBody: false,
-      child: _emptyState(context, message),
-    );
-  }
-
-  Widget _emptyState(BuildContext context, String message) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            AppIcons.receipt,
-            size: context.getRSize(48),
-            color: _border,
-          ),
-          SizedBox(height: context.getRSize(16)),
-          Text(
-            message,
-            style: TextStyle(
-              color: _subtext,
-              fontSize: context.getRFontSize(16),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
+      child: ExpensesEmptyMessage(message: message),
     );
   }
 
@@ -1038,51 +877,49 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     Map<String, String> storeNameById,
     bool showRowStore,
   ) {
-    return Container(
-      margin: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(16),
-        context.getRSize(16),
-        context.getRSize(4),
-      ),
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: amberPrimary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: amberPrimary.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                AppIcons.history,
-                size: context.getRSize(13),
-                color: amberPrimaryDark,
-              ),
-              SizedBox(width: context.getRSize(8)),
-              Text(
-                'Pending approval (${pending.length})',
-                style: TextStyle(
-                  color: amberPrimaryDark,
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.bold,
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    return Padding(
+      padding: EdgeInsets.only(top: context.getRSize(4)),
+      child: ExpenseCardShell(
+        key: ExpenseKeys.pendingCard,
+        padding: 14,
+        decoration: BoxDecoration(
+          color: f.warningTint,
+          borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
+          border: Border.all(color: f.warningOutline),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  AppIcons.history,
+                  size: context.getRSize(14),
+                  color: f.warning,
                 ),
-              ),
-            ],
-          ),
-          SizedBox(height: context.getRSize(10)),
-          ...pending.map(
-            (e) => _buildPendingRow(
-              context,
-              e,
-              categoryNames,
-              users,
-              showRowStore ? _storeLabel(e, storeNameById) : null,
+                SizedBox(width: context.getRSize(8)),
+                Expanded(
+                  child: Text(
+                    'Pending approval (${pending.length})',
+                    style: context.boldStyle(13).copyWith(color: f.warning),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+            SizedBox(height: context.getRSize(10)),
+            ...pending.map(
+              (e) => _buildPendingRow(
+                context,
+                e,
+                categoryNames,
+                users,
+                showRowStore ? _storeLabel(e, storeNameById) : null,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1098,74 +935,68 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     final cat = _categoryName(e, categoryNames);
     final by = _recordedByName(exp.recordedBy, users);
 
-    return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(10)),
-      padding: EdgeInsets.all(context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.getRSize(10)),
+      child: DecoratedBox(
+        decoration: AppDecorations.card(
+          context,
+          radius: AppSpacing.borderRadiusL,
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(context.getRSize(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  exp.description.isNotEmpty ? exp.description : cat,
-                  style: TextStyle(
-                    color: _text,
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      exp.description.isNotEmpty ? exp.description : cat,
+                      style: context.boldStyle(14).copyWith(color: _text),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                  Text(
+                    formatCurrency(exp.amountKobo / 100.0),
+                    style: context.boldStyle(14).copyWith(color: _text),
+                  ),
+                ],
               ),
+              SizedBox(height: context.getRSize(4)),
               Text(
-                formatCurrency(exp.amountKobo / 100.0),
-                style: TextStyle(
-                  color: _text,
-                  fontWeight: FontWeight.bold,
-                  fontSize: context.getRFontSize(14),
-                ),
+                storeName == null
+                    ? '$cat · by $by'
+                    : '$cat · by $by · $storeName',
+                style: context.regularStyle(12).copyWith(color: _subtext),
+              ),
+              SizedBox(height: context.getRSize(10)),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      text: 'Reject',
+                      icon: AppIcons.close,
+                      variant: AppButtonVariant.danger,
+                      size: AppButtonSize.xsmall,
+                      onPressed: () => _rejectExpense(exp),
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(10)),
+                  Expanded(
+                    child: AppButton(
+                      text: 'Approve',
+                      icon: AppIcons.check,
+                      variant: AppButtonVariant.success,
+                      size: AppButtonSize.xsmall,
+                      onPressed: () => _approveExpense(exp),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          SizedBox(height: context.getRSize(4)),
-          Text(
-            storeName == null ? '$cat · by $by' : '$cat · by $by · $storeName',
-            style: TextStyle(
-              color: _subtext,
-              fontSize: context.getRFontSize(12),
-            ),
-          ),
-          SizedBox(height: context.getRSize(10)),
-          Row(
-            children: [
-              Expanded(
-                child: AppButton(
-                  text: 'Reject',
-                  icon: AppIcons.close,
-                  variant: AppButtonVariant.danger,
-                  size: AppButtonSize.xsmall,
-                  onPressed: () => _rejectExpense(exp),
-                ),
-              ),
-              SizedBox(width: context.getRSize(10)),
-              Expanded(
-                child: AppButton(
-                  text: 'Approve',
-                  icon: AppIcons.check,
-                  variant: AppButtonVariant.success,
-                  size: AppButtonSize.xsmall,
-                  onPressed: () => _approveExpense(exp),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1208,7 +1039,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               backgroundColor: _surface,
               title: Text(
                 'Reject expense',
-                style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+                style: ctx.boldStyle(18).copyWith(color: _text),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1216,28 +1047,17 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 children: [
                   Text(
                     'The recorder is notified. No money moves on a rejection.',
-                    style: TextStyle(color: _subtext, fontSize: 13),
+                    style: ctx.regularStyle(13).copyWith(color: _subtext),
                   ),
                   SizedBox(height: context.getRSize(16)),
-                  TextField(
+                  AppInput(
+                    key: ExpenseKeys.rejectField,
                     controller: reasonController,
                     autofocus: true,
                     minLines: 1,
                     maxLines: 3,
-                    style: TextStyle(color: _text),
+                    labelText: 'Reason (required)',
                     onChanged: (_) => setDialogState(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'Reason (required)',
-                      labelStyle: TextStyle(color: _subtext),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: _border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Theme.of(ctx).colorScheme.primary,
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -1306,11 +1126,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           backgroundColor: _surface,
           title: Text(
             'Delete expense',
-            style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+            style: ctx.boldStyle(18).copyWith(color: _text),
           ),
           content: Text(
             'This removes the expense.',
-            style: TextStyle(color: _subtext, fontSize: 13),
+            style: ctx.regularStyle(13).copyWith(color: _subtext),
           ),
           actions: [
             AppButton(
@@ -1357,11 +1177,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     final canEdit = _canEdit(exp);
     final canDelete = _canDelete();
     if (!canEdit && !canDelete) return null;
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
 
     return PopupMenuButton<String>(
+      key: ExpenseKeys.cardMenu,
       icon: Icon(
         AppIcons.moreVertical,
-        size: context.getRSize(14),
+        size: context.getRSize(18),
         color: _subtext,
       ),
       color: _surface,
@@ -1378,13 +1201,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             value: 'edit',
             child: Row(
               children: [
-                Icon(
-                  AppIcons.edit,
-                  size: context.getRSize(13),
-                  color: _text,
-                ),
+                Icon(AppIcons.edit, size: context.getRSize(14), color: _text),
                 SizedBox(width: context.getRSize(10)),
-                Text('Edit', style: TextStyle(color: _text)),
+                Text('Edit', style: ctx.mediumStyle(14).copyWith(color: _text)),
               ],
             ),
           ),
@@ -1395,11 +1214,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               children: [
                 Icon(
                   AppIcons.delete,
-                  size: context.getRSize(13),
-                  color: danger,
+                  size: context.getRSize(14),
+                  color: f.danger,
                 ),
                 SizedBox(width: context.getRSize(10)),
-                const Text('Delete', style: TextStyle(color: danger)),
+                Text(
+                  'Delete',
+                  style: ctx.mediumStyle(14).copyWith(color: f.danger),
+                ),
               ],
             ),
           ),
@@ -1442,7 +1264,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       return const [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(child: Text('No data for statistics.')),
+          child: ExpensesEmptyMessage(message: 'No data for statistics.'),
         ),
       ];
     }
@@ -1457,127 +1279,112 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     final sortedCats = catTotals.keys.toList()
       ..sort((a, b) => catTotals[b]!.compareTo(catTotals[a]!));
 
-    final colors = [
-      const Color(0xFFEF4444), // red
-      const Color(0xFFF59E0B), // amber
-      const Color(0xFF10B981), // emerald
-      const Color(0xFF3B82F6), // blue
-      const Color(0xFF8B5CF6), // purple
-      const Color(0xFFEC4899), // pink
-    ];
+    // Same order as before (red, amber, emerald, blue, purple, pink), on the
+    // fixed colour set (pink -> neutral).
+    final colors = expenseChartColors(
+      Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light,
+    );
 
     return [
-      SliverPadding(
-        padding: EdgeInsets.all(
-          context.getRSize(16),
-        ).copyWith(bottom: context.getRSize(100) + context.deviceBottomPadding),
-        sliver: SliverList.list(
-          children: [
-            _buildAnnualProjectionCard(context),
-            SizedBox(height: context.getRSize(16)),
-            _buildBudgetComparisonCard(context),
-            _buildTopStaffCard(context, periodApproved, users),
-            SizedBox(height: context.getRSize(8)),
-  
-            // Category Breakdown Header
-            Text(
-              'Category Breakdown',
-              style: TextStyle(
-                color: _text,
-                fontSize: context.getRFontSize(16),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: context.getRSize(16)),
-  
-            Container(
-              padding: EdgeInsets.all(context.getRSize(16)),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _border),
-              ),
-              child: Column(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Row(
-                      children: List.generate(sortedCats.length, (index) {
-                        final cat = sortedCats[index];
-                        final amt = catTotals[cat]!;
-                        final flex = total == 0
-                            ? 0
-                            : (amt / total * 1000).toInt();
-                        if (flex == 0) return const SizedBox();
-                        return Expanded(
-                          flex: flex,
-                          child: Container(
-                            height: context.getRSize(16),
-                            color: colors[index % colors.length],
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(20)),
-                  ...List.generate(sortedCats.length, (index) {
-                    final cat = sortedCats[index];
-                    final amt = catTotals[cat]!;
-                    final pct = total == 0
-                        ? '0.0'
-                        : (amt / total * 100).toStringAsFixed(1);
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: context.getRSize(12)),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: colors[index % colors.length],
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          SizedBox(width: context.getRSize(12)),
-                          Expanded(
-                            child: Text(
-                              cat,
-                              style: TextStyle(
-                                color: _text,
-                                fontSize: context.getRFontSize(14),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            formatCurrency(amt / 100.0),
-                            style: TextStyle(
-                              color: _text,
-                              fontSize: context.getRFontSize(14),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(width: context.getRSize(12)),
-                          SizedBox(
-                            width: context.getRSize(45),
-                            child: Text(
-                              '$pct%',
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                color: _subtext,
-                                fontSize: context.getRFontSize(12),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
+      SliverLayoutBuilder(
+        builder: (context, constraints) => SliverPadding(
+          padding: EdgeInsets.only(
+            left: expenseGutter(context, constraints.crossAxisExtent),
+            right: expenseGutter(context, constraints.crossAxisExtent),
+            top: context.getRSize(16),
+            bottom: context.getRSize(100) + context.deviceBottomPadding,
+          ),
+          sliver: SliverList.list(
+            children: [
+              _buildAnnualProjectionCard(context),
+              SizedBox(height: context.getRSize(16)),
+              _buildBudgetComparisonCard(context),
+              _buildTopStaffCard(context, periodApproved, users),
+              SizedBox(height: context.getRSize(8)),
+
+              // Category Breakdown Header
+              const SectionHeader(title: 'Category Breakdown'),
+              SizedBox(height: context.getRSize(16)),
+
+              ExpenseCardShell(
+                child: Column(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(
+                        AppSpacing.borderRadiusS,
                       ),
-                    );
-                  }),
-                ],
+                      child: Row(
+                        children: List.generate(sortedCats.length, (index) {
+                          final cat = sortedCats[index];
+                          final amt = catTotals[cat]!;
+                          final flex = total == 0
+                              ? 0
+                              : (amt / total * 1000).toInt();
+                          if (flex == 0) return const SizedBox();
+                          return Expanded(
+                            flex: flex,
+                            child: Container(
+                              height: context.getRSize(16),
+                              color: colors[index % colors.length],
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                    SizedBox(height: context.getRSize(20)),
+                    ...List.generate(sortedCats.length, (index) {
+                      final cat = sortedCats[index];
+                      final amt = catTotals[cat]!;
+                      final pct = total == 0
+                          ? '0.0'
+                          : (amt / total * 100).toStringAsFixed(1);
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: context.getRSize(12)),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: context.getRSize(12),
+                              height: context.getRSize(12),
+                              decoration: BoxDecoration(
+                                color: colors[index % colors.length],
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            SizedBox(width: context.getRSize(12)),
+                            Expanded(
+                              child: Text(
+                                cat,
+                                style: context
+                                    .semiBoldStyle(14)
+                                    .copyWith(color: _text),
+                              ),
+                            ),
+                            Text(
+                              formatCurrency(amt / 100.0),
+                              style: context
+                                  .boldStyle(14)
+                                  .copyWith(color: _text),
+                            ),
+                            SizedBox(width: context.getRSize(12)),
+                            SizedBox(
+                              width: context.getRSize(45),
+                              child: Text(
+                                '$pct%',
+                                textAlign: TextAlign.right,
+                                style: context
+                                    .boldStyle(12)
+                                    .copyWith(color: _subtext),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ];
@@ -1604,44 +1411,29 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     final pct = monthKobo / goalKobo * 100;
     final isOver = monthKobo > goalKobo;
-    final color = isOver ? danger : success;
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    final color = isOver ? f.danger : f.green;
 
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(16)),
-      child: Container(
-        padding: EdgeInsets.all(context.getRSize(16)),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border),
-        ),
+      child: ExpenseCardShell(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  AppIcons.target,
-                  size: context.getRSize(14),
-                  color: color,
-                ),
+                Icon(AppIcons.target, size: context.getRSize(16), color: color),
                 SizedBox(width: context.getRSize(8)),
-                Text(
-                  'This month vs budget',
-                  style: TextStyle(
-                    color: _text,
-                    fontSize: context.getRFontSize(14),
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Text(
+                    'This month vs budget',
+                    style: context.boldStyle(14).copyWith(color: _text),
                   ),
                 ),
-                const Spacer(),
                 Text(
                   '${pct.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: context.getRFontSize(14),
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: context.boldStyle(14).copyWith(color: color),
                 ),
               ],
             ),
@@ -1649,10 +1441,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             Text(
               '${formatCurrency(monthKobo / 100.0)} of ${formatCurrency(goalKobo / 100.0)} '
               '— ${isOver ? "over budget" : "under budget"}',
-              style: TextStyle(
-                color: _subtext,
-                fontSize: context.getRFontSize(12),
-              ),
+              style: context.regularStyle(12).copyWith(color: _subtext),
             ),
           ],
         ),
@@ -1680,13 +1469,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(16)),
-      child: Container(
-        padding: EdgeInsets.all(context.getRSize(16)),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border),
-        ),
+      child: ExpenseCardShell(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1694,17 +1477,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               children: [
                 Icon(
                   AppIcons.customerRole,
-                  size: context.getRSize(14),
+                  size: context.getRSize(16),
                   color: _subtext,
                 ),
                 SizedBox(width: context.getRSize(8)),
                 Text(
                   'Top staff by spend',
-                  style: TextStyle(
-                    color: _text,
-                    fontSize: context.getRFontSize(14),
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: context.boldStyle(14).copyWith(color: _text),
                 ),
               ],
             ),
@@ -1719,22 +1498,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                     Expanded(
                       child: Text(
                         name,
-                        style: TextStyle(
-                          color: _text,
-                          fontSize: context.getRFontSize(13),
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: context.semiBoldStyle(13).copyWith(color: _text),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Text(
                       formatCurrency(entry.value / 100.0),
-                      style: TextStyle(
-                        color: _text,
-                        fontSize: context.getRFontSize(13),
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: context.boldStyle(13).copyWith(color: _text),
                     ),
                   ],
                 ),
@@ -1762,62 +1533,40 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     final projection = currentYearApproved.isEmpty
         ? 0.0
         : (totalThisYear / now.month) * 12;
-    return Container(
-      padding: EdgeInsets.all(context.getRSize(20)),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.error.withValues(alpha: 0.8),
-            danger,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return ExpenseCardShell(
+      padding: 20,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                AppIcons.analytics,
-                color: Colors.white,
-                size: context.getRSize(16),
+              const IconTile(
+                icon: AppIcons.analytics,
+                tone: IconTileTone.danger,
+                size: 36,
               ),
-              SizedBox(width: context.getRSize(10)),
-              Text(
-                'Annual Projection',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w600,
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: Text(
+                  'Annual Projection',
+                  style: context.semiBoldStyle(14).copyWith(color: _subtext),
                 ),
               ),
             ],
           ),
           SizedBox(height: context.getRSize(16)),
-          Text(
-            formatCurrency(projection),
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: context.getRFontSize(28),
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              formatCurrency(projection),
+              style: context.boldStyle(28).copyWith(color: _text),
             ),
           ),
           SizedBox(height: context.getRSize(4)),
           Text(
             'Estimated spend based on current year trajectory.',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
-              fontSize: context.getRFontSize(12),
-            ),
+            style: context.regularStyle(12).copyWith(color: _subtext),
           ),
         ],
       ),
@@ -1844,276 +1593,172 @@ class _ExpenseCard extends StatelessWidget {
     this.trailing,
   });
 
-  IconData _getIconForCategory(String category) {
-    switch (category.toLowerCase()) {
-      case 'fuel':
-        return AppIcons.fuel;
-      case 'salary':
-        return AppIcons.customers;
-      case 'rent':
-        return AppIcons.building;
-      case 'maintenance':
-        return AppIcons.maintenance;
-      case 'utilities':
-        return AppIcons.quickSale;
-      case 'supplies':
-        return AppIcons.box;
-      default:
-        return AppIcons.invoice;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final cardBg = Theme.of(context).cardColor;
-    final textCol = Theme.of(context).colorScheme.onSurface;
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final textCol = t.colorScheme.onSurface;
     final subtextCol =
-        Theme.of(context).textTheme.bodySmall?.color ??
-        Theme.of(context).iconTheme.color!;
-    final borderCol = Theme.of(context).dividerColor;
+        t.textTheme.bodySmall?.color ?? t.iconTheme.color ?? textCol;
 
     final dateStr = DateFormat('MMM d, y • h:mm a').format(exp.expenseDate);
     final isRejected = exp.status == 'rejected';
 
-    return Container(
-      margin: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(6),
-      ),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderCol),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(context.getRSize(16)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(context.getRSize(12)),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.error.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _getIconForCategory(categoryName),
-                    color: Theme.of(context).colorScheme.error,
-                    size: context.getRSize(16),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(14)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              exp.description.isNotEmpty
-                                  ? exp.description
-                                  : categoryName,
-                              style: TextStyle(
-                                color: textCol,
-                                fontWeight: FontWeight.bold,
-                                fontSize: context.getRFontSize(15),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+    return ExpenseCardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconTile(
+                icon: expenseCategoryIcon(categoryName),
+                tone: IconTileTone.danger,
+                size: 44,
+              ),
+              SizedBox(width: context.getRSize(14)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            exp.description.isNotEmpty
+                                ? exp.description
+                                : categoryName,
+                            style: context
+                                .boldStyle(15)
+                                .copyWith(color: textCol),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          Text(
-                            formatCurrency(exp.amountKobo / 100.0),
-                            style: TextStyle(
-                              color: textCol,
-                              fontWeight: FontWeight.bold,
-                              fontSize: context.getRFontSize(15),
-                            ),
+                        ),
+                        SizedBox(width: context.getRSize(8)),
+                        Text(
+                          formatCurrency(exp.amountKobo / 100.0),
+                          style: context.boldStyle(15).copyWith(color: textCol),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: context.getRSize(6)),
+                    Row(
+                      children: [
+                        Flexible(child: ExpenseStatusPill(status: exp.status)),
+                        SizedBox(width: context.getRSize(8)),
+                        Expanded(
+                          child: Text(
+                            _paymentMethodLabel(exp.paymentMethod),
+                            style: context
+                                .semiBoldStyle(13)
+                                .copyWith(color: subtextCol),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                      SizedBox(height: context.getRSize(6)),
-                      Row(
-                        children: [
-                          Flexible(child: _StatusBadge(status: exp.status)),
-                          SizedBox(width: context.getRSize(8)),
-                          Expanded(
-                            child: Text(
-                              _paymentMethodLabel(exp.paymentMethod),
-                              style: TextStyle(
-                                color: subtextCol,
-                                fontSize: context.getRFontSize(13),
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                        ),
+                        // The full "Sep 18, 2026 • 10:30 AM" stamp is wider
+                        // than a 320dp card can spare beside the status
+                        // badge; it shortens rather than overflowing (#256).
+                        Flexible(
+                          child: Text(
+                            dateStr,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context
+                                .regularStyle(12)
+                                .copyWith(color: subtextCol),
                           ),
-                          // The full "Sep 18, 2026 • 10:30 AM" stamp is wider
-                          // than a 320dp card can spare beside the status
-                          // badge; it shortens rather than overflowing (#256).
-                          Flexible(
-                            child: Text(
-                              dateStr,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: subtextCol,
-                                fontSize: context.getRFontSize(12),
-                              ),
-                            ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: context.getRSize(8)),
+                    Row(
+                      children: [
+                        Icon(
+                          AppIcons.userEdit,
+                          size: context.getRSize(12),
+                          color: subtextCol,
+                        ),
+                        SizedBox(width: context.getRSize(4)),
+                        Flexible(
+                          child: Text(
+                            recordedByName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context
+                                .regularStyle(12)
+                                .copyWith(color: subtextCol),
                           ),
-                        ],
-                      ),
-                      SizedBox(height: context.getRSize(8)),
-                      Row(
-                        children: [
+                        ),
+                        if (exp.reference != null &&
+                            exp.reference!.isNotEmpty) ...[
+                          SizedBox(width: context.getRSize(12)),
                           Icon(
-                            AppIcons.userEdit,
-                            size: context.getRSize(10),
+                            AppIcons.counter,
+                            size: context.getRSize(12),
                             color: subtextCol,
                           ),
                           SizedBox(width: context.getRSize(4)),
-                          Text(
-                            recordedByName,
-                            style: TextStyle(
-                              color: subtextCol,
-                              fontSize: context.getRFontSize(12),
+                          Expanded(
+                            child: Text(
+                              exp.reference!,
+                              style: context
+                                  .regularStyle(12)
+                                  .copyWith(
+                                    color: subtextCol,
+                                    fontFamily: 'monospace',
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (exp.reference != null &&
-                              exp.reference!.isNotEmpty) ...[
-                            SizedBox(width: context.getRSize(12)),
-                            Icon(
-                              AppIcons.counter,
-                              size: context.getRSize(10),
-                              color: subtextCol,
+                        ],
+                      ],
+                    ),
+                    // §20.8 — store that recorded this expense ("All Stores").
+                    if (storeName != null) ...[
+                      SizedBox(height: context.getRSize(6)),
+                      Row(
+                        children: [
+                          Icon(
+                            AppIcons.store,
+                            size: context.getRSize(12),
+                            color: subtextCol,
+                          ),
+                          SizedBox(width: context.getRSize(4)),
+                          Expanded(
+                            child: Text(
+                              storeName!,
+                              style: context
+                                  .regularStyle(12)
+                                  .copyWith(color: subtextCol),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            SizedBox(width: context.getRSize(4)),
-                            Expanded(
-                              child: Text(
-                                exp.reference!,
-                                style: TextStyle(
-                                  color: subtextCol,
-                                  fontSize: context.getRFontSize(12),
-                                  fontFamily: 'monospace',
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                          ),
                         ],
                       ),
-                      // §20.8 — store that recorded this expense ("All Stores").
-                      if (storeName != null) ...[
-                        SizedBox(height: context.getRSize(6)),
-                        Row(
-                          children: [
-                            Icon(
-                              AppIcons.store,
-                              size: context.getRSize(10),
-                              color: subtextCol,
-                            ),
-                            SizedBox(width: context.getRSize(4)),
-                            Expanded(
-                              child: Text(
-                                storeName!,
-                                style: TextStyle(
-                                  color: subtextCol,
-                                  fontSize: context.getRFontSize(12),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
-                  ),
-                ),
-                if (trailing != null) trailing!,
-              ],
-            ),
-            if (isRejected &&
-                exp.rejectionReason != null &&
-                exp.rejectionReason!.isNotEmpty) ...[
-              SizedBox(height: context.getRSize(8)),
-              Text(
-                'Rejected: ${exp.rejectionReason!}',
-                style: TextStyle(
-                  color: danger,
-                  fontSize: context.getRFontSize(12),
-                  fontStyle: FontStyle.italic,
+                  ],
                 ),
               ),
+              if (trailing != null) trailing!,
             ],
+          ),
+          if (isRejected &&
+              exp.rejectionReason != null &&
+              exp.rejectionReason!.isNotEmpty) ...[
+            SizedBox(height: context.getRSize(8)),
+            Text(
+              'Rejected: ${exp.rejectionReason!}',
+              style: context
+                  .regularStyle(12)
+                  .copyWith(color: f.danger, fontStyle: FontStyle.italic),
+            ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Small status pill on each expense card (§20.4).
-class _StatusBadge extends StatelessWidget {
-  final String status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final Color color;
-    final String label;
-    switch (status) {
-      case 'approved':
-        color = success;
-        label = 'Approved';
-        break;
-      case 'rejected':
-        color = danger;
-        label = 'Rejected';
-        break;
-      default:
-        color = amberPrimaryDark;
-        label = 'Pending CEO approval';
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(4),
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        label,
-        // "Pending CEO approval" is the long one; on a 320dp card it shortens
-        // rather than pushing the date off the edge (#256).
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.bold,
-          fontSize: context.getRFontSize(10),
-        ),
+        ],
       ),
     );
   }
