@@ -387,7 +387,6 @@ class CustomerFormSheetLayout extends StatelessWidget {
   }
 }
 
-
 // ── Customer Detail (#395 PR 2) ───────────────────────────────────────────
 
 /// Customer Detail's content cap: a fixed 960 (the Inventory detail screens'
@@ -460,7 +459,11 @@ class CustomerHeaderSliver extends StatelessWidget {
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [profile, SizedBox(height: gap), credits],
+                    children: [
+                      profile,
+                      SizedBox(height: gap),
+                      credits,
+                    ],
                   ),
           ),
         );
@@ -613,10 +616,7 @@ class CustomerProfileCard extends StatelessWidget {
                     _CustomerInfoLine(icon: AppIcons.location, text: address),
                   ],
                   SizedBox(height: context.getRSize(6)),
-                  _CustomerInfoLine(
-                    icon: AppIcons.calendarCheck,
-                    text: since,
-                  ),
+                  _CustomerInfoLine(icon: AppIcons.calendarCheck, text: since),
                 ],
               ),
             ),
@@ -800,28 +800,30 @@ class CustomerCreditsCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: context.getRSize(14)),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _CustomerStatBox(
-                    icon: AppIcons.creditCard,
-                    label: 'Debt Limit',
-                    value: limitLabel,
-                  ),
-                ),
-                if (depositLabel != null) ...[
-                  SizedBox(width: gap),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   Expanded(
                     child: _CustomerStatBox(
-                      icon: AppIcons.box,
-                      label: 'Deposit Held',
-                      value: depositLabel!,
-                      tinted: true,
+                      icon: AppIcons.creditCard,
+                      label: 'Debt Limit',
+                      value: limitLabel,
                     ),
                   ),
+                  if (depositLabel != null) ...[
+                    SizedBox(width: gap),
+                    Expanded(
+                      child: _CustomerStatBox(
+                        icon: AppIcons.box,
+                        label: 'Deposit Held',
+                        value: depositLabel!,
+                        tinted: true,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
             if (onAddCredit != null || onSetLimit != null) ...[
               SizedBox(height: context.getRSize(14)),
@@ -1197,9 +1199,10 @@ class CustomerOptionCard extends StatelessWidget {
 TextStyle customerDangerActionStyle(BuildContext context) => context
     .boldStyle(14)
     .copyWith(
-      color: (Theme.of(context).extension<AppFixedColors>() ??
-              AppFixedColors.light)
-          .danger,
+      color:
+          (Theme.of(context).extension<AppFixedColors>() ??
+                  AppFixedColors.light)
+              .danger,
     );
 
 /// Currency-sign hint for the amount inputs, e.g. "Amount to refund (₦)".
