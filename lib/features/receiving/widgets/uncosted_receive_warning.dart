@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 
 /// The receive-side Uncosted disclosure (#199 / PRD #155 US 37).
 ///
@@ -35,21 +38,25 @@ class UncostedReceiveWarning extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final semantic = t.extension<AppSemanticColors>()!;
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final text = t.colorScheme.onSurface;
+    // The amber card of the redesign (as the Cart's crate-value warning,
+    // #385): warning tint + outline, a warning icon tile, then the three
+    // lines.
     return Container(
       padding: EdgeInsets.all(context.getRSize(14)),
       decoration: BoxDecoration(
-        color: semantic.warning.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(context.getRSize(12)),
-        border: Border.all(color: semantic.warning.withValues(alpha: 0.4)),
+        color: f.warningTint,
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
+        border: Border.all(color: f.warningOutline),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            AppIcons.warning,
-            size: context.getRSize(16),
-            color: semantic.warning,
+          const IconTile(
+            icon: AppIcons.warning,
+            tone: IconTileTone.warning,
+            size: 40,
           ),
           SizedBox(width: context.getRSize(12)),
           Expanded(
@@ -59,10 +66,7 @@ class UncostedReceiveWarning extends StatelessWidget {
                 Text(
                   '$itemCount ${itemCount == 1 ? 'item has' : 'items have'} '
                   'no buying price',
-                  style: t.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: t.colorScheme.onSurface,
-                  ),
+                  style: context.boldStyle(15).copyWith(color: text),
                 ),
                 SizedBox(height: context.getRSize(6)),
                 Text(
@@ -71,17 +75,13 @@ class UncostedReceiveWarning extends StatelessWidget {
                   "supplier's account for "
                   '${unitCount == 1 ? 'it' : 'them'} and profit will read '
                   'higher than it is.',
-                  style: t.textTheme.bodySmall?.copyWith(
-                    color: t.colorScheme.onSurface,
-                  ),
+                  style: context.regularStyle(13).copyWith(color: text),
                 ),
                 SizedBox(height: context.getRSize(6)),
                 Text(
                   'Add what you paid so profit shows correctly. You can add it '
                   'later.',
-                  style: t.textTheme.bodySmall?.copyWith(
-                    color: semantic.warning,
-                  ),
+                  style: context.semiBoldStyle(13).copyWith(color: f.warning),
                 ),
               ],
             ),
