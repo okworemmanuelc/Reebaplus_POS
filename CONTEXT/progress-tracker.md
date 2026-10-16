@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #392 PR 1: Inventory screen restyle (Wave 2 A, 2026-10-12)
+Branch `feat/redesign-w2-inventory-1` off `main` 2ec88349, worktree `../drinkPosApp-wt-392`. PR 1 of 4 (screen + tabs + Manage Categories + Add Manufacturer). **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, no shared-part change.**
+- New local parts `lib/features/inventory/widgets/inventory_parts.dart`: `InventoryTopBar` (Home's solid bar + `ScreenHeader`), `InventoryBarAction`, `InventoryLiveBell`, `InventoryFigureCard` (selectable compact figure), `InventoryProductRow` (photo, else `categoryVisual` tile — `colorHex` no longer drawn in the row), `InventoryEmptyCard`, `InventorySheetHeader`, `InventoryPeriodChip`; `kInventoryMaxContentWidth` (= 720) + `inventoryGutter`. All shared-part candidates.
+- Inventory content (figure cards, filter band, every tab, tab labels) capped at 720 and centred (measured widths, no viewport predicate); figure cards share one row when each gets 104dp, else scroll at 112dp.
+- Fixes: Manage-categories square / category row actions / History period chips now ≥ 48dp; list bottom padding `deviceBottomPadding` (was `bottomInset`); tab bar keeps 48dp under its hairline; sheets `useSafeArea`; category dialogs `scrollable`.
+- Tests: `test/inventory/inventory_redesign_test.dart` (31), goldens `test/redesign/inventory_golden_test.dart` (36) + sample seed `test/helpers/inventory_seed.dart`; `inventory_manufacturers_*` and `frame_inventory_*` goldens regenerated.
+- Next: PR 2 (Add Product, Update Product sheet) after owner approval. Owner question carried: Product Detail's Update Stock sheet + edit mode are unreachable (`_showUpdateStockModal` has no caller).
+
 ### Issue #395 PR 1: Customers list + Add / Edit Customer sheets restyle (2026-10-11) — PRD #346 Wave 2 A
 Branch `feat/redesign-w2-customers` off `main` 2ec88349, worktree `../drinkPosApp-wt-395`. PR 1 of 2 (PR 2 = Customer Detail + its sheets, after supervisor go-ahead). **Restyle only — no money/crate/deposit calculation or write path changed; no Drift/cloud/sync/permission/status change (no `pos-parity` issue); no new packages; nothing added to `lib/shared/widgets/redesign/`.**
 - **New** `lib/features/customers/widgets/customer_parts.dart`: `CustomersKeys`, `CustomerTopBar` + `customerTopBarHeight`, `CustomerLiveBell`, `CustomerListRow`, `CustomersEmptyMessage`, `CustomerSheetHandle`, `customerSheetShape`, `CustomerFormSheetLayout`. Conventions in `ui-context.md` "Customers".
