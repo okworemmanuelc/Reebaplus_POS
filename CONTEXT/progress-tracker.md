@@ -13,7 +13,7 @@ Branch `feat/redesign-w2-inventory-3` stacked on `feat/redesign-w2-inventory-2` 
 - Product Detail: solid `InventoryTopBar` (back + delete behind `products.delete`), identity card (photo / tile, name, stock `TagPill`), Stock & Info on the left and Pricing / Sales Summary / Sales Target / Last Delivery stacked on the right from a measured 900 (one column below); every row 48dp+. The "Update Stock" sheet stays unconnected (owner decision); the Edit toggle stays hidden.
 - Stock Count: solid top bar (back, Record Damages, History), 720-capped list of flat row cards (48dp count boxes, fixed-tone diff), Save Count `AppFAB` unchanged; Review Count / Record Damages / Count History sheets use the theme sheet shape and scroll as one list so a short sideways sheet never overflows.
 - Keyboard rule: Delete dialog `scrollable`; Record Damages sheet scrolls; keyboard-up tests at 360x640 and 390x844 @1.15.
-- Tests: `test/inventory/product_detail_redesign_test.dart` (13), `test/inventory/stock_count_redesign_test.dart` (23), goldens `test/redesign/product_detail_golden_test.dart` (8) + `stock_count_golden_test.dart` (20).
+- Tests: `test/inventory/product_detail_redesign_test.dart` (13), `test/inventory/stock_count_redesign_test.dart` (19), goldens `test/redesign/product_detail_golden_test.dart` (8) + `stock_count_golden_test.dart` (20).
 
 ### Issue #392 PR 2: Add Product + Update Product sheet restyle (Wave 2 A, 2026-10-16)
 Branch `feat/redesign-w2-inventory-2` off `main` 8f5f7395, worktree `../drinkPosApp-wt-392b`. PR 2 of 4. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, no shared-part change.**
