@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,12 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 
 class UpdateProductSheet extends ConsumerStatefulWidget {
@@ -164,7 +171,12 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     );
     _lowStockCtrl = TextEditingController(text: p.lowStockThreshold.toString());
     final initialQty = widget.receiveMode
-        ? ref.read(receiveCartProvider).where((l) => l.productId == p.id).firstOrNull?.qty ?? 0
+        ? ref
+                  .read(receiveCartProvider)
+                  .where((l) => l.productId == p.id)
+                  .firstOrNull
+                  ?.qty ??
+              0
         : 0;
     _qtyToAddCtrl = TextEditingController(text: initialQty.toString());
     _supplierCtrl = TextEditingController();
@@ -178,9 +190,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     // The industry's starter units, plus this product's own unit so the
     // dropdown always includes the selected value (#80). A unitless product
     // (#108) contributes nothing.
-    _dynamicUnits =
-        <String>{..._lexicon.starterUnits, if (p.unit != null) p.unit!}.toList()
-          ..sort();
+    _dynamicUnits = <String>{
+      ..._lexicon.starterUnits,
+      if (p.unit != null) p.unit!,
+    }.toList()..sort();
     _trackEmpties = p.trackEmpties;
     _allowFractionalSales = p.allowFractionalSales;
     _size = p.size;
@@ -202,7 +215,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     // Resolve a renderable path for an existing photo (downloads from Storage
     // once if only the cloud URL is known), so a cross-device photo shows in
     // the edit preview. #78.
-    final cachedPhoto = await ref.read(productImageServiceProvider).ensureCached(
+    final cachedPhoto = await ref
+        .read(productImageServiceProvider)
+        .ensureCached(
           productId: widget.product.id,
           imageUrl: widget.product.imageUrl,
         );
@@ -213,13 +228,11 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       _allSuppliers = suppliers;
       _allManufacturers = manufacturers;
       _allCategories = cats;
-      _dynamicUnits =
-          <String>{
-              ..._lexicon.starterUnits,
-              if (_unit != null) _unit!,
-              ...uniqueUnits,
-            }.toList()
-            ..sort();
+      _dynamicUnits = <String>{
+        ..._lexicon.starterUnits,
+        if (_unit != null) _unit!,
+        ...uniqueUnits,
+      }.toList()..sort();
       if (cachedPhoto != null) _imagePath = cachedPhoto;
 
       // Pre-select store: prefer currentStoreId, else first
@@ -510,8 +523,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       }
 
       // Auto-handle category if typed but not explicitly selected
-      if (_selectedCategory == null &&
-          _categoryCtrl.text.trim().isNotEmpty) {
+      if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
         _selectedCategory = await _getOrCreateCategory(
           _categoryCtrl.text.trim(),
         );
@@ -660,8 +672,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       //    uncosted batches for the future and, if there are past uncosted
       //    sales, offer once to backfill them (ADR 0005 "Cost backfill", #41).
       if (canEditBuying && oldBuyingKobo == 0 && buyingKobo > 0) {
-        final offer = await db.costBatchesDao
-            .onCostBecameReal(widget.product.id, buyingKobo);
+        final offer = await db.costBatchesDao.onCostBecameReal(
+          widget.product.id,
+          buyingKobo,
+        );
         if (mounted && !offer.isEmpty) {
           await _promptCostBackfill(db, offer, name, auth.currentUser?.id);
         }
@@ -670,7 +684,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       if (mounted) {
         AppNotification.showSuccess(context, '$name updated successfully');
         Navigator.pop(context);
-        final updatedProduct = await (db.select(db.products)..where((t) => t.id.equals(widget.product.id))).getSingle();
+        final updatedProduct = await (db.select(
+          db.products,
+        )..where((t) => t.id.equals(widget.product.id))).getSingle();
         widget.onProductUpdated?.call(updatedProduct);
       }
     } catch (e, st) {
@@ -698,7 +714,13 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     final apply = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Apply cost to past sales?'),
+        scrollable: true,
+        title: Text(
+          'Apply cost to past sales?',
+          style: ctx.screenTitleStyle.copyWith(
+            color: Theme.of(ctx).colorScheme.onSurface,
+          ),
+        ),
         content: Text(
           'You sold ${offer.unitsUncosted} unit(s) of "$productName" before a '
           'cost was recorded. Apply $costLabel per unit to those past sales so '
@@ -734,327 +756,367 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = Theme.of(context).colorScheme.surface;
-    final card = Theme.of(context).cardColor;
-    final textColor = Theme.of(context).colorScheme.onSurface;
-    final subtext =
-        Theme.of(context).textTheme.bodySmall?.color ??
-        Theme.of(context).iconTheme.color!;
-    final border = Theme.of(context).dividerColor;
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final gutter = context.getRSize(20);
+    final gap = context.getRSize(14);
+    final section = context.getRSize(16);
+    // The sheet draws its own Surface and top corners: both call sites
+    // (Inventory and Receive Stock) open it on a transparent background. It
+    // takes the theme's sheet shape so it matches every other sheet (#392).
+    final shape =
+        t.bottomSheetTheme.shape ??
+        const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppSpacing.borderRadiusXL),
+          ),
+        );
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
-      child: Container(
-        constraints: BoxConstraints(
-          maxHeight: context.getRHeight(0.92),
-        ),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Drag handle
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: border,
-                    borderRadius: BorderRadius.circular(2),
+    return Container(
+      constraints: BoxConstraints(maxHeight: context.sheetMaxHeight(0.92)),
+      decoration: ShapeDecoration(color: t.colorScheme.surface, shape: shape),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Padding(
+            padding: EdgeInsets.only(top: context.getRSize(12)),
+            child: Container(
+              width: context.getRSize(40),
+              height: context.getRSize(4),
+              decoration: BoxDecoration(
+                color: t.dividerColor,
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusS),
+              ),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              context.getRSize(16),
+              gutter,
+              0,
+            ),
+            child: Row(
+              children: [
+                const IconTile(icon: AppIcons.edit, size: 44),
+                SizedBox(width: context.getRSize(12)),
+                _photoButton(),
+                SizedBox(width: context.getRSize(12)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Update ${_lexicon.item}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.screenTitleStyle.copyWith(
+                          color: t.colorScheme.onSurface,
+                        ),
+                      ),
+                      Text(
+                        'Edit details and add new stock below',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context
+                            .semiBoldStyle(13)
+                            .copyWith(color: t.colorScheme.primary),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+              ],
             ),
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Row(
+          ),
+          // Scrollable form
+          Flexible(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                context.getRSize(20),
+                gutter,
+                context.getRSize(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
+                  if (_errorMessage != null) ...[
+                    InventoryNotice(
+                      icon: AppIcons.alertCircle,
+                      tone: IconTileTone.danger,
+                      message: _errorMessage!,
+                      onClose: () => setState(() => _errorMessage = null),
                     ),
-                    child: Icon(
-                      AppIcons.edit,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 18,
-                    ),
+                    SizedBox(height: section),
+                  ],
+
+                  // ── PRODUCT NAME ─────────────────────────────────────────
+                  AppInput(
+                    controller: _nameCtrl,
+                    labelText: '${_lexicon.item} Name *',
+                    hintText: _lexicon.itemNameHint,
                   ),
-                  const SizedBox(width: 14),
-                  GestureDetector(
-                    onTap: _pickImage,
-                    child: Stack(
+                  SizedBox(height: gap),
+
+                  // ── CATEGORY ─────────────────────────────────────────────
+                  AppInput(
+                    controller: _categoryCtrl,
+                    labelText: '${_lexicon.category.toUpperCase()} *',
+                    hintText: 'Search or type category name…',
+                    prefixIcon: const InventorySearchIcon(),
+                    onChanged: _onCategoryChanged,
+                    suffixIcon: _selectedCategory != null
+                        ? InventoryFieldClear(onPressed: _clearCategory)
+                        : null,
+                  ),
+                  if (_categorySuggestions.isNotEmpty ||
+                      (_categoryCtrl.text.trim().isNotEmpty &&
+                          _selectedCategory == null))
+                    InventorySuggestionList(
                       children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.2),
-                            ),
-                          ),
-                          child: _pendingImageBytes != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(11),
-                                  child: Image.memory(
-                                    _pendingImageBytes!,
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : _imagePath != null
-                                  ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(11),
-                                      child: Image.file(
-                                        File(_imagePath!),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    )
-                                  : Icon(
-                                      AppIcons.image,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                      size: 18,
-                                    ),
-                        ),
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: bg, width: 1.5),
-                            ),
-                            child: const Icon(
-                              AppIcons.edit,
-                              color: Colors.white,
-                              size: 8,
-                            ),
+                        ..._categorySuggestions.map(
+                          (c) => InventorySuggestionTile(
+                            label: c.name,
+                            icon: AppIcons.category,
+                            onTap: () => _selectCategory(c),
                           ),
                         ),
+                        if (_categoryCtrl.text.trim().isNotEmpty &&
+                            !_categorySuggestions.any(
+                              (c) =>
+                                  c.name.toLowerCase() ==
+                                  _categoryCtrl.text.trim().toLowerCase(),
+                            ))
+                          InventorySuggestionTile(
+                            label: 'Create "${_categoryCtrl.text.trim()}"',
+                            icon: AppIcons.addCircle,
+                            emphasis: true,
+                            onTap: () async {
+                              try {
+                                final c = await _getOrCreateCategory(
+                                  _categoryCtrl.text.trim(),
+                                );
+                                if (c != null && mounted) _selectCategory(c);
+                              } catch (e, st) {
+                                CrashReporter.record(
+                                  e,
+                                  st,
+                                  context:
+                                      'inventory.update_product.create_category',
+                                );
+                                if (mounted) {
+                                  setState(
+                                    () => _errorMessage =
+                                        'Could not create category. Please try again.',
+                                  );
+                                }
+                              }
+                            },
+                          ),
                       ],
                     ),
+                  SizedBox(height: gap),
+
+                  // ── SUBTITLE ─────────────────────────────────────────────
+                  AppInput(
+                    controller: _subtitleCtrl,
+                    labelText: 'Description / Subtitle',
+                    hintText: _lexicon.itemDescriptionHint,
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Update ${_lexicon.item}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: textColor,
+                  SizedBox(height: gap),
+
+                  // ── BARCODE (optional) ───────────────────────────────────
+                  _barcodeField(),
+                  SizedBox(height: gap),
+
+                  // ── PRICES ───────────────────────────────────────────────
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: AppInput(
+                          controller: _retailPriceCtrl,
+                          labelText: 'Retailer Price ($activeCurrencySymbol) *',
+                          hintText: 'e.g. 500',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
                           ),
+                          inputFormatters: [CurrencyInputFormatter()],
                         ),
-                        Text(
-                          'Edit details and add new stock below',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 13, color: subtext),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Scrollable form
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_errorMessage != null) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.red.withValues(alpha: 0.3),
+                      ),
+                      SizedBox(width: context.getRSize(12)),
+                      Expanded(
+                        child: AppInput(
+                          controller: _wholesalePriceCtrl,
+                          labelText:
+                              'Wholesaler Price ($activeCurrencySymbol) *',
+                          hintText: '0.00',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              AppIcons.alertCircle,
-                              color: Colors.red,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _errorMessage!,
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => setState(() => _errorMessage = null),
-                              child: const Icon(
-                                AppIcons.close,
-                                color: Colors.red,
-                                size: 16,
-                              ),
-                            ),
-                          ],
+                          inputFormatters: [CurrencyInputFormatter()],
                         ),
                       ),
                     ],
-
-                    // ── PRODUCT NAME ─────────────────────────────────────────
+                  ),
+                  if (_canEditBuying) ...[
+                    SizedBox(height: gap),
                     AppInput(
-                      controller: _nameCtrl,
-                      labelText: '${_lexicon.item} Name *',
-                      hintText: _lexicon.itemNameHint,
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── CATEGORY ─────────────────────────────────────────────
-                    AppInput(
-                      controller: _categoryCtrl,
-                      labelText: '${_lexicon.category.toUpperCase()} *',
-                      hintText: 'Search or type category name…',
-                      prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
-                      onChanged: _onCategoryChanged,
-                      suffixIcon: _selectedCategory != null
-                          ? GestureDetector(
-                              onTap: _clearCategory,
-                              child: Icon(AppIcons.close, size: 16, color: subtext),
-                            )
-                          : null,
-                    ),
-                    if (_categorySuggestions.isNotEmpty ||
-                        (_categoryCtrl.text.trim().isNotEmpty &&
-                            _selectedCategory == null))
-                      _suggestionList(
-                        children: [
-                          ..._categorySuggestions.map(
-                            (c) => _suggestionTile(
-                              label: c.name,
-                              icon: AppIcons.category,
-                              textColor: textColor,
-                              card: card,
-                              border: border,
-                              onTap: () => _selectCategory(c),
-                            ),
-                          ),
-                          if (_categoryCtrl.text.trim().isNotEmpty &&
-                              !_categorySuggestions.any(
-                                (c) =>
-                                    c.name.toLowerCase() ==
-                                    _categoryCtrl.text.trim().toLowerCase(),
-                              ))
-                            _suggestionTile(
-                              label: 'Create "${_categoryCtrl.text.trim()}"',
-                              icon: AppIcons.addCircle,
-                              textColor: Theme.of(context).colorScheme.primary,
-                              card: card,
-                              border: border,
-                              onTap: () async {
-                                try {
-                                  final c = await _getOrCreateCategory(
-                                    _categoryCtrl.text.trim(),
-                                  );
-                                  if (c != null && mounted) _selectCategory(c);
-                                } catch (e, st) {
-                                  CrashReporter.record(
-                                    e,
-                                    st,
-                                    context:
-                                        'inventory.update_product.create_category',
-                                  );
-                                  if (mounted) {
-                                    setState(
-                                      () => _errorMessage =
-                                          'Could not create category. Please try again.',
-                                    );
-                                  }
-                                }
-                              },
-                            ),
-                        ],
-                        card: card,
-                        border: border,
+                      controller: _buyingPriceCtrl,
+                      labelText: 'Buying Price ($activeCurrencySymbol) *',
+                      hintText: '0.00',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
                       ),
-                    const SizedBox(height: 14),
-
-                    // ── SUBTITLE ─────────────────────────────────────────────
-                    AppInput(
-                      controller: _subtitleCtrl,
-                      labelText: 'Description / Subtitle',
-                      hintText: _lexicon.itemDescriptionHint,
+                      inputFormatters: [CurrencyInputFormatter()],
                     ),
-                    const SizedBox(height: 14),
+                  ],
+                  SizedBox(height: gap),
 
-                    // ── BARCODE (optional) ───────────────────────────────────
-                    _barcodeField(),
-                    const SizedBox(height: 14),
+                  // ── LOW STOCK ALERT ──────────────────────────────────────
+                  AppInput(
+                    controller: _lowStockCtrl,
+                    labelText: 'Low Stock Alert *',
+                    hintText: '5',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  SizedBox(height: section),
 
-                    // ── PRICES ───────────────────────────────────────────────
-                    Row(
+                  // ── PRODUCT UNIT (optional, #108) ────────────────────────
+                  const InventoryFieldLabel('PRODUCT UNIT'),
+                  SizedBox(height: context.getRSize(8)),
+                  AppDropdown<String?>(
+                    value: _unit,
+                    hintText: 'No unit',
+                    // "No unit" (#108) clears the unit — the product keeps
+                    // just its name and is hidden wherever the unit renders.
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('No unit'),
+                      ),
+                      ..._dynamicUnits.map(
+                        (u) =>
+                            DropdownMenuItem<String?>(value: u, child: Text(u)),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      setState(() {
+                        _unit = v;
+                        // A null unit is not a bottle → no crate tracking.
+                        _trackEmpties = v?.toLowerCase() == 'bottle';
+                      });
+                    },
+                  ),
+                  SizedBox(height: context.getRSize(8)),
+
+                  // ── ALLOW FRACTIONAL SALES ───────────────────────────────
+                  InventoryCheckRow(
+                    value: _allowFractionalSales,
+                    onChanged: (v) =>
+                        setState(() => _allowFractionalSales = v ?? false),
+                    title: 'Allow fractional sales',
+                    subtitle:
+                        'Enables ±0.5 quantity steps when selling this '
+                        '${_lexicon.itemLower}',
+                  ),
+                  SizedBox(height: context.getRSize(8)),
+
+                  // ── EXPIRY DATE (optional, all business types) ───────────
+                  const InventoryFieldLabel('EXPIRY DATE'),
+                  const InventoryFieldHelper(
+                    'Optional — used to flag stock nearing expiry',
+                  ),
+                  SizedBox(height: context.getRSize(8)),
+                  InventoryDateField(
+                    label: _expiryLabel(),
+                    placeholder: 'No expiry date',
+                    onTap: _pickExpiryDate,
+                    onClear: () => setState(() => _expiryDate = null),
+                  ),
+                  SizedBox(height: section),
+
+                  // ── MANUFACTURER ─────────────────────────────────────────
+                  AppInput(
+                    controller: _manufacturerCtrl,
+                    labelText: 'MANUFACTURER (optional)',
+                    hintText: 'Search or type manufacturer name…',
+                    prefixIcon: const InventorySearchIcon(),
+                    onChanged: _onManufacturerChanged,
+                    suffixIcon: _selectedManufacturer != null
+                        ? InventoryFieldClear(onPressed: _clearManufacturer)
+                        : null,
+                  ),
+                  if (_manufacturerSuggestions.isNotEmpty ||
+                      (_manufacturerCtrl.text.trim().isNotEmpty &&
+                          _selectedManufacturer == null))
+                    InventorySuggestionList(
                       children: [
-                        Expanded(
-                          child: AppInput(
-                            controller: _retailPriceCtrl,
-                            labelText:
-                                'Retailer Price ($activeCurrencySymbol) *',
-                            hintText: 'e.g. 500',
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            inputFormatters: [CurrencyInputFormatter()],
+                        ..._manufacturerSuggestions.map(
+                          (m) => InventorySuggestionTile(
+                            label: m.name,
+                            onTap: () => _selectManufacturer(m),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: AppInput(
-                            controller: _wholesalePriceCtrl,
-                            labelText:
-                                'Wholesaler Price ($activeCurrencySymbol) *',
-                            hintText: '0.00',
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            inputFormatters: [CurrencyInputFormatter()],
+                        if (_manufacturerCtrl.text.trim().isNotEmpty &&
+                            !_manufacturerSuggestions.any(
+                              (m) =>
+                                  m.name.toLowerCase() ==
+                                  _manufacturerCtrl.text.trim().toLowerCase(),
+                            ))
+                          InventorySuggestionTile(
+                            label: 'Create "${_manufacturerCtrl.text.trim()}"',
+                            icon: AppIcons.addCircle,
+                            emphasis: true,
+                            onTap: () async {
+                              try {
+                                final m = await _getOrCreateManufacturer(
+                                  _manufacturerCtrl.text.trim(),
+                                );
+                                if (m != null) _selectManufacturer(m);
+                              } catch (e, st) {
+                                CrashReporter.record(
+                                  e,
+                                  st,
+                                  context:
+                                      'inventory.update_product.create_manufacturer',
+                                );
+                                if (mounted) {
+                                  setState(
+                                    () => _errorMessage =
+                                        'Could not create manufacturer. Please try again.',
+                                  );
+                                }
+                              }
+                            },
                           ),
-                        ),
                       ],
                     ),
-                    if (_canEditBuying) ...[
-                      const SizedBox(height: 14),
+                  SizedBox(height: section),
+
+                  // ── TRACK EMPTIES + CRATE VALUE (below Manufacturer) ─────
+                  // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
+                  // businesses; _effectiveTrackEmpties forces it off on save.
+                  if (_unit?.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
+                    InventoryCheckRow(
+                      value: _trackEmpties,
+                      onChanged: (v) =>
+                          setState(() => _trackEmpties = v ?? false),
+                      title: 'Track empty crate returns',
+                      subtitle:
+                          'Enables deposit collection and crate return flow '
+                          'for this ${_lexicon.itemLower}',
+                    ),
+                    // Crate value is shared at the manufacturer level;
+                    // selecting a manufacturer autofills it (§16.5).
+                    if (_trackEmpties) ...[
+                      SizedBox(height: context.getRSize(6)),
                       AppInput(
-                        controller: _buyingPriceCtrl,
-                        labelText: 'Buying Price ($activeCurrencySymbol) *',
+                        controller: _emptyCrateValueCtrl,
+                        labelText: 'Empty Crate Value ($activeCurrencySymbol)',
                         hintText: '0.00',
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
@@ -1062,424 +1124,232 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         inputFormatters: [CurrencyInputFormatter()],
                       ),
                     ],
-                    const SizedBox(height: 14),
+                    SizedBox(height: section),
+                  ],
 
-                    // ── LOW STOCK ALERT ──────────────────────────────────────
+                  if (!widget.receiveMode) ...[
+                    // ── SUPPLIER ─────────────────────────────────────────────
                     AppInput(
-                      controller: _lowStockCtrl,
-                      labelText: 'Low Stock Alert *',
-                      hintText: '5',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ── PRODUCT UNIT (optional, #108) ────────────────────────
-                    _sectionLabel('PRODUCT UNIT', subtext),
-                    const SizedBox(height: 8),
-                    AppDropdown<String?>(
-                      value: _unit,
-                      hintText: 'No unit',
-                      // "No unit" (#108) clears the unit — the product keeps
-                      // just its name and is hidden wherever the unit renders.
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('No unit'),
-                        ),
-                        ..._dynamicUnits.map(
-                          (u) => DropdownMenuItem<String?>(
-                            value: u,
-                            child: Text(u),
-                          ),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        setState(() {
-                          _unit = v;
-                          // A null unit is not a bottle → no crate tracking.
-                          _trackEmpties = v?.toLowerCase() == 'bottle';
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-
-                    // ── ALLOW FRACTIONAL SALES ───────────────────────────────
-                    Material(
-                      type: MaterialType.transparency,
-                      child: CheckboxListTile(
-                        value: _allowFractionalSales,
-                        onChanged: (v) =>
-                            setState(() => _allowFractionalSales = v ?? false),
-                        title: const Text('Allow fractional sales'),
-                        subtitle: Text(
-                          'Enables ±0.5 quantity steps when selling this ${_lexicon.itemLower}',
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // ── EXPIRY DATE (optional, all business types) ───────────
-                    _sectionLabel('EXPIRY DATE', subtext),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Optional — used to flag stock nearing expiry',
-                      style: TextStyle(fontSize: 11, color: subtext),
-                    ),
-                    const SizedBox(height: 8),
-                    _expiryField(
-                      card: card,
-                      border: border,
-                      subtext: subtext,
-                      textColor: textColor,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ── MANUFACTURER ─────────────────────────────────────────
-                    AppInput(
-                      controller: _manufacturerCtrl,
-                      labelText: 'MANUFACTURER (optional)',
-                      hintText: 'Search or type manufacturer name…',
-                      prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
-                      onChanged: _onManufacturerChanged,
-                      suffixIcon: _selectedManufacturer != null
-                          ? GestureDetector(
-                              onTap: _clearManufacturer,
-                              child: Icon(
-                                AppIcons.close,
-                                size: 16,
-                                color: subtext,
-                              ),
-                            )
+                      controller: _supplierCtrl,
+                      labelText: 'SUPPLIER (optional)',
+                      hintText: 'Search supplier name…',
+                      prefixIcon: const InventorySearchIcon(),
+                      onChanged: _onSupplierChanged,
+                      suffixIcon: _selectedSupplier != null
+                          ? InventoryFieldClear(onPressed: _clearSupplier)
                           : null,
                     ),
-                    if (_manufacturerSuggestions.isNotEmpty ||
-                        (_manufacturerCtrl.text.trim().isNotEmpty &&
-                            _selectedManufacturer == null))
-                      _suggestionList(
+                    if (_supplierSuggestions.isNotEmpty ||
+                        (_supplierCtrl.text.trim().isNotEmpty &&
+                            _selectedSupplier == null))
+                      InventorySuggestionList(
                         children: [
-                          ..._manufacturerSuggestions.map(
-                            (m) => _suggestionTile(
-                              label: m.name,
-                              textColor: textColor,
-                              card: card,
-                              border: border,
-                              onTap: () => _selectManufacturer(m),
+                          ..._supplierSuggestions.map(
+                            (s) => InventorySuggestionTile(
+                              label: s.name,
+                              onTap: () => _selectSupplier(s),
                             ),
                           ),
-                          if (_manufacturerCtrl.text.trim().isNotEmpty &&
-                              !_manufacturerSuggestions.any(
-                                (m) =>
-                                    m.name.toLowerCase() ==
-                                    _manufacturerCtrl.text.trim().toLowerCase(),
+                          if (_supplierCtrl.text.trim().isNotEmpty &&
+                              !_supplierSuggestions.any(
+                                (s) =>
+                                    s.name.toLowerCase() ==
+                                    _supplierCtrl.text.trim().toLowerCase(),
                               ))
-                            _suggestionTile(
-                              label:
-                                  'Create "${_manufacturerCtrl.text.trim()}"',
+                            InventorySuggestionTile(
+                              label: 'Create "${_supplierCtrl.text.trim()}"',
                               icon: AppIcons.addCircle,
-                              textColor: Theme.of(context).colorScheme.primary,
-                              card: card,
-                              border: border,
+                              emphasis: true,
                               onTap: () async {
                                 try {
-                                  final m = await _getOrCreateManufacturer(
-                                    _manufacturerCtrl.text.trim(),
+                                  final s = await _getOrCreateSupplier(
+                                    _supplierCtrl.text.trim(),
                                   );
-                                  if (m != null) _selectManufacturer(m);
+                                  if (!mounted) return;
+                                  if (s != null) _selectSupplier(s);
                                 } catch (e, st) {
                                   CrashReporter.record(
                                     e,
                                     st,
                                     context:
-                                        'inventory.update_product.create_manufacturer',
+                                        'inventory.update_product.create_supplier',
                                   );
-                                  if (mounted) {
-                                    setState(
-                                      () => _errorMessage =
-                                          'Could not create manufacturer. Please try again.',
-                                    );
-                                  }
+                                  if (!mounted) return;
+                                  setState(
+                                    () => _errorMessage =
+                                        'Could not create supplier. Please try again.',
+                                  );
                                 }
                               },
                             ),
                         ],
-                        card: card,
-                        border: border,
                       ),
-                    const SizedBox(height: 16),
-
-                    // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
-                    // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
-                    // businesses; _effectiveTrackEmpties forces it off on save.
-                    if (_unit?.toLowerCase() == 'bottle' &&
-                        _isCrateBusiness) ...[
-                      Material(
-                        type: MaterialType.transparency,
-                        child: CheckboxListTile(
-                          value: _trackEmpties,
-                          onChanged: (v) =>
-                              setState(() => _trackEmpties = v ?? false),
-                          title: const Text('Track empty crate returns'),
-                          subtitle: Text(
-                            'Enables deposit collection and crate return flow for this ${_lexicon.itemLower}',
-                          ),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                        ),
-                      ),
-                      // Crate value is shared at the manufacturer level; selecting
-                      // a manufacturer autofills it (§16.5).
-                      if (_trackEmpties) ...[
-                        const SizedBox(height: 6),
-                        AppInput(
-                          controller: _emptyCrateValueCtrl,
-                          labelText:
-                              'Empty Crate Value ($activeCurrencySymbol)',
-                          hintText: '0.00',
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          inputFormatters: [CurrencyInputFormatter()],
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                    ],
-
-                    if (!widget.receiveMode) ...[
-                      // ── SUPPLIER ─────────────────────────────────────────────
-                      AppInput(
-                        controller: _supplierCtrl,
-                        labelText: 'SUPPLIER (optional)',
-                        hintText: 'Search supplier name…',
-                        prefixIcon: Icon(AppIcons.search, size: 18, color: subtext),
-                        onChanged: _onSupplierChanged,
-                        suffixIcon: _selectedSupplier != null
-                            ? GestureDetector(
-                                onTap: _clearSupplier,
-                                child: Icon(
-                                  AppIcons.close,
-                                  size: 16,
-                                  color: subtext,
-                                ),
-                              )
-                            : null,
-                      ),
-                      if (_supplierSuggestions.isNotEmpty ||
-                          (_supplierCtrl.text.trim().isNotEmpty &&
-                              _selectedSupplier == null))
-                        _suggestionList(
-                          children: [
-                            ..._supplierSuggestions.map(
-                              (s) => _suggestionTile(
-                                label: s.name,
-                                textColor: textColor,
-                                card: card,
-                                border: border,
-                                onTap: () => _selectSupplier(s),
-                              ),
-                            ),
-                            if (_supplierCtrl.text.trim().isNotEmpty &&
-                                !_supplierSuggestions.any(
-                                  (s) =>
-                                      s.name.toLowerCase() ==
-                                      _supplierCtrl.text.trim().toLowerCase(),
-                                ))
-                              _suggestionTile(
-                                label: 'Create "${_supplierCtrl.text.trim()}"',
-                                icon: AppIcons.addCircle,
-                                textColor: Theme.of(context).colorScheme.primary,
-                                card: card,
-                                border: border,
-                                onTap: () async {
-                                  try {
-                                    final s = await _getOrCreateSupplier(
-                                      _supplierCtrl.text.trim(),
-                                    );
-                                    if (!mounted) return;
-                                    if (s != null) _selectSupplier(s);
-                                  } catch (e, st) {
-                                    CrashReporter.record(
-                                      e,
-                                      st,
-                                      context:
-                                          'inventory.update_product.create_supplier',
-                                    );
-                                    if (!mounted) return;
-                                    setState(
-                                      () => _errorMessage =
-                                          'Could not create supplier. Please try again.',
-                                    );
-                                  }
-                                },
-                              ),
-                          ],
-                          card: card,
-                          border: border,
-                        ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    if (widget.receiveMode && _canAddStock) ...[
-                      const Divider(),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Stock Management',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Current total stock: ${widget.totalStock}',
-                        style: TextStyle(fontSize: 13, color: subtext),
-                      ),
-                      const SizedBox(height: 14),
-                      AppInput(
-                        controller: _qtyToAddCtrl,
-                        labelText: 'RECEIVE QUANTITY',
-                        hintText: '0',
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'This will set the quantity of this ${_lexicon.itemLower} in the receive cart.',
-                        style: TextStyle(fontSize: 11, color: subtext),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-
-                    if (!widget.receiveMode) ...[
-                      // ── STORE ────────────────────────────────────────────
-                      _sectionLabel('STORE *', subtext),
-                      const SizedBox(height: 8),
-                      if (_stores.isEmpty)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          decoration: BoxDecoration(
-                            color: card,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: border),
-                          ),
-                          child: Text(
-                            'No stores',
-                            style: TextStyle(fontSize: 14, color: subtext),
-                          ),
-                        )
-                      else
-                        AppDropdown<StoreData?>(
-                          value: _selectedStore,
-                          items: _stores
-                              .map(
-                                (w) => DropdownMenuItem<StoreData?>(
-                                  value: w,
-                                  child: Text(
-                                    w.name,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) => setState(() => _selectedStore = v),
-                        ),
-                      const SizedBox(height: 24),
-                    ],
+                    SizedBox(height: section),
                   ],
-                ),
+
+                  if (widget.receiveMode && _canAddStock) ...[
+                    Divider(height: 1, color: t.dividerColor),
+                    SizedBox(height: section),
+                    Text(
+                      'Stock Management',
+                      style: context
+                          .boldStyle(15)
+                          .copyWith(color: t.colorScheme.onSurface),
+                    ),
+                    SizedBox(height: context.getRSize(4)),
+                    Text(
+                      'Current total stock: ${widget.totalStock}',
+                      style: context.regularStyle(13).copyWith(color: muted),
+                    ),
+                    SizedBox(height: gap),
+                    AppInput(
+                      controller: _qtyToAddCtrl,
+                      labelText: 'RECEIVE QUANTITY',
+                      hintText: '0',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                    InventoryFieldHelper(
+                      'This will set the quantity of this '
+                      '${_lexicon.itemLower} in the receive cart.',
+                    ),
+                    SizedBox(height: gap),
+                  ],
+
+                  if (!widget.receiveMode) ...[
+                    // ── STORE ────────────────────────────────────────────
+                    const InventoryFieldLabel('STORE *'),
+                    SizedBox(height: context.getRSize(8)),
+                    if (_stores.isEmpty)
+                      const InventoryEmptyCard(
+                        icon: AppIcons.store,
+                        title: 'No stores',
+                      )
+                    else
+                      AppDropdown<StoreData?>(
+                        value: _selectedStore,
+                        items: _stores
+                            .map(
+                              (w) => DropdownMenuItem<StoreData?>(
+                                value: w,
+                                child: Text(
+                                  w.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setState(() => _selectedStore = v),
+                      ),
+                    SizedBox(height: context.getRSize(24)),
+                  ],
+                ],
               ),
             ),
-            // Save button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: AppButton(
-                text: 'Update ${_lexicon.item}',
-                variant: AppButtonVariant.primary,
-                isLoading: _isSaving,
-                onPressed: _save,
-              ),
+          ),
+          // Save button: pinned under the form, with the system-nav inset
+          // inside the sheet's Surface (#392; it used to sit outside it).
+          Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: t.dividerColor)),
             ),
-          ],
-        ),
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              context.getRSize(12),
+              gutter,
+              context.getRSize(16) + context.deviceBottomPadding,
+            ),
+            child: AppButton(
+              text: 'Update ${_lexicon.item}',
+              variant: AppButtonVariant.primary,
+              isLoading: _isSaving,
+              onPressed: _save,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _expiryField({
-    required Color card,
-    required Color border,
-    required Color subtext,
-    required Color textColor,
-  }) {
-    final hasDate = _expiryDate != null;
-    String label() {
-      final d = _expiryDate!;
-      return '${d.day.toString().padLeft(2, '0')}/'
-          '${d.month.toString().padLeft(2, '0')}/${d.year}';
+  /// The photo picker in the header: a 48dp tile showing the pending or saved
+  /// photo (else the image icon) with a small edit badge.
+  Widget _photoButton() {
+    final t = Theme.of(context);
+    final tint =
+        t.extension<AppSchemeColors>()?.primaryTint ??
+        t.colorScheme.primary.withValues(alpha: 0.12);
+    final side = math.max(context.getRSize(44), kMinInteractiveDimension);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+    Widget content;
+    if (_pendingImageBytes != null) {
+      content = Image.memory(_pendingImageBytes!, fit: BoxFit.cover);
+    } else if (_imagePath != null) {
+      content = Image.file(File(_imagePath!), fit: BoxFit.cover);
+    } else {
+      content = Center(
+        child: AppIcon(
+          AppIcons.image,
+          size: context.getRSize(20),
+          color: t.colorScheme.primary,
+        ),
+      );
     }
-
-    return InkWell(
-      onTap: _pickExpiryDate,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: border),
-        ),
-        child: Row(
-          children: [
-            Icon(AppIcons.event, size: 18, color: subtext),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                hasDate ? label() : 'No expiry date',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: hasDate ? textColor : subtext,
-                  fontWeight: hasDate ? FontWeight.w600 : FontWeight.w400,
+    return Tooltip(
+      message: 'Change photo',
+      child: InkWell(
+        onTap: _pickImage,
+        borderRadius: radius,
+        child: SizedBox.square(
+          dimension: side,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: radius,
+                  child: ColoredBox(color: tint, child: content),
                 ),
               ),
-            ),
-            if (hasDate)
-              GestureDetector(
-                onTap: () => setState(() => _expiryDate = null),
-                child: Icon(AppIcons.close, size: 16, color: subtext),
+              PositionedDirectional(
+                end: -2,
+                bottom: -2,
+                child: Container(
+                  padding: EdgeInsets.all(context.getRSize(3)),
+                  decoration: BoxDecoration(
+                    color: t.colorScheme.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: t.colorScheme.surface,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: AppIcon(
+                    AppIcons.edit,
+                    size: context.getRSize(10),
+                    color: t.colorScheme.onPrimary,
+                  ),
+                ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _sectionLabel(String text, Color subtext) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
-      color: subtext,
-      letterSpacing: 0.8,
-    ),
-  );
+  String? _expiryLabel() {
+    final d = _expiryDate;
+    if (d == null) return null;
+    return '${d.day.toString().padLeft(2, '0')}/'
+        '${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
 
   /// Optional barcode field (#113) with a live soft-collision warning. Typing
   /// runs [_onBarcodeChanged], which warns (never blocks) when another product
   /// already uses the code.
   Widget _barcodeField() {
-    final error = Theme.of(context).colorScheme.error;
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1490,72 +1360,12 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
           onChanged: _onBarcodeChanged,
         ),
         if (_barcodeCollisionName != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6, left: 4),
-            child: Row(
-              children: [
-                Icon(AppIcons.warning, size: 14, color: error),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Already used by "$_barcodeCollisionName". You can still save.',
-                    style: TextStyle(fontSize: 11, color: error),
-                  ),
-                ),
-              ],
-            ),
+          InventoryFieldHelper(
+            'Already used by "$_barcodeCollisionName". You can still save.',
+            icon: AppIcons.warning,
+            color: f.danger,
           ),
       ],
-    );
-  }
-
-  Widget _suggestionList({
-    required List<Widget> children,
-    required Color card,
-    required Color border,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      decoration: BoxDecoration(
-        color: card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border),
-      ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: children),
-    );
-  }
-
-  Widget _suggestionTile({
-    required String label,
-    required Color textColor,
-    required Color card,
-    required Color border,
-    required VoidCallback onTap,
-    IconData icon = AppIcons.user,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

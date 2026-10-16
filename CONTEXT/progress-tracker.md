@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #392 PR 2: Add Product + Update Product sheet restyle (Wave 2 A, 2026-10-16)
+Branch `feat/redesign-w2-inventory-2` off `main` 8f5f7395, worktree `../drinkPosApp-wt-392b`. PR 2 of 4. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, no shared-part change.**
+- Form parts added to `inventory_parts.dart` (`InventoryFormCard`, `InventoryFieldLabel`, `InventoryFieldHelper`, `InventoryNotice`, `InventorySuggestionList`/`Tile`, `InventoryDateField`, `InventoryCheckRow`, `InventoryFieldClear`, `InventorySearchIcon`, `InventoryFormFooter`); conventions in `ui-context.md` "Inventory".
+- Add Product (fast + classic): top bar, 720 cap, cards, footer; wording, field order, gates and the single unit `AppDropdown` unchanged. Photo field + catalogue note restyled.
+- Update Product sheet: `sheetMaxHeight(0.92)` (was `getRHeight`), bottom inset moved inside the Surface, 48dp photo button, form parts.
+- Tests: `test/inventory/add_product_redesign_test.dart` (23), goldens `test/redesign/add_product_golden_test.dart` (20).
+- Next: PR 3 (Product Detail + Stock Count) after owner approval; owner question on the unreachable Update Stock sheet still open.
+
 ### Issue #395 PR 2: Customer Detail + its sheets restyle (2026-10-16) — PRD #346 Wave 2 A
 Branch `feat/redesign-w2-customers-2` off `main` 8f5f7395, worktree `../drinkPosApp-wt-395b`. Last PR of #395 (PR 1 = list + Add/Edit sheets, merged). **Restyle only — every figure, gate and submit/write handler is unchanged (kept byte-for-byte); no Drift/cloud/sync/permission/status change (no `pos-parity` issue), no new packages, no shared-part change.**
 - `customer_parts.dart` gains the Detail parts: `CustomerBarAction` (48dp), `CustomerProfileCard`, `CustomerCreditsCard`, `CustomerFigureCard`, `CustomerDetailRow`, `CustomerDetailEmpty`, `CustomerHeaderSliver` / `customerDetailSliver` (fixed 960 cap, two cards side by side at a measured >= 900), `CustomerSheetFrame` + `showCustomerSheet` (shrink-wrapped scroll capped at 90% height, `deviceBottomPadding`, 640 wide) and `CustomerOptionCard` (a COPY of the payment sheet's private `_MethodOption`, so its 8 goldens are untouched). Conventions in `ui-context.md` "Customers".

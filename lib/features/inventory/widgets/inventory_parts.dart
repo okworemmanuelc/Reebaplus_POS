@@ -584,3 +584,455 @@ class InventoryPeriodChip extends StatelessWidget {
     );
   }
 }
+
+// ── Form parts (#392 PR 2: Add Product, Update Product) ─────────────────────
+
+/// A flat card holding a group of form fields (#392): `AppDecorations.card`
+/// with a 16dp inset. Shared-part candidate.
+class InventoryFormCard extends StatelessWidget {
+  const InventoryFormCard({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.getRSize(16)),
+      decoration: AppDecorations.card(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+}
+
+/// The small uppercase label over a field that has none of its own
+/// ("PRODUCT UNIT", "EXPIRY DATE", "STORE *"): SemiBold 12, muted.
+class InventoryFieldLabel extends StatelessWidget {
+  const InventoryFieldLabel(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Text(
+      text,
+      style: context
+          .semiBoldStyle(12)
+          .copyWith(color: muted, letterSpacing: 0.6),
+    );
+  }
+}
+
+/// A one-line hint under a field: Regular 12, muted (or [color]).
+class InventoryFieldHelper extends StatelessWidget {
+  const InventoryFieldHelper(this.text, {super.key, this.color, this.icon});
+
+  final String text;
+  final Color? color;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final ink =
+        color ?? t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Padding(
+      padding: EdgeInsets.only(
+        top: context.getRSize(6),
+        left: context.getRSize(4),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (icon != null) ...[
+            AppIcon(icon!, size: context.getRSize(14), color: ink),
+            SizedBox(width: context.getRSize(6)),
+          ],
+          Expanded(
+            child: Text(
+              text,
+              style: context.regularStyle(12).copyWith(color: ink),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A tinted notice in a fixed tone (#392): the form's error banner (`danger`)
+/// and "Adding stock to existing …" (`green`). Optional [title] above the
+/// message; [onClose] adds a 48dp ✕.
+class InventoryNotice extends StatelessWidget {
+  const InventoryNotice({
+    super.key,
+    required this.icon,
+    required this.tone,
+    required this.message,
+    this.title,
+    this.onClose,
+    this.closeTooltip = 'Dismiss',
+  });
+
+  final IconData icon;
+  final IconTileTone tone;
+  final String message;
+  final String? title;
+  final VoidCallback? onClose;
+  final String closeTooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final (fill, ink) = tone.resolve(f);
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsetsDirectional.fromSTEB(
+        context.getRSize(14),
+        context.getRSize(10),
+        context.getRSize(onClose == null ? 14 : 2),
+        context.getRSize(10),
+      ),
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+      ),
+      child: Row(
+        children: [
+          AppIcon(icon, filled: true, size: context.getRSize(20), color: ink),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title != null)
+                  Text(
+                    title!,
+                    style: context.semiBoldStyle(12).copyWith(color: ink),
+                  ),
+                Text(
+                  message,
+                  style: title == null
+                      ? context.semiBoldStyle(13).copyWith(color: ink)
+                      : context
+                            .extraBoldStyle(14)
+                            .copyWith(color: t.colorScheme.onSurface),
+                ),
+              ],
+            ),
+          ),
+          if (onClose != null)
+            IconButton(
+              tooltip: closeTooltip,
+              onPressed: onClose,
+              constraints: const BoxConstraints(
+                minWidth: kMinInteractiveDimension,
+                minHeight: kMinInteractiveDimension,
+              ),
+              icon: AppIcon(
+                AppIcons.close,
+                size: context.getRSize(18),
+                color: ink,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The drop-down list of suggestions under a search field (#392): a flat card
+/// of [InventorySuggestionTile]s.
+class InventorySuggestionList extends StatelessWidget {
+  const InventorySuggestionList({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(top: context.getRSize(6)),
+      clipBehavior: Clip.antiAlias,
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusM,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(mainAxisSize: MainAxisSize.min, children: children),
+      ),
+    );
+  }
+}
+
+/// One suggestion: primary icon + SemiBold 14 label; a 48dp row. [emphasis]
+/// draws the label in primary ("Create …").
+class InventorySuggestionTile extends StatelessWidget {
+  const InventorySuggestionTile({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.icon = AppIcons.user,
+    this.emphasis = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool emphasis;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: context.getRSize(14),
+            vertical: context.getRSize(10),
+          ),
+          child: Row(
+            children: [
+              AppIcon(
+                icon,
+                size: context.getRSize(18),
+                color: t.colorScheme.primary,
+              ),
+              SizedBox(width: context.getRSize(10)),
+              Expanded(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: context
+                      .semiBoldStyle(14)
+                      .copyWith(
+                        color: emphasis
+                            ? t.colorScheme.primary
+                            : t.colorScheme.onSurface,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A tappable date field in the `AppInput` shape (#392, the expiry date): the
+/// theme's input fill, 14 radius, calendar icon, the date or [placeholder],
+/// and a 48dp clear ✕ when a date is set. The whole field is a 48dp target.
+class InventoryDateField extends StatelessWidget {
+  const InventoryDateField({
+    super.key,
+    required this.label,
+    required this.placeholder,
+    required this.onTap,
+    this.onClear,
+  });
+
+  /// The formatted date, or null for none.
+  final String? label;
+  final String placeholder;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    // The AppInput shape: the theme's input border radius.
+    final themeBorder = t.inputDecorationTheme.border;
+    final radius = themeBorder is OutlineInputBorder
+        ? themeBorder.borderRadius
+        : BorderRadius.circular(AppSpacing.borderRadiusM);
+    final has = label != null;
+    return Material(
+      color: t.inputDecorationTheme.fillColor ?? t.colorScheme.surface,
+      borderRadius: radius,
+      child: InkWell(
+        borderRadius: radius,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: kMinInteractiveDimension,
+          ),
+          child: Padding(
+            padding: EdgeInsetsDirectional.only(
+              start: context.getRSize(16),
+              end: context.getRSize(has && onClear != null ? 0 : 16),
+            ),
+            child: Row(
+              children: [
+                AppIcon(
+                  AppIcons.event,
+                  size: context.getRSize(20),
+                  color: t.colorScheme.primary,
+                ),
+                SizedBox(width: context.getRSize(12)),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      vertical: context.getRSize(12),
+                    ),
+                    child: Text(
+                      label ?? placeholder,
+                      style: has
+                          ? context
+                                .semiBoldStyle(14)
+                                .copyWith(color: t.colorScheme.onSurface)
+                          : context.regularStyle(14).copyWith(color: muted),
+                    ),
+                  ),
+                ),
+                if (has && onClear != null)
+                  IconButton(
+                    tooltip: 'Clear date',
+                    onPressed: onClear,
+                    constraints: const BoxConstraints(
+                      minWidth: kMinInteractiveDimension,
+                      minHeight: kMinInteractiveDimension,
+                    ),
+                    icon: AppIcon(
+                      AppIcons.close,
+                      size: context.getRSize(18),
+                      color: muted,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A checkbox row (#392): the same `CheckboxListTile` (leading box, whole row
+/// taps), with the title SemiBold 14 and the subtitle Regular 12 muted.
+class InventoryCheckRow extends StatelessWidget {
+  const InventoryCheckRow({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Material(
+      type: MaterialType.transparency,
+      child: CheckboxListTile(
+        value: value,
+        onChanged: onChanged,
+        title: Text(
+          title,
+          style: context
+              .semiBoldStyle(14)
+              .copyWith(color: t.colorScheme.onSurface),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: context.regularStyle(12).copyWith(color: muted),
+        ),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+      ),
+    );
+  }
+}
+
+/// A clear ✕ inside a search field's suffix: a 48dp target.
+class InventoryFieldClear extends StatelessWidget {
+  const InventoryFieldClear({
+    super.key,
+    required this.onPressed,
+    this.tooltip = 'Clear',
+  });
+
+  final VoidCallback onPressed;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      constraints: const BoxConstraints(
+        minWidth: kMinInteractiveDimension,
+        minHeight: kMinInteractiveDimension,
+      ),
+      icon: AppIcon(AppIcons.close, size: context.getRSize(18), color: muted),
+    );
+  }
+}
+
+/// A search-field prefix icon in primary (the redesign's search fields).
+class InventorySearchIcon extends StatelessWidget {
+  const InventorySearchIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) => AppIcon(
+    AppIcons.search,
+    size: context.getRSize(20),
+    color: Theme.of(context).colorScheme.primary,
+  );
+}
+
+/// The pinned footer under a form (#392): Surface, a hairline on top, the
+/// [child] (the save button) capped at [maxWidth] and centred, and
+/// `deviceBottomPadding` below it.
+class InventoryFormFooter extends StatelessWidget {
+  const InventoryFormFooter({
+    super.key,
+    required this.child,
+    this.maxWidth = kInventoryMaxContentWidth,
+  });
+
+  final Widget child;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: t.colorScheme.surface,
+        border: Border(top: BorderSide(color: t.dividerColor)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(16),
+        context.getRSize(10),
+        context.getRSize(16),
+        context.getRSize(12) + context.deviceBottomPadding,
+      ),
+      child: Center(
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
