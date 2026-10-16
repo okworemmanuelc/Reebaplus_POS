@@ -10,6 +10,13 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 
 /// Opens the "Manage categories" bottom sheet (#109). Gate the call site with
 /// [Gates.addProduct]; the rename/delete actions inside re-check it at their
@@ -18,7 +25,7 @@ Future<void> showManageCategoriesSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.transparent,
+    useSafeArea: true,
     builder: (_) => const ManageCategoriesSheet(),
   );
 }
@@ -33,15 +40,14 @@ class ManageCategoriesSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final categories =
         ref.watch(allCategoriesProvider).valueOrNull ?? const <CategoryData>[];
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+    // The sheet's Surface, top radius and scrim come from the theme's
+    // bottomSheetTheme (#392, ui-context "Bottom sheets").
+    return Padding(
       padding: EdgeInsets.fromLTRB(
         context.getRSize(20),
         context.getRSize(12),
@@ -52,37 +58,18 @@ class ManageCategoriesSheet extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: context.getRSize(40),
-              height: context.getRSize(4),
-              decoration: BoxDecoration(
-                color: theme.dividerColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          SizedBox(height: context.getRSize(16)),
-          Text('Manage categories', style: theme.textTheme.titleLarge),
+          const InventorySheetHeader(title: 'Manage categories'),
           SizedBox(height: context.getRSize(4)),
           Text(
             'Rename a category, or delete it to move its products to '
             'Uncategorized.',
-            style: theme.textTheme.bodySmall,
+            style: context.regularStyle(13).copyWith(color: muted),
           ),
           SizedBox(height: context.getRSize(16)),
           if (categories.isEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: context.getRSize(28)),
-              child: Center(
-                child: Text(
-                  'No categories yet. Add one while creating a product.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
+            const InventoryEmptyCard(
+              icon: AppIcons.tag,
+              title: 'No categories yet. Add one while creating a product.',
             )
           else
             Flexible(
@@ -94,12 +81,9 @@ class ManageCategoriesSheet extends ConsumerWidget {
                   shrinkWrap: true,
                   padding: EdgeInsets.zero,
                   itemCount: categories.length,
-                  separatorBuilder: (_, __) => Divider(
-                    height: context.getRSize(1),
-                    color: theme.dividerColor,
-                  ),
-                  itemBuilder: (_, i) =>
-                      _CategoryRow(category: categories[i]),
+                  separatorBuilder: (_, __) =>
+                      SizedBox(height: context.getRSize(8)),
+                  itemBuilder: (_, i) => _CategoryRow(category: categories[i]),
                 ),
               ),
             ),
@@ -109,8 +93,9 @@ class ManageCategoriesSheet extends ConsumerWidget {
   }
 }
 
-/// One category row: name + rename + delete. A [ConsumerWidget] so each action
-/// can re-check [Gates.addProduct] at its write boundary and reach the DAO.
+/// One category row: a flat card with the category's tile, name, rename and
+/// delete. A [ConsumerWidget] so each action can re-check [Gates.addProduct]
+/// at its write boundary and reach the DAO.
 class _CategoryRow extends ConsumerWidget {
   const _CategoryRow({required this.category});
 
@@ -118,32 +103,51 @@ class _CategoryRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(6)),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              category.name,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium,
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final visual = categoryVisual(category.name, f);
+    return DecoratedBox(
+      decoration: AppDecorations.card(context),
+      child: Padding(
+        padding: EdgeInsetsDirectional.fromSTEB(
+          context.getRSize(12),
+          context.getRSize(6),
+          context.getRSize(4),
+          context.getRSize(6),
+        ),
+        child: Row(
+          children: [
+            IconTile(
+              icon: visual.icon,
+              tint: visual.tint,
+              iconColor: visual.iconColor,
+              size: 40,
             ),
-          ),
-          _RowAction(
-            icon: AppIcons.edit,
-            tooltip: 'Rename',
-            color: theme.colorScheme.primary,
-            onTap: () => _rename(context, ref, category),
-          ),
-          SizedBox(width: context.getRSize(4)),
-          _RowAction(
-            icon: AppIcons.delete,
-            tooltip: 'Delete',
-            color: theme.colorScheme.error,
-            onTap: () => _confirmDelete(context, ref, category),
-          ),
-        ],
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              child: Text(
+                category.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: context
+                    .boldStyle(15)
+                    .copyWith(color: t.colorScheme.onSurface),
+              ),
+            ),
+            _RowAction(
+              icon: AppIcons.edit,
+              tooltip: 'Rename',
+              color: t.colorScheme.primary,
+              onTap: () => _rename(context, ref, category),
+            ),
+            _RowAction(
+              icon: AppIcons.delete,
+              tooltip: 'Delete',
+              color: f.danger,
+              onTap: () => _confirmDelete(context, ref, category),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -167,11 +171,11 @@ class _RowAction extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       onPressed: onTap,
-      icon: Icon(icon, size: context.getRSize(16), color: color),
-      splashRadius: context.getRSize(20),
-      constraints: BoxConstraints(
-        minWidth: context.getRSize(40),
-        minHeight: context.getRSize(40),
+      icon: AppIcon(icon, size: context.getRSize(20), color: color),
+      // A 48dp target at every scale (#392; it compacted to ~34dp before).
+      constraints: const BoxConstraints(
+        minWidth: kMinInteractiveDimension,
+        minHeight: kMinInteractiveDimension,
       ),
     );
   }
@@ -192,13 +196,13 @@ Future<void> _rename(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setLocal) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        // Scrolls rather than overflows over a sideways keyboard (#392).
+        scrollable: true,
         title: Text(
           'Rename category',
-          style: Theme.of(ctx).textTheme.titleLarge,
+          style: ctx.screenTitleStyle.copyWith(
+            color: Theme.of(ctx).colorScheme.onSurface,
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -216,9 +220,14 @@ Future<void> _rename(
               SizedBox(height: ctx.getRSize(8)),
               Text(
                 errorText!,
-                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(ctx).colorScheme.error,
-                ),
+                style: ctx
+                    .mediumStyle(12)
+                    .copyWith(
+                      color:
+                          (Theme.of(ctx).extension<AppFixedColors>() ??
+                                  AppFixedColors.light)
+                              .danger,
+                    ),
               ),
             ],
           ],
@@ -294,19 +303,27 @@ Future<void> _confirmDelete(
     context: context,
     builder: (ctx) {
       final theme = Theme.of(ctx);
+      final tint =
+          theme.extension<AppSchemeColors>()?.primaryTint ??
+          theme.colorScheme.primary.withValues(alpha: 0.12);
       return AlertDialog(
-        backgroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+        // Scrolls rather than overflows over a sideways keyboard (#392).
+        scrollable: true,
+        title: Text(
+          'Delete category',
+          style: ctx.screenTitleStyle.copyWith(
+            color: theme.colorScheme.onSurface,
+          ),
         ),
-        title: Text('Delete category', style: theme.textTheme.titleLarge),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Delete "${category.name}"?',
-              style: theme.textTheme.bodyMedium,
+              style: ctx
+                  .mediumStyle(14)
+                  .copyWith(color: theme.colorScheme.onSurface),
             ),
             SizedBox(height: ctx.getRSize(12)),
             Container(
@@ -315,11 +332,8 @@ Future<void> _confirmDelete(
                 vertical: ctx.getRSize(10),
               ),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                ),
+                color: tint,
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
               ),
               child: Text(
                 count == 0
@@ -327,9 +341,9 @@ Future<void> _confirmDelete(
                     : 'This will move $count '
                           '${count == 1 ? 'product' : 'products'} to '
                           'Uncategorized. Nothing is deleted from your catalogue.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                ),
+                style: ctx
+                    .semiBoldStyle(13)
+                    .copyWith(color: theme.colorScheme.primary),
               ),
             ),
           ],

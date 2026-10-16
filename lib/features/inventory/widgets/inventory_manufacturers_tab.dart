@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,14 +5,13 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/settings_screen.dart'
-    show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/screens/manufacturer_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/add_manufacturer_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
@@ -44,16 +41,13 @@ class InventoryManufacturersTab extends ConsumerWidget {
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         // Settings-style list: capped at 720dp and centred on wide screens.
-        final gutter = math.max(
-          context.getRSize(16),
-          (constraints.crossAxisExtent - kSettingsMaxContentWidth) / 2,
-        );
+        final gutter = inventoryGutter(context, constraints.crossAxisExtent);
         return SliverPadding(
           padding: EdgeInsets.fromLTRB(
             gutter,
             context.getRSize(16),
             gutter,
-            context.getRSize(120) + context.bottomInset,
+            context.getRSize(120) + context.deviceBottomPadding,
           ),
           sliver: SliverList.list(
             children: [
