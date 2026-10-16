@@ -129,6 +129,16 @@ Branch `feat/redesign-w1-pos` off `main` 9a6a3d73 (after PR #383), worktree `../
 - **Review fix (sideways grid)**: at 844×390 the chrome took ~260 of 390dp. Under `kPosShortHeight` (480dp of height after insets) the tier controls join the search row (scan stays a square) and the tile art shrinks; first tile now fully visible above the View Cart bar at 844×390 + insets (tested). At 568×320 a full tile on first view is not reachable while the bottom bar (56) and View Cart bar show: the view is ~171dp tall, less than the 48dp search row + 48dp chips + a ~123dp tile. Regenerated only the 10 `pos_844x390*` / `frame_pos*_844x390*` goldens.
 - **Open**: View Cart bar still sits under the grid in a Column slot (ui-context convention); floating it over the grid as the mockup draws needs a `main_layout.dart` change — owner/supervisor call. Shared-part candidates: live bell (3 copies), top-bar height rule, list-density `ProductTile`.
 
+### Issue #322: Shared barcode catalogue — shipped, PRD closed (2026-10-11)
+PRD #322 is closed and all four slices are merged to main. Shops that scan an unsaved factory barcode get the name, unit and photo another shop already saved. Dev and prod are one Supabase project, so cloud steps apply to both. **No Drift schema change, no new synced table.**
+- **#330** (PR #338): `FactoryBarcode` rule (`lib/core/utils/factory_barcode.dart`, shared vectors `test/fixtures/gtin_vectors.json`); cloud 0181 (`barcode_suggestion` definer RPC with live cross-shop vote, `platform_settings` kill switch `barcode_catalogue.suggestions_enabled`, name block list). Pushed to dev/prod.
+- **#331** (PR #339): cloud 0182 (photo table, block table, `barcode_catalogue_request_share`, trigger `trg_share_barcode_photo` on `products`); Edge Function `share-barcode-photo` deployed; hook secret set in Vault and the function; backfill script `supabase/scripts/backfill_barcode_catalogue_photos.sql` run on prod (0 photos to share yet).
+- **#332** (PR #344): Add Product fills empty name, unit and photo from the shared list. `BarcodeCatalogueService` (`lib/core/services/barcode_catalogue_service.dart`) is a sanctioned direct-Supabase exception; 2 s timeout, silent on failure, nothing cached.
+- **#335** (PR #345): report a problem from product details (`CatalogueReportLink`, `CatalogueReportSheet`); cloud 0183 + 0184 (`barcode_catalogue_reports` table and `report_barcode_catalogue_entry` RPC).
+- **Docs**: ADR 0029 with the runbook in §6 (kill switch, blocks, reports). Docs PRs #333 and #336.
+- **Open, not code**: terms and privacy policy must say that names, units and photos are pooled (owner action). Admin Hub review page for reports and kill switch is later work in a separate repo. Public GTIN databases are out of scope (licence review first).
+- **Open, product decision**: on Fast-Add the photo box sits under the collapsed "More details", so a filled-in photo may go unnoticed. Owner to decide whether to expand it.
+
 ### Issue #362 PR 4: Home quick actions — Record Payment tile (2026-10-11) — #362 COMPLETE
 Branch `feat/redesign-w1-home-quick-actions-4` off `main` 62612cba (after PR #382), worktree `../drinkPosApp-wt-362d`. PR 4 of 4: closes #362 and PRD #270. **No Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages; `record_supplier_activity.dart` and `customer_payment_sheet.dart` untouched.** RELEASE FREEZE ON.
 - **Resolver** (`quick_actions.dart`): `QuickAction.recordPayment` declared between `takeStock` and `receiveStock` (Receive Stock stays last). `resolveQuickActions` now takes `customerCount` + `supplierCount` (as `storeCount`, pure inputs) and fills `paymentSides`: customer = `Gates.addCustomerCredit` and ≥ 1 registered customer; supplier = `Gates.manageSuppliers` and ≥ 1 supplier. The tile shows with ≥ 1 side. `registeredCustomerCount` drops the walk-in. Home feeds `customerServiceProvider` (the picker's own list, deleted excluded) and `allSuppliersProvider` (the supplier dropdown's list), both live.
@@ -415,12 +425,12 @@ Branch `feat/receive-supplier-optional`, cut from `main`. Worked in `../drinkPos
 - **Known gap (accepted)**: a supplier-less purchase leaves no money record anywhere (cash tracking was dropped; the invoice was the only money record of a purchase).
 - **Tests**: `receive_stock_test.dart` +4 (no-supplier group); new `receive_supplier_optional_test.dart` (3 widget tests). `flutter analyze` clean; full suite 2681 pass / 271 skipped / 0 fail.
 
-### Issue #322: Shared barcode catalogue, decided and parked (2026-10-03)
+### Issue #322: Shared barcode catalogue, decided and parked (2026-10-03) — superseded: shipped 2026-10-11, see the entry above
 Branch `docs/shared-barcode-catalogue-322`, worked in `../drinkPosApp-wt-322`. **Docs only: no code, no schema, no migration.**
 - Owner grilling settled all of #322's open questions. Decisions are in **ADR 0029** (`docs/adr/0029-shared-barcode-catalogue.md`), and #322 has been rewritten as the PRD. Slices: #330 (GTIN rule + lookup RPC + kill switch), #331 (shared photo + backfill, blocked by #330), #332 (Add Product fill-in, blocked by #330).
 - Key decisions: share name + unit + first photo only; automatic, **no opt-out**; factory GTINs only (check digit, restricted-circulation prefixes excluded, keyed by GTIN-14); one shop, one vote, most votes wins, a tie goes to the most recent; names and units are computed live from `public.products` by a definer RPC (no vote table, no name backfill); the first photo is copied to a shared bucket by an Edge Function (the backfill runs oldest first); removal is by hand through block lists; a Reebaplus-only kill switch in `platform_settings`; client lookup is online only, ~2 s, silent, fills empty boxes only, brand-new products only.
 - `architecture.md` invariant #5 notes the planned exception.
-- **Still on hold** at the owner's request: #322 and its slices carry `on-hold`, not `ready-for-agent`.
+- ~~Still on hold~~ (superseded 2026-10-11: unparked and shipped).
 - Owner action outside code: the terms and privacy policy should mention pooled product names, units and photos.
 
 ### Add Product: Manufacturer is no longer required (2026-10-03)
