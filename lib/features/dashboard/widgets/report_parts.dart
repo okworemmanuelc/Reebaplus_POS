@@ -290,8 +290,10 @@ class ReportValueRow extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 32),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(
+          Flexible(
+            flex: 3,
             child: Text(
               label,
               maxLines: 2,
@@ -302,6 +304,7 @@ class ReportValueRow extends StatelessWidget {
           ),
           SizedBox(width: context.getRSize(12)),
           Flexible(
+            flex: 2,
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerRight,

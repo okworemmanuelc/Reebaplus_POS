@@ -207,6 +207,7 @@ class _SupplierReportRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconTile(
                 icon: AppIcons.bank,
@@ -218,7 +219,8 @@ class _SupplierReportRow extends StatelessWidget {
                 size: 40,
               ),
               SizedBox(width: context.getRSize(12)),
-              Expanded(
+              Flexible(
+                flex: 3,
                 child: Text(
                   row.name,
                   style: context.boldStyle(15).copyWith(color: text),
@@ -228,6 +230,7 @@ class _SupplierReportRow extends StatelessWidget {
               ),
               SizedBox(width: context.getRSize(8)),
               Flexible(
+                flex: 2,
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,

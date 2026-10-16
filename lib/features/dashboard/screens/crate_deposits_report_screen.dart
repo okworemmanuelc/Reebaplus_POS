@@ -212,8 +212,10 @@ class CrateDepositsReportScreen extends ConsumerWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 32),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
+              Flexible(
+                flex: 3,
                 child: Text(
                   name,
                   maxLines: 1,
@@ -225,6 +227,7 @@ class CrateDepositsReportScreen extends ConsumerWidget {
               ),
               SizedBox(width: context.getRSize(12)),
               Flexible(
+                flex: 2,
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
