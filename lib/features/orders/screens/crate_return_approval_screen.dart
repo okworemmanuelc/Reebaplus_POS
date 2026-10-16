@@ -80,6 +80,8 @@ class _CrateReturnApprovalScreenState
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        // Scrolls so the text box stays reachable with the keyboard open.
+        scrollable: true,
         title: Text(
           'Reject Crate Return',
           style: context.screenTitleStyle.copyWith(

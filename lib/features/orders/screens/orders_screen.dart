@@ -953,6 +953,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           builder: (ctx, setDialogState) {
             final reason = reasonController.text.trim();
             return AlertDialog(
+              // Scrolls so the text box stays reachable with the keyboard open.
+              scrollable: true,
               title: Text(
                 'Refund ${order.orderNumber}',
                 style: ctx.screenTitleStyle.copyWith(color: textCol),
