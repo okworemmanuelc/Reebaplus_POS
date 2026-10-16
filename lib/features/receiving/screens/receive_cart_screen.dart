@@ -1,356 +1,294 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
-import 'package:reebaplus_pos/features/receiving/screens/receive_checkout_screen.dart';
-import 'package:reebaplus_pos/features/receiving/widgets/edit_receive_item_modal.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/receiving/screens/receive_checkout_screen.dart';
+import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/edit_receive_item_modal.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/cart_line.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
 
+/// The receiving cart (#394): the lines on this receipt, each a shared
+/// [CartLine] without a stepper (tap opens the Edit sheet, swipe left
+/// removes, as before), then "Invoice Total:" and "Continue (N items)".
+/// Content caps at [kReceiveMaxContentWidth], centred; the bars span the
+/// screen.
 class ReceiveCartScreen extends ConsumerWidget {
   const ReceiveCartScreen({super.key});
+
+  Future<void> _confirmClear(BuildContext context, WidgetRef ref) async {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Cart'),
+        content: const Text(
+          'Are you sure you want to remove all items from the cart?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Clear', style: TextStyle(color: f.danger)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && context.mounted) {
+      ref.read(receiveCartProvider.notifier).clear();
+      Navigator.pop(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cart = ref.watch(receiveCartProvider);
+    final lineCount = cart.length;
+
+    return DecoratedBox(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: ReceiveTopBar(
+          height: receiveTopBarHeight(context),
+          icon: AppIcons.cart,
+          title: 'Receive Stock Cart',
+          subtitle: '$lineCount ${lineCount == 1 ? 'item' : 'items'}',
+          actions: [
+            if (cart.isNotEmpty)
+              ReceiveClearButton(onPressed: () => _confirmClear(context, ref)),
+          ],
+        ),
+        body: cart.isEmpty
+            ? const _EmptyReceiveCart()
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final side = receiveSidePadding(
+                    context,
+                    constraints.maxWidth,
+                  );
+                  // The footer stays pinned while there is room for it and a
+                  // useful list (the Cart's measured rule, #385); on a
+                  // sideways phone it scrolls at the end of the list.
+                  final pinned = constraints.maxHeight >= context.getRSize(440);
+                  final footer = _ReceiveCartFooter(
+                    sidePadding: side,
+                    pinned: pinned,
+                  );
+                  final list = ListView.separated(
+                    key: ReceiveKeys.cartList,
+                    padding: EdgeInsets.fromLTRB(
+                      side,
+                      context.getRSize(16),
+                      side,
+                      pinned
+                          ? context.getRSize(16)
+                          : context.getRSize(16) + context.deviceBottomPadding,
+                    ),
+                    itemCount: cart.length + (pinned ? 0 : 1),
+                    separatorBuilder: (_, __) =>
+                        SizedBox(height: context.getRSize(12)),
+                    itemBuilder: (context, index) {
+                      if (index == cart.length) return footer;
+                      return _ReceiveCartLineCard(line: cart[index]);
+                    },
+                  );
+                  if (!pinned) return list;
+                  return Column(
+                    children: [
+                      Expanded(child: list),
+                      footer,
+                    ],
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+/// One line: category tile, name, "qty × cost", line total, the "Cost: ₦X"
+/// tag, and "unit · Ret: ₦X • Whls: ₦Y". Swipe left removes it; tap edits.
+class _ReceiveCartLineCard extends ConsumerWidget {
+  const _ReceiveCartLineCard({required this.line});
+
+  final ReceiveCartLine line;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final categories = ref.watch(allCategoriesProvider).value ?? const [];
+    final categoryName = categories
+        .where((c) => c.id == line.categoryId)
+        .firstOrNull
+        ?.name;
+    final visual = categoryVisual(categoryName, f);
+    final cost = formatCurrency(line.buyingPriceKobo / 100);
+    final prices =
+        'Ret: ${formatCurrency(line.retailKobo / 100)} • '
+        'Whls: ${formatCurrency(line.wholesaleKobo / 100)}';
+    // A unitless product (#108) shows no unit label — just its prices.
+    final detail = (line.unit ?? '').isNotEmpty
+        ? '${line.unit} · $prices'
+        : prices;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
+    return Dismissible(
+      key: ValueKey(line.productId),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: EdgeInsets.only(right: context.getRSize(20)),
+        decoration: BoxDecoration(color: f.danger, borderRadius: radius),
+        child: AppIcon(
+          AppIcons.delete,
+          color: f.onSolid,
+          size: context.getRSize(22),
+        ),
+      ),
+      onDismissed: (_) {
+        ref.read(receiveCartProvider.notifier).remove(line.productId);
+      },
+      child: CartLine(
+        key: receiveCartLineKey(line.productId),
+        name: line.productName,
+        icon: visual.icon,
+        tileTint: visual.tint,
+        tileIconColor: visual.iconColor,
+        quantityLabel: '${line.qty}',
+        unitPriceLabel: cost,
+        totalLabel: formatCurrency(line.buyingPriceKobo * line.qty / 100),
+        detail: detail,
+        badges: [TagPill(label: 'Cost: $cost', dense: true)],
+        onTap: () => EditReceiveItemModal.show(context, line),
+      ),
+    );
+  }
+}
+
+/// "Invoice Total:" + the figure, and "Continue (N items)" to checkout.
+/// Pinned under the list (Surface + hairline) or, on a short screen, the last
+/// item of the list.
+class _ReceiveCartFooter extends ConsumerWidget {
+  const _ReceiveCartFooter({required this.sidePadding, required this.pinned});
+
+  final double sidePadding;
+  final bool pinned;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(receiveCartProvider);
     final notifier = ref.read(receiveCartProvider.notifier);
     final t = Theme.of(context);
-    final bg = t.colorScheme.surface;
-    final text = t.colorScheme.onSurface;
-    final primary = t.colorScheme.primary;
-    final border = t.dividerColor;
-
-    final totalUnits = notifier.totalUnits;
-    final totalValueKobo = notifier.invoiceTotalKobo;
-    final totalValueStr = formatCurrency(totalValueKobo / 100);
-
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        title: const Text('Receive Stock Cart'),
-        elevation: 0,
-        backgroundColor: bg,
-        actions: [
-          if (cart.isNotEmpty)
-            TextButton.icon(
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Clear Cart'),
-                    content: const Text(
-                      'Are you sure you want to remove all items from the cart?',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: Text(
-                          'Clear',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (confirm == true && context.mounted) {
-                  notifier.clear();
-                  Navigator.pop(context);
-                }
-              },
-              icon: Icon(
-                AppIcons.delete,
-                color: Theme.of(context).colorScheme.error,
-                size: context.getRSize(16),
-              ),
-              label: Text(
-                'Clear',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Invoice Total:',
+                style: context.semiBoldStyle(16).copyWith(color: muted),
               ),
             ),
-          SizedBox(width: context.getRSize(8)),
-        ],
+            Text(
+              formatCurrency(notifier.invoiceTotalKobo / 100),
+              style: context
+                  .extraBoldStyle(24)
+                  .copyWith(color: t.colorScheme.primary),
+            ),
+          ],
+        ),
+        SizedBox(height: context.getRSize(16)),
+        AppButton(
+          key: ReceiveKeys.continueButton,
+          text: 'Continue (${notifier.totalUnits} items)',
+          isFullWidth: true,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ReceiveCheckoutScreen()),
+            );
+          },
+        ),
+      ],
+    );
+    if (!pinned) {
+      return Padding(
+        key: ReceiveKeys.cartFooter,
+        padding: EdgeInsets.only(top: context.getRSize(8)),
+        child: content,
+      );
+    }
+    return Container(
+      key: ReceiveKeys.cartFooter,
+      padding: EdgeInsets.fromLTRB(
+        sidePadding,
+        context.getRSize(16),
+        sidePadding,
+        context.getRSize(16) + context.deviceBottomPadding,
       ),
-      body: cart.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(context.getRSize(24)),
-                    decoration: BoxDecoration(
-                      color: primary.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      AppIcons.box,
-                      size: context.getRSize(48),
-                      color: primary.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(24)),
-                  Text(
-                    'Your receive cart is empty',
-                    style: TextStyle(
-                      color: text,
-                      fontSize: context.getRFontSize(18),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(8)),
-                  Text(
-                    'Tap products from the grid to add them.',
-                    style: TextStyle(
-                      color: text.withValues(alpha: 0.6),
-                      fontSize: context.getRFontSize(14),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : ListView.separated(
-              padding: EdgeInsets.only(
-                top: context.getRSize(16),
-                bottom: context.getRSize(24),
-                left: context.getRSize(16),
-                right: context.getRSize(16),
-              ),
-              itemCount: cart.length,
-              separatorBuilder: (_, __) =>
-                  SizedBox(height: context.getRSize(12)),
-              itemBuilder: (context, index) {
-                final line = cart[index];
-                return Dismissible(
-                  key: ValueKey(line.productId),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: EdgeInsets.only(right: context.getRSize(20)),
-                    decoration: BoxDecoration(
-                      color: t.colorScheme.error,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      AppIcons.delete,
-                      color: t.colorScheme.onError,
-                      size: context.getRSize(20),
-                    ),
-                  ),
-                  onDismissed: (_) {
-                    notifier.remove(line.productId);
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: t.cardColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: border.withValues(alpha: 0.5)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.02),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          EditReceiveItemModal.show(context, line);
-                        },
-                        borderRadius: BorderRadius.circular(16),
-                        child: Padding(
-                          padding: EdgeInsets.all(context.getRSize(16)),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              // Left: Qty chip
-                              Container(
-                                width: context.getRSize(44),
-                                height: context.getRSize(44),
-                                decoration: BoxDecoration(
-                                  color: bg,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: border.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  line.qty.toString(),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: context.getRFontSize(16),
-                                    color: text,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: context.getRSize(16)),
-                              // Middle: details
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      line.productName,
-                                      style: TextStyle(
-                                        fontSize: context.getRFontSize(16),
-                                        fontWeight: FontWeight.bold,
-                                        color: text,
-                                      ),
-                                    ),
-                                    SizedBox(height: context.getRSize(4)),
-                                    Row(
-                                      children: [
-                                        // A unitless product (#108) shows no
-                                        // unit label — just its cost.
-                                        if ((line.unit ?? '').isNotEmpty) ...[
-                                          Text(
-                                            line.unit!,
-                                            style: TextStyle(
-                                              fontSize:
-                                                  context.getRFontSize(13),
-                                              color:
-                                                  text.withValues(alpha: 0.6),
-                                            ),
-                                          ),
-                                          SizedBox(width: context.getRSize(8)),
-                                        ],
-                                        Flexible(
-                                          child: Container(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: context.getRSize(6),
-                                              vertical: context.getRSize(2),
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: primary.withValues(
-                                                alpha: 0.1,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              'Cost: ${formatCurrency(line.buyingPriceKobo / 100)}',
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 1,
-                                              style: TextStyle(
-                                                fontSize:
-                                                    context.getRFontSize(11),
-                                                fontWeight: FontWeight.w600,
-                                                color: primary,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    SizedBox(height: context.getRSize(6)),
-                                    Text(
-                                      'Ret: ${formatCurrency(line.retailKobo / 100)} • Whls: ${formatCurrency(line.wholesaleKobo / 100)}',
-                                      style: TextStyle(
-                                        fontSize: context.getRFontSize(12),
-                                        color: text.withValues(alpha: 0.5),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(width: context.getRSize(12)),
-                              // Right: Total
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    formatCurrency(
-                                      line.buyingPriceKobo * line.qty / 100,
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: context.getRFontSize(16),
-                                      fontWeight: FontWeight.w800,
-                                      color: primary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
+      decoration: BoxDecoration(
+        color: t.colorScheme.surface,
+        border: Border(top: BorderSide(color: t.dividerColor)),
+      ),
+      child: content,
+    );
+  }
+}
+
+class _EmptyReceiveCart extends StatelessWidget {
+  const _EmptyReceiveCart();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(context.getRSize(24)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const IconTile(
+              icon: AppIcons.box,
+              tone: IconTileTone.neutral,
+              size: 64,
             ),
-      bottomNavigationBar: cart.isEmpty
-          ? null
-          : Container(
-              padding: EdgeInsets.fromLTRB(
-                context.getRSize(24),
-                context.getRSize(20),
-                context.getRSize(24),
-                context.getRSize(20) + context.deviceBottomPadding,
-              ),
-              decoration: BoxDecoration(
-                color: t.colorScheme.surface,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(32),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    offset: const Offset(0, -8),
-                    blurRadius: 24,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Invoice Total:',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(16),
-                          fontWeight: FontWeight.w600,
-                          color: text.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      Text(
-                        totalValueStr,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(24),
-                          fontWeight: FontWeight.w900,
-                          color: primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: context.getRSize(20)),
-                  AppButton(
-                    text: 'Continue ($totalUnits items)',
-                    height: context.getRSize(56),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ReceiveCheckoutScreen(),
-                        ),
-                      );
-                    },
-                    isFullWidth: true,
-                  ),
-                ],
-              ),
+            SizedBox(height: context.getRSize(20)),
+            Text(
+              'Your receive cart is empty',
+              textAlign: TextAlign.center,
+              style: context
+                  .boldStyle(18)
+                  .copyWith(color: t.colorScheme.onSurface),
             ),
+            SizedBox(height: context.getRSize(8)),
+            Text(
+              'Tap products from the grid to add them.',
+              textAlign: TextAlign.center,
+              style: context.regularStyle(14).copyWith(color: muted),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
