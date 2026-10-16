@@ -44,11 +44,11 @@ void main() {
   };
 
   Finder expenseRows() => find.byWidgetPredicate(
-        (w) =>
-            w.key is ValueKey<String> &&
-            (w.key! as ValueKey<String>).value.startsWith(kExpenseRowKeyPrefix),
-        description: 'expense row',
-      );
+    (w) =>
+        w.key is ValueKey<String> &&
+        (w.key! as ValueKey<String>).value.startsWith(kExpenseRowKeyPrefix),
+    description: 'expense row',
+  );
 
   /// The first tab's own scroll view — the one scrollable surface.
   ///
@@ -82,7 +82,9 @@ void main() {
   }) async {
     final db = env.db;
     final categoryId = UuidV7.generate();
-    await db.into(db.expenseCategories).insert(
+    await db
+        .into(db.expenseCategories)
+        .insert(
           ExpenseCategoriesCompanion.insert(
             id: Value(categoryId),
             businessId: env.businessId,
@@ -92,7 +94,9 @@ void main() {
 
     final now = seedAnchorToday();
     for (var i = 1; i <= count; i++) {
-      await db.into(db.expenses).insert(
+      await db
+          .into(db.expenses)
+          .insert(
             ExpensesCompanion.insert(
               id: Value(UuidV7.generate()),
               businessId: env.businessId,
@@ -138,8 +142,9 @@ void main() {
     });
 
     viewports.forEach((name, size) {
-      testWidgets('$name shows a complete expense row without overflowing',
-          (tester) async {
+      testWidgets('$name shows a complete expense row without overflowing', (
+        tester,
+      ) async {
         await pumpScreen(
           tester,
           env: env,
@@ -147,8 +152,9 @@ void main() {
           screen: const ExpensesScreen(),
           grantedKeys: expenseGrants,
           overrides: [
-            firstRunSurfaceStateProvider
-                .overrideWithValue(FirstRunSurfaceState.hasContent),
+            firstRunSurfaceStateProvider.overrideWithValue(
+              FirstRunSurfaceState.hasContent,
+            ),
           ],
           settle: false,
         );
@@ -173,8 +179,9 @@ void main() {
     });
 
     viewports.forEach((name, size) {
-      testWidgets('$name renders the empty state without overflowing',
-          (tester) async {
+      testWidgets('$name renders the empty state without overflowing', (
+        tester,
+      ) async {
         await pumpScreen(
           tester,
           env: env,
@@ -182,8 +189,9 @@ void main() {
           screen: const ExpensesScreen(),
           grantedKeys: expenseGrants,
           overrides: [
-            firstRunSurfaceStateProvider
-                .overrideWithValue(FirstRunSurfaceState.hasContent),
+            firstRunSurfaceStateProvider.overrideWithValue(
+              FirstRunSurfaceState.hasContent,
+            ),
           ],
           settle: false,
         );
@@ -213,8 +221,9 @@ void main() {
       await seedExpenses(env, count: 30);
     });
 
-    testWidgets('each tab remembers its scroll position across tab switches',
-        (tester) async {
+    testWidgets('each tab remembers its scroll position across tab switches', (
+      tester,
+    ) async {
       await pumpScreen(
         tester,
         env: env,
@@ -222,8 +231,9 @@ void main() {
         screen: const ExpensesScreen(),
         grantedKeys: expenseGrants,
         overrides: [
-          firstRunSurfaceStateProvider
-              .overrideWithValue(FirstRunSurfaceState.hasContent),
+          firstRunSurfaceStateProvider.overrideWithValue(
+            FirstRunSurfaceState.hasContent,
+          ),
         ],
         settle: false,
       );
@@ -240,8 +250,11 @@ void main() {
       await tester.drag(tabSurface(), const Offset(0, -800));
       await tester.pumpAndSettle();
       final scrolledTo = expensesPosition().pixels;
-      expect(scrolledTo, greaterThan(0),
-          reason: 'The Expenses tab must scroll');
+      expect(
+        scrolledTo,
+        greaterThan(0),
+        reason: 'The Expenses tab must scroll',
+      );
 
       // Target the Tab itself: "Expenses" is also the app bar's title, so a
       // bare text finder is ambiguous and can tap the heading instead.
@@ -267,8 +280,9 @@ void main() {
         screen: const ExpensesScreen(),
         grantedKeys: expenseGrants,
         overrides: [
-          firstRunSurfaceStateProvider
-              .overrideWithValue(FirstRunSurfaceState.hasContent),
+          firstRunSurfaceStateProvider.overrideWithValue(
+            FirstRunSurfaceState.hasContent,
+          ),
         ],
         settle: false,
       );
@@ -301,8 +315,9 @@ void main() {
       await teardownScreen(tester);
     });
 
-    testWidgets('the period selector keeps a full tap target at 800x360',
-        (tester) async {
+    testWidgets('the period selector keeps a full tap target at 800x360', (
+      tester,
+    ) async {
       await pumpScreen(
         tester,
         env: env,
@@ -310,8 +325,9 @@ void main() {
         screen: const ExpensesScreen(),
         grantedKeys: expenseGrants,
         overrides: [
-          firstRunSurfaceStateProvider
-              .overrideWithValue(FirstRunSurfaceState.hasContent),
+          firstRunSurfaceStateProvider.overrideWithValue(
+            FirstRunSurfaceState.hasContent,
+          ),
         ],
         settle: false,
       );
@@ -320,8 +336,11 @@ void main() {
       // The header scrolls away, so the selector may start off screen; it must
       // still exist at its full height rather than have been shrunk to fit.
       final selector = find.text('This Month', skipOffstage: false);
-      expect(selector, findsWidgets,
-          reason: 'The period selector must survive sideways');
+      expect(
+        selector,
+        findsWidgets,
+        reason: 'The period selector must survive sideways',
+      );
 
       // Measured by layout, not hit-testing, so it holds while the header has
       // scrolled out of view.

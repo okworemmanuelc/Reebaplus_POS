@@ -167,9 +167,24 @@ void main() {
 
   // No overflow: 360dp @1.3, 390x844, 844x390 with insets, 800x1280, 1280x800.
   final sizes = <(String, Size, EdgeInsets, double)>[
-    ('360@1.3', const Size(360, 640), const EdgeInsets.only(top: 24, bottom: 48), 1.3),
-    ('390x844', const Size(390, 844), const EdgeInsets.only(top: 24, bottom: 24), 1.0),
-    ('844x390', const Size(844, 390), const EdgeInsets.only(top: 24, right: 48), 1.0),
+    (
+      '360@1.3',
+      const Size(360, 640),
+      const EdgeInsets.only(top: 24, bottom: 48),
+      1.3,
+    ),
+    (
+      '390x844',
+      const Size(390, 844),
+      const EdgeInsets.only(top: 24, bottom: 24),
+      1.0,
+    ),
+    (
+      '844x390',
+      const Size(844, 390),
+      const EdgeInsets.only(top: 24, right: 48),
+      1.0,
+    ),
     ('800x1280', const Size(800, 1280), EdgeInsets.zero, 1.0),
     ('1280x800', const Size(1280, 800), EdgeInsets.zero, 1.0),
   ];
@@ -206,7 +221,11 @@ void main() {
   }
 
   testWidgets('the list caps at 720dp on a wide screen', (tester) async {
-    await pumpList(tester, size: const Size(1280, 800), padding: EdgeInsets.zero);
+    await pumpList(
+      tester,
+      size: const Size(1280, 800),
+      padding: EdgeInsets.zero,
+    );
     final w = tester.getSize(find.byKey(ExpenseKeys.totalCard)).width;
     expect(w, lessThanOrEqualTo(720));
     expect(w, greaterThan(300));

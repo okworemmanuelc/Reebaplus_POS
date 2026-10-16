@@ -1648,23 +1648,14 @@ class _ExpenseCard extends StatelessWidget {
                       children: [
                         Flexible(child: ExpenseStatusPill(status: exp.status)),
                         SizedBox(width: context.getRSize(8)),
-                        Expanded(
-                          child: Text(
-                            _paymentMethodLabel(exp.paymentMethod),
-                            style: context
-                                .semiBoldStyle(13)
-                                .copyWith(color: subtextCol),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
                         // The full "Sep 18, 2026 • 10:30 AM" stamp is wider
                         // than a 320dp card can spare beside the status
                         // badge; it shortens rather than overflowing (#256).
-                        Flexible(
+                        Expanded(
                           child: Text(
                             dateStr,
                             maxLines: 1,
+                            textAlign: TextAlign.end,
                             overflow: TextOverflow.ellipsis,
                             style: context
                                 .regularStyle(12)
@@ -1672,6 +1663,15 @@ class _ExpenseCard extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                    SizedBox(height: context.getRSize(6)),
+                    Text(
+                      _paymentMethodLabel(exp.paymentMethod),
+                      style: context
+                          .semiBoldStyle(13)
+                          .copyWith(color: subtextCol),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: context.getRSize(8)),
                     Row(
