@@ -123,8 +123,6 @@ class DetailInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
       child: Padding(
@@ -132,39 +130,49 @@ class DetailInfoRow extends StatelessWidget {
           horizontal: context.getRSize(14),
           vertical: context.getRSize(10),
         ),
-        child: Row(
-          children: [
-            IconTile(icon: icon, tone: tone, size: 40),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: context.semiBoldStyle(13).copyWith(color: muted),
-              ),
-            ),
-            if (value.isNotEmpty) ...[
-              SizedBox(width: context.getRSize(8)),
-              Flexible(
-                child: Text(
-                  value,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: context
-                      .boldStyle(14)
-                      .copyWith(color: t.colorScheme.onSurface),
-                ),
-              ),
-            ],
-            if (trailing != null) ...[
-              SizedBox(width: context.getRSize(8)),
-              trailing!,
-            ],
-          ],
+        child: LayoutBuilder(
+          builder: (context, c) => _row(context, c.maxWidth),
         ),
       ),
+    );
+  }
+
+  Widget _row(BuildContext context, double rowWidth) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Row(
+      children: [
+        IconTile(icon: icon, tone: tone, size: 40),
+        SizedBox(width: context.getRSize(12)),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: context.semiBoldStyle(13).copyWith(color: muted),
+          ),
+        ),
+        if (value.isNotEmpty) ...[
+          SizedBox(width: context.getRSize(8)),
+          // The value hugs the end and never takes more than half the row.
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: rowWidth * 0.45),
+            child: Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: context
+                  .boldStyle(14)
+                  .copyWith(color: t.colorScheme.onSurface),
+            ),
+          ),
+        ],
+        if (trailing != null) ...[
+          SizedBox(width: context.getRSize(8)),
+          trailing!,
+        ],
+      ],
     );
   }
 }

@@ -753,38 +753,41 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Identity + Pricing (side by side when measured wide) ─────────
-        DetailPair(
-          sideBySide: sideBySide,
-          first: _buildHero(context),
-          second: DetailSection(title: 'Pricing', child: _pricingCard(context)),
-        ),
+        _buildHero(context),
         gap,
 
-        // ── Stock & Info ─────────────────────────────────────────────────
-        DetailSection(title: 'Stock & Info', child: _stockInfoCard(context)),
-        gap,
-
-        // ── Sales Summary + Sales Target ─────────────────────────────────
+        // Wide: Stock & Info on the left, the money and sales cards stacked
+        // on the right. Narrow: one column in the same order.
         DetailPair(
           sideBySide: sideBySide,
           first: DetailSection(
-            title: 'Sales Summary',
-            child: _buildSalesGrid(context),
+            title: 'Stock & Info',
+            child: _stockInfoCard(context),
           ),
-          // Editable by CEO only, in edit mode.
-          second: DetailSection(
-            title: 'Sales Target',
-            subtitle: (_editMode && !_isCeo) ? '(CEO only)' : null,
-            child: _buildTargetGrid(context),
+          second: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!sideBySide) SizedBox(height: context.getRSize(8)),
+              DetailSection(title: 'Pricing', child: _pricingCard(context)),
+              gap,
+              DetailSection(
+                title: 'Sales Summary',
+                child: _buildSalesGrid(context),
+              ),
+              gap,
+              // Editable by CEO only, in edit mode.
+              DetailSection(
+                title: 'Sales Target',
+                subtitle: (_editMode && !_isCeo) ? '(CEO only)' : null,
+                child: _buildTargetGrid(context),
+              ),
+              gap,
+              DetailSection(
+                title: 'Last Delivery',
+                child: _buildDeliveryCard(context),
+              ),
+            ],
           ),
-        ),
-        gap,
-
-        // ── Last Delivery ────────────────────────────────────────────────
-        DetailSection(
-          title: 'Last Delivery',
-          child: _buildDeliveryCard(context),
         ),
         SizedBox(height: context.getRSize(24)),
 
