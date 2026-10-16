@@ -396,14 +396,67 @@ class PaymentsSheetHeader extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.subtitleColor,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
 
+  /// The entry type's colour cue (fixed danger for an invoice, green for a
+  /// payment). Null keeps the shared header's primary subtitle.
+  final Color? subtitleColor;
+
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final tile = context.getRSize(44);
+    final Widget header = subtitleColor == null
+        ? ScreenHeader(icon: icon, title: title, subtitle: subtitle)
+        : Row(
+            children: [
+              Container(
+                width: tile,
+                height: tile,
+                alignment: Alignment.center,
+                decoration: AppDecorations.primaryButtonGradient(
+                  context,
+                  radius: AppSpacing.borderRadiusL,
+                ),
+                child: AppIcon(
+                  icon,
+                  filled: true,
+                  size: tile * 0.5,
+                  color: t.colorScheme.onPrimary,
+                ),
+              ),
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.screenTitleStyle.copyWith(
+                        color: t.colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context
+                          .semiBoldStyle(13)
+                          .copyWith(color: subtitleColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
     return Padding(
       padding: EdgeInsets.fromLTRB(
         context.getRSize(20),
@@ -415,7 +468,7 @@ class PaymentsSheetHeader extends StatelessWidget {
         children: [
           const PaymentsSheetHandle(),
           SizedBox(height: context.getRSize(16)),
-          ScreenHeader(icon: icon, title: title, subtitle: subtitle),
+          header,
         ],
       ),
     );

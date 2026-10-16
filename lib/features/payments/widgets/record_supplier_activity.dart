@@ -268,6 +268,9 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet> {
                     icon: AppIcons.bill,
                     title: 'Invoice Total',
                     subtitle: widget.supplierName,
+                    subtitleColor:
+                        Theme.of(context).extension<AppFixedColors>()?.danger ??
+                        AppFixedColors.light.danger,
                   ),
                   fields: fields,
                   footer: PaymentsSheetFooter(
@@ -437,6 +440,11 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet> {
   Widget build(BuildContext context) {
     final suppliers =
         ref.watch(allSuppliersProvider).valueOrNull ?? const <SupplierData>[];
+    final itemStyle = context
+        .mediumStyle(14)
+        .copyWith(color: Theme.of(context).colorScheme.onSurface);
+    final fixed =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     final fields = <Widget>[
       PaymentsStoreBanner(label: _resolveRecordStore(ref).label),
       SizedBox(height: context.getRSize(16)),
@@ -446,7 +454,12 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet> {
           value: _selectedSupplierId,
           hintText: 'Select supplier',
           items: suppliers
-              .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
+              .map(
+                (s) => DropdownMenuItem(
+                  value: s.id,
+                  child: Text(s.name, style: itemStyle),
+                ),
+              )
               .toList(),
           onChanged: (v) => setState(() => _selectedSupplierId = v),
           validator: (v) => v == null ? 'Select a supplier' : null,
@@ -466,11 +479,23 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet> {
       AppDropdown<String>(
         labelText: 'Payment Method',
         value: _method,
-        items: const [
-          DropdownMenuItem(value: 'cash', child: Text('Cash')),
-          DropdownMenuItem(value: 'transfer', child: Text('Bank Transfer')),
-          DropdownMenuItem(value: 'pos', child: Text('POS Card')),
-          DropdownMenuItem(value: 'other', child: Text('Other')),
+        items: [
+          DropdownMenuItem(
+            value: 'cash',
+            child: Text('Cash', style: itemStyle),
+          ),
+          DropdownMenuItem(
+            value: 'transfer',
+            child: Text('Bank Transfer', style: itemStyle),
+          ),
+          DropdownMenuItem(
+            value: 'pos',
+            child: Text('POS Card', style: itemStyle),
+          ),
+          DropdownMenuItem(
+            value: 'other',
+            child: Text('Other', style: itemStyle),
+          ),
         ],
         onChanged: (v) {
           if (v != null) setState(() => _method = v);
@@ -522,6 +547,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet> {
                     icon: AppIcons.transfer,
                     title: 'Record Payment',
                     subtitle: widget.supplierName ?? 'Log outgoing funds',
+                    subtitleColor: fixed.green,
                   ),
                   fields: fields,
                   footer: PaymentsSheetFooter(
