@@ -14,7 +14,9 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -22,9 +24,8 @@ import 'package:reebaplus_pos/core/utils/store_address.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:flutter/services.dart';
-import 'package:reebaplus_pos/core/widgets/amber_button.dart';
-import 'package:reebaplus_pos/core/widgets/status_badge.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
+import 'package:reebaplus_pos/features/customers/widgets/customer_parts.dart';
 import 'package:reebaplus_pos/features/customers/widgets/customer_payment_sheet.dart';
 import 'package:reebaplus_pos/features/customers/widgets/edit_customer_sheet.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
@@ -33,8 +34,8 @@ import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
@@ -56,7 +57,6 @@ class CustomerDetailScreen extends ConsumerStatefulWidget {
 class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     with TickerProviderStateMixin {
   bool _contentReady = false;
-  bool _isScrolled = false;
   final ScreenshotController _screenshotCtrl = ScreenshotController();
 
   late TabController _tabController;
@@ -121,8 +121,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         .read(orderServiceProvider)
         .watchOrdersByCustomer(id)
         .listen((orders) {
-      if (mounted) setState(() => _orders = orders);
-    });
+          if (mounted) setState(() => _orders = orders);
+        });
 
     _cratesSub = db.customersDao.watchCrateBalancesWithGroups(id).listen((
       crates,
@@ -190,8 +190,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
 
   /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
   /// are capped to Today/This Week/This Month).
-  List<String> get _periodOptions =>
-      datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
+  List<String> get _periodOptions => datePeriodLabelsForRole(
+    managerUp: Gates.seeExtendedDateRanges.allows(ref),
+  );
 
   /// [_selectedPeriod] clamped into [_periodOptions], so the dropdown value and
   /// the filter agree for capped viewers (default is "To Date", out of their set).
@@ -251,21 +252,25 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     }
   }
 
-  BadgeVariant _orderStatusVariant(String status) {
+  TagPillTone _orderStatusTone(String status) {
     switch (status) {
       case 'completed':
-        return BadgeVariant.green;
+        return TagPillTone.green;
       case 'cancelled':
       // LEGACY ROWS ONLY (#196): `refunded` is a retired status (PRD #155 moved
       // refunds to `payment_transactions`); nothing writes it, but a historic
       // order that carries it still renders in this customer's history and reads
       // as a reversed sale, so it keeps the reversed-sale badge.
       case 'refunded':
-        return BadgeVariant.red;
+        return TagPillTone.danger;
       default:
-        return BadgeVariant.amber;
+        return TagPillTone.warning;
     }
   }
+
+  /// The fixed status colours (green / danger), for snackbars and figures.
+  AppFixedColors get _fixed =>
+      Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
 
   // ── Sheets ─────────────────────────────────────────────────────────────────
 
@@ -327,268 +332,234 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final formKey = GlobalKey<FormState>();
     String selectedMethod = 'cash'; // 'cash' | 'transfer' | 'pos' | 'other'
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
+    showCustomerSheet<void>(
+      context,
+      (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => Consumer(
           builder: (ctx, sheetRef, _) {
-            final accent = Theme.of(ctx).colorScheme.primary;
             final onSurface = Theme.of(ctx).colorScheme.onSurface;
-
-            return _SheetContainer(
-              scrollController: ScrollController(),
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const _SheetHandle(),
-                    Text(
-                      inDebt ? 'Refund Deposit' : 'Refund Cash',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: ctx.getRFontSize(18),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    SizedBox(height: ctx.getRSize(4)),
-                    Text(
-                      inDebt
-                          ? 'Refund to $_name\'s credit balance — reduces what they owe'
-                          : 'Pay $_name back in cash',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: ctx.getRFontSize(13),
-                        color: onSurface.withAlpha(128),
-                      ),
-                    ),
-                    SizedBox(height: ctx.getRSize(20)),
-                    // What's available, broken down.
-                    Container(
-                      padding: EdgeInsets.all(ctx.getRSize(14)),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: accent.withAlpha(40)),
-                      ),
-                      child: Column(
-                        children: [
-                          if (creditAvail > 0)
-                            _refundAvailRow(
-                              ctx,
-                              'Credit balance',
-                              creditAvail,
-                              onSurface,
-                            ),
-                          if (depositAvail > 0)
-                            _refundAvailRow(
-                              ctx,
-                              'Crate deposit held',
-                              depositAvail,
-                              onSurface,
-                            ),
-                          if (creditAvail > 0 && depositAvail > 0) ...[
-                            Divider(height: ctx.getRSize(16)),
-                            _refundAvailRow(
-                              ctx,
-                              'Available',
-                              availableKobo,
-                              onSurface,
-                              bold: true,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: ctx.getRSize(20)),
-                    _SheetField(
-                      controller: amountCtrl,
-                      label: 'Amount to refund (₦)',
-                      keyboard: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [CurrencyInputFormatter()],
-                      validator: (v) {
-                        final n = parseCurrency(v ?? '');
-                        if (n <= 0) return 'Enter a valid amount';
-                        if ((n * 100).round() > availableKobo) {
-                          return 'Max ${formatCurrency(availableKobo / 100)}';
-                        }
-                        return null;
-                      },
-                    ),
-                    if (!inDebt) ...[
-                      SizedBox(height: ctx.getRSize(16)),
-                      Text(
-                        'Refund method',
-                        style: TextStyle(
-                          fontSize: ctx.getRFontSize(13),
-                          fontWeight: FontWeight.w600,
-                          color: onSurface.withAlpha(178),
+            return CustomerSheetFrame(
+              title: inDebt ? 'Refund Deposit' : 'Refund Cash',
+              subtitle: inDebt
+                  ? 'Refund to $_name\'s credit balance — reduces what they owe'
+                  : 'Pay $_name back in cash',
+              children: [
+                Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // What's available, broken down.
+                      DecoratedBox(
+                        decoration: AppDecorations.card(ctx),
+                        child: Padding(
+                          padding: EdgeInsets.all(ctx.getRSize(14)),
+                          child: Column(
+                            children: [
+                              if (creditAvail > 0)
+                                _refundAvailRow(
+                                  ctx,
+                                  'Credit balance',
+                                  creditAvail,
+                                  onSurface,
+                                ),
+                              if (depositAvail > 0)
+                                _refundAvailRow(
+                                  ctx,
+                                  'Crate deposit held',
+                                  depositAvail,
+                                  onSurface,
+                                ),
+                              if (creditAvail > 0 && depositAvail > 0) ...[
+                                Divider(height: ctx.getRSize(16)),
+                                _refundAvailRow(
+                                  ctx,
+                                  'Available',
+                                  availableKobo,
+                                  onSurface,
+                                  bold: true,
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
-                      SizedBox(height: ctx.getRSize(8)),
-                      ...[
-                        ('cash', 'Cash'),
-                        ('transfer', 'Bank Transfer'),
-                        ('pos', 'POS card'),
-                        ('other', 'Other'),
-                      ].map((opt) {
-                        final isSel = selectedMethod == opt.$1;
-                        return GestureDetector(
-                          onTap: () =>
-                              setSheetState(() => selectedMethod = opt.$1),
-                          child: Container(
-                            margin: EdgeInsets.only(bottom: ctx.getRSize(8)),
-                            padding: EdgeInsets.all(ctx.getRSize(14)),
-                            decoration: BoxDecoration(
-                              color: isSel
-                                  ? accent.withValues(alpha: 0.08)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: isSel ? accent : onSurface.withAlpha(40),
-                                width: isSel ? 1.5 : 1,
+                      SizedBox(height: ctx.getRSize(16)),
+                      AppInput(
+                        key: CustomersKeys.refundAmount,
+                        controller: amountCtrl,
+                        labelText: customerAmountLabel('Amount to refund'),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [CurrencyInputFormatter()],
+                        validator: (v) {
+                          final n = parseCurrency(v ?? '');
+                          if (n <= 0) return 'Enter a valid amount';
+                          if ((n * 100).round() > availableKobo) {
+                            return 'Max ${formatCurrency(availableKobo / 100)}';
+                          }
+                          return null;
+                        },
+                      ),
+                      if (!inDebt) ...[
+                        SizedBox(height: ctx.getRSize(16)),
+                        Text(
+                          'Refund method',
+                          style: ctx
+                              .semiBoldStyle(13)
+                              .copyWith(
+                                color:
+                                    Theme.of(ctx).textTheme.bodySmall?.color ??
+                                    onSurface,
                               ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  isSel
-                                      ? AppIcons.radioButtonChecked
-                                      : AppIcons.radioButtonUnchecked,
-                                  size: ctx.getRSize(20),
-                                  color: isSel
-                                      ? accent
-                                      : onSurface.withAlpha(128),
-                                ),
-                                SizedBox(width: ctx.getRSize(12)),
-                                Text(
-                                  opt.$2,
-                                  style: TextStyle(
-                                    fontSize: ctx.getRFontSize(14),
-                                    fontWeight: FontWeight.w600,
-                                    color: onSurface,
+                        ),
+                        SizedBox(height: ctx.getRSize(8)),
+                        for (final pair in const [
+                          [
+                            ('cash', 'Cash', AppIcons.cash),
+                            ('transfer', 'Bank Transfer', AppIcons.bank),
+                          ],
+                          [
+                            ('pos', 'POS card', AppIcons.creditCard),
+                            ('other', 'Other', AppIcons.moreVertical),
+                          ],
+                        ]) ...[
+                          Row(
+                            children: [
+                              for (final (i, opt) in pair.indexed) ...[
+                                if (i > 0) SizedBox(width: ctx.getRSize(10)),
+                                Expanded(
+                                  child: CustomerOptionCard(
+                                    key: CustomersKeys.refundMethod(opt.$1),
+                                    label: opt.$2,
+                                    icon: opt.$3,
+                                    isSelected: selectedMethod == opt.$1,
+                                    onTap: () => setSheetState(
+                                      () => selectedMethod = opt.$1,
+                                    ),
                                   ),
                                 ),
                               ],
+                            ],
+                          ),
+                          SizedBox(height: ctx.getRSize(10)),
+                        ],
+                      ] else ...[
+                        SizedBox(height: ctx.getRSize(12)),
+                        Container(
+                          padding: EdgeInsets.all(ctx.getRSize(12)),
+                          decoration: BoxDecoration(
+                            color: _fixed.infoTint,
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.borderRadiusL,
                             ),
                           ),
-                        );
-                      }),
-                    ] else ...[
-                      SizedBox(height: ctx.getRSize(12)),
-                      Container(
-                        padding: EdgeInsets.all(ctx.getRSize(12)),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              AppIcons.infoCircle,
-                              size: ctx.getRSize(14),
-                              color: accent,
-                            ),
-                            SizedBox(width: ctx.getRSize(10)),
-                            Expanded(
-                              child: Text(
-                                'This customer is in debt, so the deposit is '
-                                'added to their credit balance to reduce what they owe — '
-                                'no cash is paid out.',
-                                style: TextStyle(
-                                  fontSize: ctx.getRFontSize(12),
-                                  color: onSurface.withAlpha(200),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AppIcon(
+                                AppIcons.infoCircle,
+                                size: ctx.getRSize(16),
+                                color: _fixed.info,
+                              ),
+                              SizedBox(width: ctx.getRSize(10)),
+                              Expanded(
+                                child: Text(
+                                  'This customer is in debt, so the deposit is '
+                                  'added to their credit balance to reduce what they owe — '
+                                  'no cash is paid out.',
+                                  style: ctx
+                                      .regularStyle(12)
+                                      .copyWith(color: onSurface),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                      ],
+                      SizedBox(height: ctx.getRSize(16)),
+                      AppInput(
+                        key: CustomersKeys.refundNote,
+                        controller: noteCtrl,
+                        labelText: 'Note (optional)',
+                        keyboardType: TextInputType.text,
+                      ),
+                      SizedBox(height: ctx.getRSize(24)),
+                      AppButton(
+                        key: CustomersKeys.refundSubmit,
+                        text: inDebt
+                            ? 'Refund to Credit Balance'
+                            : 'Refund Cash',
+                        icon: AppIcons.transfer,
+                        onPressed: () async {
+                          if (!formKey.currentState!.validate()) return;
+                          final amount = parseCurrency(amountCtrl.text);
+                          final amountKobo = (amount * 100).round();
+                          final note = noteCtrl.text.trim();
+                          final method = selectedMethod;
+                          final messenger = ScaffoldMessenger.of(context);
+                          // Defense-in-depth write-boundary re-check (§10.2.1):
+                          // the button is render-gated on
+                          // `customers.wallet.withdraw`, but re-check the effective
+                          // permission before moving money so a revoked override is
+                          // honored at the action too.
+                          if (!ref
+                              .read(currentUserPermissionsProvider)
+                              .contains('customers.wallet.withdraw')) {
+                            Navigator.pop(ctx);
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'You don\'t have permission to do that.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+                          // The Sales card's Refunds figure is store-filtered, so
+                          // an unstamped cash-out vanishes under a locked store
+                          // (#194). Same store resolution as Add Credit above.
+                          final storeId = ref.read(activeWriteStoreProvider).id;
+                          Navigator.pop(ctx);
+                          try {
+                            final refundedKobo = await ref
+                                .read(customerServiceProvider)
+                                .refundCashFromWallet(
+                                  customerId: id,
+                                  amountKobo: amountKobo,
+                                  method: method,
+                                  staffId: staffId,
+                                  storeId: storeId,
+                                  note: note.isEmpty ? null : note,
+                                );
+                            messenger.showSnackBar(
+                              refundedKobo <= 0
+                                  ? const SnackBar(
+                                      content: Text('Nothing to refund'),
+                                    )
+                                  : SnackBar(
+                                      content: Text(
+                                        '${formatCurrency(refundedKobo / 100)} refunded'
+                                        '${inDebt ? ' to credit balance' : ''}',
+                                      ),
+                                      backgroundColor: _fixed.green,
+                                    ),
+                            );
+                          } catch (_) {
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Could not process refund'),
+                              ),
+                            );
+                          }
+                        },
                       ),
                     ],
-                    SizedBox(height: ctx.getRSize(16)),
-                    _SheetField(
-                      controller: noteCtrl,
-                      label: 'Note (optional)',
-                      keyboard: TextInputType.text,
-                    ),
-                    SizedBox(height: ctx.getRSize(24)),
-                    AmberButton(
-                      label: inDebt ? 'Refund to Credit Balance' : 'Refund Cash',
-                      icon: AppIcons.transfer,
-                      onPressed: () async {
-                        if (!formKey.currentState!.validate()) return;
-                        final amount = parseCurrency(amountCtrl.text);
-                        final amountKobo = (amount * 100).round();
-                        final note = noteCtrl.text.trim();
-                        final method = selectedMethod;
-                        final messenger = ScaffoldMessenger.of(context);
-                        // Defense-in-depth write-boundary re-check (§10.2.1):
-                        // the button is render-gated on
-                        // `customers.wallet.withdraw`, but re-check the effective
-                        // permission before moving money so a revoked override is
-                        // honored at the action too.
-                        if (!ref
-                            .read(currentUserPermissionsProvider)
-                            .contains('customers.wallet.withdraw')) {
-                          Navigator.pop(ctx);
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'You don\'t have permission to do that.',
-                              ),
-                            ),
-                          );
-                          return;
-                        }
-                        // The Sales card's Refunds figure is store-filtered, so
-                        // an unstamped cash-out vanishes under a locked store
-                        // (#194). Same store resolution as Add Credit above.
-                        final storeId = ref.read(activeWriteStoreProvider).id;
-                        Navigator.pop(ctx);
-                        try {
-                          final refundedKobo = await ref
-                              .read(customerServiceProvider)
-                              .refundCashFromWallet(
-                                customerId: id,
-                                amountKobo: amountKobo,
-                                method: method,
-                                staffId: staffId,
-                                storeId: storeId,
-                                note: note.isEmpty ? null : note,
-                              );
-                          messenger.showSnackBar(
-                            refundedKobo <= 0
-                                ? const SnackBar(
-                                    content: Text('Nothing to refund'),
-                                  )
-                                : SnackBar(
-                                    content: Text(
-                                      '${formatCurrency(refundedKobo / 100)} refunded'
-                                      '${inDebt ? ' to credit balance' : ''}',
-                                    ),
-                                    backgroundColor: success,
-                                  ),
-                          );
-                        } catch (_) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Could not process refund'),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                    SizedBox(
-                      height: ctx.deviceBottomPadding + ctx.getRSize(16),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             );
           },
         ),
@@ -603,6 +574,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     Color onSurface, {
     bool bold = false,
   }) {
+    final muted = Theme.of(ctx).textTheme.bodySmall?.color ?? onSurface;
     return Padding(
       padding: EdgeInsets.symmetric(vertical: ctx.getRSize(2)),
       child: Row(
@@ -610,17 +582,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: ctx.getRFontSize(13),
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-              color: bold ? onSurface : onSurface.withAlpha(178),
+            style: (bold ? ctx.boldStyle(13) : ctx.mediumStyle(13)).copyWith(
+              color: bold ? onSurface : muted,
             ),
           ),
           Text(
             formatCurrency(kobo / 100),
-            style: TextStyle(
-              fontSize: ctx.getRFontSize(13),
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+            style: (bold ? ctx.boldStyle(13) : ctx.semiBoldStyle(13)).copyWith(
               color: onSurface,
             ),
           ),
@@ -635,85 +603,71 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     );
     final formKey = GlobalKey<FormState>();
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _SheetContainer(
-        scrollController: ScrollController(),
-        child: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _SheetHandle(),
-              Text(
-                'Set Debt Limit',
-                style: TextStyle(
-                  fontSize: ctx.getRFontSize(20),
-                  fontWeight: FontWeight.w800,
-                  color: Theme.of(ctx).colorScheme.onSurface,
+    showCustomerSheet<void>(
+      context,
+      (ctx) => CustomerSheetFrame(
+        title: 'Set Debt Limit',
+        subtitle: 'Maximum credit allowed for $_name',
+        children: [
+          Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppInput(
+                  key: CustomersKeys.limitField,
+                  controller: limitCtrl,
+                  labelText: customerAmountLabel('Limit Amount'),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [CurrencyInputFormatter()],
+                  validator: (v) {
+                    final n = parseCurrency(v ?? '');
+                    if (n < 0) {
+                      return 'Enter a valid amount (0 to remove limit)';
+                    }
+                    return null;
+                  },
                 ),
-              ),
-              SizedBox(height: ctx.getRSize(4)),
-              Text(
-                'Maximum credit allowed for $_name',
-                style: TextStyle(
-                  fontSize: ctx.getRFontSize(13),
-                  color: Theme.of(ctx).colorScheme.onSurface.withAlpha(128),
-                ),
-              ),
-              SizedBox(height: ctx.getRSize(24)),
-              _SheetField(
-                controller: limitCtrl,
-                label: 'Limit Amount (₦)',
-                keyboard: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [CurrencyInputFormatter()],
-                validator: (v) {
-                  final n = parseCurrency(v ?? '');
-                  if (n < 0) {
-                    return 'Enter a valid amount (0 to remove limit)';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: ctx.getRSize(24)),
-              AmberButton(
-                label: 'Save Limit',
-                icon: AppIcons.check,
-                onPressed: () async {
-                  if (!formKey.currentState!.validate()) return;
-                  final amount = parseCurrency(limitCtrl.text);
-                  final id = _customerId;
-                  if (id == null) return;
-                  final messenger = ScaffoldMessenger.of(context);
-                  Navigator.pop(ctx);
-                  try {
-                    await ref
-                        .read(customerServiceProvider)
-                        .updateWalletLimit(id, amount);
-                    messenger.showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Debt limit set to ${formatCurrency(amount)}',
+                SizedBox(height: ctx.getRSize(24)),
+                AppButton(
+                  key: CustomersKeys.limitSubmit,
+                  text: 'Save Limit',
+                  icon: AppIcons.check,
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    final amount = parseCurrency(limitCtrl.text);
+                    final id = _customerId;
+                    if (id == null) return;
+                    final messenger = ScaffoldMessenger.of(context);
+                    Navigator.pop(ctx);
+                    try {
+                      await ref
+                          .read(customerServiceProvider)
+                          .updateWalletLimit(id, amount);
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Debt limit set to ${formatCurrency(amount)}',
+                          ),
+                          backgroundColor: _fixed.green,
                         ),
-                        backgroundColor: success,
-                      ),
-                    );
-                  } catch (_) {
-                    if (!mounted) return;
-                    AppNotification.showError(
-                      context,
-                      'Could not update the debt limit. Please try again.',
-                    );
-                  }
-                },
-              ),
-              SizedBox(height: ctx.deviceBottomPadding + ctx.getRSize(16)),
-            ],
+                      );
+                    } catch (_) {
+                      if (!mounted) return;
+                      AppNotification.showError(
+                        context,
+                        'Could not update the debt limit. Please try again.',
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -723,11 +677,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   Future<void> _confirmAndDelete() async {
     final id = _customerId;
     if (id == null) return;
-    final theme = Theme.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: theme.colorScheme.surface,
         title: const Text('Delete customer?'),
         content: Text(
           '$_name will be removed from your customer list. '
@@ -740,7 +692,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: danger)),
+            child: Text('Delete', style: customerDangerActionStyle(ctx)),
           ),
         ],
       ),
@@ -753,7 +705,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       if (!mounted) return;
       Navigator.pop(context); // back to the customers list
       messenger.showSnackBar(
-        SnackBar(content: Text('$name deleted'), backgroundColor: success),
+        SnackBar(content: Text('$name deleted'), backgroundColor: _fixed.green),
       );
     } catch (_) {
       if (!mounted) return;
@@ -780,12 +732,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       );
       return;
     }
-    final theme = Theme.of(context);
     final reasonCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: theme.colorScheme.surface,
+        scrollable: true,
         title: const Text('Void this credit top-up?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -797,12 +748,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
               'This cannot be undone.',
             ),
             SizedBox(height: ctx.getRSize(12)),
-            TextField(
-              controller: reasonCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Reason (optional)',
-              ),
-            ),
+            AppInput(controller: reasonCtrl, labelText: 'Reason (optional)'),
           ],
         ),
         actions: [
@@ -812,7 +758,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Void', style: TextStyle(color: danger)),
+            child: Text('Void', style: customerDangerActionStyle(ctx)),
           ),
         ],
       ),
@@ -834,7 +780,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
           content: Text(
             voided ? 'Top-up voided' : 'This top-up can no longer be voided',
           ),
-          backgroundColor: voided ? success : danger,
+          backgroundColor: voided ? _fixed.green : _fixed.danger,
         ),
       );
     } catch (_) {
@@ -908,8 +854,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
 
     DateTime? reprintDate;
     DateTime? reshareDate;
-    final surfaceCol = Theme.of(context).colorScheme.surface;
-    final borderCol = Theme.of(context).dividerColor;
     // #200 / US 33 — rebuild the ORIGINAL receipt's money block from the
     // recorded order so this reprint prints the same Subtotal / Discount /
     // Total. `totalKobo` returns `order.totalAmountKobo` by construction.
@@ -923,28 +867,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxWidth: kCustomerSheetMaxWidth),
       builder: (modalCtx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
-            return Container(
-              height: ctx.getRHeight(0.85),
-              decoration: BoxDecoration(
-                color: surfaceCol,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
-                ),
-              ),
+            return SizedBox(
+              height: ctx.sheetMaxHeight(0.85),
               child: Column(
                 children: [
-                  Container(
-                    margin: EdgeInsets.symmetric(vertical: ctx.getRSize(12)),
-                    width: ctx.getRSize(40),
-                    height: ctx.getRSize(5),
-                    decoration: BoxDecoration(
-                      color: borderCol,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: ctx.getRSize(12)),
+                    child: const CustomerSheetHandle(),
                   ),
                   Expanded(
                     child: SingleChildScrollView(
@@ -1115,9 +1048,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
           context: ctx,
           isScrollControlled: true,
           backgroundColor: Theme.of(ctx).colorScheme.surface,
-          constraints: BoxConstraints(
-            maxHeight: ctx.sheetMaxHeight(0.5),
-          ),
+          constraints: BoxConstraints(maxHeight: ctx.sheetMaxHeight(0.5)),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
           ),
@@ -1190,6 +1121,41 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   bool _showCratesTab() =>
       businessTracksCrates(ref.watch(currentBusinessProvider));
 
+  /// Back (48dp), the title, then — behind the same gate and walk-in guard as
+  /// before — Delete, then the live bell. Solid bar: nothing changes on scroll.
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    return CustomerTopBar(
+      key: CustomersKeys.detailTopBar,
+      height: customerTopBarHeight(context),
+      header: ScreenHeader(
+        icon: AppIcons.user,
+        title: 'Customer Profile',
+        subtitle: 'Account Details',
+        leading: CustomerBarAction(
+          key: CustomersKeys.detailBack,
+          icon: AppIcons.arrowBackIosNew,
+          tooltip: 'Back',
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          // §18.4 — soft-delete, CEO/Manager only (customers.delete). Never
+          // for the synthetic walk-in (its id is non-null Customer.walkInId).
+          if (_customerId != null &&
+              _customerId != Customer.walkInId &&
+              Gates.deleteCustomer.allows(ref))
+            CustomerBarAction(
+              key: CustomersKeys.detailDelete,
+              icon: AppIcons.delete,
+              tooltip: 'Delete customer',
+              color: _fixed.danger,
+              onPressed: _confirmAndDelete,
+            ),
+          const CustomerLiveBell(),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(
@@ -1203,94 +1169,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: _isScrolled
-              ? theme.colorScheme.surface.withValues(alpha: 0.8)
-              : Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(
-              AppIcons.arrowBackIosNew,
-              size: context.getRSize(20),
-              color: theme.colorScheme.onSurface,
-            ),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(context.getRSize(8)),
-                decoration: AppDecorations.primaryGradient(context, radius: 12),
-                child: Icon(
-                  AppIcons.user,
-                  color: Colors.white,
-                  size: context.getRSize(16),
-                ),
-              ),
-              SizedBox(width: context.getRSize(12)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        'Customer Profile',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(18),
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onSurface,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      'Account Details',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(11),
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          centerTitle: false,
-          actions: [
-            // §18.4 — soft-delete, CEO/Manager only (customers.delete). Never
-            // for the synthetic walk-in (its id is non-null Customer.walkInId).
-            if (_customerId != null &&
-                _customerId != Customer.walkInId &&
-                Gates.deleteCustomer.allows(ref))
-              IconButton(
-                icon: Icon(
-                  AppIcons.delete,
-                  size: context.getRSize(18),
-                  color: danger,
-                ),
-                tooltip: 'Delete customer',
-                onPressed: _confirmAndDelete,
-              ),
-            const NotificationBell(),
-            SizedBox(width: context.getRSize(8)),
-          ],
-        ),
-        body: NotificationListener<ScrollUpdateNotification>(
-          onNotification: (notif) {
-            if (notif.metrics.axis == Axis.vertical) {
-              final scrolled = notif.metrics.pixels > 10;
-              if (scrolled != _isScrolled) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) setState(() => _isScrolled = scrolled);
-                });
-              }
-            }
-            return false;
-          },
+        appBar: _buildAppBar(context),
+        // Sideways, the system bar sits on the right: keep the cards out of
+        // it (the lists add the bottom inset themselves).
+        body: SafeArea(
+          top: false,
+          bottom: false,
           child: AppRefreshWrapper(
             onRefresh: () => _loadData(),
             child: _contentReady
@@ -1306,9 +1190,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     return TabbedSliverScaffold(
       controller: _tabController,
       tabBarExtent: max(kMinInteractiveDimension, context.getRSize(60)),
+      // The hairline under the tab bar is reserved on top of the extent.
+      tabBarChromeExtent: 1,
       headerSlivers: [
-        SliverToBoxAdapter(child: _buildHeader(theme)),
-        SliverToBoxAdapter(child: _buildCreditCard(theme)),
+        CustomerHeaderSliver(
+          profile: _buildHeader(theme),
+          credits: _buildCreditCard(theme),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 8)),
       ],
       tabBar: _buildTabBar(theme, showCrates),
       tabViews: [
@@ -1332,444 +1221,133 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   // ── Header ──────────────────────────────────────────────────────────────────
 
   Widget _buildHeader(ThemeData theme) {
-    final isWholesaler = _groupName == 'wholesaler';
-    return _GlassyCard(
-      margin: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(24),
-        context.getRSize(20),
-        context.getRSize(16),
-      ),
-      padding: EdgeInsets.all(context.getRSize(16)),
-      radius: 20,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: context.getRSize(60),
-            height: context.getRSize(60),
-            decoration: AppDecorations.primaryGradient(context, radius: 30),
-            child: Center(
-              child: Text(
-                _initials(_name),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(22),
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: context.getRSize(16)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _name,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(18),
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    if (_customerId != null &&
-                        _customerId != Customer.walkInId &&
-                        Gates.editCustomer.allows(ref)) ...[
-                      SizedBox(width: context.getRSize(6)),
-                      InkWell(
-                        onTap: _openEditSheet,
-                        borderRadius: BorderRadius.circular(20),
-                        child: Padding(
-                          padding: EdgeInsets.all(context.getRSize(4)),
-                          child: Icon(
-                            AppIcons.edit,
-                            size: context.getRSize(15),
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                SizedBox(height: context.getRSize(4)),
-                StatusBadge(
-                  label: isWholesaler ? 'Wholesaler' : 'Retailer',
-                  variant: isWholesaler ? BadgeVariant.green : BadgeVariant.amber,
-                ),
-                if (_phone.isNotEmpty) ...[
-                  SizedBox(height: context.getRSize(8)),
-                  _InfoRow(
-                    icon: AppIcons.phone,
-                    text: _phone,
-                    theme: theme,
-                  ),
-                ],
-                if (_address.isNotEmpty && _address != 'N/A') ...[
-                  SizedBox(height: context.getRSize(4)),
-                  _InfoRow(
-                    icon: AppIcons.location,
-                    text: _address,
-                    theme: theme,
-                  ),
-                ],
-                SizedBox(height: context.getRSize(4)),
-                _InfoRow(
-                  icon: AppIcons.calendarCheck,
-                  text: 'Since ${DateFormat('MMM yyyy').format(_joinedAt)}',
-                  theme: theme,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return CustomerProfileCard(
+      initials: _initials(_name),
+      name: _name,
+      wholesaler: _groupName == 'wholesaler',
+      phone: _phone,
+      address: _address,
+      since: 'Since ${DateFormat('MMM yyyy').format(_joinedAt)}',
+      onEdit:
+          _customerId != null &&
+              _customerId != Customer.walkInId &&
+              Gates.editCustomer.allows(ref)
+          ? _openEditSheet
+          : null,
     );
   }
 
   // ── Credit Balance Card ─────────────────────────────────────────────────────
 
+  Widget _buildPeriodPicker() {
+    return SizedBox(
+      width: context.getRSize(110),
+      child: AppDropdown<String>(
+        value: _effectivePeriod.startsWith('Custom:')
+            ? 'Custom'
+            : _effectivePeriod,
+        isExpanded: false,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(8),
+          vertical: context.getRSize(6),
+        ),
+        items: _periodOptions
+            .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+            .toList(),
+        onChanged: (v) async {
+          if (v == 'Custom') {
+            final range = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
+              initialDateRange: _customRange,
+              builder: (context, child) =>
+                  Theme(data: Theme.of(context), child: child!),
+            );
+            if (range != null) {
+              setState(() {
+                _customRange = range;
+                _selectedPeriod =
+                    'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+              });
+            }
+          } else if (v != null) {
+            setState(() {
+              _selectedPeriod = v;
+              _customRange = null;
+            });
+          }
+        },
+      ),
+    );
+  }
+
   Widget _buildCreditCard(ThemeData theme) {
     final balance = _creditBalance / 100.0;
     final limit = _limitKobo / 100.0;
-
-    return _GlassyCard(
-      margin: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-      padding: EdgeInsets.all(context.getRSize(18)),
-      radius: 20,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          AppIcons.creditBalance,
-                          size: context.getRSize(14),
-                          color: theme.colorScheme.primary,
-                        ),
-                        SizedBox(width: context.getRSize(8)),
-                        Flexible(
-                          child: Text(
-                            'Credits Balance',
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(12),
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface.withAlpha(128),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: context.getRSize(6)),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        formatCurrency(balance),
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(28),
-                          fontWeight: FontWeight.w900,
-                          color: balance >= 0 ? theme.colorScheme.onSurface : danger,
-                          letterSpacing: -1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Period:',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(10),
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withAlpha(128),
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(4)),
-                  SizedBox(
-                    width: context.getRSize(110),
-                    child: AppDropdown<String>(
-                      value: _effectivePeriod.startsWith('Custom:') ? 'Custom' : _effectivePeriod,
-                      isExpanded: false,
-                      contentPadding: EdgeInsets.symmetric(horizontal: context.getRSize(8), vertical: context.getRSize(6)),
-                      items: _periodOptions
-                          .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                          .toList(),
-                      onChanged: (v) async {
-                        if (v == 'Custom') {
-                          final range = await showDateRangePicker(
-                            context: context,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
-                            initialDateRange: _customRange,
-                            builder: (context, child) => Theme(
-                              data: Theme.of(context),
-                              child: child!,
-                            ),
-                          );
-                          if (range != null) {
-                            setState(() {
-                              _customRange = range;
-                              _selectedPeriod = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
-                            });
-                          }
-                        } else if (v != null) {
-                          setState(() {
-                            _selectedPeriod = v;
-                            _customRange = null;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          SizedBox(height: context.getRSize(16)),
-          // Grid-like layout for Secondary Stats (Debt Limit & Crate Deposits)
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(context.getRSize(12)),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.dividerColor),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            AppIcons.creditCard,
-                            size: context.getRSize(12),
-                            color: theme.colorScheme.onSurface.withAlpha(102),
-                          ),
-                          SizedBox(width: context.getRSize(6)),
-                          Expanded(
-                            child: Text(
-                              'Debt Limit',
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(11),
-                                color: theme.colorScheme.onSurface.withAlpha(128),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: context.getRSize(4)),
-                      Text(
-                        limit > 0 ? formatCurrency(limit) : 'No limit',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(14),
-                          fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (_depositsHeld != 0) ...[
-                SizedBox(width: context.getRSize(12)),
-                Expanded(
-                  child: Container(
-                    padding: EdgeInsets.all(context.getRSize(12)),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              AppIcons.box,
-                              size: context.getRSize(12),
-                              color: theme.colorScheme.primary.withAlpha(178),
-                            ),
-                            SizedBox(width: context.getRSize(6)),
-                            Expanded(
-                              child: Text(
-                                'Deposit Held',
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(11),
-                                  color: theme.colorScheme.primary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: context.getRSize(4)),
-                        Text(
-                          formatCurrency(_depositsHeld / 100.0),
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.w700,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          SizedBox(height: context.getRSize(16)),
-          // Buttons
-          Builder(
-            builder: (context) {
-              final canAddFunds = Gates.addCustomerCredit.allows(ref);
-              final canSetLimit = Gates.setDebtLimit.allows(ref);
-              final canRefund = Gates.refundCustomerWallet.allows(ref);
-              return Column(
-                children: [
-                  Row(
-                    children: [
-                      if (canAddFunds)
-                        Expanded(
-                          child: AppButton(
-                            text: 'Add Credit',
-                            icon: AppIcons.add,
-                            size: AppButtonSize.small,
-                            onPressed: _showAddFundsSheet,
-                          ),
-                        ),
-                      if (canAddFunds && canSetLimit)
-                        SizedBox(width: context.getRSize(10)),
-                      if (canSetLimit)
-                        Expanded(
-                          child: AppButton(
-                            text: 'Set Limit',
-                            icon: AppIcons.edit,
-                            variant: AppButtonVariant.outline,
-                            size: AppButtonSize.small,
-                            onPressed: _showSetLimitSheet,
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (canRefund) ...[
-                    SizedBox(height: context.getRSize(10)),
-                    AppButton(
-                      text: 'Refund Cash',
-                      icon: AppIcons.transfer,
-                      variant: AppButtonVariant.outline,
-                      size: AppButtonSize.small,
-                      onPressed: _showRefundCashSheet,
-                    ),
-                  ],
-                ],
-              );
-            },
-          ),
-        ],
-      ),
+    final canAddFunds = Gates.addCustomerCredit.allows(ref);
+    final canSetLimit = Gates.setDebtLimit.allows(ref);
+    final canRefund = Gates.refundCustomerWallet.allows(ref);
+    return CustomerCreditsCard(
+      balanceLabel: formatCurrency(balance),
+      owes: balance < 0,
+      periodPicker: _buildPeriodPicker(),
+      limitLabel: limit > 0 ? formatCurrency(limit) : 'No limit',
+      depositLabel: _depositsHeld != 0
+          ? formatCurrency(_depositsHeld / 100.0)
+          : null,
+      onAddCredit: canAddFunds ? _showAddFundsSheet : null,
+      onSetLimit: canSetLimit ? _showSetLimitSheet : null,
+      onRefund: canRefund ? _showRefundCashSheet : null,
     );
   }
 
   // ── Tab Bar ─────────────────────────────────────────────────────────────────
 
   Widget _buildTabBar(ThemeData theme, bool showCrates) {
-    return Container(
-      color: Colors.transparent,
-      padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-      child: TabBar(
-        controller: _tabController,
-        labelColor: theme.colorScheme.primary,
-        unselectedLabelColor: theme.colorScheme.onSurface.withAlpha(115),
-        indicatorColor: theme.colorScheme.primary,
-        dividerColor: Colors.transparent,
-        indicatorSize: TabBarIndicatorSize.tab,
-        labelStyle: TextStyle(
-          fontSize: context.getRFontSize(13),
-          fontWeight: FontWeight.w700,
-        ),
-        tabs: [
-          const Tab(
-            icon: Icon(AppIcons.history, size: 16),
-            text: 'Credits',
-          ),
-          const Tab(
-            icon: Icon(AppIcons.document, size: 16),
-            text: 'Orders',
-          ),
-          if (showCrates)
-            const Tab(
-              icon: Icon(AppIcons.box, size: 16),
-              text: 'Crates',
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
+    return LayoutBuilder(
+      builder: (context, c) {
+        final g = customerDetailGutter(context, c.maxWidth);
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border(
+              bottom: BorderSide(color: theme.dividerColor, width: 1),
             ),
-        ],
-      ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: g),
+            child: TabBar(
+              controller: _tabController,
+              labelColor: theme.colorScheme.primary,
+              unselectedLabelColor: muted,
+              indicatorColor: theme.colorScheme.primary,
+              dividerColor: Colors.transparent,
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelStyle: context.boldStyle(13),
+              unselectedLabelStyle: context.semiBoldStyle(13),
+              tabs: [
+                const Tab(
+                  icon: Icon(AppIcons.history, size: 16),
+                  text: 'Credits',
+                ),
+                const Tab(
+                  icon: Icon(AppIcons.document, size: 16),
+                  text: 'Orders',
+                ),
+                if (showCrates)
+                  const Tab(icon: Icon(AppIcons.box, size: 16), text: 'Crates'),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   // ── Wallet Summary ──────────────────────────────────────────────────────────
-
-  Widget _buildSummaryTile(
-    ThemeData theme,
-    String label,
-    double amount,
-    Color color,
-  ) {
-    return _GlassyCard(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(14),
-        vertical: context.getRSize(10),
-      ),
-      radius: 12,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(11),
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withAlpha(128),
-            ),
-          ),
-          SizedBox(height: context.getRSize(4)),
-          Text(
-            formatCurrency(amount),
-            style: TextStyle(
-              fontSize: context.getRFontSize(15),
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildCreditSummaryRow(ThemeData theme) {
     int totalInKobo = 0, totalOutKobo = 0;
@@ -1783,34 +1361,24 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         totalOutKobo += txn.amountKobo;
       }
     }
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(12),
-        context.getRSize(20),
-        0,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildSummaryTile(
-              theme,
-              'Total In',
-              totalInKobo / 100.0,
-              success,
-            ),
+    return Row(
+      children: [
+        Expanded(
+          child: CustomerFigureCard(
+            label: 'Total In',
+            value: formatCurrency(totalInKobo / 100.0),
+            color: _fixed.green,
           ),
-          SizedBox(width: context.getRSize(10)),
-          Expanded(
-            child: _buildSummaryTile(
-              theme,
-              'Total Out',
-              totalOutKobo / 100.0,
-              danger,
-            ),
+        ),
+        SizedBox(width: context.getRSize(10)),
+        Expanded(
+          child: CustomerFigureCard(
+            label: 'Total Out',
+            value: formatCurrency(totalOutKobo / 100.0),
+            color: _fixed.danger,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1819,12 +1387,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   List<Widget> _creditHistoryTabSlivers(ThemeData theme) {
     if (_creditHistory.isEmpty) {
       return [
-        SliverFillRemaining(
+        const SliverFillRemaining(
           hasScrollBody: false,
-          child: _EmptyState(
+          child: CustomerDetailEmpty(
             icon: AppIcons.waiting,
             message: 'No ledger entries yet',
-            theme: theme,
           ),
         ),
       ];
@@ -1836,45 +1403,33 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     // §18.4: Total In / Total Out are gated by `customers.wallet.totals.view`
     if (Gates.seeWalletTotals.allows(ref)) {
       slivers.add(
-        SliverToBoxAdapter(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildCreditSummaryRow(theme),
-              SizedBox(height: context.getRSize(4)),
-            ],
-          ),
+        customerDetailSliver(
+          SliverToBoxAdapter(child: _buildCreditSummaryRow(theme)),
+          top: context.getRSize(12),
         ),
       );
     }
 
     if (filtered.isEmpty) {
       slivers.add(
-        SliverFillRemaining(
+        const SliverFillRemaining(
           hasScrollBody: false,
-          child: _EmptyState(
+          child: CustomerDetailEmpty(
             icon: AppIcons.clearFilter,
             message: 'No transactions in this period',
-            theme: theme,
           ),
         ),
       );
     } else {
       slivers.add(
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(
-            context.getRSize(20),
-            context.getRSize(12),
-            context.getRSize(20),
-            context.getRSize(20) + context.deviceBottomPadding,
-          ),
-          sliver: SliverList.builder(
+        customerDetailSliver(
+          SliverList.builder(
             itemCount: filtered.length,
             itemBuilder: (ctx, i) {
               final txn = filtered[i];
               final isCredit = txn.type == 'credit';
               final amount = txn.amountKobo / 100.0;
-              final color = isCredit ? success : danger;
+              final color = isCredit ? _fixed.green : _fixed.danger;
               // #173 — a live cash/transfer top-up can be voided by anyone
               // who can withdraw from the wallet (the sanctioned fix for a
               // mistyped Add Credit). Hide-don't-block: no affordance
@@ -1888,84 +1443,46 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
               return Padding(
                 key: ValueKey('$kCustomerCreditRowKeyPrefix${txn.id}'),
                 padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
-                child: _GlassyCard(
-                  padding: EdgeInsets.all(ctx.getRSize(14)),
-                  radius: 12,
-                  child: Row(
+                child: CustomerDetailRow(
+                  leading: IconTile(
+                    icon: isCredit ? AppIcons.arrowDown : AppIcons.arrowUp,
+                    tone: isCredit ? IconTileTone.green : IconTileTone.danger,
+                    size: 40,
+                  ),
+                  title: _friendlyRefType(txn.referenceType),
+                  subtitle: DateFormat(
+                    'd MMM yyyy, h:mm a',
+                  ).format(txn.createdAt),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: ctx.getRSize(38),
-                        height: ctx.getRSize(38),
-                        decoration: BoxDecoration(
-                          color: color.withAlpha(30),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isCredit
-                              ? AppIcons.arrowDown
-                              : AppIcons.arrowUp,
-                          color: color,
-                          size: ctx.getRSize(16),
-                        ),
-                      ),
-                      SizedBox(width: ctx.getRSize(12)),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _friendlyRefType(txn.referenceType),
-                              style: TextStyle(
-                                fontSize: ctx.getRFontSize(14),
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            ),
-                            Text(
-                              DateFormat(
-                                'd MMM yyyy, h:mm a',
-                              ).format(txn.createdAt),
-                              style: TextStyle(
-                                fontSize: ctx.getRFontSize(11),
-                                color: theme.colorScheme.onSurface
-                                    .withAlpha(115),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                       Text(
                         '${isCredit ? '+' : '-'}${formatCurrency(amount)}',
-                        style: TextStyle(
-                          fontSize: ctx.getRFontSize(15),
-                          fontWeight: FontWeight.w800,
-                          color: color,
-                        ),
+                        style: ctx.extraBoldStyle(15).copyWith(color: color),
                       ),
-                      if (isVoidableTopup) ...[
-                        SizedBox(width: ctx.getRSize(6)),
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(
-                            minWidth: ctx.getRSize(32),
-                            minHeight: ctx.getRSize(32),
+                      if (isVoidableTopup)
+                        SizedBox.square(
+                          dimension: kMinInteractiveDimension,
+                          child: IconButton(
+                            key: CustomersKeys.voidTopup(txn.id),
+                            padding: EdgeInsets.zero,
+                            tooltip: 'Void top-up',
+                            icon: AppIcon(
+                              AppIcons.undo,
+                              size: ctx.getRSize(20),
+                              color: _fixed.danger,
+                            ),
+                            onPressed: () => _confirmVoidTopup(txn),
                           ),
-                          tooltip: 'Void top-up',
-                          icon: Icon(
-                            AppIcons.undo,
-                            size: ctx.getRSize(14),
-                            color: danger,
-                          ),
-                          onPressed: () => _confirmVoidTopup(txn),
                         ),
-                      ],
                     ],
                   ),
                 ),
               );
             },
           ),
+          top: context.getRSize(12),
+          bottom: context.getRSize(20) + context.deviceBottomPadding,
         ),
       );
     }
@@ -1978,104 +1495,56 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   List<Widget> _ordersTabSlivers(ThemeData theme) {
     if (_orders.isEmpty) {
       return [
-        SliverFillRemaining(
+        const SliverFillRemaining(
           hasScrollBody: false,
-          child: _EmptyState(
+          child: CustomerDetailEmpty(
             icon: AppIcons.receipt,
             message: 'No orders placed yet',
-            theme: theme,
           ),
         ),
       ];
     }
     return [
-      SliverPadding(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
-          context.getRSize(12),
-          context.getRSize(20),
-          context.getRSize(20) + context.deviceBottomPadding,
-        ),
-        sliver: SliverList.builder(
+      customerDetailSliver(
+        SliverList.builder(
           itemCount: _orders.length,
           itemBuilder: (ctx, i) {
             final order = _orders[i];
             final total = order.totalAmountKobo / 100.0;
             return Padding(
               padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
-              child: InkWell(
+              child: CustomerDetailRow(
+                key: CustomersKeys.orderRow(order.id),
+                leading: const IconTile(icon: AppIcons.receipt, size: 40),
+                title: '#${order.orderNumber}',
+                subtitle: DateFormat('d MMM yyyy').format(order.createdAt),
                 onTap: () => _showReceipt(order),
-                borderRadius: BorderRadius.circular(12),
-                child: _GlassyCard(
-                  padding: EdgeInsets.all(ctx.getRSize(14)),
-                  radius: 12,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: ctx.getRSize(38),
-                        height: ctx.getRSize(38),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withAlpha(25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          AppIcons.receipt,
-                          color: theme.colorScheme.primary,
-                          size: ctx.getRSize(16),
-                        ),
-                      ),
-                      SizedBox(width: ctx.getRSize(12)),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '#${order.orderNumber}',
-                              style: TextStyle(
-                                fontSize: ctx.getRFontSize(14),
-                                fontWeight: FontWeight.w700,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            ),
-                            Text(
-                              DateFormat('d MMM yyyy').format(order.createdAt),
-                              style: TextStyle(
-                                fontSize: ctx.getRFontSize(11),
-                                color: theme.colorScheme.onSurface
-                                    .withAlpha(115),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            formatCurrency(total),
-                            style: TextStyle(
-                              fontSize: ctx.getRFontSize(14),
-                              fontWeight: FontWeight.w800,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: ctx.getRSize(4)),
-                          StatusBadge(
-                            label:
-                                order.status[0].toUpperCase() +
-                                order.status.substring(1),
-                            variant: _orderStatusVariant(order.status),
-                            fontSize: 10,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                trailing: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      formatCurrency(total),
+                      style: ctx
+                          .extraBoldStyle(14)
+                          .copyWith(color: theme.colorScheme.onSurface),
+                    ),
+                    SizedBox(height: ctx.getRSize(4)),
+                    TagPill(
+                      label:
+                          order.status[0].toUpperCase() +
+                          order.status.substring(1),
+                      tone: _orderStatusTone(order.status),
+                      dense: true,
+                    ),
+                  ],
                 ),
               ),
             );
           },
         ),
+        top: context.getRSize(12),
+        bottom: context.getRSize(20) + context.deviceBottomPadding,
       ),
     ];
   }
@@ -2100,20 +1569,15 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     if (_crateBalances.isEmpty) {
       if (topItems.isNotEmpty) {
         slivers.add(
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              context.getRSize(20),
-              context.getRSize(12),
-              context.getRSize(20),
-              0,
-            ),
-            sliver: SliverToBoxAdapter(
+          customerDetailSliver(
+            SliverToBoxAdapter(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: topItems,
               ),
             ),
+            top: context.getRSize(12),
           ),
         );
       }
@@ -2126,10 +1590,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
               child: Text(
                 'No crate activity recorded',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  color: theme.colorScheme.onSurface.withAlpha(128),
-                ),
+                style: context
+                    .semiBoldStyle(13)
+                    .copyWith(
+                      color:
+                          theme.textTheme.bodySmall?.color ??
+                          theme.colorScheme.onSurface,
+                    ),
               ),
             ),
           ),
@@ -2137,80 +1604,32 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       );
     } else {
       slivers.add(
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(
-            context.getRSize(20),
-            context.getRSize(12),
-            context.getRSize(20),
-            context.getRSize(20) + context.deviceBottomPadding,
-          ),
-          sliver: SliverList(
+        customerDetailSliver(
+          SliverList(
             delegate: SliverChildListDelegate([
               ...topItems,
-              ..._crateBalances.map((entry) => _buildCrateBalanceRow(theme, entry)),
+              ..._crateBalances.map(
+                (entry) => _buildCrateBalanceRow(theme, entry),
+              ),
             ]),
           ),
+          top: context.getRSize(12),
+          bottom: context.getRSize(20) + context.deviceBottomPadding,
         ),
       );
     }
     return slivers;
   }
 
-  // The "+" action card pinned at the top of the Crates tab.
+  // The "+" action row pinned at the top of the Crates tab.
   Widget _buildCrateReturnCard(ThemeData theme) {
-    return InkWell(
+    return SettingsRow(
+      key: CustomersKeys.recordCrateReturn,
+      icon: AppIcons.add,
+      tone: IconTileTone.info,
+      title: 'Record crate return',
+      subtitle: 'Enter crates brought back, by manufacturer',
       onTap: _showRecordCrateReturnSheet,
-      borderRadius: BorderRadius.circular(12),
-      child: _GlassyCard(
-        padding: EdgeInsets.all(context.getRSize(14)),
-        radius: 12,
-        child: Row(
-          children: [
-            Container(
-              width: context.getRSize(38),
-              height: context.getRSize(38),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withAlpha(30),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                AppIcons.add,
-                color: theme.colorScheme.primary,
-                size: context.getRSize(16),
-              ),
-            ),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Record crate return',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(14),
-                      fontWeight: FontWeight.w700,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    'Enter crates brought back, by manufacturer',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: theme.colorScheme.onSurface.withAlpha(140),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              AppIcons.chevronRight,
-              size: context.getRSize(13),
-              color: theme.colorScheme.onSurface.withAlpha(100),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -2219,11 +1638,16 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final bal = entry.balance;
     final isOwe = bal > 0;
     final isClear = bal == 0;
-    final color = isClear
-        ? theme.colorScheme.onSurface.withAlpha(102)
+    final tone = isClear
+        ? IconTileTone.neutral
         : isOwe
-        ? theme.colorScheme.primary
-        : success;
+        ? IconTileTone.info
+        : IconTileTone.green;
+    final pillTone = isClear
+        ? TagPillTone.neutral
+        : isOwe
+        ? TagPillTone.info
+        : TagPillTone.green;
     final label = isClear
         ? 'Clear'
         : isOwe
@@ -2231,55 +1655,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         : '${bal.abs()} crates credit';
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(10)),
-      child: _GlassyCard(
-        padding: EdgeInsets.all(context.getRSize(14)),
-        radius: 12,
-        child: Row(
-          children: [
-            Container(
-              width: context.getRSize(38),
-              height: context.getRSize(38),
-              decoration: BoxDecoration(
-                color: color.withAlpha(30),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                AppIcons.box,
-                color: color,
-                size: context.getRSize(16),
-              ),
-            ),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: Text(
-                entry.manufacturerName,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(10),
-                vertical: context.getRSize(4),
-              ),
-              decoration: BoxDecoration(
-                color: color.withAlpha(30),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ),
-          ],
-        ),
+      child: CustomerDetailRow(
+        leading: IconTile(icon: AppIcons.box, tone: tone, size: 40),
+        title: entry.manufacturerName,
+        trailing: TagPill(label: label, tone: pillTone),
       ),
     );
   }
@@ -2310,315 +1689,135 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final qtyCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => _SheetContainer(
-          scrollController: ScrollController(),
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _SheetHandle(),
-                Text(
-                  'Record Crate Return',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: ctx.getRFontSize(18),
-                    fontWeight: FontWeight.w700,
+    await showCustomerSheet<void>(
+      context,
+      (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => CustomerSheetFrame(
+          title: 'Record Crate Return',
+          subtitle: 'Crates brought back by the customer',
+          children: [
+            Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AppDropdown<String>(
+                    value: selectedId,
+                    labelText: 'Manufacturer',
+                    hintText: 'Select a manufacturer',
+                    items: manufacturers
+                        .map(
+                          (m) => DropdownMenuItem(
+                            value: m.id,
+                            child: Text(m.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setSheetState(() => selectedId = v),
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'Select a manufacturer'
+                        : null,
                   ),
-                ),
-                SizedBox(height: ctx.getRSize(4)),
-                Text(
-                  'Crates brought back by the customer',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: ctx.getRFontSize(13),
-                    color: Theme.of(ctx).colorScheme.onSurface.withAlpha(128),
+                  SizedBox(height: ctx.getRSize(16)),
+                  AppInput(
+                    key: CustomersKeys.crateQty,
+                    controller: qtyCtrl,
+                    labelText: 'Crates returned',
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) {
+                      final n = int.tryParse((v ?? '').trim()) ?? 0;
+                      if (n <= 0) return 'Enter how many crates came back';
+                      return null;
+                    },
                   ),
-                ),
-                SizedBox(height: ctx.getRSize(24)),
-                AppDropdown<String>(
-                  value: selectedId,
-                  labelText: 'Manufacturer',
-                  hintText: 'Select a manufacturer',
-                  items: manufacturers
-                      .map(
-                        (m) =>
-                            DropdownMenuItem(value: m.id, child: Text(m.name)),
-                      )
-                      .toList(),
-                  onChanged: (v) => setSheetState(() => selectedId = v),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Select a manufacturer' : null,
-                ),
-                SizedBox(height: ctx.getRSize(16)),
-                _SheetField(
-                  controller: qtyCtrl,
-                  label: 'Crates returned',
-                  keyboard: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  validator: (v) {
-                    final n = int.tryParse((v ?? '').trim()) ?? 0;
-                    if (n <= 0) return 'Enter how many crates came back';
-                    return null;
-                  },
-                ),
-                SizedBox(height: ctx.getRSize(24)),
-                AmberButton(
-                  label: 'Record Return',
-                  icon: AppIcons.check,
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) return;
-                    final mfrId = selectedId!;
-                    final qty = int.parse(qtyCtrl.text.trim());
-                    final mfrName = manufacturers
-                        .firstWhere((m) => m.id == mfrId)
-                        .name;
-                    final messenger = ScaffoldMessenger.of(context);
-                    // Write-boundary re-check (§10.2.1): honor a revoked override.
-                    if (!ref
-                        .read(currentUserPermissionsProvider)
-                        .contains('sales.make')) {
+                  SizedBox(height: ctx.getRSize(24)),
+                  AppButton(
+                    key: CustomersKeys.crateSubmit,
+                    text: 'Record Return',
+                    icon: AppIcons.check,
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final mfrId = selectedId!;
+                      final qty = int.parse(qtyCtrl.text.trim());
+                      final mfrName = manufacturers
+                          .firstWhere((m) => m.id == mfrId)
+                          .name;
+                      final messenger = ScaffoldMessenger.of(context);
+                      // Write-boundary re-check (§10.2.1): honor a revoked override.
+                      if (!ref
+                          .read(currentUserPermissionsProvider)
+                          .contains('sales.make')) {
+                        Navigator.pop(ctx);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'You don\'t have permission to do that.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
                       Navigator.pop(ctx);
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'You don\'t have permission to do that.',
+                      try {
+                        // §16.8.1: credit the empties to the store the customer's
+                        // order(s) for this brand were created from, so per-store
+                        // balances stay accurate regardless of the active store.
+                        // Fall back to the locked store when the customer has no
+                        // store-stamped order for the brand.
+                        final creditStoreId =
+                            await db.orderCrateLinesDao
+                                .resolveStoreForCustomerManufacturer(
+                                  customerId: id,
+                                  manufacturerId: mfrId,
+                                ) ??
+                            ref.read(lockedStoreProvider).value;
+                        await db.inventoryDao.addEmptyCrates(
+                          mfrId,
+                          qty,
+                          storeId: creditStoreId,
+                        );
+                        await db.cratePoolDao.recordCrateReturnByCustomer(
+                          customerId: id,
+                          manufacturerId: mfrId,
+                          quantity: qty,
+                          performedBy: staffId,
+                        );
+                        // §7.8 — audit the manual crate return (who/when/brand/
+                        // count) so it appears in Activity Logs.
+                        await db.activityLogDao.logActivity(
+                          action: 'crate_return',
+                          description:
+                              '$qty crate${qty == 1 ? '' : 's'} returned for '
+                              '$mfrName',
+                          staffId: staffId,
+                          storeId: ref.read(lockedStoreProvider).value,
+                          entityType: 'customer',
+                          entityId: id,
+                        );
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '$qty crate${qty == 1 ? '' : 's'} returned for '
+                              '$mfrName',
+                            ),
+                            backgroundColor: _fixed.green,
                           ),
-                        ),
-                      );
-                      return;
-                    }
-                    Navigator.pop(ctx);
-                    try {
-                      // §16.8.1: credit the empties to the store the customer's
-                      // order(s) for this brand were created from, so per-store
-                      // balances stay accurate regardless of the active store.
-                      // Fall back to the locked store when the customer has no
-                      // store-stamped order for the brand.
-                      final creditStoreId =
-                          await db.orderCrateLinesDao
-                              .resolveStoreForCustomerManufacturer(
-                                customerId: id,
-                                manufacturerId: mfrId,
-                              ) ??
-                          ref.read(lockedStoreProvider).value;
-                      await db.inventoryDao.addEmptyCrates(
-                        mfrId,
-                        qty,
-                        storeId: creditStoreId,
-                      );
-                      await db.cratePoolDao.recordCrateReturnByCustomer(
-                        customerId: id,
-                        manufacturerId: mfrId,
-                        quantity: qty,
-                        performedBy: staffId,
-                      );
-                      // §7.8 — audit the manual crate return (who/when/brand/
-                      // count) so it appears in Activity Logs.
-                      await db.activityLogDao.logActivity(
-                        action: 'crate_return',
-                        description:
-                            '$qty crate${qty == 1 ? '' : 's'} returned for '
-                            '$mfrName',
-                        staffId: staffId,
-                        storeId: ref.read(lockedStoreProvider).value,
-                        entityType: 'customer',
-                        entityId: id,
-                      );
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            '$qty crate${qty == 1 ? '' : 's'} returned for '
-                            '$mfrName',
+                        );
+                      } catch (_) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not record the return'),
                           ),
-                          backgroundColor: success,
-                        ),
-                      );
-                    } catch (_) {
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text('Could not record the return'),
-                        ),
-                      );
-                    }
-                  },
-                ),
-                SizedBox(height: ctx.deviceBottomPadding + ctx.getRSize(16)),
-              ],
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassyCard extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry? padding;
-  final EdgeInsetsGeometry? margin;
-  final double radius;
-
-  const _GlassyCard({
-    required this.child,
-    this.padding,
-    this.margin,
-    this.radius = 16.0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassyCard(
-      padding: padding,
-      margin: margin,
-      radius: radius,
-      child: child,
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final ThemeData theme;
-  const _InfoRow({required this.icon, required this.text, required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: context.getRSize(12),
-          color: theme.colorScheme.primary.withValues(alpha: 0.7),
-        ),
-        SizedBox(width: context.getRSize(6)),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-  final ThemeData theme;
-  const _EmptyState({
-    required this.icon,
-    required this.message,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: context.getRSize(40),
-            color: theme.colorScheme.onSurface.withAlpha(51),
-          ),
-          SizedBox(height: context.getRSize(12)),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: context.getRFontSize(14),
-              color: theme.colorScheme.onSurface.withAlpha(102),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SheetContainer extends StatelessWidget {
-  final ScrollController scrollController;
-  final Widget child;
-  const _SheetContainer({required this.scrollController, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(12),
-        context.getRSize(20),
-        context.getRSize(8),
-      ),
-      child: child,
-    );
-  }
-}
-
-class _SheetHandle extends StatelessWidget {
-  const _SheetHandle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 40,
-        height: 4,
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.onSurface.withAlpha(51),
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ),
-    );
-  }
-}
-
-class _SheetField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final TextInputType keyboard;
-  final List<TextInputFormatter>? inputFormatters;
-  final String? Function(String?)? validator;
-  const _SheetField({
-    required this.controller,
-    required this.label,
-    required this.keyboard,
-    this.inputFormatters,
-    this.validator,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboard,
-      inputFormatters: inputFormatters,
-      validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
+          ],
         ),
       ),
     );

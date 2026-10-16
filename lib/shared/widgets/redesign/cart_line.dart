@@ -33,9 +33,9 @@ class CartLine extends StatelessWidget {
     required this.unitPriceLabel,
     required this.totalLabel,
     this.detail,
-    required this.isLastUnit,
-    required this.onIncrement,
-    required this.onDecrement,
+    this.isLastUnit = false,
+    this.onIncrement,
+    this.onDecrement,
     this.onTap,
     this.badges = const [],
     this.originalTotalLabel,
@@ -58,10 +58,13 @@ class CartLine extends StatelessWidget {
 
   /// True when one unit is left: the minus becomes delete.
   final bool isLastUnit;
-  final VoidCallback onIncrement;
+
+  /// Increase by one. With [onDecrement] also null the line draws no stepper
+  /// (#394: the receive cart edits quantities in its sheet only).
+  final VoidCallback? onIncrement;
 
   /// Decrease by one — or remove the line when [isLastUnit].
-  final VoidCallback onDecrement;
+  final VoidCallback? onDecrement;
 
   /// Tap the line (e.g. open the edit sheet).
   final VoidCallback? onTap;
@@ -171,12 +174,13 @@ class CartLine extends StatelessWidget {
                         style: context.regularStyle(12).copyWith(color: muted),
                       ),
                     ),
-                    QuantityStepper(
-                      quantityLabel: quantityLabel,
-                      isLastUnit: isLastUnit,
-                      onIncrement: onIncrement,
-                      onDecrement: onDecrement,
-                    ),
+                    if (onIncrement != null || onDecrement != null)
+                      QuantityStepper(
+                        quantityLabel: quantityLabel,
+                        isLastUnit: isLastUnit,
+                        onIncrement: onIncrement ?? () {},
+                        onDecrement: onDecrement ?? () {},
+                      ),
                   ],
                 ),
               ],

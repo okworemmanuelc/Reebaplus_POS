@@ -3,12 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/section_header.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
 
 class EditReceiveItemModal extends ConsumerStatefulWidget {
   final ReceiveCartLine item;
@@ -20,6 +27,8 @@ class EditReceiveItemModal extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // Centred and at most 640dp wide on tablets and wide screens (#394).
+      constraints: const BoxConstraints(maxWidth: kReceiveSheetMaxWidth),
       builder: (context) => EditReceiveItemModal(item: item),
     );
   }
@@ -97,10 +106,12 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final semantic = t.extension<AppSemanticColors>()!;
-    final border = t.dividerColor;
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final scheme = t.extension<AppSchemeColors>();
     final text = t.colorScheme.onSurface;
+    final muted = t.textTheme.bodySmall?.color ?? text;
     final primary = t.colorScheme.primary;
+    final primaryTint = scheme?.primaryTint ?? f.infoTint;
 
     final editBuyingPermission = Gates.editBuyingPrice.allows(ref);
     final editPricePermission = Gates.editProductPrice.allows(ref);
@@ -111,187 +122,140 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
     final buyingKobo = (buyingVal * 100).round();
     final lineTotalKobo = buyingKobo * rawQty;
 
+    Widget currencyPrefix(bool enabled) => Padding(
+      padding: EdgeInsets.all(context.getRSize(14)),
+      child: Text(
+        activeCurrencySymbol,
+        style: context
+            .boldStyle(16)
+            .copyWith(color: enabled ? text : muted.withValues(alpha: 0.5)),
+      ),
+    );
+
     return Container(
+      key: ReceiveKeys.editSheet,
+      constraints: BoxConstraints(maxHeight: context.screenHeight * 0.9),
       decoration: BoxDecoration(
         color: t.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 30,
-            offset: const Offset(0, -10),
-          ),
-        ],
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.borderRadiusXL),
+        ),
       ),
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-          context.getRSize(24),
-          context.getRSize(16),
-          context.getRSize(24),
-          context.deviceBottomPadding + context.getRSize(24),
+          context.getRSize(20),
+          context.getRSize(12),
+          context.getRSize(20),
+          context.deviceBottomPadding + context.getRSize(20),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Drag Handle
-            Center(
-              child: Container(
-                width: context.getRSize(40),
-                height: context.getRSize(4),
-                decoration: BoxDecoration(
-                  color: border.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            SizedBox(height: context.getRSize(24)),
+            const ReceiveSheetHandle(),
+            SizedBox(height: context.getRSize(16)),
 
-            // Header with Icon
+            // Header: tile, title, product name, close.
             Row(
               children: [
-                Container(
-                  padding: EdgeInsets.all(context.getRSize(14)),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        primary.withValues(alpha: 0.2),
-                        primary.withValues(alpha: 0.1),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Icon(
-                    AppIcons.box,
-                    size: context.getRSize(20),
-                    color: primary,
-                  ),
+                IconTile(
+                  icon: AppIcons.box,
+                  tint: primaryTint,
+                  iconColor: primary,
+                  size: 44,
                 ),
-                SizedBox(width: context.getRSize(16)),
+                SizedBox(width: context.getRSize(12)),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Edit Quantity & Prices',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(20),
-                          fontWeight: FontWeight.w900,
-                          color: text,
-                          letterSpacing: -0.5,
-                        ),
+                        style: context.screenTitleStyle.copyWith(color: text),
                       ),
                       Text(
                         widget.item.productName,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(14),
-                          color: text.withValues(alpha: 0.5),
-                          fontWeight: FontWeight.w600,
-                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: context
+                            .semiBoldStyle(14)
+                            .copyWith(color: primary),
                       ),
                     ],
                   ),
                 ),
-                Material(
-                  color: border.withValues(alpha: 0.1),
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(
-                      AppIcons.close,
-                      size: context.getRSize(20),
-                      color: text.withValues(alpha: 0.5),
-                    ),
+                IconButton(
+                  key: ReceiveKeys.editClose,
+                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                  constraints: const BoxConstraints(
+                    minWidth: kMinInteractiveDimension,
+                    minHeight: kMinInteractiveDimension,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  icon: AppIcon(
+                    AppIcons.close,
+                    size: context.getRSize(22),
+                    color: muted,
                   ),
                 ),
               ],
             ),
-            SizedBox(height: context.getRSize(32)),
+            SizedBox(height: context.getRSize(20)),
 
-            // Premium Quantity Selector
+            // Quantity: − / field / +.
             Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(12),
-                vertical: context.getRSize(12),
-              ),
-              decoration: BoxDecoration(
-                color: t.colorScheme.surface,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: border.withValues(alpha: 0.6),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: primary.withValues(alpha: 0.05),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
+              padding: EdgeInsets.all(context.getRSize(10)),
+              decoration: AppDecorations.card(context),
               child: Row(
                 children: [
                   _qtyBtn(
-                    AppIcons.minus,
-                    () => _updateQty(-1),
-                    color: Colors.red,
+                    key: ReceiveKeys.editMinus,
+                    icon: AppIcons.minus,
+                    tooltip: 'Decrease',
+                    fill: f.dangerTint,
+                    ink: f.danger,
+                    onTap: () => _updateQty(-1),
                   ),
                   SizedBox(width: context.getRSize(12)),
                   Expanded(
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        vertical: context.getRSize(4),
+                    child: AppInput(
+                      controller: _qtyCtrl,
+                      autofocus: true,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: false,
                       ),
-                      decoration: BoxDecoration(
-                        color: border.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: AppInput(
-                        controller: _qtyCtrl,
-                        autofocus: true,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: false,
-                        ),
-                        inputFormatters: [
-                          CurrencyInputFormatter(grouping: false),
-                        ],
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(32),
-                          fontWeight: FontWeight.w900,
-                          color: primary,
-                          letterSpacing: 1,
-                        ),
-                        border: InputBorder.none,
-                        fillColor: Colors.transparent,
-                        contentPadding: EdgeInsets.zero,
-                      ),
+                      inputFormatters: [
+                        CurrencyInputFormatter(grouping: false),
+                      ],
+                      textAlign: TextAlign.center,
+                      style: context
+                          .extraBoldStyle(28)
+                          .copyWith(color: primary),
+                      border: InputBorder.none,
+                      fillColor: Colors.transparent,
+                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
                   SizedBox(width: context.getRSize(12)),
                   _qtyBtn(
-                    AppIcons.add,
-                    () => _updateQty(1),
-                    color: Colors.green,
+                    key: ReceiveKeys.editPlus,
+                    icon: AppIcons.add,
+                    tooltip: 'Increase',
+                    fill: f.greenTint,
+                    ink: f.green,
+                    onTap: () => _updateQty(1),
                   ),
                 ],
               ),
             ),
-            SizedBox(height: context.getRSize(28)),
+            SizedBox(height: context.getRSize(20)),
 
-            // Prices Section
-            Text(
-              'UPDATE PRICES',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
-                color: text.withValues(alpha: 0.5),
-              ),
+            // Prices.
+            const SectionHeader(
+              title: 'UPDATE PRICES',
+              variant: SectionHeaderVariant.group,
             ),
-            SizedBox(height: context.getRSize(12)),
+            SizedBox(height: context.getRSize(10)),
 
             AppInput(
               controller: _buyingCtrl,
@@ -301,19 +265,7 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                 decimal: true,
               ),
               inputFormatters: [CurrencyInputFormatter(grouping: true)],
-              prefixIcon: Padding(
-                padding: EdgeInsets.all(context.getRSize(14)),
-                child: Text(
-                  activeCurrencySymbol,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: editBuyingPermission
-                        ? text
-                        : text.withValues(alpha: 0.3),
-                  ),
-                ),
-              ),
+              prefixIcon: currencyPrefix(editBuyingPermission),
             ),
 
             // Inline Uncosted warning (#199 / PRD #155 US 37). A blank/0 unit
@@ -329,19 +281,19 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
+                    AppIcon(
                       AppIcons.warning,
-                      size: context.getRSize(11),
-                      color: semantic.warning,
+                      size: context.getRSize(14),
+                      color: f.warning,
                     ),
                     SizedBox(width: context.getRSize(6)),
                     Expanded(
                       child: Text(
                         'No buying price. Add what you paid so profit shows '
                         'correctly. You can add it later.',
-                        style: t.textTheme.bodySmall?.copyWith(
-                          color: semantic.warning,
-                        ),
+                        style: context
+                            .regularStyle(12)
+                            .copyWith(color: f.warning),
                       ),
                     ),
                   ],
@@ -357,19 +309,7 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                 decimal: true,
               ),
               inputFormatters: [CurrencyInputFormatter(grouping: true)],
-              prefixIcon: Padding(
-                padding: EdgeInsets.all(context.getRSize(14)),
-                child: Text(
-                  activeCurrencySymbol,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: editPricePermission
-                        ? text
-                        : text.withValues(alpha: 0.3),
-                  ),
-                ),
-              ),
+              prefixIcon: currencyPrefix(editPricePermission),
             ),
             SizedBox(height: context.getRSize(16)),
 
@@ -381,54 +321,37 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                 decimal: true,
               ),
               inputFormatters: [CurrencyInputFormatter(grouping: true)],
-              prefixIcon: Padding(
-                padding: EdgeInsets.all(context.getRSize(14)),
-                child: Text(
-                  activeCurrencySymbol,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: editPricePermission
-                        ? text
-                        : text.withValues(alpha: 0.3),
-                  ),
-                ),
-              ),
+              prefixIcon: currencyPrefix(editPricePermission),
             ),
 
             if (lineTotalKobo > 0) ...[
-              SizedBox(height: context.getRSize(24)),
+              SizedBox(height: context.getRSize(20)),
               Container(
                 padding: EdgeInsets.all(context.getRSize(16)),
                 decoration: BoxDecoration(
-                  color: primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(16),
+                  color: primaryTint,
+                  borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Total Cost',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(16),
-                        fontWeight: FontWeight.w600,
-                        color: primary,
+                    Expanded(
+                      child: Text(
+                        'Total Cost',
+                        style: context
+                            .semiBoldStyle(16)
+                            .copyWith(color: primary),
                       ),
                     ),
                     Text(
                       formatCurrency(lineTotalKobo / 100.0),
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(18),
-                        fontWeight: FontWeight.w800,
-                        color: primary,
-                      ),
+                      style: context.boldStyle(18).copyWith(color: primary),
                     ),
                   ],
                 ),
               ),
             ],
 
-            SizedBox(height: context.getRSize(32)),
+            SizedBox(height: context.getRSize(24)),
 
             // Action Buttons
             Row(
@@ -439,7 +362,6 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                     text: 'Remove',
                     variant: AppButtonVariant.danger,
                     icon: AppIcons.delete,
-                    height: context.getRSize(56),
                     onPressed: () {
                       ref
                           .read(receiveCartProvider.notifier)
@@ -448,13 +370,12 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                     },
                   ),
                 ),
-                SizedBox(width: context.getRSize(16)),
+                SizedBox(width: context.getRSize(12)),
                 Expanded(
                   flex: 3,
                   child: AppButton(
                     text: 'Save Changes',
                     variant: AppButtonVariant.primary,
-                    height: context.getRSize(56),
                     onPressed: () {
                       final notifier = ref.read(receiveCartProvider.notifier);
 
@@ -507,18 +428,35 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
     );
   }
 
-  Widget _qtyBtn(IconData icon, VoidCallback onTap, {required Color color}) {
-    return Material(
-      color: color.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          width: context.getRSize(56),
-          height: context.getRSize(56),
-          alignment: Alignment.center,
-          child: Icon(icon, color: color, size: context.getRSize(20)),
+  /// A 48dp+ quantity button: a tinted rounded square with the icon.
+  Widget _qtyBtn({
+    required Key key,
+    required IconData icon,
+    required String tooltip,
+    required Color fill,
+    required Color ink,
+    required VoidCallback onTap,
+  }) {
+    final side = context.getRSize(52) < kMinInteractiveDimension
+        ? kMinInteractiveDimension
+        : context.getRSize(52);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: fill,
+        borderRadius: radius,
+        child: InkWell(
+          key: key,
+          onTap: onTap,
+          borderRadius: radius,
+          child: SizedBox(
+            width: side,
+            height: side,
+            child: Center(
+              child: AppIcon(icon, color: ink, size: context.getRSize(22)),
+            ),
+          ),
         ),
       ),
     );
