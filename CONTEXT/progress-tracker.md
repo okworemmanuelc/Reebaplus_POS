@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #394 PR 2: receive cart, Edit Receive Item, Receive Checkout restyle (2026-10-16) — PRD #346 Wave 2 A, closes #394
+Branch `feat/redesign-w2-receiving-2` off `main` d9a2701a (after PR #396), worktree `../drinkPosApp-wt-394b`. **No Drift/cloud/sync/permission/status/money/stock/crate-rule change (no `pos-parity` issue), no new packages.**
+- **Shared part (additive)**: `CartLine.onIncrement` / `onDecrement` optional — both null = no stepper (`parts_cart_line_*` goldens unchanged; new parts test).
+- **Receive cart**: `ReceiveTopBar` + "N items" + Clear pill (confirm kept); `CartLine` lines without a stepper (category tile, "qty × cost", Cost tag, unit · Ret • Whls), swipe-remove and tap-to-edit kept; measured pinned/scrolling footer; 720 cap. `ReceiveCartLine.categoryId` added (in memory only — the receive cart is never saved).
+- **Edit sheet**: redesign header, fixed-colour 48dp+ stepper, group label, same gated inputs and inline uncosted line; 640 cap, 90% height.
+- **Checkout**: `StatCard` total, restyled uncosted card, group headers (wording kept), 48dp supplier clear ✕ (was ~22dp), payment method `AppDropdown` (was a raw `DropdownButton`), card item/crate rows, pinned Confirm footer (was `Scaffold.bottomSheet`); 720 cap. Supplier picker rows are cards; sheet 640 cap; bottom padding added.
+- **Tests**: new `test/receiving/receive_cart_checkout_redesign_test.dart` (31); `receive_supplier_optional_test.dart` taps the clear ✕ by `ReceiveKeys.supplierClear` (the round `InkWell` it found is now a 48dp `IconButton`; assertions unchanged); fixture gains a supplier and a crate-moving Star Lager. Goldens `receive_cart_*`, `receive_checkout_*` (4 sizes × 2 themes), `receive_edit_item_*`, `receive_supplier_picker_*` (390x844, 844x390 × 2 themes).
+- **#394 complete** with this PR.
+
 ### Issue #394 PR 1: Receive Stock restyle + fly-to-cart (2026-10-11) — PRD #346 Wave 2 A
 Branch `feat/redesign-w2-receiving` off `main` 2ec88349, worktree `../drinkPosApp-wt-394`. PR 1 of 2 (PR 2 = receive cart, Edit Receive Item sheet, checkout, supplier picker, uncosted warning). **No Drift/cloud/sync/permission/status/money/stock-rule change (no `pos-parity` issue), no new packages.**
 - **Shared parts (additive)**: `ProductTile.tappableWhenOut` (default false; `parts_product_tile_*` goldens unchanged, new parts test) and `FlyTargetId.receiveCart`.
