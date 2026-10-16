@@ -87,6 +87,32 @@ void main() {
     }
   });
 
+  testWidgets('CartLine without callbacks draws no stepper (#394)', (
+    tester,
+  ) async {
+    var taps = 0;
+    await pump(
+      tester,
+      (_) => CartLine(
+        key: const Key('plain'),
+        name: 'Star Lager',
+        icon: AppIcons.beerMug,
+        quantityLabel: '12',
+        unitPriceLabel: '₦7,500',
+        totalLabel: '₦90,000',
+        detail: 'Bottle',
+        onTap: () => taps++,
+      ),
+      textScale: 1.3,
+    );
+    expect(find.byType(QuantityStepper), findsNothing);
+    expect(find.text('12 × ₦7,500'), findsOneWidget);
+    expect(find.text('Bottle'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('plain')));
+    expect(taps, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('CartLine stepper: + and − call back; at one unit − is delete', (
     tester,
   ) async {

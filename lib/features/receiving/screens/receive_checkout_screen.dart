@@ -6,14 +6,21 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/uncosted_receive_warning.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/section_header.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/stat_card.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -30,7 +37,12 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart
 /// (that payment section is gated on `suppliers.manage`). This is a purchase,
 /// not a sale.
 class ReceiveCheckoutScreen extends ConsumerStatefulWidget {
-  const ReceiveCheckoutScreen({super.key});
+  const ReceiveCheckoutScreen({super.key, this.initialDateReceived});
+
+  /// Test seam: the receipt date the form starts on (goldens pin it so the
+  /// date shown never depends on the day the test runs). Null = today.
+  @visibleForTesting
+  final DateTime? initialDateReceived;
 
   @override
   ConsumerState<ReceiveCheckoutScreen> createState() =>
@@ -46,7 +58,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
 
   List<SupplierData> _suppliers = [];
   SupplierData? _selectedSupplier;
-  DateTime _dateReceived = DateTime.now();
+  late DateTime _dateReceived = widget.initialDateReceived ?? DateTime.now();
 
   /// Destination store for this receipt. Defaults to the active store (or the
   /// first selectable store) when the checkout opens, but the user can
@@ -106,7 +118,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       _stores = stores;
       // Default to the active store, falling back to the first store the user
       // can access. The dropdown lets them change it before confirming.
-      _flowStoreId = ref.read(lockedStoreProvider).value ?? stores.firstOrNull?.id;
+      _flowStoreId =
+          ref.read(lockedStoreProvider).value ?? stores.firstOrNull?.id;
       _isLoading = false;
     });
 
@@ -165,6 +178,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // Centred and at most 640dp wide on tablets and wide screens (#394).
+      constraints: const BoxConstraints(maxWidth: kReceiveSheetMaxWidth),
       builder: (ctx) => _SupplierPickerSheet(suppliers: _suppliers),
     );
     if (selected != null && mounted) {
@@ -196,7 +211,10 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     // dropdown, so we only need to ensure one is selected (no active-store
     // revalidation — the receipt lands wherever the user allocated it).
     if (_flowStoreId == null) {
-      AppNotification.showError(context, 'Please select a store to receive into');
+      AppNotification.showError(
+        context,
+        'Please select a store to receive into',
+      );
       return;
     }
 
@@ -240,17 +258,21 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
           : 0;
       final amountPaidKobo = (amountPaid * 100).round();
 
-      await ref.read(receiveStockServiceProvider).confirmReceipt(
+      await ref
+          .read(receiveStockServiceProvider)
+          .confirmReceipt(
             supplierId: supplier?.id,
             supplierName: supplier?.name,
             storeId: _flowStoreId!,
             dateReceived: _dateReceived,
             staffId: staffId,
             lines: cart,
-            fullCratesReceivedByManufacturer:
-                Map<String, int>.from(_fullCratesReceivedByManufacturer),
-            emptiesReturnedByManufacturer:
-                Map<String, int>.from(_emptiesReturnedByManufacturer),
+            fullCratesReceivedByManufacturer: Map<String, int>.from(
+              _fullCratesReceivedByManufacturer,
+            ),
+            emptiesReturnedByManufacturer: Map<String, int>.from(
+              _emptiesReturnedByManufacturer,
+            ),
             note: note.isEmpty ? null : note,
             amountPaidKobo: amountPaidKobo > 0 ? amountPaidKobo : null,
             paymentMethod: amountPaidKobo > 0 ? _paymentMethod : null,
@@ -289,7 +311,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     required int emptiesReturned,
   }) {
     final theme = Theme.of(context);
-    final semantic = theme.extension<AppSemanticColors>()!;
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final crateParts = <String>[
       if (fullCratesReceived > 0) '$fullCratesReceived full in',
       if (emptiesReturned > 0) '$emptiesReturned empty back',
@@ -303,12 +325,12 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _dialogRow('Supplier', supplierName ?? 'None (cash purchase)'),
-            _dialogRow('Items', '$productCount product(s), $totalUnits unit(s)'),
-            _dialogRow('Stocking', storeName),
             _dialogRow(
-              'Invoice Total',
-              formatCurrency(invoiceTotalKobo / 100),
+              'Items',
+              '$productCount product(s), $totalUnits unit(s)',
             ),
+            _dialogRow('Stocking', storeName),
+            _dialogRow('Invoice Total', formatCurrency(invoiceTotalKobo / 100)),
             // #210: the crate movement is committed with the goods, so it is
             // disclosed with them — the receipt is all-or-nothing.
             if (crateParts.isNotEmpty)
@@ -317,10 +339,10 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
             Text(
               supplierName == null
                   ? 'This increases stock at $storeName. With no supplier, '
-                      'nothing is recorded as owed or paid.'
+                        'nothing is recorded as owed or paid.'
                   : 'This posts ${formatCurrency(invoiceTotalKobo / 100)} to '
-                      "$supplierName's account and increases stock at "
-                      '$storeName.',
+                        "$supplierName's account and increases stock at "
+                        '$storeName.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -337,9 +359,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                 '${uncostedItemCount == 1 ? 'it' : 'them'} and '
                 '${uncostedItemCount == 1 ? 'it' : 'they'} will show no profit '
                 'when sold.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: semantic.warning,
-                ),
+                style: theme.textTheme.bodySmall?.copyWith(color: f.warning),
               ),
             ],
           ],
@@ -394,11 +414,6 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final theme = Theme.of(context);
     final cart = ref.watch(receiveCartProvider);
     final notifier = ref.read(receiveCartProvider.notifier);
-    final bg = theme.colorScheme.surface;
-    final cardColor = theme.cardColor;
-    final textColor = theme.colorScheme.onSurface;
-    final primary = theme.colorScheme.primary;
-    final border = theme.dividerColor;
     final subtext = theme.textTheme.bodySmall?.color;
 
     final totalValueStr = formatCurrency(notifier.invoiceTotalKobo / 100);
@@ -412,7 +427,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     // crate numbers are typed rather than derived (ADR 0023).
     final manufacturers =
         ref.watch(allManufacturersProvider).valueOrNull ??
-            const <ManufacturerData>[];
+        const <ManufacturerData>[];
     final mfrNames = {for (final m in manufacturers) m.id: m.name};
     final crateGroups =
         <({String manufacturerId, String name, int unitsDelivered})>[];
@@ -431,306 +446,285 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       ));
     }
 
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        title: const Text('Invoice'),
-        elevation: 0,
-        backgroundColor: bg,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                context.getRSize(20),
-                context.getRSize(16),
-                context.getRSize(20),
-                context.getRSize(110) + context.deviceBottomPadding,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Invoice Total (read-only)
-                  Container(
-                    padding: EdgeInsets.all(context.getRSize(16)),
-                    decoration: BoxDecoration(
-                      color: primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: primary.withValues(alpha: 0.2)),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Invoice Total',
-                          style: TextStyle(
-                            color: primary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: context.getRFontSize(13),
-                          ),
-                        ),
-                        SizedBox(height: context.getRSize(4)),
-                        Text(
-                          totalValueStr,
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(28),
-                            fontWeight: FontWeight.w800,
-                            color: primary,
-                          ),
-                        ),
-                        SizedBox(height: context.getRSize(8)),
-                        Text(
-                          '${notifier.totalUnits} units • ${cart.length} products',
-                          style: TextStyle(
-                            color: primary.withValues(alpha: 0.8),
-                            fontSize: context.getRFontSize(13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(12)),
+    final confirmEnabled =
+        !((supplierRequired && _selectedSupplier == null) ||
+            _flowStoreId == null ||
+            _isSaving);
 
-                  // Uncosted disclosure (#199 / PRD #155 US 37) — sits directly
-                  // under the Invoice Total because that is the figure it
-                  // undermines: a line with no buying price contributes nothing
-                  // to it, so no payable is raised and the units later sell at
-                  // 0 COGS. Informational only; Confirm Receipt stays enabled.
-                  if (uncostedLineCount > 0) ...[
-                    UncostedReceiveWarning(
-                      itemCount: uncostedLineCount,
-                      unitCount: notifier.uncostedUnits,
-                    ),
-                    SizedBox(height: context.getRSize(12)),
-                  ],
-
-                  // Stocking into: destination store (the receipt commits stock
-                  // to THIS store). Defaults to the active store; the user can
-                  // re-allocate to any store they can access.
-                  _fieldLabel('STOCKING INTO *', subtext),
-                  SizedBox(height: context.getRSize(8)),
-                  AppDropdown<String>(
-                    value: _flowStoreId,
-                    hintText: 'Select store',
-                    prefixIcon: Icon(
-                      AppIcons.store,
-                      size: context.getRSize(16),
-                      color: subtext,
-                    ),
-                    items: [
-                      for (final s in _stores)
-                        DropdownMenuItem(value: s.id, child: Text(s.name)),
+    return DecoratedBox(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: ReceiveTopBar(
+          height: receiveTopBarHeight(context),
+          icon: AppIcons.invoice,
+          title: 'Invoice',
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final side = receiveSidePadding(
+                    context,
+                    constraints.maxWidth,
+                  );
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          key: ReceiveKeys.checkoutScroll,
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: EdgeInsets.fromLTRB(
+                            side,
+                            context.getRSize(16),
+                            side,
+                            context.getRSize(24),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: _formChildren(
+                              context,
+                              cart: cart,
+                              notifier: notifier,
+                              totalValueStr: totalValueStr,
+                              supplierRequired: supplierRequired,
+                              uncostedLineCount: uncostedLineCount,
+                              crateGroups: crateGroups,
+                              subtext: subtext,
+                            ),
+                          ),
+                        ),
+                      ),
+                      _ConfirmFooter(
+                        sidePadding: side,
+                        isSaving: _isSaving,
+                        onPressed: confirmEnabled ? _confirm : null,
+                      ),
                     ],
-                    onChanged: (v) => setState(() => _flowStoreId = v),
-                  ),
-                  SizedBox(height: context.getRSize(24)),
-
-                  // Supplier (searchable). Required only when a line moves
-                  // crates; otherwise none = a cash purchase.
-                  _fieldLabel(
-                    supplierRequired ? 'SUPPLIER *' : 'SUPPLIER (optional)',
-                    subtext,
-                  ),
-                  SizedBox(height: context.getRSize(8)),
-                  _TapField(
-                    icon: AppIcons.supplierDelivery,
-                    text: _selectedSupplier?.name ?? 'Select supplier',
-                    isPlaceholder: _selectedSupplier == null,
-                    onTap: _pickSupplier,
-                    onClear: _selectedSupplier == null
-                        ? null
-                        : () => setState(() => _selectedSupplier = null),
-                  ),
-                  if (_selectedSupplier == null) ...[
-                    SizedBox(height: context.getRSize(6)),
-                    Text(
-                      supplierRequired
-                          ? 'Needed for drinks with crates, so the crates are '
-                              'recorded against someone.'
-                          : 'No supplier? It is saved as a cash purchase: '
-                              'stock goes up, nothing is recorded as owed.',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(12),
-                        color: subtext,
-                      ),
-                    ),
-                  ],
-                  SizedBox(height: context.getRSize(16)),
-
-                  // Date received (default today, backdate allowed)
-                  _fieldLabel('DATE RECEIVED', subtext),
-                  SizedBox(height: context.getRSize(8)),
-                  _TapField(
-                    icon: AppIcons.calendar,
-                    text: _formatDate(_dateReceived),
-                    isPlaceholder: false,
-                    onTap: _pickDate,
-                  ),
-                  SizedBox(height: context.getRSize(16)),
-
-                  // Note (optional)
-                  AppInput(
-                    controller: _noteCtrl,
-                    labelText: 'Reference Note (Optional)',
-                    hintText: 'e.g. Invoice #12345',
-                  ),
-                  SizedBox(height: context.getRSize(24)),
-
-                  if (_selectedSupplier != null &&
-                      Gates.manageSuppliers.allows(ref)) ...[
-                    // Payment (optional)
-                    _fieldLabel('PAYMENT', subtext),
-                    SizedBox(height: context.getRSize(8)),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: AppInput(
-                            controller: _amountPaidCtrl,
-                            labelText: 'Amount Paid Now',
-                            hintText: '0.00',
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            inputFormatters: [CurrencyInputFormatter()],
-                          ),
-                        ),
-                        SizedBox(width: context.getRSize(12)),
-                        Expanded(
-                          flex: 1,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
-                            decoration: BoxDecoration(
-                              color: cardColor,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: border),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _paymentMethod,
-                                isExpanded: true,
-                                items: const [
-                                  DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                                  DropdownMenuItem(value: 'transfer', child: Text('Transfer')),
-                                  DropdownMenuItem(value: 'pos', child: Text('POS')),
-                                ],
-                                onChanged: (v) {
-                                  if (v != null) setState(() => _paymentMethod = v);
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: context.getRSize(24)),
-                  ],
-
-                  // Line items summary
-                  _fieldLabel('ITEMS', subtext),
-                  SizedBox(height: context.getRSize(8)),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: cardColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: border),
-                    ),
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < cart.length; i++) ...[
-                          if (i > 0) Divider(height: 1, color: border),
-                          _lineRow(cart[i], textColor, subtext),
-                        ],
-                      ],
-                    ),
-                  ),
-
-                  // Crates moved with this delivery (grouped by manufacturer).
-                  // Both directions sit together because they happen together:
-                  // the driver drops full crates off and takes empties away in
-                  // the same visit, and recording only one side is what drove
-                  // supplier crate debt negative (#210 / ADR 0023).
-                  if (crateGroups.isNotEmpty) ...[
-                    SizedBox(height: context.getRSize(24)),
-                    Row(
-                      children: [
-                        Icon(AppIcons.wineBottle,
-                            size: context.getRSize(14), color: subtext),
-                        SizedBox(width: context.getRSize(8)),
-                        _fieldLabel('CRATES WITH THIS DELIVERY', subtext),
-                      ],
-                    ),
-                    SizedBox(height: context.getRSize(6)),
-                    Text(
-                      'Count the crates and type them in. Crate sizes differ, so '
-                      'the number cannot be worked out from the drinks '
-                      'delivered. Leave a box at 0 if nothing moved.',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(12),
-                        color: subtext,
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(12)),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: border),
-                      ),
-                      child: Column(
-                        children: [
-                          for (var i = 0; i < crateGroups.length; i++) ...[
-                            if (i > 0) Divider(height: 1, color: border),
-                            _crateRow(crateGroups[i], textColor, subtext),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
+                  );
+                },
               ),
-            ),
-      bottomSheet: _isLoading
-          ? null
-          : Container(
-              padding: EdgeInsets.fromLTRB(
-                context.getRSize(20),
-                context.getRSize(16),
-                context.getRSize(20),
-                context.getRSize(16) + context.deviceBottomPadding,
-              ),
-              decoration: BoxDecoration(
-                color: cardColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    offset: const Offset(0, -4),
-                    blurRadius: 12,
-                  ),
-                ],
-              ),
-              child: AppButton(
-                text: 'Confirm Receipt',
-                onPressed:
-                    (supplierRequired && _selectedSupplier == null) ||
-                            _flowStoreId == null ||
-                            _isSaving
-                        ? null
-                        : _confirm,
-                isLoading: _isSaving,
-                isFullWidth: true,
-              ),
-            ),
+      ),
     );
   }
 
-  Widget _fieldLabel(String text, Color? subtext) => Text(
-        text,
-        style: TextStyle(
-          fontSize: context.getRFontSize(12),
-          fontWeight: FontWeight.bold,
+  List<Widget> _formChildren(
+    BuildContext context, {
+    required List<ReceiveCartLine> cart,
+    required ReceiveCartNotifier notifier,
+    required String totalValueStr,
+    required bool supplierRequired,
+    required int uncostedLineCount,
+    required List<({String manufacturerId, String name, int unitsDelivered})>
+    crateGroups,
+    required Color? subtext,
+  }) {
+    final gap = context.getRSize(16);
+    return [
+      // Invoice Total (read-only)
+      StatCard(
+        icon: AppIcons.invoice,
+        tone: IconTileTone.info,
+        title: 'Invoice Total',
+        value: totalValueStr,
+        subtitle: '${notifier.totalUnits} units • ${cart.length} products',
+      ),
+      SizedBox(height: context.getRSize(12)),
+
+      // Uncosted disclosure (#199 / PRD #155 US 37) — sits directly
+      // under the Invoice Total because that is the figure it
+      // undermines: a line with no buying price contributes nothing
+      // to it, so no payable is raised and the units later sell at
+      // 0 COGS. Informational only; Confirm Receipt stays enabled.
+      if (uncostedLineCount > 0) ...[
+        UncostedReceiveWarning(
+          itemCount: uncostedLineCount,
+          unitCount: notifier.uncostedUnits,
+        ),
+        SizedBox(height: context.getRSize(12)),
+      ],
+
+      // Stocking into: destination store (the receipt commits stock
+      // to THIS store). Defaults to the active store; the user can
+      // re-allocate to any store they can access.
+      _fieldLabel('STOCKING INTO *'),
+      AppDropdown<String>(
+        value: _flowStoreId,
+        hintText: 'Select store',
+        prefixIcon: Icon(
+          AppIcons.store,
+          size: context.getRSize(18),
           color: subtext,
         ),
-      );
+        items: [
+          for (final s in _stores)
+            DropdownMenuItem(
+              value: s.id,
+              child: Text(
+                s.name,
+                style: context
+                    .mediumStyle(15)
+                    .copyWith(color: Theme.of(context).colorScheme.onSurface),
+              ),
+            ),
+        ],
+        onChanged: (v) => setState(() => _flowStoreId = v),
+      ),
+      SizedBox(height: gap),
 
-  Widget _lineRow(ReceiveCartLine line, Color textColor, Color? subtext) {
+      // Supplier (searchable). Required only when a line moves
+      // crates; otherwise none = a cash purchase.
+      _fieldLabel(supplierRequired ? 'SUPPLIER *' : 'SUPPLIER (optional)'),
+      _TapField(
+        key: ReceiveKeys.supplierField,
+        icon: AppIcons.supplierDelivery,
+        text: _selectedSupplier?.name ?? 'Select supplier',
+        isPlaceholder: _selectedSupplier == null,
+        onTap: _pickSupplier,
+        onClear: _selectedSupplier == null
+            ? null
+            : () => setState(() => _selectedSupplier = null),
+        clearKey: ReceiveKeys.supplierClear,
+      ),
+      if (_selectedSupplier == null) ...[
+        SizedBox(height: context.getRSize(6)),
+        Text(
+          supplierRequired
+              ? 'Needed for drinks with crates, so the crates are '
+                    'recorded against someone.'
+              : 'No supplier? It is saved as a cash purchase: '
+                    'stock goes up, nothing is recorded as owed.',
+          style: context.regularStyle(12).copyWith(color: subtext),
+        ),
+      ],
+      SizedBox(height: gap),
+
+      // Date received (default today, backdate allowed)
+      _fieldLabel('DATE RECEIVED'),
+      _TapField(
+        key: ReceiveKeys.dateField,
+        icon: AppIcons.calendar,
+        text: _formatDate(_dateReceived),
+        isPlaceholder: false,
+        onTap: _pickDate,
+      ),
+      SizedBox(height: gap),
+
+      // Note (optional)
+      AppInput(
+        controller: _noteCtrl,
+        labelText: 'Reference Note (Optional)',
+        hintText: 'e.g. Invoice #12345',
+      ),
+      SizedBox(height: gap),
+
+      if (_selectedSupplier != null && Gates.manageSuppliers.allows(ref)) ...[
+        // Payment (optional)
+        _fieldLabel('PAYMENT'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 2,
+              child: AppInput(
+                controller: _amountPaidCtrl,
+                labelText: 'Amount Paid Now',
+                hintText: '0.00',
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [CurrencyInputFormatter()],
+              ),
+            ),
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              flex: 1,
+              child: AppDropdown<String>(
+                key: ReceiveKeys.paymentMethod,
+                value: _paymentMethod,
+                items: [
+                  for (final (value, label) in const [
+                    ('cash', 'Cash'),
+                    ('transfer', 'Transfer'),
+                    ('pos', 'POS'),
+                  ])
+                    DropdownMenuItem(
+                      value: value,
+                      child: Text(
+                        label,
+                        style: context
+                            .mediumStyle(15)
+                            .copyWith(
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                      ),
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _paymentMethod = v);
+                },
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: gap),
+      ],
+
+      // Line items summary
+      _fieldLabel('ITEMS'),
+      Container(
+        decoration: AppDecorations.card(context),
+        child: Column(
+          children: [
+            for (var i = 0; i < cart.length; i++) ...[
+              if (i > 0)
+                Divider(height: 1, color: Theme.of(context).dividerColor),
+              _lineRow(cart[i], subtext),
+            ],
+          ],
+        ),
+      ),
+
+      // Crates moved with this delivery (grouped by manufacturer).
+      // Both directions sit together because they happen together:
+      // the driver drops full crates off and takes empties away in
+      // the same visit, and recording only one side is what drove
+      // supplier crate debt negative (#210 / ADR 0023).
+      if (crateGroups.isNotEmpty) ...[
+        SizedBox(height: gap),
+        _fieldLabel('CRATES WITH THIS DELIVERY'),
+        Text(
+          'Count the crates and type them in. Crate sizes differ, so '
+          'the number cannot be worked out from the drinks '
+          'delivered. Leave a box at 0 if nothing moved.',
+          style: context.regularStyle(12).copyWith(color: subtext),
+        ),
+        SizedBox(height: context.getRSize(12)),
+        Container(
+          decoration: AppDecorations.card(context),
+          child: Column(
+            children: [
+              for (var i = 0; i < crateGroups.length; i++) ...[
+                if (i > 0)
+                  Divider(height: 1, color: Theme.of(context).dividerColor),
+                _crateRow(crateGroups[i], subtext),
+              ],
+            ],
+          ),
+        ),
+      ],
+    ];
+  }
+
+  /// A group label over a field ("STOCKING INTO *"), wording unchanged.
+  Widget _fieldLabel(String text) => Padding(
+    padding: EdgeInsets.only(bottom: context.getRSize(8)),
+    child: SectionHeader(title: text, variant: SectionHeaderVariant.group),
+  );
+
+  Widget _lineRow(ReceiveCartLine line, Color? subtext) {
+    final t = Theme.of(context);
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(16),
@@ -744,21 +738,22 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
               children: [
                 Text(
                   line.productName,
-                  style:
-                      TextStyle(fontWeight: FontWeight.w600, color: textColor),
+                  style: context
+                      .boldStyle(15)
+                      .copyWith(color: t.colorScheme.onSurface),
                 ),
                 SizedBox(height: context.getRSize(2)),
                 Text(
                   '${line.qty} × ${formatCurrency(line.buyingPriceKobo / 100)}',
-                  style: TextStyle(
-                      fontSize: context.getRFontSize(12), color: subtext),
+                  style: context.regularStyle(13).copyWith(color: subtext),
                 ),
               ],
             ),
           ),
+          SizedBox(width: context.getRSize(8)),
           Text(
             formatCurrency(line.buyingPriceKobo * line.qty / 100),
-            style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
+            style: context.boldStyle(15).copyWith(color: t.colorScheme.primary),
           ),
         ],
       ),
@@ -770,9 +765,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   /// bottle count, never a crate count.
   Widget _crateRow(
     ({String manufacturerId, String name, int unitsDelivered}) group,
-    Color textColor,
     Color? subtext,
   ) {
+    final t = Theme.of(context);
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(16),
@@ -781,16 +776,34 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            group.name,
-            style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
-          ),
-          SizedBox(height: context.getRSize(2)),
-          Text(
-            '${group.unitsDelivered} '
-            '${group.unitsDelivered == 1 ? 'drink' : 'drinks'} on this delivery',
-            style:
-                TextStyle(fontSize: context.getRFontSize(12), color: subtext),
+          Row(
+            children: [
+              const IconTile(
+                icon: AppIcons.crates,
+                tone: IconTileTone.warning,
+                size: 40,
+              ),
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      group.name,
+                      style: context
+                          .boldStyle(15)
+                          .copyWith(color: t.colorScheme.onSurface),
+                    ),
+                    Text(
+                      '${group.unitsDelivered} '
+                      '${group.unitsDelivered == 1 ? 'drink' : 'drinks'} on '
+                      'this delivery',
+                      style: context.regularStyle(12).copyWith(color: subtext),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           SizedBox(height: context.getRSize(10)),
           Row(
@@ -822,7 +835,47 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   }
 }
 
-/// Read-only tappable field used for the supplier + date pickers.
+/// "Confirm Receipt", pinned under the form on Surface with a hairline; the
+/// button keeps to the content width.
+class _ConfirmFooter extends StatelessWidget {
+  const _ConfirmFooter({
+    required this.sidePadding,
+    required this.isSaving,
+    required this.onPressed,
+  });
+
+  final double sidePadding;
+  final bool isSaving;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        sidePadding,
+        context.getRSize(12),
+        sidePadding,
+        context.getRSize(12) + context.deviceBottomPadding,
+      ),
+      decoration: BoxDecoration(
+        color: t.colorScheme.surface,
+        border: Border(top: BorderSide(color: t.dividerColor)),
+      ),
+      child: AppButton(
+        key: ReceiveKeys.confirmButton,
+        text: 'Confirm Receipt',
+        onPressed: onPressed,
+        isLoading: isSaving,
+        isFullWidth: true,
+      ),
+    );
+  }
+}
+
+/// Read-only tappable field used for the supplier + date pickers: a card-like
+/// field (Surface, hairline, `borderRadiusM`), leading icon, the value (or
+/// placeholder), and a chevron — or, when [onClear] is set, a 48dp clear ✕.
 class _TapField extends StatelessWidget {
   final IconData? icon;
   final String text;
@@ -831,65 +884,85 @@ class _TapField extends StatelessWidget {
 
   /// When set, a clear (×) button replaces the chevron.
   final VoidCallback? onClear;
+  final Key? clearKey;
 
   const _TapField({
+    super.key,
     required this.icon,
     required this.text,
     required this.isPlaceholder,
     required this.onTap,
     this.onClear,
+    this.clearKey,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final subtext = theme.textTheme.bodySmall?.color;
+    final subtext =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
     return Material(
-      color: Colors.transparent,
+      type: MaterialType.transparency,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: radius,
         child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: context.getRSize(16),
-            vertical: context.getRSize(16),
+          constraints: const BoxConstraints(
+            minHeight: kMinInteractiveDimension,
+          ),
+          padding: EdgeInsets.only(
+            left: context.getRSize(16),
+            right: context.getRSize(4),
           ),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: radius,
             border: Border.all(color: theme.dividerColor),
           ),
           child: Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, size: context.getRSize(16), color: subtext),
+                AppIcon(icon!, size: context.getRSize(18), color: subtext),
                 SizedBox(width: context.getRSize(12)),
               ],
               Expanded(
-                child: Text(
-                  text,
-                  style: TextStyle(
-                    color: isPlaceholder
-                        ? subtext
-                        : theme.colorScheme.onSurface,
-                    fontWeight:
-                        isPlaceholder ? FontWeight.normal : FontWeight.w600,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: context.getRSize(14)),
+                  child: Text(
+                    text,
+                    style: isPlaceholder
+                        ? context.regularStyle(15).copyWith(color: subtext)
+                        : context
+                              .semiBoldStyle(15)
+                              .copyWith(color: theme.colorScheme.onSurface),
                   ),
                 ),
               ),
               if (onClear != null)
-                InkWell(
-                  onTap: onClear,
-                  customBorder: const CircleBorder(),
-                  child: Padding(
-                    padding: EdgeInsets.all(context.getRSize(4)),
-                    child: Icon(AppIcons.close,
-                        size: context.getRSize(14), color: subtext),
+                IconButton(
+                  key: clearKey,
+                  tooltip: 'Clear',
+                  constraints: const BoxConstraints(
+                    minWidth: kMinInteractiveDimension,
+                    minHeight: kMinInteractiveDimension,
+                  ),
+                  onPressed: onClear,
+                  icon: AppIcon(
+                    AppIcons.close,
+                    size: context.getRSize(18),
+                    color: subtext,
                   ),
                 )
               else
-                Icon(AppIcons.chevronDown,
-                    size: context.getRSize(14), color: subtext),
+                SizedBox(
+                  width: kMinInteractiveDimension,
+                  child: AppIcon(
+                    AppIcons.chevronDown,
+                    size: context.getRSize(18),
+                    color: subtext,
+                  ),
+                ),
             ],
           ),
         ),
@@ -905,7 +978,8 @@ class _SupplierPickerSheet extends ConsumerStatefulWidget {
   const _SupplierPickerSheet({required this.suppliers});
 
   @override
-  ConsumerState<_SupplierPickerSheet> createState() => _SupplierPickerSheetState();
+  ConsumerState<_SupplierPickerSheet> createState() =>
+      _SupplierPickerSheetState();
 }
 
 class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
@@ -921,11 +995,13 @@ class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
     final filtered = _query.isEmpty
         ? widget.suppliers
         : widget.suppliers
-            .where((s) => s.name.toLowerCase().contains(_query.toLowerCase()))
-            .toList();
+              .where((s) => s.name.toLowerCase().contains(_query.toLowerCase()))
+              .toList();
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -933,35 +1009,29 @@ class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
       maxChildSize: 0.9,
       expand: false,
       builder: (context, scrollController) => Container(
+        key: ReceiveKeys.supplierSheet,
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppSpacing.borderRadiusXL),
+          ),
         ),
         padding: EdgeInsets.fromLTRB(
           context.getRSize(20),
           context.getRSize(12),
           context.getRSize(20),
-          context.getRSize(20),
+          0,
         ),
         child: Column(
           children: [
-            Container(
-              width: context.getRSize(40),
-              height: context.getRSize(4),
-              decoration: BoxDecoration(
-                color: theme.dividerColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const ReceiveSheetHandle(),
             SizedBox(height: context.getRSize(16)),
             AppInput(
               controller: _searchCtrl,
               autofocus: true,
               onChanged: (v) => setState(() => _query = v),
               hintText: 'Search suppliers...',
-              prefixIcon: Icon(AppIcons.search,
-                  size: context.getRSize(16)),
+              prefixIcon: Icon(AppIcons.search, size: context.getRSize(18)),
             ),
             if (Gates.manageSuppliers.allows(ref)) ...[
               SizedBox(height: context.getRSize(12)),
@@ -985,30 +1055,85 @@ class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
                   ? Center(
                       child: Text(
                         'No suppliers found',
-                        style: TextStyle(
-                            color: theme.textTheme.bodySmall?.color),
+                        style: context.semiBoldStyle(14).copyWith(color: muted),
                       ),
                     )
                   : ListView.separated(
                       controller: scrollController,
+                      padding: EdgeInsets.only(
+                        bottom:
+                            context.getRSize(16) + context.deviceBottomPadding,
+                      ),
                       itemCount: filtered.length,
                       separatorBuilder: (_, __) =>
-                          Divider(height: 1, color: theme.dividerColor),
+                          SizedBox(height: context.getRSize(8)),
                       itemBuilder: (context, index) {
                         final s = filtered[index];
-                        // Transparent Material gives the row an ink target above
-                        // the sheet's coloured fill so its tap-ripple shows.
-                        return Material(
-                          type: MaterialType.transparency,
-                          child: ListTile(
-                          title: Text(s.name),
+                        return _SupplierRow(
+                          key: receiveSupplierRowKey(s.id),
+                          name: s.name,
                           onTap: () => Navigator.pop(context, s),
-                          ),
                         );
                       },
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One supplier: a card with the supplier tile and the name; the whole card
+/// taps (48dp+).
+class _SupplierRow extends StatelessWidget {
+  const _SupplierRow({super.key, required this.name, required this.onTap});
+
+  final String name;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    return DecoratedBox(
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusL,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(10)),
+              child: Row(
+                children: [
+                  const IconTile(
+                    icon: AppIcons.supplier,
+                    tone: IconTileTone.info,
+                    size: 40,
+                  ),
+                  SizedBox(width: context.getRSize(12)),
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: context
+                          .boldStyle(15)
+                          .copyWith(color: t.colorScheme.onSurface),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
