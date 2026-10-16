@@ -194,7 +194,12 @@ void main() {
           ('390x844', const Size(390, 844), _gesture, 1.0),
           ('844x390 insets', const Size(844, 390), _sideways, 1.0),
           ('800x1280', const Size(800, 1280), _gesture, 1.0),
-          ('1280x800', const Size(1280, 800), FakeViewPadding(top: 24), 1.0),
+          (
+            '1280x800',
+            const Size(1280, 800),
+            const FakeViewPadding(top: 24),
+            1.0,
+          ),
         ]) {
       testWidgets('no overflow at $name', (tester) async {
         await pump(
