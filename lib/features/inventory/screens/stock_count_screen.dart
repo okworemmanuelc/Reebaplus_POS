@@ -70,7 +70,6 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   /// hasn't resolved yet (store not yet synced to this device) reads "This
   /// store" rather than a raw id.
   String get _storeLabel => _storeName ?? 'This store';
-  Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
@@ -709,11 +708,39 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                           setSheet(() => reasonKey = v ?? reasonKey),
                     ),
                     SizedBox(height: sheetCtx.getRSize(20)),
-                    AppButton(
-                      text: 'Record Damage',
-                      variant: AppButtonVariant.danger,
-                      isLoading: submitting,
-                      onPressed: submitting ? null : submit,
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: submitting ? null : submit,
+                        style: FilledButton.styleFrom(
+                          backgroundColor:
+                              (t.extension<AppFixedColors>() ??
+                                      AppFixedColors.light)
+                                  .danger,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(
+                            kMinInteractiveDimension,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.borderRadiusL,
+                            ),
+                          ),
+                        ),
+                        child: submitting
+                            ? SizedBox(
+                                width: sheetCtx.getRSize(18),
+                                height: sheetCtx.getRSize(18),
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                'Record Damage',
+                                style: sheetCtx.boldStyle(15),
+                              ),
+                      ),
                     ),
                   ],
                 ),
@@ -1351,7 +1378,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     horizontal: context.getRSize(6),
                     vertical: math.max(context.getRSize(14), 16),
                   ),
-                  fillColor: _surface,
+                  fillColor: t.scaffoldBackgroundColor,
                 ),
               ),
               SizedBox(
