@@ -13,7 +13,13 @@ import '../helpers/screen_harness.dart';
 /// "Stallion Global", store "Abuja HQ", four categories and five products in
 /// that store — one with a long name, one low, one out of stock.
 class ReceiveFixture {
-  ReceiveFixture._(this.env, this.categories, this.productIds);
+  ReceiveFixture._(
+    this.env,
+    this.categories,
+    this.productIds,
+    this.products,
+    this.supplierId,
+  );
 
   final ScreenTestEnvironment env;
 
@@ -22,6 +28,12 @@ class ReceiveFixture {
 
   /// Star Lager, Malta Guinness, the long Guinness, Eva Water, Hero Lager (0).
   final List<String> productIds;
+
+  /// The same products, as rows (to put on the receive cart).
+  final List<ProductData> products;
+
+  /// "Lagos Beverages Ltd", the one supplier.
+  final String supplierId;
 
   static Future<ReceiveFixture> create() async {
     final env = await setupScreenTestEnvironment(
@@ -32,6 +44,28 @@ class ReceiveFixture {
     await db.customStatement(
       "UPDATE stores SET name = 'Abuja HQ' WHERE id = '${env.storeId}'",
     );
+    final supplierId = UuidV7.generate();
+    await db
+        .into(db.suppliers)
+        .insert(
+          SuppliersCompanion.insert(
+            id: Value(supplierId),
+            businessId: env.businessId,
+            name: 'Lagos Beverages Ltd',
+          ),
+        );
+    // Star Lager moves crates on a receipt (bottle + tracks empties + a
+    // manufacturer), so the checkout shows its crate row.
+    final manufacturerId = UuidV7.generate();
+    await db
+        .into(db.manufacturers)
+        .insert(
+          ManufacturersCompanion.insert(
+            id: Value(manufacturerId),
+            businessId: env.businessId,
+            name: 'Nigerian Breweries',
+          ),
+        );
     final categories = <String, String>{};
     for (final name in ['Beer', 'Malt', 'Water', 'Stout']) {
       final id = UuidV7.generate();
@@ -74,6 +108,10 @@ class ReceiveFixture {
               categoryId: Value(categories[category]),
               subtitle: Value(volume),
               size: Value(size),
+              manufacturerId: Value(
+                name == 'Star Lager' ? manufacturerId : null,
+              ),
+              trackEmpties: Value(name == 'Star Lager'),
               unit: Value(unit),
               buyingPriceKobo: const Value(750000),
               retailerPriceKobo: const Value(960000),
@@ -93,7 +131,13 @@ class ReceiveFixture {
           );
       ids.add(id);
     }
-    return ReceiveFixture._(env, categories, ids);
+    final products = [
+      for (final id in ids)
+        await (db.select(
+          db.products,
+        )..where((t) => t.id.equals(id))).getSingle(),
+    ];
+    return ReceiveFixture._(env, categories, ids, products, supplierId);
   }
 
   /// Soft-deletes category [name] through Drift, so watchers fire (as a
