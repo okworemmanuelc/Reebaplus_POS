@@ -37,7 +37,12 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart
 /// (that payment section is gated on `suppliers.manage`). This is a purchase,
 /// not a sale.
 class ReceiveCheckoutScreen extends ConsumerStatefulWidget {
-  const ReceiveCheckoutScreen({super.key});
+  const ReceiveCheckoutScreen({super.key, this.initialDateReceived});
+
+  /// Test seam: the receipt date the form starts on (goldens pin it so the
+  /// date shown never depends on the day the test runs). Null = today.
+  @visibleForTesting
+  final DateTime? initialDateReceived;
 
   @override
   ConsumerState<ReceiveCheckoutScreen> createState() =>
@@ -53,7 +58,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
 
   List<SupplierData> _suppliers = [];
   SupplierData? _selectedSupplier;
-  DateTime _dateReceived = DateTime.now();
+  late DateTime _dateReceived = widget.initialDateReceived ?? DateTime.now();
 
   /// Destination store for this receipt. Defaults to the active store (or the
   /// first selectable store) when the checkout opens, but the user can

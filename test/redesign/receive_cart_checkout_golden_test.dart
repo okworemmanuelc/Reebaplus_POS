@@ -122,7 +122,9 @@ void main() {
       testWidgets('receive checkout $name $theme', (tester) async {
         await open(
           tester,
-          screen: const ReceiveCheckoutScreen(),
+          screen: ReceiveCheckoutScreen(
+            initialDateReceived: DateTime(2026, 10, 11),
+          ),
           size: size,
           padding: padding,
           brightness: brightness,
@@ -161,7 +163,9 @@ void main() {
       testWidgets('receive supplier picker $name $theme', (tester) async {
         await open(
           tester,
-          screen: const ReceiveCheckoutScreen(),
+          screen: ReceiveCheckoutScreen(
+            initialDateReceived: DateTime(2026, 10, 11),
+          ),
           size: size,
           padding: padding,
           brightness: brightness,
