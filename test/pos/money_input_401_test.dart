@@ -22,7 +22,6 @@ import 'sales_sheet_hosts.dart';
 /// One brand whose full deposit has kobo: 1.5 crates × ₦1,000.33 = ₦1,500.495,
 /// rounded to 150,050 kobo (₦1,500.50).
 const _mfr = 'mfr-nb';
-const _fullKobo = 150050;
 final _koboCrateLines = <Map<String, dynamic>>[
   {
     'manufacturerId': _mfr,
