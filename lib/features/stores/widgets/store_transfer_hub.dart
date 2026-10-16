@@ -483,6 +483,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
     final result = await showDialog<({int quantity, int empties})>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         backgroundColor: Theme.of(ctx).colorScheme.surface,
         title: const Text('Dispatch quantity'),
         content: Column(

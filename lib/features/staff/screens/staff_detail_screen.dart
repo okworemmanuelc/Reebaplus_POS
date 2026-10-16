@@ -494,6 +494,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 controller.text.trim().toLowerCase() ==
                 user.name.trim().toLowerCase();
             return AlertDialog(
+              scrollable: true,
               backgroundColor: theme.colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),

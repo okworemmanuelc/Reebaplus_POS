@@ -778,6 +778,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       context: context,
       builder: (ctx) {
         return AlertDialog(
+          scrollable: true,
           backgroundColor: _surface,
           title: Text(
             'Monthly budget',
@@ -1203,6 +1204,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           builder: (ctx, setDialogState) {
             final r = reasonController.text.trim();
             return AlertDialog(
+              scrollable: true,
               backgroundColor: _surface,
               title: Text(
                 'Reject expense',

@@ -712,6 +712,8 @@ A pushed screen (Inventory's FAB, Home's quick action) on `AppDecorations.pageBa
 
 Centered overlay. Corner radius 16–20px (`AppRadius.lg` to `AppRadius.xl`).
 
+**Keyboard rule (owner phone check, #402):** a pop-up that holds a text box (`AppInput`, `TextField`, `TextFormField`) must scroll — `AlertDialog(scrollable: true, …)`, or a `Dialog` whose body is a `SingleChildScrollView`. With the keyboard up a pop-up gets about half the screen; unscrollable content squeezes the text box into a "BOTTOM OVERFLOWED" stripe. `test/utils/dialog_keyboard_scroll_ban_test.dart` scans `lib/` and fails on any pop-up that breaks this. A restyle that makes a pop-up taller (e.g. swapping a plain `TextField` for `AppInput`) also adds a keyboard-open widget test at 360×640 and 390×844 with text at 1.15 — set the keyboard on `tester.view.viewInsets` (the harness's own `viewInsets` only reaches the screen, not a pop-up on the root navigator).
+
 ### Safe-area rule
 
 Content anchored to the bottom of the screen under `MainLayout` must use

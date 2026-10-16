@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Pop-ups with a text box scroll above the keyboard (2026-10-16, owner phone check on #402)
+- The restyled Orders Refund pop-up showed "BOTTOM OVERFLOWED BY 12 PIXELS" with the keyboard up: `AlertDialog` content does not scroll by default. Every `AlertDialog` in `lib/` holding a text box now sets `scrollable: true` (Customer detail, Stock approvals, Expenses ×2, Crate return approval, Orders refund, Cart, Staff detail, Store transfer hub).
+- Guard: `test/utils/dialog_keyboard_scroll_ban_test.dart` fails on any pop-up with a text box that cannot scroll. Rule written into `ui-context.md` → Dialogs.
+
 ### Issue #392 PR 4: Supplier Detail, Manufacturer screen + crate sheets restyle (Wave 2 A, 2026-10-16)
 Branch `feat/redesign-w2-inventory-4`, stacked on PR 2 (`feat/redesign-w2-inventory-2`), worktree `../drinkPosApp-wt-392d`. Last #392 PR next to PR 3 (Product Detail + Stock Count, parallel branch). **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.**
 - New `inventory/widgets/supplier_parts.dart`: detail parts (`InventoryDetailColumn` 960 cap, `InventoryDetailHeaderCards` side by side at >= 900 measured, `InventoryDetailTabBar`, `InventoryDetailRowCard`, `InventoryDetailStatCard`, `SupplierTotalTile`) and crate-sheet parts (`CrateSheetFrame`, `CrateRecordBox`, `CrateFactRow`, `CrateSheetActions`, `inventorySheetKeyboardLift`).

@@ -246,6 +246,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('Save Cart'),
         content: AppInput(
           controller: nameController,
