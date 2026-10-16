@@ -139,6 +139,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
+        // One line: test/tour/drawer_presence_ban_test.dart reads it line by line.
         drawer: context.isRailLayout
             ? null
             : const AppDrawer(activeRoute: 'expenses'),
