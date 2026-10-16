@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Release 2.0 (v2.0.0+10) — Google Play Store Public Release (2026-10-11)
+- **Version Bump**: Bumped version in `pubspec.yaml` to `2.0.0+10` (versionName `2.0`, versionCode `10`).
+- **Release Build**: Generated signed production Android App Bundle (`app-release.aab`, 99.2 MB) at `build/app/outputs/bundle/release/app-release.aab` via `flutter build appbundle --release --build-name=2.0 --build-number=10`.
+- **Changes bundled**: Full Wave 0 & Wave 1 redesign suite (PRD #346) including Home Dashboard restyle (#374), Quick Actions (#362), Point of Sale & Cart restyle (#384, #385), modern App Frame with Nav Rail & responsive bottom bar (#352, #377), multi-item Stock Request (#380), Drawer refinements (#368, #388), Empty Crates & Manufacturers tab roster (#389), unified payment sheets, and performance optimizations.
+
 ### Pop-ups with a text box scroll above the keyboard (2026-10-16, owner phone check on #402)
 - The restyled Orders Refund pop-up showed "BOTTOM OVERFLOWED BY 12 PIXELS" with the keyboard up: `AlertDialog` content does not scroll by default. Every `AlertDialog` in `lib/` holding a text box now sets `scrollable: true` (Customer detail, Stock approvals, Expenses ×2, Crate return approval, Orders refund, Cart, Staff detail, Store transfer hub).
 - Guard: `test/utils/dialog_keyboard_scroll_ban_test.dart` fails on any pop-up with a text box that cannot scroll. Rule written into `ui-context.md` → Dialogs.
