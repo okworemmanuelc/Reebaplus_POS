@@ -12,6 +12,10 @@ class ReceiveCartLine {
   final String? manufacturerId;
   final bool trackEmpties;
 
+  /// The product's category, for the receive cart's tile colour and icon
+  /// (#394). Display only; in memory only (the receive cart is never saved).
+  final String? categoryId;
+
   const ReceiveCartLine({
     required this.productId,
     required this.productName,
@@ -22,6 +26,7 @@ class ReceiveCartLine {
     required this.wholesaleKobo,
     this.manufacturerId,
     required this.trackEmpties,
+    this.categoryId,
   });
 
   ReceiveCartLine copyWith({
@@ -34,6 +39,7 @@ class ReceiveCartLine {
     int? wholesaleKobo,
     String? manufacturerId,
     bool? trackEmpties,
+    String? categoryId,
   }) {
     return ReceiveCartLine(
       productId: productId ?? this.productId,
@@ -45,6 +51,7 @@ class ReceiveCartLine {
       wholesaleKobo: wholesaleKobo ?? this.wholesaleKobo,
       manufacturerId: manufacturerId ?? this.manufacturerId,
       trackEmpties: trackEmpties ?? this.trackEmpties,
+      categoryId: categoryId ?? this.categoryId,
     );
   }
 
@@ -86,7 +93,8 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
           wholesaleKobo: product.wholesalerPriceKobo,
           manufacturerId: product.manufacturerId,
           trackEmpties: product.trackEmpties,
-        )
+          categoryId: product.categoryId,
+        ),
       ];
     }
   }
@@ -127,7 +135,8 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
           wholesaleKobo: product.wholesalerPriceKobo,
           manufacturerId: product.manufacturerId,
           trackEmpties: product.trackEmpties,
-        )
+          categoryId: product.categoryId,
+        ),
       ];
     }
   }
@@ -137,7 +146,9 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
     final existingIndex = state.indexWhere((l) => l.productId == productId);
     if (existingIndex >= 0) {
       final updated = List<ReceiveCartLine>.from(state);
-      updated[existingIndex] = updated[existingIndex].copyWith(buyingPriceKobo: priceKobo);
+      updated[existingIndex] = updated[existingIndex].copyWith(
+        buyingPriceKobo: priceKobo,
+      );
       state = updated;
     }
   }
@@ -147,7 +158,9 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
     final existingIndex = state.indexWhere((l) => l.productId == productId);
     if (existingIndex >= 0) {
       final updated = List<ReceiveCartLine>.from(state);
-      updated[existingIndex] = updated[existingIndex].copyWith(retailKobo: priceKobo);
+      updated[existingIndex] = updated[existingIndex].copyWith(
+        retailKobo: priceKobo,
+      );
       state = updated;
     }
   }
@@ -157,7 +170,9 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
     final existingIndex = state.indexWhere((l) => l.productId == productId);
     if (existingIndex >= 0) {
       final updated = List<ReceiveCartLine>.from(state);
-      updated[existingIndex] = updated[existingIndex].copyWith(wholesaleKobo: priceKobo);
+      updated[existingIndex] = updated[existingIndex].copyWith(
+        wholesaleKobo: priceKobo,
+      );
       state = updated;
     }
   }
@@ -172,7 +187,8 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
 
   int get lineCount => state.length;
   int get totalUnits => state.fold(0, (sum, line) => sum + line.qty);
-  int get invoiceTotalKobo => state.fold(0, (sum, line) => sum + (line.buyingPriceKobo * line.qty));
+  int get invoiceTotalKobo =>
+      state.fold(0, (sum, line) => sum + (line.buyingPriceKobo * line.qty));
 
   /// Lines that would arrive with no recorded buying price (#199 / PRD #155
   /// US 37). Drives the checkout's Uncosted disclosure; it never blocks the
@@ -184,6 +200,7 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
       state.fold(0, (sum, line) => sum + (line.isUncosted ? line.qty : 0));
 }
 
-final receiveCartProvider = NotifierProvider<ReceiveCartNotifier, List<ReceiveCartLine>>(() {
-  return ReceiveCartNotifier();
-});
+final receiveCartProvider =
+    NotifierProvider<ReceiveCartNotifier, List<ReceiveCartLine>>(() {
+      return ReceiveCartNotifier();
+    });

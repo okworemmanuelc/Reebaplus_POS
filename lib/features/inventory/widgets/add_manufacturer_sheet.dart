@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -134,7 +135,7 @@ class _AddManufacturerSheetState extends ConsumerState<AddManufacturerSheet> {
         gutter,
         context.getRSize(12),
         gutter,
-        24 + context.deviceBottomPadding,
+        24 + context.deviceBottomPadding + inventorySheetKeyboardLift(context),
       ),
       child: Form(
         key: _formKey,

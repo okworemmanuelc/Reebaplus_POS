@@ -209,13 +209,22 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     );
   }
 
+  /// The typed discount: a ₦ amount reads like every money field (commas
+  /// allowed, #401); a percentage keeps its plain number parse.
+  double _enteredDiscount() {
+    final t = _discountCtrl.text.trim();
+    return _discountKind == 'naira'
+        ? parseCurrency(t)
+        : (double.tryParse(t) ?? 0.0);
+  }
+
   /// Resolves the live discount for the current inputs. Clamps to the role's
   /// max percentage (§13.2) and never below zero / above the line total.
   ({int discountKobo, bool cappedByRole}) _resolveDiscount({
     required int lineTotalKobo,
     required int maxPercent,
   }) {
-    final entered = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+    final entered = _enteredDiscount();
     if (entered <= 0 || lineTotalKobo <= 0) {
       return (discountKobo: 0, cappedByRole: false);
     }
@@ -243,7 +252,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
         (widget.item['unitPriceKobo'] as num).toInt();
     // Live custom price typed into the field (kobo). Only honoured when the
     // user holds the permission; a non-positive entry means "no override".
-    final customEntered = double.tryParse(_customPriceCtrl.text.trim()) ?? 0.0;
+    final customEntered = parseCurrency(_customPriceCtrl.text.trim());
     final customKobo = (customEntered * 100).round();
     final hasCustomPrice = canSetCustomPrice && customKobo > 0;
 
@@ -496,8 +505,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                         }
                         // Apply the resolved (role-capped) discount to the line.
                         if (discountKobo > 0) {
-                          final entered =
-                              double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+                          final entered = _enteredDiscount();
                           cart.setLineDiscount(
                             widget.item['name'],
                             kind: _discountKind,
@@ -548,8 +556,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                           );
                         }
                         // Persist the resolved (role-capped) discount alongside qty.
-                        final entered =
-                            double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+                        final entered = _enteredDiscount();
                         cart.setLineDiscount(
                           widget.item['name'],
                           kind: _discountKind,

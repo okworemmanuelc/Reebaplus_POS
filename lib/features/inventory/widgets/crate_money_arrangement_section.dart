@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -80,43 +85,29 @@ class _CrateMoneyArrangementSectionState
     return Guarded(
       gate: Gates.crateMoneyArrangement,
       builder: (context, allow) {
-        final scheme = Theme.of(context).colorScheme;
         return Container(
-          margin: const EdgeInsets.only(top: 20),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.primary.withValues(alpha: 0.1)),
-          ),
+          margin: EdgeInsets.only(top: context.getRSize(16)),
+          padding: EdgeInsets.all(context.getRSize(16)),
+          decoration: AppDecorations.card(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'CRATE MONEY',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  color: scheme.primary,
-                ),
-              ),
-              const SizedBox(height: 6),
+              const InventoryFieldLabel('CRATE MONEY'),
+              SizedBox(height: context.getRSize(6)),
               Text(
                 'How do you settle crates with the supplier of '
                 '${widget.manufacturer.name}?',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _text,
-                ),
+                style: context.semiBoldStyle(14).copyWith(color: _text),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: context.getRSize(12)),
               for (final option in CrateMoneyArrangement.values)
                 _option(option, allow),
-              const SizedBox(height: 4),
+              SizedBox(height: context.getRSize(4)),
               Text(
                 kCrateMoneyHistoryNotice,
-                style: TextStyle(fontSize: 11, height: 1.4, color: _subtext),
+                style: context
+                    .regularStyle(12)
+                    .copyWith(height: 1.4, color: _subtext),
               ),
             ],
           ),
@@ -128,22 +119,27 @@ class _CrateMoneyArrangementSectionState
   Widget _option(CrateMoneyArrangement option, GateAllow allow) {
     final scheme = Theme.of(context).colorScheme;
     final isSelected = option == _selected;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: context.getRSize(8)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: radius,
         onTap: allow(() => _choose(option)),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          constraints: const BoxConstraints(
+            minHeight: kMinInteractiveDimension,
+          ),
+          padding: EdgeInsets.all(context.getRSize(12)),
           decoration: BoxDecoration(
             color: isSelected
                 ? scheme.primary.withValues(alpha: 0.08)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: radius,
             border: Border.all(
               color: isSelected
                   ? scheme.primary
-                  : scheme.onSurface.withValues(alpha: 0.12),
+                  : Theme.of(context).dividerColor,
+              width: isSelected ? 2 : 1,
             ),
           ),
           child: Row(
@@ -153,30 +149,24 @@ class _CrateMoneyArrangementSectionState
                 isSelected
                     ? AppIcons.radioButtonChecked
                     : AppIcons.radioButtonUnchecked,
-                size: 18,
+                size: context.getRSize(20),
                 color: isSelected ? scheme.primary : _subtext,
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: context.getRSize(10)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       option.label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: _text,
-                      ),
+                      style: context.extraBoldStyle(14).copyWith(color: _text),
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: context.getRSize(2)),
                     Text(
                       option.summary,
-                      style: TextStyle(
-                        fontSize: 11,
-                        height: 1.35,
-                        color: _subtext,
-                      ),
+                      style: context
+                          .regularStyle(12)
+                          .copyWith(height: 1.35, color: _subtext),
                     ),
                   ],
                 ),
@@ -195,19 +185,26 @@ class _CrateMoneyArrangementSectionState
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: widget.surfaceColor,
-        title: Text(option.label, style: TextStyle(color: _text)),
+        // Scrolls rather than overflows at large text or a sideways phone.
+        scrollable: true,
+        title: Text(
+          option.label,
+          style: ctx.screenTitleStyle.copyWith(color: _text),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               option.onSwitchOn,
-              style: TextStyle(color: _text, height: 1.45),
+              style: ctx.regularStyle(14).copyWith(color: _text, height: 1.45),
             ),
             const SizedBox(height: 14),
             Text(
               kCrateMoneyHistoryNotice,
-              style: TextStyle(fontSize: 12, height: 1.45, color: _subtext),
+              style: ctx
+                  .regularStyle(12)
+                  .copyWith(height: 1.45, color: _subtext),
             ),
           ],
         ),
