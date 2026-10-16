@@ -1,8 +1,12 @@
 // Visual goldens for the Orders restyle (#393 PR 2, PRD #346 Wave 2 A): the
 // Orders tab (Pending, CEO) at 390×844, 844×390 (insets), 800×1280 and
-// 1280×800, the Completed tab at 390×844, the receipt and crate return
-// sheets at 390×844 and 844×390, and Crate Return Approval at the four sizes;
-// light + dark. Sample data only; times hang off noon today (time-proof).
+// 1280×800, the Completed tab at 390×844, the crate return sheet at 390×844
+// and 844×390, and Crate Return Approval at the four sizes; light + dark.
+// Sample data only; times hang off noon today (time-proof).
+//
+// No receipt-sheet golden: the on-screen receipt (`ReceiptWidget`, not part of
+// this restyle) prints `DateTime.now()`, so its picture changes every minute.
+// The sheet's restyle is covered by `orders_restyle_test.dart`.
 //
 //     flutter test --update-goldens test/redesign/orders_golden_test.dart
 
@@ -90,22 +94,6 @@ void main() {
     });
 
     for (final (size, s, pad) in cases.take(2)) {
-      testWidgets('orders receipt sheet $size $theme', (tester) async {
-        await pumpOrders(
-          tester,
-          env: env,
-          screen: const OrdersScreen(initialIndex: 1),
-          size: s,
-          padding: pad,
-          brightness: brightness,
-        );
-        // The order number (the customer name would open their profile).
-        await tester.tap(find.text('Order #ORD-000104-A1B2C3'));
-        await settleOrders(tester);
-        expect(find.byKey(OrdersKeys.receiptSheet), findsOneWidget);
-        await snap(tester, 'orders_receipt_sheet_${size}_$theme');
-      });
-
       testWidgets('crate return sheet $size $theme', (tester) async {
         await pumpOrders(
           tester,

@@ -13,7 +13,7 @@ Branch `feat/redesign-w2-sales-2` off `main` (after PR #399), worktree `../drink
 - **Crate return sheet** (`crate_return_modal.dart`): Surface sheet, warning crate tile + title + primary subtitle, card rows with a warning manufacturer tile, Credit / Cash as 48dp choice cards (Cash still behind `Gates.refundCustomerWallet`).
 - **Crate Return Approval**: `OrdersTopBar` with a 48dp back, page fade, card batches, Approve / Reject as 48dp tinted icon buttons (fixed green / danger), `AppInput` reject reason, 720 cap.
 - Local parts `lib/features/orders/widgets/orders_parts.dart` (`OrdersTopBar`, `OrdersSummaryStrip`, `OrdersEmptyState`, `OrderStatusPill`, `ordersCapPadding`, `OrdersKeys`).
-- **Tests**: `test/orders/orders_restyle_test.dart` (25), fixture `test/orders/orders_fixture.dart` (times off `seedAnchorToday`, fixed crate-return time). Goldens `orders_{390x844,844x390,800x1280,1280x800}_*`, `orders_completed_390x844_*`, `orders_receipt_sheet_*`, `crate_return_sheet_*`, `crate_return_approval_{4 sizes}_*`.
+- **Tests**: `test/orders/orders_restyle_test.dart` (25), fixture `test/orders/orders_fixture.dart` (times off `seedAnchorToday`, fixed crate-return time). Goldens `orders_{390x844,844x390,800x1280,1280x800}_*`, `orders_completed_390x844_*`, `crate_return_sheet_*`, `crate_return_approval_{4 sizes}_*`.
 - **Owner questions (behaviour, not changed)**: the crate sheet's Skip pops `false` into a `CrateReturnResult?` route (likely a type error on tap; what should Skip do?); the payment badge maps labels ("wallet", "partial", "credit") but orders store codes (`mixed`, `transfer`, `wallet`, `credit`, `cash`), so a part-paid `mixed` order badges "Cash".
 
 ### Issue #392 PR 1: Inventory screen restyle (Wave 2 A, 2026-10-12)
