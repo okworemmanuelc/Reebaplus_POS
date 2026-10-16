@@ -5,14 +5,16 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/payments/widgets/payments_parts.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_ledger_entry_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// §21.10 — every ledger entry across all suppliers (invoices, payments, voids),
 /// newest first, filtered by a period dropdown. Read-only history view.
@@ -28,10 +30,10 @@ class _SupplierTransactionsScreenState
     extends ConsumerState<SupplierTransactionsScreen> {
   String _periodFilter = 'This Month'; // §30.6/§30.11 default
   DateTimeRange? _customRange;
-  bool _isScrolled = false;
 
-  List<String> get _periodOptions =>
-      datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
+  List<String> get _periodOptions => datePeriodLabelsForRole(
+    managerUp: Gates.seeExtendedDateRanges.allows(ref),
+  );
 
   String get _effectivePeriod {
     final isCustom = _periodFilter.startsWith('Custom:');
@@ -40,96 +42,6 @@ class _SupplierTransactionsScreenState
       return _periodFilter;
     }
     return _periodOptions.first;
-  }
-
-  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _subtext =>
-      Theme.of(context).textTheme.bodySmall?.color ??
-      Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
-
-  Widget _buildSummaryTile(
-    BuildContext context,
-    ThemeData theme,
-    String label,
-    double amount,
-    Color color,
-  ) {
-    final isDark = theme.brightness == Brightness.dark;
-    return GlassyCard(
-      radius: 12,
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(14),
-        vertical: context.getRSize(10),
-      ),
-      backgroundColor: isDark
-          ? theme.colorScheme.surface.withValues(alpha: 0.25)
-          : theme.colorScheme.surface.withValues(alpha: 0.5),
-      border: Border.all(
-        color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.1 : 0.05),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(11),
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withAlpha(128),
-            ),
-          ),
-          SizedBox(height: context.getRSize(4)),
-          Text(
-            formatCurrency(amount),
-            style: TextStyle(
-              fontSize: context.getRFontSize(15),
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLedgerSummaryRow(
-    ThemeData theme,
-    SupplierLedgerStats stats,
-  ) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(8),
-        context.getRSize(16),
-        context.getRSize(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildSummaryTile(
-              context,
-              theme,
-              'Total In',
-              stats.totalIn / 100.0,
-              success,
-            ),
-          ),
-          SizedBox(width: context.getRSize(10)),
-          Expanded(
-            child: _buildSummaryTile(
-              context,
-              theme,
-              'Total Out',
-              stats.totalOut / 100.0,
-              danger,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -163,199 +75,206 @@ class _SupplierTransactionsScreenState
     final isLoadingMore = pageState.isLoadingMore;
     final hasMore = pageState.hasMore;
 
-    return ColoredBox(
-      color: _bg,
-      child: Container(
-        decoration: AppDecorations.pageBackground(context),
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            backgroundColor: _isScrolled
-                ? _surface.withValues(alpha: 0.8)
-                : Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: 20),
-              onPressed: () => Navigator.pop(context),
-            ),
-            title: Text(
-              'Transaction History',
-              style: TextStyle(
-                color: _text,
-                fontSize: context.getRFontSize(18),
-                fontWeight: FontWeight.w800,
-              ),
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+
+    void loadMore() => Future.microtask(
+      () => ref
+          .read(paginatedSupplierHistoryProvider(providerKey).notifier)
+          .loadMore(),
+    );
+
+    Widget controls(double gutter) => Padding(
+      padding: EdgeInsets.fromLTRB(
+        gutter,
+        context.getRSize(12),
+        gutter,
+        context.getRSize(4),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              '${stats.count} transaction'
+              '${stats.count == 1 ? '' : 's'} • $scopeLabel',
+              style: context.semiBoldStyle(13).copyWith(color: subtext),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          body: NotificationListener<ScrollUpdateNotification>(
-            onNotification: (notif) {
-              if (notif.metrics.pixels > 10 && !_isScrolled) {
-                setState(() => _isScrolled = true);
-              } else if (notif.metrics.pixels <= 10 && _isScrolled) {
-                setState(() => _isScrolled = false);
+          SizedBox(width: context.getRSize(8)),
+          AppDropdown<String>(
+            value: _effectivePeriod.startsWith('Custom:')
+                ? 'Custom'
+                : _effectivePeriod,
+            width: context.getRSize(140),
+            items: _periodOptions.map((val) {
+              return DropdownMenuItem<String>(value: val, child: Text(val));
+            }).toList(),
+            onChanged: (val) async {
+              if (val == 'Custom') {
+                final range = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  initialDateRange: _customRange,
+                  builder: (context, child) =>
+                      Theme(data: Theme.of(context), child: child!),
+                );
+                if (range != null) {
+                  setState(() {
+                    _customRange = range;
+                    _periodFilter =
+                        'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+                  });
+                }
+              } else if (val != null) {
+                setState(() {
+                  _periodFilter = val;
+                  _customRange = null;
+                });
               }
-              return false;
             },
-            child: !canManage
-                ? Center(
-                    child: perms.isEmpty
-                        ? const CircularProgressIndicator()
-                        : Text(
+          ),
+        ],
+      ),
+    );
+
+    Widget totals(double gutter) => Padding(
+      padding: EdgeInsets.fromLTRB(
+        gutter,
+        context.getRSize(8),
+        gutter,
+        context.getRSize(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: PaymentsFigureCard(
+              key: PaymentsKeys.totalIn,
+              label: 'Total In',
+              value: formatCurrency(stats.totalIn / 100.0),
+              color: f.green,
+            ),
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: PaymentsFigureCard(
+              key: PaymentsKeys.totalOut,
+              label: 'Total Out',
+              value: formatCurrency(stats.totalOut / 100.0),
+              color: f.danger,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: PaymentsTopBar(
+          key: PaymentsKeys.transactionsTopBar,
+          height: paymentsTopBarHeight(context),
+          header: ScreenHeader(
+            icon: AppIcons.receipt,
+            title: 'Transaction History',
+            subtitle: scopeLabel,
+            leading: PaymentsBackButton(
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: !canManage
+              ? Center(
+                  child: perms.isEmpty
+                      ? const CircularProgressIndicator()
+                      : Padding(
+                          padding: EdgeInsets.all(context.getRSize(16)),
+                          child: Text(
                             'You don’t have access to Supplier Accounts.',
-                            style: TextStyle(color: _subtext),
+                            textAlign: TextAlign.center,
+                            style: context
+                                .regularStyle(14)
+                                .copyWith(color: subtext),
                           ),
-                  )
-                : Column(
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          context.getRSize(16),
-                          context.getRSize(12),
-                          context.getRSize(16),
-                          context.getRSize(4),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${stats.count} transaction'
-                                '${stats.count == 1 ? '' : 's'} • $scopeLabel',
-                                style: TextStyle(
-                                  color: _subtext,
-                                  fontSize: context.getRFontSize(13),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            SizedBox(width: context.getRSize(8)),
-                            AppDropdown<String>(
-                              value: _effectivePeriod.startsWith('Custom:') ? 'Custom' : _effectivePeriod,
-                              width: context.getRSize(140),
-                              items: _periodOptions.map((val) {
-                                return DropdownMenuItem<String>(
-                                  value: val,
-                                  child: Text(val),
-                                );
-                              }).toList(),
-                              onChanged: (val) async {
-                                if (val == 'Custom') {
-                                  final range = await showDateRangePicker(
-                                    context: context,
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                                    initialDateRange: _customRange,
-                                    builder: (context, child) => Theme(
-                                      data: Theme.of(context),
-                                      child: child!,
-                                    ),
-                                  );
-                                  if (range != null) {
-                                    setState(() {
-                                      _customRange = range;
-                                      _periodFilter = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
-                                    });
-                                  }
-                                } else if (val != null) {
-                                  setState(() {
-                                    _periodFilter = val;
-                                    _customRange = null;
-                                  });
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      _buildLedgerSummaryRow(Theme.of(context), stats),
-                      Expanded(
-                        child: isLoading
-                            ? const Center(child: CircularProgressIndicator())
-                            : entries.isEmpty
-                                ? Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          AppIcons.receipt,
-                                          size: context.getRSize(48),
-                                          color: _border,
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final gutter = paymentsGutter(
+                      context,
+                      constraints.maxWidth,
+                    );
+                    return Column(
+                      children: [
+                        controls(gutter),
+                        totals(gutter),
+                        Expanded(
+                          child: isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : entries.isEmpty
+                              ? const Center(
+                                  child: PaymentsEmptyMessage(
+                                    key: PaymentsKeys.transactionsEmpty,
+                                    icon: AppIcons.receipt,
+                                    message: 'No transactions in this period',
+                                  ),
+                                )
+                              : ListView.builder(
+                                  key: PaymentsKeys.transactionsList,
+                                  padding: EdgeInsets.fromLTRB(
+                                    gutter,
+                                    context.getRSize(8),
+                                    gutter,
+                                    context.getRSize(24) +
+                                        context.deviceBottomPadding,
+                                  ),
+                                  itemCount: entries.length + (hasMore ? 1 : 0),
+                                  itemBuilder: (_, i) {
+                                    if (i >= entries.length) {
+                                      if (!isLoadingMore) loadMore();
+                                      return Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: context.getRSize(16),
                                         ),
-                                        SizedBox(height: context.getRSize(16)),
-                                        Text(
-                                          'No transactions in this period',
-                                          style: TextStyle(
-                                            color: _subtext,
-                                            fontSize: context.getRFontSize(15),
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                        child: const Center(
+                                          child: CircularProgressIndicator(),
                                         ),
-                                      ],
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    padding: EdgeInsets.fromLTRB(
-                                      context.getRSize(16),
-                                      context.getRSize(8),
-                                      context.getRSize(16),
-                                      context.getRSize(24) +
-                                          context.deviceBottomPadding,
-                                    ),
-                                    itemCount: entries.length + (hasMore ? 1 : 0),
-                                    itemBuilder: (_, i) {
-                                      if (i >= entries.length) {
-                                        if (!isLoadingMore) {
-                                          Future.microtask(
-                                            () => ref
-                                                .read(
-                                                  paginatedSupplierHistoryProvider(
-                                                    providerKey,
-                                                  ).notifier,
-                                                )
-                                                .loadMore(),
-                                          );
-                                        }
-                                        return Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: context.getRSize(16),
-                                          ),
-                                          child: const Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                        );
-                                      }
-                                      if (i >= entries.length - 5 && hasMore && !isLoadingMore) {
-                                        Future.microtask(
-                                          () => ref
-                                              .read(
-                                                paginatedSupplierHistoryProvider(
-                                                  providerKey,
-                                                ).notifier,
-                                              )
-                                              .loadMore(),
-                                        );
-                                      }
-                                      final e = entries[i];
-                                      return SupplierLedgerEntryTile(
-                                        entry: e,
-                                        supplierName: nameById[e.supplierId] ??
-                                            'Unknown supplier',
-                                        storeName: isAllStores
-                                            ? (storeNameById[e.storeId] ??
+                                      );
+                                    }
+                                    if (i >= entries.length - 5 &&
+                                        hasMore &&
+                                        !isLoadingMore) {
+                                      loadMore();
+                                    }
+                                    final e = entries[i];
+                                    return SupplierLedgerEntryTile(
+                                      key: PaymentsKeys.ledgerRow(e.id),
+                                      entry: e,
+                                      supplierName:
+                                          nameById[e.supplierId] ??
+                                          'Unknown supplier',
+                                      storeName: isAllStores
+                                          ? (storeNameById[e.storeId] ??
                                                 (e.storeId == null
                                                     ? 'Unassigned'
                                                     : null))
-                                            : null,
-                                      );
-                                    },
-                                  ),
-                      ),
-                    ],
-                  ),
-          ),
+                                          : null,
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
         ),
       ),
     );
