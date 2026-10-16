@@ -71,7 +71,8 @@ List<Map<String, dynamic>> checkoutCrateLines() => const [
 ];
 
 /// Pumps Checkout at [size]. A registered [customer] with [creditKobo]; crate
-/// lines only with [crates] (pass a crate business to the environment).
+/// lines only with [crates] (pass a crate business to the environment), or
+/// exactly [crateLines] when given.
 /// Under 600dp Checkout is a pushed page (no bottom bar); at 600dp+ the rail
 /// stays beside it.
 Future<BuildContext> pumpCheckout(
@@ -85,6 +86,7 @@ Future<BuildContext> pumpCheckout(
   Customer? customer,
   int creditKobo = 0,
   bool crates = false,
+  List<Map<String, dynamic>>? crateLines,
   Set<String> grantedKeys = const {'sales.make'},
 }) async {
   final context = await pumpScreen(
@@ -106,7 +108,8 @@ Future<BuildContext> pumpCheckout(
               cart: checkoutLines(),
               subtotal: 33000,
               total: 32500,
-              crateLines: crates ? checkoutCrateLines() : const [],
+              crateLines:
+                  crateLines ?? (crates ? checkoutCrateLines() : const []),
               customer: customer,
             ),
     ),
