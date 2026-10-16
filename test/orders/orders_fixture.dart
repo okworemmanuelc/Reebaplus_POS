@@ -237,6 +237,7 @@ Future<void> pumpOrders(
   Brightness brightness = Brightness.light,
   bool cashier = false,
   double? bottomNavHeight,
+  bool followView = false,
 }) async {
   await pumpScreen(
     tester,
@@ -246,6 +247,7 @@ Future<void> pumpOrders(
     viewInsets: viewInsets,
     textScaler: textScaler,
     screen: screen,
+    followView: followView,
     bottomNavHeight: bottomNavHeight ?? kBottomNavBodyHeight,
     theme: brightness == Brightness.light ? AppTheme.light() : AppTheme.dark(),
     grantedKeys: cashier ? ordersCashierGrants : ordersCeoGrants,
