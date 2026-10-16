@@ -752,12 +752,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Edit the deposit paid for one brand. Pre-fills the current value (blank =
   /// ₦0); the "Use full (₦X)" shortcut fills the full deposit; clearing/0 marks
   /// the brand "No deposit" (crate-track). Modal-style sheet (back / Save only).
+  /// Amounts are kobo-exact both ways (#401), and an amount above [fullKobo]
+  /// can't be saved: an inline message shows and Save is disabled.
   void _editBrandDeposit(String mfrId, String name, int fullKobo) {
+    final savedKobo = _depositByMfr[mfrId] ?? 0;
     final ctrl = TextEditingController(
-      text: (_depositByMfr[mfrId] ?? 0) == 0
-          ? ''
-          : ((_depositByMfr[mfrId] ?? 0) ~/ 100).toString(),
+      text: savedKobo == 0 ? '' : koboToInputText(savedKobo),
     );
+    int enteredKobo() => (parseCurrency(ctrl.text) * 100).round();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -817,37 +819,64 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     textStyle: context.boldStyle(13),
                   ),
                   onPressed: () {
-                    ctrl.text = (fullKobo ~/ 100).toString();
+                    ctrl.text = koboToInputText(fullKobo);
                   },
                   icon: AppIcon(AppIcons.magic, size: context.getRSize(16)),
                   label: Text('Use full (${formatCurrency(fullKobo / 100.0)})'),
                 ),
               ),
-              SizedBox(height: context.getRSize(12)),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      text: 'Back',
-                      variant: AppButtonVariant.ghost,
-                      onPressed: () => Navigator.pop(sheetCtx),
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  Expanded(
-                    child: AppButton(
-                      text: 'Save',
-                      variant: AppButtonVariant.primary,
-                      onPressed: () {
-                        final val = (parseCurrency(ctrl.text) * 100).round();
-                        setState(
-                          () => _depositByMfr[mfrId] = val < 0 ? 0 : val,
-                        );
-                        Navigator.pop(sheetCtx);
-                      },
-                    ),
-                  ),
-                ],
+              // Rebuilds the cap message + Save as the amount changes.
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: ctrl,
+                builder: (_, _, _) {
+                  final overFull = enteredKobo() > fullKobo;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (overFull)
+                        Padding(
+                          padding: EdgeInsets.only(top: context.getRSize(4)),
+                          child: Text(
+                            "Can't be more than the full deposit "
+                            '$activeCurrencySymbol${koboToInputText(fullKobo)}',
+                            style: context
+                                .semiBoldStyle(12)
+                                .copyWith(color: _fixed.danger),
+                          ),
+                        ),
+                      SizedBox(height: context.getRSize(12)),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AppButton(
+                              text: 'Back',
+                              variant: AppButtonVariant.ghost,
+                              onPressed: () => Navigator.pop(sheetCtx),
+                            ),
+                          ),
+                          SizedBox(width: context.getRSize(12)),
+                          Expanded(
+                            child: AppButton(
+                              text: 'Save',
+                              variant: AppButtonVariant.primary,
+                              onPressed: overFull
+                                  ? null
+                                  : () {
+                                      final val = enteredKobo();
+                                      setState(
+                                        () => _depositByMfr[mfrId] = val < 0
+                                            ? 0
+                                            : val,
+                                      );
+                                      Navigator.pop(sheetCtx);
+                                    },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),

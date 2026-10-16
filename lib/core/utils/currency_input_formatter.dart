@@ -93,3 +93,17 @@ double parseCurrency(String text) {
   String cleanText = text.replaceAll(',', '');
   return double.tryParse(cleanText) ?? 0.0;
 }
+
+/// Kobo → the text a money field shows: grouped whole naira plus the kobo when
+/// there are any (150050 → `1,500.50`, 150000 → `1,500`). The exact inverse of
+/// `(parseCurrency(text) * 100).round()`, so a pre-filled amount never loses
+/// its kobo.
+String koboToInputText(int kobo) {
+  final sign = kobo < 0 ? '-' : '';
+  final abs = kobo.abs();
+  final whole = NumberFormat('#,##0', 'en_US').format(abs ~/ 100);
+  final fraction = abs % 100;
+  return fraction == 0
+      ? '$sign$whole'
+      : '$sign$whole.${fraction.toString().padLeft(2, '0')}';
+}
