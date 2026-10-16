@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #395 PR 2: Customer Detail + its sheets restyle (2026-10-16) — PRD #346 Wave 2 A
+Branch `feat/redesign-w2-customers-2` off `main` 8f5f7395, worktree `../drinkPosApp-wt-395b`. Last PR of #395 (PR 1 = list + Add/Edit sheets, merged). **Restyle only — every figure, gate and submit/write handler is unchanged (kept byte-for-byte); no Drift/cloud/sync/permission/status change (no `pos-parity` issue), no new packages, no shared-part change.**
+- `customer_parts.dart` gains the Detail parts: `CustomerBarAction` (48dp), `CustomerProfileCard`, `CustomerCreditsCard`, `CustomerFigureCard`, `CustomerDetailRow`, `CustomerDetailEmpty`, `CustomerHeaderSliver` / `customerDetailSliver` (fixed 960 cap, two cards side by side at a measured >= 900), `CustomerSheetFrame` + `showCustomerSheet` (shrink-wrapped scroll capped at 90% height, `deviceBottomPadding`, 640 wide) and `CustomerOptionCard` (a COPY of the payment sheet's private `_MethodOption`, so its 8 goldens are untouched). Conventions in `ui-context.md` "Customers".
+- Fixes: Refund / Set Limit / Record Crate Return sheets now scroll (they overflowed at 844x390 with the keyboard up); the hard-coded "(₦)" in "Amount to refund" / "Limit Amount" now follows the currency; tap targets under 48dp (edit pencil, void, Add Credit / Set Limit / Refund, back, delete) raised; success messages use `AppFixedColors.green`; the body keeps clear of the side system bar sideways.
+- Flag only (not touched): raw permission strings in the refund / crate-return write re-checks; `_showReceipt`'s raw `db.select(db.orderItems)`; sheet `TextEditingController`s never disposed.
+- Tests: `test/customers/customer_detail_redesign_test.dart` (31) + fixture `test/helpers/customer_detail_fixture.dart`; goldens `test/redesign/customer_detail_golden_test.dart` (20).
+
 ### Issue #392 PR 1: Inventory screen restyle (Wave 2 A, 2026-10-12)
 Branch `feat/redesign-w2-inventory-1` off `main` 2ec88349, worktree `../drinkPosApp-wt-392`. PR 1 of 4 (screen + tabs + Manage Categories + Add Manufacturer). **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, no shared-part change.**
 - New local parts `lib/features/inventory/widgets/inventory_parts.dart`: `InventoryTopBar` (Home's solid bar + `ScreenHeader`), `InventoryBarAction`, `InventoryLiveBell`, `InventoryFigureCard` (selectable compact figure), `InventoryProductRow` (photo, else `categoryVisual` tile — `colorHex` no longer drawn in the row), `InventoryEmptyCard`, `InventorySheetHeader`, `InventoryPeriodChip`; `kInventoryMaxContentWidth` (= 720) + `inventoryGutter`. All shared-part candidates.
