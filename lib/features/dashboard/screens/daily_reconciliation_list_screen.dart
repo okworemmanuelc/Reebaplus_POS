@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -106,7 +107,6 @@ class _DailyReconciliationListScreenState
     final theme = Theme.of(context);
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     final scopeLabel = ref.watch(activeStoreLabelProvider);
-    final primary = theme.colorScheme.primary;
 
     // §25.9 — a Manager is capped at Month; only the CEO gets Year.
     final groupings = isCeo
