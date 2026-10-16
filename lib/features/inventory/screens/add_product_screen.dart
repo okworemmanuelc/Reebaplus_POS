@@ -908,11 +908,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             ref
                 .read(receiveCartProvider.notifier)
                 .addOrIncrement(updatedProduct, amount: qty);
-            if (mounted)
+            if (mounted) {
               AppNotification.showSuccess(
                 context,
                 '$qty units of $existingName added to Receive Cart',
               );
+            }
           } else {
             // #170 #7a: the existing-product "Add quantity" shortcut now records
             // its cost like a delivery — adjustStock creates a Cost Batch at the
@@ -926,11 +927,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               auth.currentUser?.id ?? 'unknown',
               inflowUnitCostKobo: buyingKobo,
             );
-            if (mounted)
+            if (mounted) {
               AppNotification.showSuccess(
                 context,
                 '$qty units of $existingName added to stock',
               );
+            }
           }
         }
 
@@ -1113,14 +1115,16 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ref
             .read(receiveCartProvider.notifier)
             .addOrIncrement(newProduct, amount: initialStock);
-        if (mounted)
+        if (mounted) {
           AppNotification.showSuccess(
             context,
             '$name added to catalog and $initialStock units routed to Receive Cart',
           );
+        }
       } else {
-        if (mounted)
+        if (mounted) {
           AppNotification.showSuccess(context, '$name added to catalog');
+        }
       }
 
       await ref
