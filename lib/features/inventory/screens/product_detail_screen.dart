@@ -4,7 +4,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_detail_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/result.dart';
 
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
@@ -170,10 +177,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     // Resolve a renderable path for the photo — downloads from Storage once if
     // only the cloud URL is known, so a cross-device photo shows here and
     // renders offline from the cache. #78.
-    final cachedPhoto = await ref.read(productImageServiceProvider).ensureCached(
-          productId: productId,
-          imageUrl: product?.imageUrl,
-        );
+    final cachedPhoto = await ref
+        .read(productImageServiceProvider)
+        .ensureCached(productId: productId, imageUrl: product?.imageUrl);
 
     if (mounted) {
       setState(() {
@@ -552,240 +558,185 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: _bg,
-      resizeToAvoidBottomInset: false,
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(context),
-          SliverToBoxAdapter(child: _buildBody(context)),
-        ],
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: false,
+        appBar: _buildTopBar(context),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Detail screens cap at a fixed 960 and centre (#392); the header
+              // cards pair up from a measured 900, never a viewport predicate.
+              final gutter = detailGutter(context, constraints.maxWidth);
+              final sideBySide = constraints.maxWidth >= kDetailSideBySideWidth;
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  context.getRSize(16),
+                  gutter,
+                  context.getRSize(16) + context.deviceBottomPadding,
+                ),
+                child: _buildBody(context, sideBySide),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SLIVER APP BAR — hero header with product icon and gradient
+  // TOP BAR — the solid Inventory bar (#392)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildSliverAppBar(BuildContext context) {
-    final isLow = _liveStock > 0 && _liveStock <= widget.item.lowStockThreshold;
-    final isOut = _liveStock == 0;
-    Color statusColor = success;
-    String statusLabel = 'In Stock';
-    if (isOut) {
-      statusColor = danger;
-      statusLabel = 'Out of Stock';
-    } else if (isLow) {
-      statusColor = const Color(0xFFF59E0B);
-      statusLabel = 'Low Stock';
-    }
-
-    return SliverAppBar(
-      expandedHeight: context.getRSize(220),
-      pinned: true,
-      backgroundColor: _surface,
+  PreferredSizeWidget _buildTopBar(BuildContext context) {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    return InventoryTopBar(
+      icon: AppIcons.tag,
+      title: 'Product Details',
+      height: inventoryTopBarHeight(context),
       leading: IconButton(
-        icon: Container(
-          padding: EdgeInsets.all(context.getRSize(8)),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            AppIcons.arrowBackIosNew,
-            size: context.getRSize(18),
-            color: Colors.white,
-          ),
+        tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+        constraints: const BoxConstraints(
+          minWidth: kMinInteractiveDimension,
+          minHeight: kMinInteractiveDimension,
         ),
         onPressed: () => Navigator.pop(context),
+        icon: AppIcon(
+          AppIcons.arrowBack,
+          size: context.getRSize(24),
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
       ),
       actions: [
-        // Edit toggle (CEO/Manager) — fields stay read-only until this is on.
-        // Temporarily hidden per user request
-        /*
-        if (_canEdit)
-          IconButton(
-            tooltip: _editMode ? 'Cancel editing' : 'Edit product',
-            onPressed: () {
-              if (_editMode) {
-                _resetEdits();
-                setState(() => _editMode = false);
-              } else {
-                setState(() => _editMode = true);
-              }
-            },
-            icon: Container(
-              padding: EdgeInsets.all(context.getRSize(8)),
-              decoration: BoxDecoration(
-                color: _editMode
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.black.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                _editMode ? AppIcons.close : AppIcons.edit,
-                size: context.getRSize(18),
-                color: Colors.white,
-              ),
-            ),
-          ),
-        */
+        // The Edit toggle (CEO/Manager) is hidden per owner request: the
+        // fields stay read-only (see git history for the old button).
         if (_canDelete)
           IconButton(
             tooltip: 'Delete product',
+            constraints: const BoxConstraints(
+              minWidth: kMinInteractiveDimension,
+              minHeight: kMinInteractiveDimension,
+            ),
             onPressed: () => _confirmDelete(context),
-            icon: Container(
-              padding: EdgeInsets.all(context.getRSize(8)),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.error.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                AppIcons.delete,
-                size: context.getRSize(18),
-                color: Theme.of(context).colorScheme.error,
-              ),
+            icon: AppIcon(
+              AppIcons.delete,
+              size: context.getRSize(24),
+              color: f.danger,
             ),
           ),
-        SizedBox(width: context.getRSize(8)),
       ],
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                widget.item.color.withValues(alpha: 0.8),
-                widget.item.color.withValues(alpha: 0.4),
-                _bg,
-              ],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HERO CARD — photo / icon, name, stock status
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildHero(BuildContext context) {
+    final isLow = _liveStock > 0 && _liveStock <= widget.item.lowStockThreshold;
+    final isOut = _liveStock == 0;
+    var statusTone = TagPillTone.green;
+    var statusLabel = 'In Stock';
+    if (isOut) {
+      statusTone = TagPillTone.danger;
+      statusLabel = 'Out of Stock';
+    } else if (isLow) {
+      statusTone = TagPillTone.warning;
+      statusLabel = 'Low Stock';
+    }
+    final t = Theme.of(context);
+    final edge = context.getRSize(72);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    final fallback = IconTile(
+      icon: widget.item.icon,
+      tone: IconTileTone.neutral,
+      tint: widget.item.color.withValues(alpha: 0.15),
+      iconColor: widget.item.color,
+      size: 72,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.getRSize(16)),
+      decoration: AppDecorations.card(context),
+      child: Row(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SizedBox(
+                width: edge,
+                height: edge,
+                child: _imagePath != null
+                    ? ClipRRect(
+                        borderRadius: radius,
+                        child: Image.file(
+                          File(_imagePath!),
+                          width: edge,
+                          height: edge,
+                          fit: BoxFit.cover,
+                          errorBuilder: (ctx, _, __) => fallback,
+                        ),
+                      )
+                    : fallback,
+              ),
+              if (_editMode)
+                Positioned(
+                  right: -context.getRSize(12),
+                  bottom: -context.getRSize(12),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _pickImage,
+                    child: Padding(
+                      // A 48dp target around the small badge.
+                      padding: EdgeInsets.all(context.getRSize(14)),
+                      child: Container(
+                        padding: EdgeInsets.all(context.getRSize(4)),
+                        decoration: BoxDecoration(
+                          color: t.colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: AppIcon(
+                          AppIcons.edit,
+                          color: t.colorScheme.onPrimary,
+                          size: context.getRSize(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          child: SafeArea(
+          SizedBox(width: context.getRSize(16)),
+          Expanded(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(height: context.getRSize(24)),
-                Container(
-                  width: context.getRSize(80),
-                  height: context.getRSize(80),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.3),
-                      width: 2,
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: _imagePath != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(22),
-                                child: Image.file(
-                                  File(_imagePath!),
-                                  width: context.getRSize(76),
-                                  height: context.getRSize(76),
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (ctx, _, __) => Icon(
-                                    widget.item.icon,
-                                    color: Colors.white,
-                                    size: context.getRSize(36),
-                                  ),
-                                ),
-                              )
-                            : Icon(
-                                widget.item.icon,
-                                color: Colors.white,
-                                size: context.getRSize(36),
-                              ),
-                      ),
-                      if (_editMode)
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: GestureDetector(
-                            onTap: _pickImage,
-                            child: Container(
-                              padding: EdgeInsets.all(context.getRSize(4)),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2,
-                                ),
-                              ),
-                              child: Icon(
-                                AppIcons.edit,
-                                color: Colors.white,
-                                size: context.getRSize(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                AppInput(
+                  controller: _nameController,
+                  readOnly: !_editMode,
+                  style: context
+                      .extraBoldStyle(20)
+                      .copyWith(color: t.colorScheme.onSurface),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  hintText: 'Product Name',
+                  fillColor: Colors.transparent,
+                  onChanged: (v) => setState(() {}),
                 ),
-                SizedBox(height: context.getRSize(14)),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: context.screenWidth * 0.8,
-                  ),
-                  child: AppInput(
-                    controller: _nameController,
-                    readOnly: !_editMode,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(24),
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                    hintText: 'Product Name',
-                    fillColor: Colors.transparent,
-                    onChanged: (v) => setState(() {}),
-                  ),
-                ),
-                SizedBox(height: context.getRSize(6)),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(width: context.getRSize(12)),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: context.getRSize(10),
-                        vertical: context.getRSize(4),
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(11),
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                SizedBox(height: context.getRSize(8)),
+                TagPill(label: statusLabel, tone: statusTone),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -794,422 +745,405 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // BODY — all detail sections
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildBody(BuildContext context) {
+  Widget _buildBody(BuildContext context, bool sideBySide) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final gap = SizedBox(height: context.getRSize(24));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Identity + Pricing (side by side when measured wide) ─────────
+        DetailPair(
+          sideBySide: sideBySide,
+          first: _buildHero(context),
+          second: DetailSection(title: 'Pricing', child: _pricingCard(context)),
+        ),
+        gap,
+
+        // ── Stock & Info ─────────────────────────────────────────────────
+        DetailSection(title: 'Stock & Info', child: _stockInfoCard(context)),
+        gap,
+
+        // ── Sales Summary + Sales Target ─────────────────────────────────
+        DetailPair(
+          sideBySide: sideBySide,
+          first: DetailSection(
+            title: 'Sales Summary',
+            child: _buildSalesGrid(context),
+          ),
+          // Editable by CEO only, in edit mode.
+          second: DetailSection(
+            title: 'Sales Target',
+            subtitle: (_editMode && !_isCeo) ? '(CEO only)' : null,
+            child: _buildTargetGrid(context),
+          ),
+        ),
+        gap,
+
+        // ── Last Delivery ────────────────────────────────────────────────
+        DetailSection(
+          title: 'Last Delivery',
+          child: _buildDeliveryCard(context),
+        ),
+        SizedBox(height: context.getRSize(24)),
+
+        // ── Read-only notice ─────────────────────────────────────────────
+        Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(
+            minHeight: kMinInteractiveDimension,
+          ),
+          padding: EdgeInsets.all(context.getRSize(16)),
+          decoration: AppDecorations.card(context),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AppIcon(AppIcons.lock, size: context.getRSize(14), color: muted),
+              SizedBox(width: context.getRSize(6)),
+              Text(
+                'VIEW ONLY',
+                style: context
+                    .extraBoldStyle(12)
+                    .copyWith(letterSpacing: 0.8, color: muted),
+              ),
+            ],
+          ),
+        ),
+        // Shown only for a factory barcode (ADR 0029 §6, #335).
+        CatalogueReportLink(barcode: _productData?.barcode),
+        SizedBox(height: context.getRSize(16)),
+      ],
+    );
+  }
+
+  Widget _stockInfoCard(BuildContext context) {
+    return DetailCard(
+      children: [
+        // Quantity is read-only here — it changes via Add Product
+        // (restock) or the Stock keeper's Update Stock modal, never inline.
+        _infoRow(
+          context,
+          AppIcons.crates,
+          'Total Quantity',
+          '${_liveStock.toStringAsFixed(_liveStock % 1 == 0 ? 0 : 1)}'
+              '${_selectedUnit != null ? ' ${_selectedUnit!}' : ''}',
+          IconTileTone.info,
+        ),
+        _divider(context),
+        // Description / subtitle
+        _infoRow(
+          context,
+          AppIcons.description,
+          'Description',
+          _editMode ? '' : _subtitleController.text,
+          IconTileTone.info,
+          trailing: _editMode
+              ? _textTrailing(_subtitleController, width: 150)
+              : null,
+        ),
+        _divider(context),
+        _infoRow(
+          context,
+          AppIcons.manufacturer,
+          'Manufacturer',
+          '',
+          IconTileTone.info,
+          trailing: SizedBox(
+            width: context.getRSize(160),
+            child: AppDropdown<String?>(
+              value: _selectedManufacturerId,
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(
+                    'None',
+                    style: TextStyle(
+                      color: _subtext,
+                      fontSize: context.getRFontSize(12),
+                    ),
+                  ),
+                ),
+                ..._allManufacturers.map(
+                  (m) => DropdownMenuItem<String?>(
+                    value: m.id,
+                    child: Text(m.name, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ],
+              onChanged: _editMode
+                  ? (v) => setState(() {
+                      _selectedManufacturerId = v;
+                      // Crate value is shared at the manufacturer level —
+                      // autofill from the chosen manufacturer (§16.5).
+                      final m = _allManufacturers
+                          .where((x) => x.id == v)
+                          .firstOrNull;
+                      if (m != null && m.depositAmountKobo > 0) {
+                        _emptyCrateValueController.text =
+                            (m.depositAmountKobo / 100).toStringAsFixed(0);
+                      }
+                    })
+                  : (_) {},
+            ),
+          ),
+        ),
+        // Supplier (gated — Stock keeper / Cashier don't see it, §16.7)
+        if (_canSeeSuppliers) ...[
+          _divider(context),
+          _infoRow(
+            context,
+            AppIcons.supplier,
+            'Supplier',
+            '',
+            IconTileTone.info,
+            trailing: SizedBox(
+              width: context.getRSize(160),
+              child: AppDropdown<String?>(
+                value: _allSuppliers.any((s) => s.id == _selectedSupplierId)
+                    ? _selectedSupplierId
+                    : null,
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(
+                      'None',
+                      style: TextStyle(
+                        color: _subtext,
+                        fontSize: context.getRFontSize(12),
+                      ),
+                    ),
+                  ),
+                  ..._allSuppliers.map(
+                    (s) => DropdownMenuItem<String?>(
+                      value: s.id,
+                      child: Text(s.name, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: _editMode
+                    ? (v) => setState(() => _selectedSupplierId = v)
+                    : (_) {},
+              ),
+            ),
+          ),
+        ],
+        _divider(context),
+        // Category Dropdown
+        _infoRow(
+          context,
+          AppIcons.tag,
+          'Category',
+          '',
+          IconTileTone.green,
+          trailing: SizedBox(
+            width: context.getRSize(150),
+            child: AppDropdown<String?>(
+              value: _selectedCategoryId,
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text("None"),
+                ),
+                ..._allCategories.map(
+                  (c) => DropdownMenuItem<String?>(
+                    value: c.id,
+                    child: Text(c.name),
+                  ),
+                ),
+              ],
+              onChanged: _editMode
+                  ? (val) => setState(() => _selectedCategoryId = val)
+                  : (_) {},
+            ),
+          ),
+        ),
+        _divider(context),
+        // Product Unit Dropdown
+        _infoRow(
+          context,
+          AppIcons.box,
+          'Product Unit',
+          '',
+          IconTileTone.warning,
+          trailing: SizedBox(
+            width: context.getRSize(150),
+            child: AppDropdown<String?>(
+              value: _selectedUnit,
+              hintText: 'No unit',
+              // "No unit" (#108) clears the unit — a product with just a
+              // name, hidden everywhere the unit would render.
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('No unit'),
+                ),
+                ..._allUnits.map(
+                  (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
+                ),
+              ],
+              onChanged: _editMode
+                  ? (val) => setState(() => _selectedUnit = val)
+                  : (_) {},
+            ),
+          ),
+        ),
+        _divider(context),
+        // Low Stock Alert
+        _infoRow(
+          context,
+          AppIcons.warning,
+          'Low Stock Alert',
+          '',
+          IconTileTone.danger,
+          trailing: _textTrailing(
+            _lowStockController,
+            width: 70,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+        ),
+        _divider(context),
+        // Size dropdown
+        _infoRow(
+          context,
+          AppIcons.category,
+          'Size',
+          '',
+          IconTileTone.malt,
+          trailing: SizedBox(
+            width: context.getRSize(130),
+            child: AppDropdown<String?>(
+              value: _size,
+              items: const [
+                DropdownMenuItem(value: null, child: Text('None')),
+                DropdownMenuItem(value: 'big', child: Text('Big')),
+                DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                DropdownMenuItem(value: 'small', child: Text('Small')),
+              ],
+              onChanged: _editMode ? (v) => setState(() => _size = v) : (_) {},
+            ),
+          ),
+        ),
+        _divider(context),
+        // Expiry date (editable)
+        _infoRow(
+          context,
+          AppIcons.calendarCancel,
+          'Expiry Date',
+          '',
+          IconTileTone.warning,
+          trailing: _expiryTrailing(context),
+        ),
+        _divider(context),
+        // Allow fractional sales
+        _infoRow(
+          context,
+          AppIcons.divide,
+          'Allow fractional sales',
+          '',
+          IconTileTone.info,
+          trailing: Switch.adaptive(
+            value: _allowFractionalSales,
+            onChanged: _editMode
+                ? (v) => setState(() => _allowFractionalSales = v)
+                : null,
+          ),
+        ),
+        _divider(context),
+        // Track empty crate returns
+        _infoRow(
+          context,
+          AppIcons.recycle,
+          'Track empty crates',
+          '',
+          IconTileTone.green,
+          trailing: Switch.adaptive(
+            value: _trackEmpties,
+            onChanged: _editMode
+                ? (v) => setState(() => _trackEmpties = v)
+                : null,
+          ),
+        ),
+        if (_trackEmpties) ...[
+          _divider(context),
+          // Empty Crate Value — shared at the manufacturer level (§16.5)
+          _infoRow(
+            context,
+            AppIcons.deposit,
+            'Empty Crate Value',
+            '',
+            IconTileTone.green,
+            trailing: _textTrailing(
+              _emptyCrateValueController,
+              width: 90,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [CurrencyInputFormatter()],
+              prefix: activeCurrencySymbol,
+            ),
+          ),
+          _divider(context),
+          // Empty Crates — manufacturer total (read-only)
+          _infoRow(
+            context,
+            AppIcons.beerMug,
+            'Empty Crates',
+            _emptyCrateStock?.toString() ?? '0',
+            IconTileTone.warning,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _pricingCard(BuildContext context) {
     final double totalStockValue = stockValue(
       parseCurrency(_retailPriceController.text),
       _liveStock,
     );
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(16),
-        context.getRSize(20),
-        context.getRSize(16) + context.deviceBottomPadding,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Stock & Info ─────────────────────────────────────────
-          _sectionTitle(context, 'Stock & Info'),
-          SizedBox(height: context.getRSize(12)),
-          _infoCard(context, [
-            // Quantity is read-only here — it changes via Add Product
-            // (restock) or the Stock keeper's Update Stock modal, never inline.
-            _infoRow(
-              context,
-              AppIcons.crates,
-              'Total Quantity',
-              '${_liveStock.toStringAsFixed(_liveStock % 1 == 0 ? 0 : 1)}'
-                  '${_selectedUnit != null ? ' ${_selectedUnit!}' : ''}',
-              Theme.of(context).colorScheme.primary,
-            ),
-            _divider(context),
-            // Description / subtitle
-            _infoRow(
-              context,
-              AppIcons.description,
-              'Description',
-              _editMode ? '' : _subtitleController.text,
-              const Color(0xFF06B6D4),
-              trailing: _editMode
-                  ? _textTrailing(_subtitleController, width: 150)
-                  : null,
-            ),
-            _divider(context),
-            _infoRow(
-              context,
-              AppIcons.manufacturer,
-              'Manufacturer',
-              '',
-              const Color(0xFF6366F1),
-              trailing: SizedBox(
-                width: context.getRSize(160),
-                child: AppDropdown<String?>(
-                  value: _selectedManufacturerId,
-                  items: [
-                    DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(
-                        'None',
-                        style: TextStyle(
-                          color: _subtext,
-                          fontSize: context.getRFontSize(12),
-                        ),
-                      ),
-                    ),
-                    ..._allManufacturers.map(
-                      (m) => DropdownMenuItem<String?>(
-                        value: m.id,
-                        child: Text(m.name, overflow: TextOverflow.ellipsis),
-                      ),
-                    ),
-                  ],
-                  onChanged: _editMode
-                      ? (v) => setState(() {
-                          _selectedManufacturerId = v;
-                          // Crate value is shared at the manufacturer level —
-                          // autofill from the chosen manufacturer (§16.5).
-                          final m = _allManufacturers
-                              .where((x) => x.id == v)
-                              .firstOrNull;
-                          if (m != null && m.depositAmountKobo > 0) {
-                            _emptyCrateValueController.text =
-                                (m.depositAmountKobo / 100).toStringAsFixed(0);
-                          }
-                        })
-                      : (_) {},
-                ),
-              ),
-            ),
-            // Supplier (gated — Stock keeper / Cashier don't see it, §16.7)
-            if (_canSeeSuppliers) ...[
-              _divider(context),
-              _infoRow(
-                context,
-                AppIcons.supplier,
-                'Supplier',
-                '',
-                const Color(0xFF0EA5E9),
-                trailing: SizedBox(
-                  width: context.getRSize(160),
-                  child: AppDropdown<String?>(
-                    value: _allSuppliers.any((s) => s.id == _selectedSupplierId)
-                        ? _selectedSupplierId
-                        : null,
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(
-                          'None',
-                          style: TextStyle(
-                            color: _subtext,
-                            fontSize: context.getRFontSize(12),
-                          ),
-                        ),
-                      ),
-                      ..._allSuppliers.map(
-                        (s) => DropdownMenuItem<String?>(
-                          value: s.id,
-                          child: Text(s.name, overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ],
-                    onChanged: _editMode
-                        ? (v) => setState(() => _selectedSupplierId = v)
-                        : (_) {},
-                  ),
-                ),
-              ),
-            ],
-            _divider(context),
-            // Category Dropdown
-            _infoRow(
-              context,
-              AppIcons.tag,
-              'Category',
-              '',
-              success,
-              trailing: SizedBox(
-                width: context.getRSize(150),
-                child: AppDropdown<String?>(
-                  value: _selectedCategoryId,
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text("None"),
-                    ),
-                    ..._allCategories.map(
-                      (c) => DropdownMenuItem<String?>(
-                        value: c.id,
-                        child: Text(c.name),
-                      ),
-                    ),
-                  ],
-                  onChanged: _editMode
-                      ? (val) => setState(() => _selectedCategoryId = val)
-                      : (_) {},
-                ),
-              ),
-            ),
-            _divider(context),
-            // Product Unit Dropdown
-            _infoRow(
-              context,
-              AppIcons.box,
-              'Product Unit',
-              '',
-              const Color(0xFFF59E0B),
-              trailing: SizedBox(
-                width: context.getRSize(150),
-                child: AppDropdown<String?>(
-                  value: _selectedUnit,
-                  hintText: 'No unit',
-                  // "No unit" (#108) clears the unit — a product with just a
-                  // name, hidden everywhere the unit would render.
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('No unit'),
-                    ),
-                    ..._allUnits.map(
-                      (u) =>
-                          DropdownMenuItem<String?>(value: u, child: Text(u)),
-                    ),
-                  ],
-                  onChanged: _editMode
-                      ? (val) => setState(() => _selectedUnit = val)
-                      : (_) {},
-                ),
-              ),
-            ),
-            _divider(context),
-            // Low Stock Alert
-            _infoRow(
-              context,
-              AppIcons.warning,
-              'Low Stock Alert',
-              '',
-              const Color(0xFFEF4444),
-              trailing: _textTrailing(
-                _lowStockController,
-                width: 70,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-            ),
-            _divider(context),
-            // Size dropdown
-            _infoRow(
-              context,
-              AppIcons.category,
-              'Size',
-              '',
-              const Color(0xFF8B5CF6),
-              trailing: SizedBox(
-                width: context.getRSize(130),
-                child: AppDropdown<String?>(
-                  value: _size,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('None')),
-                    DropdownMenuItem(value: 'big', child: Text('Big')),
-                    DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                    DropdownMenuItem(value: 'small', child: Text('Small')),
-                  ],
-                  onChanged: _editMode
-                      ? (v) => setState(() => _size = v)
-                      : (_) {},
-                ),
-              ),
-            ),
-            _divider(context),
-            // Expiry date (editable)
-            _infoRow(
-              context,
-              AppIcons.calendarCancel,
-              'Expiry Date',
-              '',
-              const Color(0xFFF59E0B),
-              trailing: _expiryTrailing(context),
-            ),
-            _divider(context),
-            // Allow fractional sales
-            _infoRow(
-              context,
-              AppIcons.divide,
-              'Allow fractional sales',
-              '',
-              const Color(0xFF6366F1),
-              trailing: Switch.adaptive(
-                value: _allowFractionalSales,
-                onChanged: _editMode
-                    ? (v) => setState(() => _allowFractionalSales = v)
-                    : null,
-              ),
-            ),
-            _divider(context),
-            // Track empty crate returns
-            _infoRow(
-              context,
-              AppIcons.recycle,
-              'Track empty crates',
-              '',
-              const Color(0xFF14B8A6),
-              trailing: Switch.adaptive(
-                value: _trackEmpties,
-                onChanged: _editMode
-                    ? (v) => setState(() => _trackEmpties = v)
-                    : null,
-              ),
-            ),
-            if (_trackEmpties) ...[
-              _divider(context),
-              // Empty Crate Value — shared at the manufacturer level (§16.5)
-              _infoRow(
-                context,
-                AppIcons.deposit,
-                'Empty Crate Value',
-                '',
-                const Color(0xFF14B8A6),
-                trailing: _textTrailing(
-                  _emptyCrateValueController,
-                  width: 90,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [CurrencyInputFormatter()],
-                  prefix: activeCurrencySymbol,
-                ),
-              ),
-              _divider(context),
-              // Empty Crates — manufacturer total (read-only)
-              _infoRow(
-                context,
-                AppIcons.beerMug,
-                'Empty Crates',
-                _emptyCrateStock?.toString() ?? '0',
-                const Color(0xFFF59E0B),
-              ),
-            ],
-          ]),
-
-          SizedBox(height: context.getRSize(24)),
-
-          // ── Pricing ─────────────────────────────────────────────────
-          _sectionTitle(context, 'Pricing'),
-          SizedBox(height: context.getRSize(12)),
-          _infoCard(context, [
-            // Buying price is hidden from roles without `products.edit_buying_price`
-            // (Cashier, Stock keeper) — master plan §16.6 / §16.7.
-            if (_canEditBuying) ...[
-              _infoRow(
-                context,
-                AppIcons.price,
-                'Buying Price',
-                '',
-                const Color(0xFFF59E0B),
-                trailing: _inlinePriceInput(_buyingPriceController),
-              ),
-              _divider(context),
-            ],
-            _infoRow(
-              context,
-              AppIcons.tag,
-              'Retailer Price',
-              '',
-              Theme.of(context).colorScheme.primary,
-              trailing: _inlinePriceInput(_retailPriceController),
-            ),
-            _divider(context),
-            _infoRow(
-              context,
-              AppIcons.customers,
-              'Wholesaler Price',
-              '',
-              const Color(0xFF8B5CF6),
-              trailing: _inlinePriceInput(_wholesalerPriceController),
-            ),
-            _divider(context),
-            _infoRow(
-              context,
-              AppIcons.analytics,
-              'Total Stock Value',
-              formatCurrency(totalStockValue),
-              Theme.of(context).colorScheme.primary,
-            ),
-          ]),
-
-          SizedBox(height: context.getRSize(24)),
-
-          // ── Sales Summary ───────────────────────────────────────────
-          _sectionTitle(context, 'Sales Summary'),
-          SizedBox(height: context.getRSize(12)),
-          _buildSalesGrid(context),
-
-          SizedBox(height: context.getRSize(24)),
-
-          // ── Sales Target (editable by CEO only, in edit mode) ────────
-          Row(
-            children: [
-              _sectionTitle(context, 'Sales Target'),
-              if (_editMode && !_isCeo) ...[
-                SizedBox(width: context.getRSize(8)),
-                Text(
-                  '(CEO only)',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(11),
-                    color: _subtext,
-                  ),
-                ),
-              ],
-            ],
+    return DetailCard(
+      children: [
+        // Buying price is hidden from roles without `products.edit_buying_price`
+        // (Cashier, Stock keeper) — master plan §16.6 / §16.7.
+        if (_canEditBuying) ...[
+          _infoRow(
+            context,
+            AppIcons.price,
+            'Buying Price',
+            '',
+            IconTileTone.warning,
+            trailing: _inlinePriceInput(_buyingPriceController),
           ),
-          SizedBox(height: context.getRSize(12)),
-          _buildTargetGrid(context),
-
-          SizedBox(height: context.getRSize(24)),
-
-          // ── Last Delivery ───────────────────────────────────────────
-          _sectionTitle(context, 'Last Delivery'),
-          SizedBox(height: context.getRSize(12)),
-          _buildDeliveryCard(context),
-
-          SizedBox(height: context.getRSize(32)),
-          // ── Read-only notice ──────────────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(context.getRSize(16)),
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _border),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  AppIcons.lock,
-                  size: context.getRSize(14),
-                  color: _subtext,
-                ),
-                SizedBox(width: context.getRSize(6)),
-                Text(
-                  'VIEW ONLY',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
-                    color: _subtext,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Shown only for a factory barcode (ADR 0029 §6, #335).
-          CatalogueReportLink(barcode: _productData?.barcode),
-          SizedBox(height: context.getRSize(40)),
+          _divider(context),
         ],
-      ),
+        _infoRow(
+          context,
+          AppIcons.tag,
+          'Retailer Price',
+          '',
+          IconTileTone.info,
+          trailing: _inlinePriceInput(_retailPriceController),
+        ),
+        _divider(context),
+        _infoRow(
+          context,
+          AppIcons.customers,
+          'Wholesaler Price',
+          '',
+          IconTileTone.malt,
+          trailing: _inlinePriceInput(_wholesalerPriceController),
+        ),
+        _divider(context),
+        _infoRow(
+          context,
+          AppIcons.analytics,
+          'Total Stock Value',
+          formatCurrency(totalStockValue),
+          IconTileTone.info,
+        ),
+      ],
     );
   }
 
@@ -1217,131 +1151,52 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // SHARED WIDGETS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _sectionTitle(BuildContext context, String title) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: context.getRFontSize(16),
-        fontWeight: FontWeight.w800,
-        color: _text,
-      ),
-    );
-  }
-
-  Widget _infoCard(BuildContext context, List<Widget> children) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-      ),
-      child: Column(children: children),
-    );
-  }
-
   Widget _infoRow(
     BuildContext context,
     IconData icon,
     String label,
     String value,
-    Color iconColor, {
-    VoidCallback? onTap,
+    IconTileTone tone, {
     Widget? trailing,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(16),
-          vertical: context.getRSize(14),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: context.getRSize(38),
-              height: context.getRSize(38),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: context.getRSize(16), color: iconColor),
-            ),
-            SizedBox(width: context.getRSize(14)),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.w600,
-                  color: _subtext,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            SizedBox(width: context.getRSize(8)),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(14),
-                    fontWeight: FontWeight.bold,
-                    color: _text,
-                  ),
-                  textAlign: TextAlign.end,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-            if (trailing != null) ...[
-              SizedBox(width: context.getRSize(8)),
-              trailing,
-            ],
-          ],
-        ),
-      ),
+    return DetailInfoRow(
+      icon: icon,
+      tone: tone,
+      label: label,
+      value: value,
+      trailing: trailing,
     );
   }
 
-  Widget _divider(BuildContext context) {
-    return Divider(
-      height: 1,
-      color: _border,
-      indent: context.getRSize(16),
-      endIndent: context.getRSize(16),
-    );
-  }
+  Widget _divider(BuildContext context) => const DetailDivider();
 
   // ── Sales Summary Grid — reads from DB ───────────────────────────────────
   Widget _buildSalesGrid(BuildContext context) {
     final s = _salesSummary;
-    return _infoCard(context, [
-      _statRow(
-        context,
-        'Today',
-        s != null ? '${s.todayUnits} units' : '—',
-        s != null ? formatCurrency(s.todayRevenueKobo / 100) : '—',
-      ),
-      _divider(context),
-      _statRow(
-        context,
-        'This Week',
-        s != null ? '${s.weekUnits} units' : '—',
-        s != null ? formatCurrency(s.weekRevenueKobo / 100) : '—',
-      ),
-      _divider(context),
-      _statRow(
-        context,
-        'This Month',
-        s != null ? '${s.monthUnits} units' : '—',
-        s != null ? formatCurrency(s.monthRevenueKobo / 100) : '—',
-      ),
-    ]);
+    return DetailCard(
+      children: [
+        _statRow(
+          context,
+          'Today',
+          s != null ? '${s.todayUnits} units' : '—',
+          s != null ? formatCurrency(s.todayRevenueKobo / 100) : '—',
+        ),
+        _divider(context),
+        _statRow(
+          context,
+          'This Week',
+          s != null ? '${s.weekUnits} units' : '—',
+          s != null ? formatCurrency(s.weekRevenueKobo / 100) : '—',
+        ),
+        _divider(context),
+        _statRow(
+          context,
+          'This Month',
+          s != null ? '${s.monthUnits} units' : '—',
+          s != null ? formatCurrency(s.monthRevenueKobo / 100) : '—',
+        ),
+      ],
+    );
   }
 
   // ── Sales Target Grid — reads monthly target from DB ─────────────────────
@@ -1351,19 +1206,21 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final int currentWeekly = s?.weekUnits ?? 0;
     final int currentDaily = s?.todayUnits ?? 0;
 
-    return _infoCard(context, [
-      _targetRow(context, 'Daily', currentDaily, _monthlyTarget ~/ 30),
-      _divider(context),
-      _targetRow(context, 'Weekly', currentWeekly, _monthlyTarget ~/ 4),
-      _divider(context),
-      _targetRow(
-        context,
-        'Monthly',
-        currentMonthly,
-        _monthlyTarget,
-        isEditable: true,
-      ),
-    ]);
+    return DetailCard(
+      children: [
+        _targetRow(context, 'Daily', currentDaily, _monthlyTarget ~/ 30),
+        _divider(context),
+        _targetRow(context, 'Weekly', currentWeekly, _monthlyTarget ~/ 4),
+        _divider(context),
+        _targetRow(
+          context,
+          'Monthly',
+          currentMonthly,
+          _monthlyTarget,
+          isEditable: true,
+        ),
+      ],
+    );
   }
 
   Widget _statRow(
@@ -1372,49 +1229,45 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     String qty,
     String revenue,
   ) {
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(14),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              period,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.w600,
-                color: _subtext,
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(14),
+          vertical: context.getRSize(12),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
+                period,
+                style: context.semiBoldStyle(13).copyWith(color: muted),
               ),
             ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              qty,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.bold,
-                color: _text,
+            Expanded(
+              flex: 2,
+              child: Text(
+                qty,
+                textAlign: TextAlign.center,
+                style: context
+                    .boldStyle(13)
+                    .copyWith(color: t.colorScheme.onSurface),
               ),
-              textAlign: TextAlign.center,
             ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              revenue,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.bold,
-                color: success,
+            Expanded(
+              flex: 3,
+              child: Text(
+                revenue,
+                textAlign: TextAlign.end,
+                style: context.boldStyle(13).copyWith(color: f.green),
               ),
-              textAlign: TextAlign.end,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1426,13 +1279,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     int target, {
     bool isEditable = false,
   }) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
     final pct = (progress * 100).toInt();
+    final figure = context
+        .boldStyle(12)
+        .copyWith(color: t.colorScheme.onSurface);
 
     return Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(14),
+        horizontal: context.getRSize(14),
+        vertical: context.getRSize(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1442,24 +1301,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             children: [
               Text(
                 period,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.w600,
-                  color: _subtext,
-                ),
+                style: context.semiBoldStyle(13).copyWith(color: muted),
               ),
               if (isEditable)
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '$current / ',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(12),
-                        fontWeight: FontWeight.bold,
-                        color: _text,
-                      ),
-                    ),
+                    Text('$current / ', style: figure),
                     SizedBox(
                       width: context.getRSize(40),
                       child: AppInput(
@@ -1479,38 +1327,22 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         fillColor: Colors.transparent,
                       ),
                     ),
-                    Text(
-                      ' units ($pct%)',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(12),
-                        fontWeight: FontWeight.bold,
-                        color: _text,
-                      ),
-                    ),
+                    Text(' units ($pct%)', style: figure),
                   ],
                 )
               else
-                Text(
-                  '$current / $target units  ($pct%)',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.bold,
-                    color: _text,
-                  ),
-                ),
+                Text('$current / $target units  ($pct%)', style: figure),
             ],
           ),
           SizedBox(height: context.getRSize(8)),
           ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusS),
             child: LinearProgressIndicator(
               value: progress,
               minHeight: context.getRSize(6),
-              backgroundColor: _border,
+              backgroundColor: t.dividerColor,
               valueColor: AlwaysStoppedAnimation<Color>(
-                progress >= 1.0
-                    ? success
-                    : Theme.of(context).colorScheme.primary,
+                progress >= 1.0 ? f.green : t.colorScheme.primary,
               ),
             ),
           ),
@@ -1521,75 +1353,80 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   // ── Last Delivery Card — reads from Shipments table ───────────────────────
   Widget _buildDeliveryCard(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     if (!_deliveryLoaded) {
-      return _infoCard(context, [
-        Padding(
-          padding: EdgeInsets.all(context.getRSize(24)),
-          child: Center(
-            child: SizedBox(
-              width: context.getRSize(20),
-              height: context.getRSize(20),
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Theme.of(context).colorScheme.primary,
+      return DetailCard(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(context.getRSize(24)),
+            child: Center(
+              child: SizedBox(
+                width: context.getRSize(20),
+                height: context.getRSize(20),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: t.colorScheme.primary,
+                ),
               ),
             ),
           ),
-        ),
-      ]);
+        ],
+      );
     }
 
     if (_lastDelivery == null) {
-      return _infoCard(context, [
-        Padding(
-          padding: EdgeInsets.all(context.getRSize(24)),
-          child: Center(
-            child: Text(
-              'No deliveries recorded yet',
-              style: TextStyle(
-                color: _subtext,
-                fontSize: context.getRFontSize(13),
+      return DetailCard(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(context.getRSize(24)),
+            child: Center(
+              child: Text(
+                'No deliveries recorded yet',
+                style: context.regularStyle(13).copyWith(color: muted),
               ),
             ),
           ),
-        ),
-      ]);
+        ],
+      );
     }
 
     final d = _lastDelivery!;
-    return _infoCard(context, [
-      _infoRow(
-        context,
-        AppIcons.calendar,
-        'Date',
-        _fmtDate(d.date),
-        Theme.of(context).colorScheme.primary,
-      ),
-      _divider(context),
-      _infoRow(
-        context,
-        AppIcons.vanDelivery,
-        'Quantity Received',
-        '${d.quantity} units',
-        const Color(0xFF6366F1),
-      ),
-      _divider(context),
-      _infoRow(
-        context,
-        AppIcons.price,
-        'Price Per Unit',
-        formatCurrency(d.unitPriceKobo / 100),
-        const Color(0xFFF59E0B),
-      ),
-      _divider(context),
-      _infoRow(
-        context,
-        AppIcons.receipt,
-        'Total Delivery Cost',
-        formatCurrency(d.totalKobo / 100),
-        success,
-      ),
-    ]);
+    return DetailCard(
+      children: [
+        _infoRow(
+          context,
+          AppIcons.calendar,
+          'Date',
+          _fmtDate(d.date),
+          IconTileTone.info,
+        ),
+        _divider(context),
+        _infoRow(
+          context,
+          AppIcons.vanDelivery,
+          'Quantity Received',
+          '${d.quantity} units',
+          IconTileTone.info,
+        ),
+        _divider(context),
+        _infoRow(
+          context,
+          AppIcons.price,
+          'Price Per Unit',
+          formatCurrency(d.unitPriceKobo / 100),
+          IconTileTone.warning,
+        ),
+        _divider(context),
+        _infoRow(
+          context,
+          AppIcons.receipt,
+          'Total Delivery Cost',
+          formatCurrency(d.totalKobo / 100),
+          IconTileTone.green,
+        ),
+      ],
+    );
   }
 
   String _fmtDate(DateTime dt) {
@@ -1684,34 +1521,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       expiry.day,
     ).difference(today).inDays;
     String label;
-    Color color;
+    TagPillTone tone;
     if (days < 0) {
       label = 'Expired';
-      color = danger;
+      tone = TagPillTone.danger;
     } else if (days <= 30) {
       label = days == 0 ? 'Expires today' : 'Expires soon';
-      color = const Color(0xFFF59E0B);
+      tone = TagPillTone.warning;
     } else {
       return null;
     }
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(10),
-        vertical: context.getRSize(4),
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: context.getRFontSize(11),
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
+    return TagPill(label: label, tone: tone);
   }
 
   /// "Update Stock" modal (master plan §16.6): add / remove a quantity against
@@ -1846,8 +1666,25 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
   }
 
-  /// Bordered inline text/number field used as an `_infoRow` trailing. Editable
-  /// only in edit mode (CEO/Manager); read-only otherwise.
+  /// Inline text/number field used as a row trailing: a themed box that is
+  /// always a 48dp target. Editable only in edit mode (CEO/Manager);
+  /// read-only otherwise.
+  Widget _trailingBox({required double width, required Widget field}) {
+    final t = Theme.of(context);
+    return Container(
+      width: context.getRSize(width),
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+      alignment: Alignment.center,
+      padding: EdgeInsets.symmetric(horizontal: context.getRSize(10)),
+      decoration: BoxDecoration(
+        color: t.scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+        border: Border.all(color: t.dividerColor),
+      ),
+      child: field,
+    );
+  }
+
   Widget _textTrailing(
     TextEditingController controller, {
     double width = 120,
@@ -1855,18 +1692,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     List<TextInputFormatter>? inputFormatters,
     String? prefix,
   }) {
-    return Container(
-      width: context.getRSize(width),
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(4),
-      ),
-      decoration: BoxDecoration(
-        color: _bg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _border),
-      ),
-      child: AppInput(
+    return _trailingBox(
+      width: width,
+      field: AppInput(
         controller: controller,
         readOnly: !_editMode,
         keyboardType: keyboardType,
@@ -1884,62 +1712,67 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   /// Expiry-date trailing: shows the date (+ near-expiry badge when viewing),
   /// and in edit mode is tappable to open the date picker with a clear button.
   Widget _expiryTrailing(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final has = _expiryDate != null;
-    return GestureDetector(
-      onTap: _editMode ? _pickExpiry : null,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (has && !_editMode) ...[
-            _expiryBadge(context, _expiryDate!) ?? const SizedBox.shrink(),
-            SizedBox(width: context.getRSize(6)),
-          ],
-          Text(
-            has ? _formatDate(_expiryDate!) : 'None',
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.bold,
-              color: has ? _text : _subtext,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: _editMode ? _pickExpiry : null,
+          borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (has && !_editMode) ...[
+                  _expiryBadge(context, _expiryDate!) ??
+                      const SizedBox.shrink(),
+                  SizedBox(width: context.getRSize(6)),
+                ],
+                Text(
+                  has ? _formatDate(_expiryDate!) : 'None',
+                  style: context
+                      .boldStyle(13)
+                      .copyWith(color: has ? t.colorScheme.onSurface : muted),
+                ),
+                if (_editMode) ...[
+                  SizedBox(width: context.getRSize(6)),
+                  AppIcon(
+                    AppIcons.calendarMonth,
+                    size: context.getRSize(16),
+                    color: t.colorScheme.primary,
+                  ),
+                ],
+              ],
             ),
           ),
-          if (_editMode) ...[
-            SizedBox(width: context.getRSize(6)),
-            Icon(
-              AppIcons.calendarMonth,
-              size: context.getRSize(16),
-              color: Theme.of(context).colorScheme.primary,
+        ),
+        if (_editMode && has)
+          IconButton(
+            tooltip: 'Clear date',
+            constraints: const BoxConstraints(
+              minWidth: kMinInteractiveDimension,
+              minHeight: kMinInteractiveDimension,
             ),
-            if (has)
-              GestureDetector(
-                onTap: () => setState(() => _expiryDate = null),
-                child: Padding(
-                  padding: EdgeInsets.only(left: context.getRSize(4)),
-                  child: Icon(
-                    AppIcons.close,
-                    size: context.getRSize(14),
-                    color: _subtext,
-                  ),
-                ),
-              ),
-          ],
-        ],
-      ),
+            onPressed: () => setState(() => _expiryDate = null),
+            icon: AppIcon(
+              AppIcons.close,
+              size: context.getRSize(16),
+              color: muted,
+            ),
+          ),
+      ],
     );
   }
 
   Widget _inlinePriceInput(TextEditingController controller) {
-    return Container(
-      width: context.getRSize(100),
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(4),
-      ),
-      decoration: BoxDecoration(
-        color: _bg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _border),
-      ),
-      child: AppInput(
+    return _trailingBox(
+      width: 110,
+      field: AppInput(
         controller: controller,
         readOnly: !_editMode,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1958,11 +1791,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        // Scrolls rather than overflows on a small or sideways screen (#392).
+        scrollable: true,
         backgroundColor: _surface,
-        title: Text('Delete Product', style: TextStyle(color: _text)),
+        title: Text(
+          'Delete Product',
+          style: ctx.screenTitleStyle.copyWith(color: _text),
+        ),
         content: Text(
           'Are you sure you want to delete ${widget.item.productName}? This action cannot be undone.',
-          style: TextStyle(color: _text),
+          style: ctx.regularStyle(14).copyWith(color: _text),
         ),
         actions: [
           AppButton(
@@ -1996,10 +1834,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               // retry rather than lose the value silently.
               final int writtenOffKobo;
               try {
-                writtenOffKobo = await db.inventoryDao.writeOffAllStockForDelete(
-                  productId,
-                  actorId,
-                );
+                writtenOffKobo = await db.inventoryDao
+                    .writeOffAllStockForDelete(productId, actorId);
               } catch (e, st) {
                 CrashReporter.record(
                   e,
