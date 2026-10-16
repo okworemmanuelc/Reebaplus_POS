@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,7 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -63,14 +70,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   /// hasn't resolved yet (store not yet synced to this device) reads "This
   /// store" rather than a raw id.
   String get _storeLabel => _storeName ?? 'This store';
-  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
-  Color get _card => Theme.of(context).cardColor;
 
   @override
   void initState() {
@@ -188,292 +191,187 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         initialChildSize: changedIndexes.isEmpty ? 0.45 : 0.75,
         maxChildSize: 0.95,
         minChildSize: 0.35,
-        builder: (sheetCtx, scrollCtrl) => Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              // Handle
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: context.getRSize(12)),
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: _border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // Header
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.getRSize(20),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      AppIcons.clipboardList,
-                      size: context.getRSize(16),
-                      color: Theme.of(context).colorScheme.primary,
+        builder: (sheetCtx, scrollCtrl) {
+          final t = Theme.of(sheetCtx);
+          final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+          final gutter = sheetCtx.getRSize(20);
+          return _sheetSurface(
+            sheetCtx,
+            child: Column(
+              children: [
+                // Header, chips and the changed lines scroll together; only
+                // the buttons stay pinned, so a short sideways sheet never
+                // overflows.
+                Expanded(
+                  child: ListView(
+                    controller: scrollCtrl,
+                    padding: EdgeInsets.fromLTRB(
+                      gutter,
+                      sheetCtx.getRSize(12),
+                      gutter,
+                      sheetCtx.getRSize(10),
                     ),
-                    SizedBox(width: context.getRSize(10)),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InventorySheetHeader(
+                        title: 'Review Count',
+                        subtitle: _storeLabel,
+                      ),
+                      SizedBox(height: sheetCtx.getRSize(12)),
+                      Wrap(
+                        spacing: sheetCtx.getRSize(8),
+                        runSpacing: sheetCtx.getRSize(6),
                         children: [
-                          Text(
-                            'Review Count',
-                            style: TextStyle(
-                              color: _text,
-                              fontSize: context.getRFontSize(18),
-                              fontWeight: FontWeight.w800,
-                            ),
+                          TagPill(
+                            label: '${_items.length} counted',
+                            tone: TagPillTone.neutral,
                           ),
-                          Text(
-                            _storeLabel,
-                            style: TextStyle(
-                              color: _subtext,
-                              fontSize: context.getRFontSize(12),
+                          if (changedIndexes.isNotEmpty)
+                            TagPill(
+                              label: '${changedIndexes.length} adjusted',
+                              tone: TagPillTone.info,
                             ),
-                          ),
+                          if (shortages > 0)
+                            TagPill(
+                              label: '$shortages short',
+                              tone: TagPillTone.danger,
+                            ),
+                          if (surpluses > 0)
+                            TagPill(
+                              label: '$surpluses over',
+                              tone: TagPillTone.green,
+                            ),
                         ],
                       ),
-                    ),
-                  ],
+                      SizedBox(height: sheetCtx.getRSize(14)),
+                      if (changedIndexes.isEmpty)
+                        _reviewMatched(sheetCtx)
+                      else
+                        for (final i in changedIndexes) ...[
+                          _reviewLine(sheetCtx, f, i),
+                          SizedBox(height: sheetCtx.getRSize(8)),
+                        ],
+                    ],
+                  ),
                 ),
-              ),
-              SizedBox(height: context.getRSize(10)),
-              // Summary chips
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-                child: Wrap(
-                  spacing: context.getRSize(8),
-                  runSpacing: context.getRSize(6),
-                  children: [
-                    _reviewChip(
-                      '${_items.length} counted',
-                      _subtext,
-                      _border.withValues(alpha: 0.5),
-                    ),
-                    if (changedIndexes.isNotEmpty)
-                      _reviewChip(
-                        '${changedIndexes.length} adjusted',
-                        Theme.of(context).colorScheme.primary,
-                        Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
+                // Action buttons
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    sheetCtx.getRSize(16),
+                    sheetCtx.getRSize(8),
+                    sheetCtx.getRSize(16),
+                    sheetCtx.deviceBottomPadding + sheetCtx.getRSize(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          text: 'Back',
+                          variant: AppButtonVariant.outline,
+                          onPressed: () => Navigator.pop(sheetCtx, false),
+                        ),
                       ),
-                    if (shortages > 0)
-                      _reviewChip(
-                        '$shortages short',
-                        danger,
-                        danger.withValues(alpha: 0.1),
+                      SizedBox(width: sheetCtx.getRSize(12)),
+                      Expanded(
+                        flex: 2,
+                        child: AppButton(
+                          text: 'Confirm & Save Count',
+                          onPressed: () => Navigator.pop(sheetCtx, true),
+                        ),
                       ),
-                    if (surpluses > 0)
-                      _reviewChip(
-                        '$surpluses over',
-                        success,
-                        success.withValues(alpha: 0.1),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              SizedBox(height: context.getRSize(10)),
-              Divider(color: _border, height: 1),
-              // Changed items list or "all matched" state
-              Expanded(
-                child: changedIndexes.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              AppIcons.checkCircle,
-                              size: context.getRSize(36),
-                              color: success.withValues(alpha: 0.6),
-                            ),
-                            SizedBox(height: context.getRSize(12)),
-                            Text(
-                              'All products matched',
-                              style: TextStyle(
-                                color: _text,
-                                fontSize: context.getRFontSize(15),
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            SizedBox(height: context.getRSize(4)),
-                            Text(
-                              'The count will be recorded with no stock changes.',
-                              style: TextStyle(
-                                color: _subtext,
-                                fontSize: context.getRFontSize(13),
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.separated(
-                        controller: scrollCtrl,
-                        padding: EdgeInsets.fromLTRB(
-                          context.getRSize(16),
-                          context.getRSize(10),
-                          context.getRSize(16),
-                          context.getRSize(10),
-                        ),
-                        itemCount: changedIndexes.length,
-                        separatorBuilder: (_, __) =>
-                            SizedBox(height: context.getRSize(6)),
-                        itemBuilder: (_, idx) {
-                          final i = changedIndexes[idx];
-                          final item = _items[i];
-                          final d = _diff(i);
-                          final actual = item.totalStock + d;
-                          final isShort = d < 0;
-                          final diffColor = isShort ? danger : success;
-                          final sign = d > 0 ? '+' : '';
-                          return Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: context.getRSize(12),
-                              vertical: context.getRSize(10),
-                            ),
-                            decoration: BoxDecoration(
-                              color: _card,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: diffColor.withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item.product.name,
-                                    style: TextStyle(
-                                      color: _text,
-                                      fontSize: context.getRFontSize(13),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                SizedBox(width: context.getRSize(8)),
-                                Text(
-                                  '${item.totalStock} → $actual',
-                                  style: TextStyle(
-                                    color: _subtext,
-                                    fontSize: context.getRFontSize(12),
-                                  ),
-                                ),
-                                SizedBox(width: context.getRSize(10)),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: context.getRSize(8),
-                                    vertical: context.getRSize(3),
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: diffColor.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    '$sign$d',
-                                    style: TextStyle(
-                                      color: diffColor,
-                                      fontSize: context.getRFontSize(12),
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-              // Action buttons
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  context.getRSize(16),
-                  context.getRSize(8),
-                  context.getRSize(16),
-                  context.deviceBottomPadding + context.getRSize(16),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(sheetCtx, false),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _text,
-                          side: BorderSide(color: _border),
-                          padding: EdgeInsets.symmetric(
-                            vertical: context.getRSize(14),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Back',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: context.getRSize(12)),
-                    Expanded(
-                      flex: 2,
-                      child: FilledButton(
-                        onPressed: () => Navigator.pop(sheetCtx, true),
-                        style: FilledButton.styleFrom(
-                          padding: EdgeInsets.symmetric(
-                            vertical: context.getRSize(14),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Confirm & Save Count',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(14),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _reviewChip(String label, Color textColor, Color bgColor) {
+  /// A sheet's own Surface with the theme's top corners (both stock-count
+  /// sheets open on a transparent background so a draggable sheet can fill it).
+  Widget _sheetSurface(BuildContext ctx, {required Widget child}) {
+    final t = Theme.of(ctx);
+    final shape =
+        t.bottomSheetTheme.shape ??
+        const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppSpacing.borderRadiusXL),
+          ),
+        );
+    return DecoratedBox(
+      decoration: ShapeDecoration(color: t.colorScheme.surface, shape: shape),
+      child: child,
+    );
+  }
+
+  Widget _reviewMatched(BuildContext ctx) {
+    final t = Theme.of(ctx);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: ctx.getRSize(24)),
+      child: Column(
+        children: [
+          const IconTile(
+            icon: AppIcons.checkCircle,
+            tone: IconTileTone.green,
+            size: 48,
+          ),
+          SizedBox(height: ctx.getRSize(12)),
+          Text(
+            'All products matched',
+            textAlign: TextAlign.center,
+            style: ctx.boldStyle(15).copyWith(color: t.colorScheme.onSurface),
+          ),
+          SizedBox(height: ctx.getRSize(4)),
+          Text(
+            'The count will be recorded with no stock changes.',
+            textAlign: TextAlign.center,
+            style: ctx.regularStyle(13).copyWith(color: muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reviewLine(BuildContext ctx, AppFixedColors f, int i) {
+    final t = Theme.of(ctx);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final item = _items[i];
+    final d = _diff(i);
+    final actual = item.totalStock + d;
+    final sign = d > 0 ? '+' : '';
     return Container(
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
       padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(10),
-        vertical: context.getRSize(4),
+        horizontal: ctx.getRSize(14),
+        vertical: ctx.getRSize(10),
       ),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: textColor,
-          fontSize: context.getRFontSize(12),
-          fontWeight: FontWeight.w700,
-        ),
+      decoration: AppDecorations.card(ctx),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              item.product.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: ctx
+                  .semiBoldStyle(13)
+                  .copyWith(color: t.colorScheme.onSurface),
+            ),
+          ),
+          SizedBox(width: ctx.getRSize(8)),
+          Text(
+            '${item.totalStock} → $actual',
+            style: ctx.regularStyle(12).copyWith(color: muted),
+          ),
+          SizedBox(width: ctx.getRSize(10)),
+          TagPill(
+            label: '$sign$d',
+            tone: d < 0 ? TagPillTone.danger : TagPillTone.green,
+          ),
+        ],
       ),
     );
   }
@@ -611,7 +509,9 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     if (_items.isEmpty) return;
     ProductStockWithStore? product;
     String reasonKey = 'broken';
-    final tracksCrates = businessTracksCrates(ref.read(currentBusinessProvider));
+    final tracksCrates = businessTracksCrates(
+      ref.read(currentBusinessProvider),
+    );
     // Reuse the State-owned controller; clear any value left from a prior open.
     _damageQtyCtrl.clear();
     bool submitting = false;
@@ -626,8 +526,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             Future<void> submit() async {
               final qty = int.tryParse(_damageQtyCtrl.text.trim()) ?? 0;
               if (product == null) {
-                AppNotification.showError(sheetCtx,
-                    'Choose a ${ref.read(industryLexiconProvider).itemLower}.');
+                AppNotification.showError(
+                  sheetCtx,
+                  'Choose a ${ref.read(industryLexiconProvider).itemLower}.',
+                );
                 return;
               }
               if (qty <= 0) {
@@ -735,42 +637,36 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               }
             }
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: context.getRSize(20),
-                right: context.getRSize(20),
-                top: context.getRSize(20),
-                bottom: context.deviceBottomPadding + context.getRSize(20),
+            final t = Theme.of(sheetCtx);
+            // The sheet's own Surface; the form scrolls so it never overflows
+            // over a keyboard or a short sideways screen (#392).
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: sheetCtx.sheetMaxHeight(0.92),
               ),
-              child: Container(
-                padding: EdgeInsets.all(context.getRSize(20)),
-                decoration: BoxDecoration(
-                  color: _surface,
-                  borderRadius: BorderRadius.circular(20),
+              decoration: ShapeDecoration(
+                color: t.colorScheme.surface,
+                shape:
+                    t.bottomSheetTheme.shape ??
+                    const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(AppSpacing.borderRadiusXL),
+                      ),
+                    ),
+              ),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  sheetCtx.getRSize(20),
+                  sheetCtx.getRSize(12),
+                  sheetCtx.getRSize(20),
+                  sheetCtx.deviceBottomPadding + sheetCtx.getRSize(20),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          AppIcons.warning,
-                          size: context.getRSize(16),
-                          color: danger,
-                        ),
-                        SizedBox(width: context.getRSize(10)),
-                        Text(
-                          'Record Damages',
-                          style: TextStyle(
-                            color: _text,
-                            fontSize: context.getRFontSize(18),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: context.getRSize(16)),
+                    const InventorySheetHeader(title: 'Record Damages'),
+                    SizedBox(height: sheetCtx.getRSize(16)),
                     AppDropdown<ProductStockWithStore>(
                       labelText: ref.read(industryLexiconProvider).item,
                       hintText:
@@ -789,7 +685,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         product = v;
                       }),
                     ),
-                    SizedBox(height: context.getRSize(14)),
+                    SizedBox(height: sheetCtx.getRSize(14)),
                     AppInput(
                       controller: _damageQtyCtrl,
                       labelText: 'Quantity',
@@ -797,7 +693,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
-                    SizedBox(height: context.getRSize(14)),
+                    SizedBox(height: sheetCtx.getRSize(14)),
                     AppDropdown<String>(
                       labelText: 'Reason',
                       value: reasonKey,
@@ -812,37 +708,12 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       onChanged: (v) =>
                           setSheet(() => reasonKey = v ?? reasonKey),
                     ),
-                    SizedBox(height: context.getRSize(20)),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: submitting ? null : submit,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: danger,
-                          padding: EdgeInsets.symmetric(
-                            vertical: context.getRSize(14),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: submitting
-                            ? SizedBox(
-                                width: context.getRSize(18),
-                                height: context.getRSize(18),
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Text(
-                                'Record Damage',
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(15),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                      ),
+                    SizedBox(height: sheetCtx.getRSize(20)),
+                    AppButton(
+                      text: 'Record Damage',
+                      variant: AppButtonVariant.danger,
+                      isLoading: submitting,
+                      onPressed: submitting ? null : submit,
                     ),
                   ],
                 ),
@@ -884,151 +755,107 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         initialChildSize: 0.7,
         maxChildSize: 0.95,
         minChildSize: 0.4,
-        builder: (ctx, scrollCtrl) => Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              // Handle
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: context.getRSize(12)),
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: _border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+        builder: (ctx, scrollCtrl) {
+          final gutter = ctx.getRSize(20);
+          return _sheetSurface(
+            ctx,
+            child: ListView(
+              controller: scrollCtrl,
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                ctx.getRSize(12),
+                gutter,
+                ctx.getRSize(16) + ctx.deviceBottomPadding,
               ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-                child: Row(
-                  children: [
-                    Icon(
-                      AppIcons.history,
-                      size: context.getRSize(16),
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    SizedBox(width: context.getRSize(10)),
-                    Text(
-                      'Count History',
-                      style: TextStyle(
-                        color: _text,
-                        fontSize: context.getRFontSize(18),
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+              children: [
+                const InventorySheetHeader(title: 'Count History'),
+                SizedBox(height: ctx.getRSize(14)),
+                if (dates.isEmpty)
+                  const InventoryEmptyCard(
+                    icon: AppIcons.history,
+                    title: 'No history yet',
+                  )
+                else
+                  for (final dateKey in dates) ...[
+                    _historyRow(ctx, dateKey, grouped[dateKey]!),
+                    SizedBox(height: ctx.getRSize(8)),
                   ],
-                ),
-              ),
-              SizedBox(height: context.getRSize(8)),
-              Divider(color: _border, height: 1),
-              if (dates.isEmpty)
-                Expanded(
-                  child: Center(
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// One day in the Count History: a flat card (48dp+ tap target) that opens
+  /// that day's saved counts.
+  Widget _historyRow(
+    BuildContext ctx,
+    String dateKey,
+    List<StockCountData> dayCounts,
+  ) {
+    final t = Theme.of(ctx);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final label = _formatDate(DateTime.parse(dateKey));
+    final shortages = dayCounts.fold<int>(0, (n, c) => n + c.shortageCount);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
+    return DecoratedBox(
+      decoration: AppDecorations.card(ctx),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: () {
+            Navigator.pop(ctx);
+            _showDayDetail(context, label, dayCounts);
+          },
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(ctx.getRSize(14)),
+              child: Row(
+                children: [
+                  const IconTile(
+                    icon: AppIcons.auditCheck,
+                    tone: IconTileTone.info,
+                    size: 44,
+                  ),
+                  SizedBox(width: ctx.getRSize(14)),
+                  Expanded(
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          AppIcons.history,
-                          size: context.getRSize(36),
-                          color: _border,
-                        ),
-                        SizedBox(height: context.getRSize(12)),
                         Text(
-                          'No history yet',
-                          style: TextStyle(
-                            color: _subtext,
-                            fontSize: context.getRFontSize(15),
-                          ),
+                          label,
+                          style: ctx
+                              .boldStyle(14)
+                              .copyWith(color: t.colorScheme.onSurface),
+                        ),
+                        Text(
+                          '${dayCounts.length} count${dayCounts.length == 1 ? '' : 's'}'
+                          '${shortages > 0 ? ' · $shortages short' : ''}',
+                          style: ctx
+                              .regularStyle(12)
+                              .copyWith(
+                                color: shortages > 0 ? f.danger : muted,
+                              ),
                         ),
                       ],
                     ),
                   ),
-                )
-              else
-                Expanded(
-                  child: ListView.separated(
-                    controller: scrollCtrl,
-                    padding: EdgeInsets.fromLTRB(
-                      0,
-                      context.getRSize(8),
-                      0,
-                      context.getRSize(8) + context.deviceBottomPadding,
-                    ),
-                    itemCount: dates.length,
-                    separatorBuilder: (_, __) => Divider(
-                      color: _border,
-                      height: 1,
-                      indent: context.getRSize(20),
-                    ),
-                    itemBuilder: (ctx, i) {
-                      final dateKey = dates[i];
-                      final dayCounts = grouped[dateKey]!;
-                      final date = DateTime.parse(dateKey);
-                      final label = _formatDate(date);
-                      final shortages = dayCounts.fold<int>(
-                        0,
-                        (n, c) => n + c.shortageCount,
-                      );
-
-                      // Transparent Material gives the row an ink target above
-                      // the sheet's coloured fill so its tap-ripple shows.
-                      return Material(
-                        type: MaterialType.transparency,
-                        child: ListTile(
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: context.getRSize(20),
-                          vertical: context.getRSize(4),
-                        ),
-                        leading: Container(
-                          padding: EdgeInsets.all(context.getRSize(10)),
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            AppIcons.auditCheck,
-                            size: context.getRSize(14),
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                        title: Text(
-                          label,
-                          style: TextStyle(
-                            color: _text,
-                            fontWeight: FontWeight.w700,
-                            fontSize: context.getRFontSize(14),
-                          ),
-                        ),
-                        subtitle: Text(
-                          '${dayCounts.length} count${dayCounts.length == 1 ? '' : 's'}'
-                          '${shortages > 0 ? ' · $shortages short' : ''}',
-                          style: TextStyle(
-                            color: shortages > 0 ? danger : _subtext,
-                            fontSize: context.getRFontSize(12),
-                          ),
-                        ),
-                        trailing: Icon(
-                          AppIcons.chevronRight,
-                          color: _subtext,
-                          size: context.getRSize(20),
-                        ),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          _showDayDetail(context, label, dayCounts);
-                        },
-                        ),
-                      );
-                    },
+                  AppIcon(
+                    AppIcons.chevronRight,
+                    size: ctx.getRSize(20),
+                    color: muted,
                   ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -1048,95 +875,41 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         initialChildSize: 0.75,
         maxChildSize: 0.95,
         minChildSize: 0.4,
-        builder: (ctx, scrollCtrl) => Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              // Handle
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: context.getRSize(12)),
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: _border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+        builder: (ctx, scrollCtrl) {
+          final gutter = ctx.getRSize(20);
+          return _sheetSurface(
+            ctx,
+            child: ListView(
+              controller: scrollCtrl,
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                ctx.getRSize(12),
+                gutter,
+                ctx.getRSize(16) + ctx.deviceBottomPadding,
               ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            dateLabel,
-                            style: TextStyle(
-                              color: _text,
-                              fontSize: context.getRFontSize(18),
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            'Saved counts',
-                            style: TextStyle(
-                              color: _subtext,
-                              fontSize: context.getRFontSize(12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: context.getRSize(10),
-                        vertical: context.getRSize(4),
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
+              children: [
+                InventorySheetHeader(
+                  title: dateLabel,
+                  subtitle: 'Saved counts',
+                ),
+                SizedBox(height: ctx.getRSize(10)),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TagPill(
+                    label:
                         '${counts.length} count${counts.length == 1 ? '' : 's'}',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontSize: context.getRFontSize(12),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: context.getRSize(8)),
-              Divider(color: _border, height: 1),
-              Expanded(
-                child: ListView.separated(
-                  controller: scrollCtrl,
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(16),
-                    context.getRSize(12),
-                    context.getRSize(16),
-                    context.getRSize(12) + context.deviceBottomPadding,
+                    tone: TagPillTone.info,
                   ),
-                  itemCount: counts.length,
-                  separatorBuilder: (_, __) =>
-                      SizedBox(height: context.getRSize(10)),
-                  itemBuilder: (ctx, i) =>
-                      _buildCountSessionCard(context, counts[i]),
                 ),
-              ),
-            ],
-          ),
-        ),
+                SizedBox(height: ctx.getRSize(14)),
+                for (final c in counts) ...[
+                  _buildCountSessionCard(ctx, c),
+                  SizedBox(height: ctx.getRSize(10)),
+                ],
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1144,6 +917,9 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   /// One saved count session: store + time, a counted/adjusted/short summary,
   /// and the itemised changed lines parsed from the session's lines_json.
   Widget _buildCountSessionCard(BuildContext context, StockCountData c) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final storeName = c.storeId == null
         ? 'All stores'
         : (_storeNameFor(c.storeId!) ?? 'Store');
@@ -1160,14 +936,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     if (c.surplusCount > 0) summaryParts.add('${c.surplusCount} over');
 
     return Container(
-      padding: EdgeInsets.all(context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(12),
+      padding: EdgeInsets.all(context.getRSize(14)),
+      decoration: AppDecorations.card(context).copyWith(
         border: Border.all(
-          color: (c.shortageCount > 0 ? danger : _border).withValues(
-            alpha: c.shortageCount > 0 ? 0.3 : 1,
-          ),
+          color: c.shortageCount > 0 ? f.dangerOutline : t.dividerColor,
         ),
       ),
       child: Column(
@@ -1175,39 +947,31 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         children: [
           Row(
             children: [
-              Icon(
+              AppIcon(
                 AppIcons.store,
-                size: context.getRSize(11),
-                color: Theme.of(context).colorScheme.primary,
+                size: context.getRSize(14),
+                color: t.colorScheme.primary,
               ),
               SizedBox(width: context.getRSize(6)),
               Expanded(
                 child: Text(
                   storeName,
-                  style: TextStyle(
-                    color: _text,
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w700,
-                  ),
                   overflow: TextOverflow.ellipsis,
+                  style: context
+                      .boldStyle(13)
+                      .copyWith(color: t.colorScheme.onSurface),
                 ),
               ),
               Text(
                 _formatTime(c.createdAt),
-                style: TextStyle(
-                  color: _subtext,
-                  fontSize: context.getRFontSize(11),
-                ),
+                style: context.regularStyle(11).copyWith(color: muted),
               ),
             ],
           ),
           SizedBox(height: context.getRSize(4)),
           Text(
             summaryParts.join(' · '),
-            style: TextStyle(
-              color: _subtext,
-              fontSize: context.getRFontSize(12),
-            ),
+            style: context.regularStyle(12).copyWith(color: muted),
           ),
           if (lines.isNotEmpty) ...[
             SizedBox(height: context.getRSize(8)),
@@ -1219,8 +983,11 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   }
 
   Widget _buildCountLineRow(BuildContext context, Map<String, dynamic> l) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final d = (l['d'] as num?)?.toInt() ?? 0;
-    final color = d < 0 ? danger : (d > 0 ? success : _subtext);
+    final color = d < 0 ? f.danger : (d > 0 ? f.green : muted);
     final name = l['n']?.toString() ?? 'Product';
     final sign = d > 0 ? '+' : '';
     return Padding(
@@ -1230,19 +997,15 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           Expanded(
             child: Text(
               name,
-              style: TextStyle(
-                color: _text,
-                fontSize: context.getRFontSize(12),
-              ),
               overflow: TextOverflow.ellipsis,
+              style: context
+                  .regularStyle(12)
+                  .copyWith(color: t.colorScheme.onSurface),
             ),
           ),
           Text(
             '${l['s']} → ${l['a']}',
-            style: TextStyle(
-              color: _subtext,
-              fontSize: context.getRFontSize(11),
-            ),
+            style: context.regularStyle(11).copyWith(color: muted),
           ),
           SizedBox(width: context.getRSize(8)),
           SizedBox(
@@ -1250,11 +1013,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             child: Text(
               '$sign$d',
               textAlign: TextAlign.right,
-              style: TextStyle(
-                color: color,
-                fontSize: context.getRFontSize(12),
-                fontWeight: FontWeight.w700,
-              ),
+              style: context.boldStyle(12).copyWith(color: color),
             ),
           ),
         ],
@@ -1289,6 +1048,61 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  /// The solid Inventory top bar (#392): back, the clipboard tile, "Daily Stock
+  /// Count" with the store name, and the Record Damages / History actions.
+  PreferredSizeWidget _topBar(BuildContext context, {bool withActions = true}) {
+    final t = Theme.of(context);
+    return InventoryTopBar(
+      icon: AppIcons.clipboardList,
+      title: 'Daily Stock Count',
+      // §17.1: subtitle = store NAME (never the raw id).
+      subtitle: withActions ? _storeLabel : null,
+      height: inventoryTopBarHeight(context),
+      leading: IconButton(
+        tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+        constraints: const BoxConstraints(
+          minWidth: kMinInteractiveDimension,
+          minHeight: kMinInteractiveDimension,
+        ),
+        onPressed: () => Navigator.pop(context),
+        icon: AppIcon(
+          AppIcons.arrowBack,
+          size: context.getRSize(24),
+          color: t.colorScheme.onSurface,
+        ),
+      ),
+      actions: [
+        if (withActions && !_loading && _items.isNotEmpty)
+          InventoryBarAction(
+            key: const Key('stock_count_record_damages_button'),
+            icon: AppIcons.warning,
+            tooltip: 'Record Damages',
+            onPressed: _saving ? null : () => _recordDamages(context),
+          ),
+        if (withActions)
+          InventoryBarAction(
+            icon: AppIcons.history,
+            tooltip: 'View History',
+            onPressed: () => _viewHistory(context),
+          ),
+        if (withActions && !_loading && _saving)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: context.getRSize(14)),
+            child: Center(
+              child: SizedBox(
+                width: context.getRSize(20),
+                height: context.getRSize(20),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: t.colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // §17.4 access: Stock keeper, Manager, CEO. Cashier blocked. The Stock Take
@@ -1311,169 +1125,92 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         !allowed.contains(role.slug) ||
         !perms.contains('stock.adjust');
     if (blocked) {
-      return Scaffold(
-        backgroundColor: _bg,
-        appBar: AppBar(
-          backgroundColor: _surface,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Text(
-            'Daily Stock Count',
-            style: TextStyle(
-              color: _text,
-              fontSize: context.getRFontSize(16),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        body: Center(
-          child: (role == null || perms.isEmpty)
-              ? const CircularProgressIndicator()
-              : Text(
-                  'You don’t have access to stock counts.',
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: context.getRFontSize(14),
+      return Container(
+        decoration: AppDecorations.pageBackground(context),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: _topBar(context, withActions: false),
+          body: Center(
+            child: (role == null || perms.isEmpty)
+                ? const CircularProgressIndicator()
+                : Padding(
+                    padding: EdgeInsets.all(context.getRSize(16)),
+                    child: Text(
+                      'You don’t have access to stock counts.',
+                      textAlign: TextAlign.center,
+                      style: context.regularStyle(14).copyWith(color: _subtext),
+                    ),
                   ),
-                ),
+          ),
         ),
       );
     }
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Daily Stock Count',
-              style: TextStyle(
-                color: _text,
-                fontSize: context.getRFontSize(16),
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            // §17.1: subtitle = store NAME (store icon, never the raw id).
-            Row(
-              children: [
-                Icon(
-                  AppIcons.store,
-                  size: context.getRSize(10),
-                  color: _subtext,
-                ),
-                SizedBox(width: context.getRSize(5)),
-                Text(
-                  _storeLabel,
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: context.getRFontSize(11),
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: _topBar(context),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          // A list/form screen: content caps at the fixed 720 and centres
+          // (#392), measured.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final gutter = inventoryGutter(context, constraints.maxWidth);
+              return Column(
+                children: [
+                  // §17: the count is per store. When entered unscoped with
+                  // more than one store, a picker chooses which store to count
+                  // (kept above the list so it stays reachable even when a
+                  // store has no products).
+                  if (widget.storeId == null && _stores.length > 1)
+                    _buildStorePicker(context, gutter),
+                  Expanded(
+                    child: _loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _items.isEmpty
+                        ? Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: gutter,
+                              vertical: context.getRSize(16),
+                            ),
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: InventoryEmptyCard(
+                                icon: AppIcons.box,
+                                title:
+                                    'No ${ref.watch(industryLexiconProvider).itemPluralLower} found',
+                              ),
+                            ),
+                          )
+                        : _buildTable(context, gutter),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              );
+            },
+          ),
         ),
-        actions: [
-          if (!_loading && _items.isNotEmpty)
-            IconButton(
-              key: const Key('stock_count_record_damages_button'),
-              icon: Icon(
-                AppIcons.warning,
-                color: _text,
-                size: context.getRSize(16),
+        floatingActionButton: _loading || _saving || _items.isEmpty
+            ? null
+            : AppFAB(
+                heroTag: 'save_count_fab',
+                onPressed: _confirmAndSave,
+                icon: AppIcons.save,
+                label: 'Save Count',
               ),
-              tooltip: 'Record Damages',
-              onPressed: _saving ? null : () => _recordDamages(context),
-            ),
-          IconButton(
-            icon: Icon(
-              AppIcons.history,
-              color: _text,
-              size: context.getRSize(16),
-            ),
-            tooltip: 'View History',
-            onPressed: () => _viewHistory(context),
-          ),
-          if (!_loading && _saving)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
-      body: Column(
-        children: [
-          // §17: the count is per store. When entered unscoped with more than
-          // one store, a picker chooses which store to count (kept above the
-          // list so it stays reachable even when a store has no products).
-          if (widget.storeId == null && _stores.length > 1)
-            _buildStorePicker(context),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          AppIcons.box,
-                          size: context.getRSize(48),
-                          color: _subtext.withValues(alpha: 0.4),
-                        ),
-                        SizedBox(height: context.getRSize(16)),
-                        Text(
-                          'No ${ref.watch(industryLexiconProvider).itemPluralLower} found',
-                          style: TextStyle(
-                            color: _subtext,
-                            fontSize: context.getRFontSize(16),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : _buildTable(context),
-          ),
-        ],
-      ),
-      floatingActionButton: _loading || _saving || _items.isEmpty
-          ? null
-          : AppFAB(
-              heroTag: 'save_count_fab',
-              onPressed: _confirmAndSave,
-              icon: AppIcons.save,
-              label: 'Save Count',
-            ),
     );
   }
 
   /// Store picker (§17) — shown only when the screen was entered unscoped and
   /// the business has more than one store. Switching reloads that store's count.
-  Widget _buildStorePicker(BuildContext context) {
+  Widget _buildStorePicker(BuildContext context, double gutter) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
+        gutter,
         context.getRSize(12),
-        context.getRSize(16),
+        gutter,
         context.getRSize(4),
       ),
       child: AppDropdown<String>(
@@ -1494,16 +1231,20 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     );
   }
 
-  Widget _buildTable(BuildContext context) {
+  Widget _buildTable(BuildContext context, double gutter) {
     // Per store (§17): a flat product list — no store-section headers (the
     // header subtitle / picker already names the single store being counted).
     return Column(
       children: [
-        _buildTableHeader(context),
+        _buildTableHeader(context, gutter),
         Expanded(
           child: ListView.builder(
-            padding: EdgeInsets.only(
-              bottom: context.getRSize(24) + context.deviceBottomPadding,
+            // Clears the Save Count button so the last row can scroll above it.
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              0,
+              gutter,
+              context.getRSize(80) + context.deviceBottomPadding,
             ),
             itemCount: _items.length,
             itemBuilder: (_, i) => _buildRow(context, i),
@@ -1513,18 +1254,17 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     );
   }
 
-  Widget _buildTableHeader(BuildContext context) {
-    final style = TextStyle(
-      color: _subtext,
-      fontSize: context.getRFontSize(11),
-      fontWeight: FontWeight.w700,
-      letterSpacing: 0.5,
-    );
-    return Container(
-      color: _surface,
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(10),
+  Widget _buildTableHeader(BuildContext context, double gutter) {
+    final style = context
+        .semiBoldStyle(11)
+        .copyWith(color: _subtext, letterSpacing: 0.5);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        // Lines the labels up with the row cards' content (card inset 14).
+        gutter + context.getRSize(14),
+        context.getRSize(14),
+        gutter + context.getRSize(14),
+        context.getRSize(6),
       ),
       child: Row(
         children: [
@@ -1534,7 +1274,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             child: Text('SYSTEM', style: style, textAlign: TextAlign.center),
           ),
           SizedBox(
-            width: context.getRSize(72),
+            width: context.getRSize(84),
             child: Text('ACTUAL', style: style, textAlign: TextAlign.center),
           ),
           SizedBox(
@@ -1549,31 +1289,32 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   Widget _buildRow(BuildContext context, int i) {
     final item = _items[i];
     final systemStock = item.totalStock;
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
 
     return StatefulBuilder(
       builder: (context, setRowState) {
         final diff = _diff(i);
         final diffColor = diff > 0
-            ? success
+            ? f.green
             : diff < 0
-            ? danger
+            ? f.danger
             : _subtext;
         final diffLabel = diff == 0 ? '—' : (diff > 0 ? '+$diff' : '$diff');
 
         return Container(
-          margin: EdgeInsets.symmetric(
-            horizontal: context.getRSize(16),
-            vertical: context.getRSize(4),
-          ),
+          margin: EdgeInsets.only(bottom: context.getRSize(8)),
           padding: EdgeInsets.symmetric(
-            horizontal: context.getRSize(12),
+            horizontal: context.getRSize(14),
             vertical: context.getRSize(10),
           ),
-          decoration: BoxDecoration(
-            color: _card,
-            borderRadius: BorderRadius.circular(12),
+          decoration: AppDecorations.card(context).copyWith(
             border: Border.all(
-              color: diff != 0 ? diffColor.withValues(alpha: 0.4) : _border,
+              color: diff < 0
+                  ? f.dangerOutline
+                  : diff > 0
+                  ? f.green.withValues(alpha: 0.5)
+                  : t.dividerColor,
             ),
           ),
           child: Row(
@@ -1582,11 +1323,9 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 flex: 5,
                 child: Text(
                   item.product.name,
-                  style: TextStyle(
-                    color: _text,
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: context
+                      .boldStyle(14)
+                      .copyWith(color: t.colorScheme.onSurface),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1596,23 +1335,21 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 child: Text(
                   '$systemStock',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: context.getRFontSize(13),
-                  ),
+                  style: context.semiBoldStyle(13).copyWith(color: _subtext),
                 ),
               ),
               SizedBox(
-                width: context.getRSize(72),
+                width: context.getRSize(84),
                 child: AppInput(
                   controller: _controllers[i],
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   onChanged: (_) => setRowState(() {}),
                   textAlign: TextAlign.center,
+                  // 48dp tall: the box is its text line plus this padding.
                   contentPadding: EdgeInsets.symmetric(
                     horizontal: context.getRSize(6),
-                    vertical: context.getRSize(8),
+                    vertical: math.max(context.getRSize(14), 16),
                   ),
                   fillColor: _surface,
                 ),
@@ -1622,11 +1359,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 child: Text(
                   diffLabel,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: diffColor,
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: context.boldStyle(13).copyWith(color: diffColor),
                 ),
               ),
             ],
