@@ -9,6 +9,8 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -32,7 +34,7 @@ class AddManufacturerSheet extends ConsumerStatefulWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      useSafeArea: true,
       builder: (_) => AddManufacturerSheet(existingNames: existingNames),
     );
   }
@@ -125,62 +127,49 @@ class _AddManufacturerSheetState extends ConsumerState<AddManufacturerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+    // The sheet's Surface, top radius and scrim come from the theme's
+    // bottomSheetTheme (#392, ui-context "Bottom sheets").
+    final gutter = context.getRSize(20);
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        gutter,
+        context.getRSize(12),
+        gutter,
+        24 + context.deviceBottomPadding + inventorySheetKeyboardLift(context),
       ),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          24,
-          24,
-          24 + context.deviceBottomPadding,
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Add Manufacturer',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: theme.colorScheme.onSurface,
-                ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const InventorySheetHeader(title: 'Add Manufacturer'),
+            SizedBox(height: context.getRSize(20)),
+            AppInput(
+              controller: _nameCtrl,
+              labelText: 'Name',
+              hintText: 'e.g. Nigerian Breweries',
+              textInputAction: TextInputAction.next,
+              validator: _validateName,
+            ),
+            SizedBox(height: context.getRSize(12)),
+            AppInput(
+              controller: _crateValueCtrl,
+              labelText: 'Crate value ($activeCurrencySymbol)',
+              hintText: '0',
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
               ),
-              const SizedBox(height: 20),
-              AppInput(
-                controller: _nameCtrl,
-                labelText: 'Name',
-                hintText: 'e.g. Nigerian Breweries',
-                textInputAction: TextInputAction.next,
-                validator: _validateName,
-                fillColor: theme.cardColor,
-              ),
-              const SizedBox(height: 12),
-              AppInput(
-                controller: _crateValueCtrl,
-                labelText: 'Crate value ($activeCurrencySymbol)',
-                hintText: '0',
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [CurrencyInputFormatter()],
-                fillColor: theme.cardColor,
-              ),
-              const SizedBox(height: 32),
-              AppButton(
-                text: 'Add Manufacturer',
-                variant: AppButtonVariant.primary,
-                isLoading: _saving,
-                onPressed: _save,
-              ),
-            ],
-          ),
+              inputFormatters: [CurrencyInputFormatter()],
+            ),
+            SizedBox(height: context.getRSize(24)),
+            AppButton(
+              text: 'Add Manufacturer',
+              variant: AppButtonVariant.primary,
+              isLoading: _saving,
+              onPressed: _save,
+            ),
+          ],
         ),
       ),
     );

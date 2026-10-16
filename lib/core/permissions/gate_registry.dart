@@ -67,7 +67,8 @@ abstract final class Gates {
     rule: Gate.key('products.edit_price'),
   );
 
-  /// Add a manufacturer from the Crates tab (#292). CEO or Manager holding
+  /// Add a manufacturer from Inventory → Manufacturers (#292; moved off the
+  /// Empty Crates tab by #389). CEO or Manager holding
   /// `products.edit_price` — the tier keeps a custom grant of the key to a
   /// Cashier or Stock keeper from reaching it.
   static const NamedGate addManufacturer = NamedGate(

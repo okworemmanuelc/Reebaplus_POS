@@ -12,6 +12,8 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/screen_header.dart';
+import 'package:reebaplus_pos/features/customers/widgets/customer_parts.dart';
 
 /// §18 — Edit Customer Details. Mirrors [AddCustomerSheet] but prefilled with
 /// the customer's current values. Intentionally cannot be dismissed by tapping
@@ -111,10 +113,6 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
     });
   }
 
-  Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _border => Theme.of(context).dividerColor;
-
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -159,217 +157,139 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
       snapSizes: const [0.5, 0.9],
       builder: (context, scrollController) {
         return Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          key: CustomersKeys.editSheet,
+          decoration: ShapeDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            shape: customerSheetShape(context),
           ),
           child: Form(
             key: _formKey,
-            child: Column(
-              children: [
-                // Handle & Header
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(20),
-                    context.getRSize(12),
-                    context.getRSize(20),
-                    0,
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: context.getRSize(40),
-                        height: context.getRSize(4),
-                        decoration: BoxDecoration(
-                          color: _border,
-                          borderRadius: BorderRadius.circular(2),
+            child: CustomerFormSheetLayout(
+              scrollController: scrollController,
+              // Handle & Header — the back button is one of the two ways to close the sheet.
+              header: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.getRSize(20),
+                  context.getRSize(12),
+                  context.getRSize(20),
+                  context.getRSize(10),
+                ),
+                child: Column(
+                  children: [
+                    const CustomerSheetHandle(),
+                    SizedBox(height: context.getRSize(16)),
+                    ScreenHeader(
+                      icon: AppIcons.edit,
+                      title: 'Edit Customer Details',
+                      subtitle: 'Update Client Information',
+                      leading: IconButton(
+                        key: CustomersKeys.editBack,
+                        onPressed: () => Navigator.pop(context),
+                        tooltip: 'Back',
+                        constraints: const BoxConstraints(
+                          minWidth: kMinInteractiveDimension,
+                          minHeight: kMinInteractiveDimension,
+                        ),
+                        icon: AppIcon(
+                          AppIcons.arrowBack,
+                          size: context.getRSize(24),
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
-                      SizedBox(height: context.getRSize(20)),
-                      Row(
-                        children: [
-                          // Back button — one of the two ways to close the sheet.
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            tooltip: 'Back',
-                            icon: Icon(
-                              AppIcons.arrowBack,
-                              color: _text,
-                              size: context.getRSize(18),
-                            ),
-                          ),
-                          SizedBox(width: context.getRSize(4)),
-                          Container(
-                            width: context.getRSize(44),
-                            height: context.getRSize(44),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.7),
-                                  Theme.of(context).colorScheme.primary,
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              AppIcons.edit,
-                              color: Colors.white,
-                              size: context.getRSize(18),
-                            ),
-                          ),
-                          SizedBox(width: context.getRSize(14)),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Edit Customer Details',
-                                  style: TextStyle(
-                                    fontSize: context.getRFontSize(18),
-                                    fontWeight: FontWeight.w800,
-                                    color: _text,
-                                  ),
-                                ),
-                                Text(
-                                  'Update Client Information',
-                                  style: TextStyle(
-                                    fontSize: context.getRFontSize(13),
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: context.getRSize(10)),
-                    ],
-                  ),
-                ),
-
-                // Scrollable Content
-                Expanded(
-                  child: ListView(
-                    controller: scrollController,
-                    padding: EdgeInsets.fromLTRB(
-                      context.getRSize(20),
-                      context.getRSize(10),
-                      context.getRSize(20),
-                      context.getRSize(20),
                     ),
-                    children: [
-                      AppInput(
-                        labelText: 'Customer Name',
-                        controller: _nameCtrl,
-                        hintText: 'e.g. John Doe',
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'This field is required'
-                            : null,
-                      ),
-                      _groupDropdown(),
-                      AppDropdown<String>(
-                        labelText: 'Assign to Store',
-                        value: _selectedStoreId,
-                        hintText: 'Select store',
-                        items: _stores.map((wh) {
-                          return DropdownMenuItem<String>(
-                            value: wh.id,
-                            child: Text(wh.name),
-                          );
-                        }).toList(),
-                        onChanged: (val) =>
-                            setState(() => _selectedStoreId = val),
-                        validator: (v) =>
-                            v == null ? 'Please select a store' : null,
-                      ),
-                      SizedBox(height: context.getRSize(16)),
-                      AppInput(
-                        labelText: 'Address (optional)',
-                        controller: _addressCtrl,
-                        hintText: 'e.g. 123 Main Street',
-                      ),
-                      AppInput(
-                        labelText: 'Phone Number',
-                        controller: _phoneCtrl,
-                        hintText: 'e.g. 08012345678',
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'This field is required'
-                            : null,
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
-
-                // Button
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(20),
-                    context.getRSize(16),
-                    context.getRSize(20),
-                    context.deviceBottomPadding + context.getRSize(16),
-                  ),
-                  child: AppButton(
-                    text: 'Save Details',
-                    variant: AppButtonVariant.primary,
-                    onPressed: () async {
-                      // Defense-in-depth (hard rule #6): re-check the gate at
-                      // the write boundary (fire-time decision, no subscribe).
-                      if (!Gates.editCustomer.allowsNow(ref)) {
-                        Navigator.pop(context);
-                        return;
-                      }
-                      if (_formKey.currentState!.validate()) {
-                        final updated = Customer(
-                          id: widget.customerId,
-                          name: _nameCtrl.text.trim(),
-                          addressText: _addressCtrl.text.trim(),
-                          googleMapsLocation: _locationCtrl.text.trim(),
-                          phone: _phoneCtrl.text.trim().isEmpty
-                              ? null
-                              : _phoneCtrl.text.trim(),
-                          priceTier: _selectedGroup,
-                          isWalkIn: false,
-                          storeId: _selectedStoreId,
-                        );
-                        try {
-                          await ref
-                              .read(customerServiceProvider)
-                              .updateCustomer(updated);
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
-                          widget.onCustomerUpdated?.call(updated);
-                        } catch (_) {
-                          if (!context.mounted) return;
-                          AppNotification.showError(
-                            context,
-                            'Could not update customer. Please try again.',
-                          );
-                        }
-                      }
-                    },
-                  ),
+              ),
+              fields: [
+                AppInput(
+                  labelText: 'Customer Name',
+                  controller: _nameCtrl,
+                  hintText: 'e.g. John Doe',
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'This field is required'
+                      : null,
+                ),
+                SizedBox(height: context.getRSize(16)),
+                _groupDropdown(),
+                AppDropdown<String>(
+                  labelText: 'Assign to Store',
+                  value: _selectedStoreId,
+                  hintText: 'Select store',
+                  items: _stores.map((wh) {
+                    return DropdownMenuItem<String>(
+                      value: wh.id,
+                      child: Text(wh.name),
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => _selectedStoreId = val),
+                  validator: (v) => v == null ? 'Please select a store' : null,
+                ),
+                SizedBox(height: context.getRSize(16)),
+                AppInput(
+                  labelText: 'Address (optional)',
+                  controller: _addressCtrl,
+                  hintText: 'e.g. 123 Main Street',
+                ),
+                SizedBox(height: context.getRSize(16)),
+                AppInput(
+                  labelText: 'Phone Number',
+                  controller: _phoneCtrl,
+                  hintText: 'e.g. 08012345678',
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'This field is required'
+                      : null,
                 ),
               ],
+              footer: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.getRSize(20),
+                  context.getRSize(16),
+                  context.getRSize(20),
+                  context.deviceBottomPadding + context.getRSize(16),
+                ),
+                child: AppButton(
+                  text: 'Save Details',
+                  variant: AppButtonVariant.primary,
+                  onPressed: () async {
+                    // Defense-in-depth (hard rule #6): re-check the gate at
+                    // the write boundary (fire-time decision, no subscribe).
+                    if (!Gates.editCustomer.allowsNow(ref)) {
+                      Navigator.pop(context);
+                      return;
+                    }
+                    if (_formKey.currentState!.validate()) {
+                      final updated = Customer(
+                        id: widget.customerId,
+                        name: _nameCtrl.text.trim(),
+                        addressText: _addressCtrl.text.trim(),
+                        googleMapsLocation: _locationCtrl.text.trim(),
+                        phone: _phoneCtrl.text.trim().isEmpty
+                            ? null
+                            : _phoneCtrl.text.trim(),
+                        priceTier: _selectedGroup,
+                        isWalkIn: false,
+                        storeId: _selectedStoreId,
+                      );
+                      try {
+                        await ref
+                            .read(customerServiceProvider)
+                            .updateCustomer(updated);
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                        widget.onCustomerUpdated?.call(updated);
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        AppNotification.showError(
+                          context,
+                          'Could not update customer. Please try again.',
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
             ),
           ),
         );

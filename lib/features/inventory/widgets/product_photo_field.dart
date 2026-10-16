@@ -3,6 +3,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -44,13 +48,23 @@ class ProductPhotoField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final tint =
+        t.extension<AppSchemeColors>()?.primaryTint ??
+        t.colorScheme.primary.withValues(alpha: 0.12);
     final box = context.getRSize(80);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
 
     Widget preview;
     if (pendingBytes != null) {
-      preview =
-          Image.memory(pendingBytes!, width: box, height: box, fit: BoxFit.cover);
+      preview = Image.memory(
+        pendingBytes!,
+        width: box,
+        height: box,
+        fit: BoxFit.cover,
+      );
     } else if (existingPath != null && File(existingPath!).existsSync()) {
       preview = Image.file(
         File(existingPath!),
@@ -59,10 +73,10 @@ class ProductPhotoField extends StatelessWidget {
         fit: BoxFit.cover,
       );
     } else {
-      preview = Icon(
+      preview = AppIcon(
         AppIcons.image,
-        size: context.getRSize(26),
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+        size: context.getRSize(28),
+        color: muted,
       );
     }
 
@@ -74,9 +88,9 @@ class ProductPhotoField extends StatelessWidget {
           alignment: Alignment.center,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: theme.dividerColor),
+            color: t.inputDecorationTheme.fillColor ?? t.colorScheme.surface,
+            borderRadius: radius,
+            border: Border.all(color: t.dividerColor),
           ),
           child: preview,
         ),
@@ -85,41 +99,66 @@ class ProductPhotoField extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
-                onTap: onPick,
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: context.getRSize(16),
-                    vertical: context.getRSize(10),
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _hasImage ? 'Change photo' : 'Add photo',
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(color: theme.colorScheme.primary),
+              // 48dp targets (#392): the pick pill and the remove link.
+              Material(
+                color: tint,
+                borderRadius: radius,
+                child: InkWell(
+                  borderRadius: radius,
+                  onTap: onPick,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: kMinInteractiveDimension,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: context.getRSize(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AppIcon(
+                            AppIcons.image,
+                            size: context.getRSize(18),
+                            color: t.colorScheme.primary,
+                          ),
+                          SizedBox(width: context.getRSize(8)),
+                          Text(
+                            _hasImage ? 'Change photo' : 'Add photo',
+                            style: context
+                                .semiBoldStyle(14)
+                                .copyWith(color: t.colorScheme.primary),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-              if (_hasImage && onRemove != null) ...[
-                SizedBox(height: context.getRSize(8)),
-                GestureDetector(
+              if (_hasImage && onRemove != null)
+                InkWell(
+                  borderRadius: radius,
                   onTap: onRemove,
-                  child: Text(
-                    'Remove photo',
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(color: theme.colorScheme.error),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: kMinInteractiveDimension,
+                    ),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      widthFactor: 1,
+                      child: Text(
+                        'Remove photo',
+                        style: context
+                            .semiBoldStyle(14)
+                            .copyWith(color: f.danger),
+                      ),
+                    ),
                   ),
                 ),
-              ],
-              SizedBox(height: context.getRSize(6)),
+              SizedBox(height: context.getRSize(4)),
               Text(
                 'Optional — shown on the product’s details.',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
+                style: context.regularStyle(12).copyWith(color: muted),
               ),
             ],
           ),

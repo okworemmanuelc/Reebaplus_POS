@@ -16,6 +16,9 @@ enum FlyTargetId {
 
   /// Request Stock's "Review request" bar (#380), while it shows.
   stockRequest,
+
+  /// Receive Stock's "Review Items" bar (#394), while it shows.
+  receiveCart,
 }
 
 /// Where flights land, by [FlyTargetId]. [FlyTarget] widgets register

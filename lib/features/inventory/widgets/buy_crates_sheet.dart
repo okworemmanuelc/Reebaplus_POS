@@ -11,8 +11,8 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
 /// The manufacturer screen's Buy crates button (#294).
@@ -52,7 +52,7 @@ class BuyCratesSheet extends ConsumerStatefulWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      useSafeArea: true,
       builder: (_) => BuyCratesSheet(manufacturer: manufacturer),
     );
   }
@@ -114,7 +114,10 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
   Future<void> _save() async {
     if (_saving) return;
     if (_storeId == null) {
-      AppNotification.showError(context, 'Choose the store receiving the crates');
+      AppNotification.showError(
+        context,
+        'Choose the store receiving the crates',
+      );
       return;
     }
     if (!_formKey.currentState!.validate()) return;
@@ -132,7 +135,10 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
 
     setState(() => _saving = true);
     try {
-      await ref.read(databaseProvider).cratePoolDao.recordCratePurchase(
+      await ref
+          .read(databaseProvider)
+          .cratePoolDao
+          .recordCratePurchase(
             manufacturerId: widget.manufacturer.id,
             storeId: _storeId!,
             performedBy: userId,
@@ -175,42 +181,20 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final crateValue = formatCurrency(widget.manufacturer.depositAmountKobo / 100);
-    return Container(
-      key: const ValueKey(kBuyCratesSheetKey),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(24),
-          context.getRSize(24),
-          context.getRSize(24),
-          context.getRSize(24) + context.deviceBottomPadding,
-        ),
-        child: Form(
+    final crateValue = formatCurrency(
+      widget.manufacturer.depositAmountKobo / 100,
+    );
+    return CrateSheetFrame(
+      frameKey: const ValueKey(kBuyCratesSheetKey),
+      title: 'Buy crates',
+      subtitle: widget.manufacturer.name,
+      children: [
+        Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Buy crates',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: context.getRSize(4)),
-              Text(
-                widget.manufacturer.name,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                ),
-              ),
-              SizedBox(height: context.getRSize(20)),
               if (_mustPickStore) ...[
                 AppDropdown<String>(
                   key: const ValueKey(kBuyCratesStorePickerKey),
@@ -219,7 +203,10 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
                   hintText: 'Choose a store',
                   items: [
                     for (final store in _stores)
-                      DropdownMenuItem(value: store.id, child: Text(store.name)),
+                      DropdownMenuItem(
+                        value: store.id,
+                        child: Text(store.name),
+                      ),
                   ],
                   onChanged: (id) => setState(() => _storeId = id),
                 ),
@@ -235,7 +222,6 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
                 textInputAction: TextInputAction.next,
                 validator: _validateQuantity,
                 onChanged: (_) => setState(() {}),
-                fillColor: theme.cardColor,
               ),
               SizedBox(height: context.getRSize(12)),
               AppInput(
@@ -249,65 +235,25 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
                 inputFormatters: [CurrencyInputFormatter()],
                 validator: _validatePrice,
                 onChanged: (_) => setState(() {}),
-                fillColor: theme.cardColor,
               ),
               SizedBox(height: context.getRSize(16)),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(context.getRSize(12)),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'This is what will be recorded',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(4)),
-                    Text(
-                      _recordedLine(),
-                      key: const ValueKey(kBuyCratesRecordedLineKey),
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
+              CrateRecordBox(
+                message: _recordedLine(),
+                messageKey: const ValueKey(kBuyCratesRecordedLineKey),
               ),
               SizedBox(height: context.getRSize(24)),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      key: const ValueKey(kBuyCratesCancelButtonKey),
-                      text: 'Cancel',
-                      variant: AppButtonVariant.outline,
-                      onPressed: _saving ? null : () => Navigator.pop(context),
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  Expanded(
-                    child: AppButton(
-                      key: const ValueKey(kBuyCratesSaveButtonKey),
-                      text: 'Buy crates',
-                      variant: AppButtonVariant.primary,
-                      isLoading: _saving,
-                      onPressed: _save,
-                    ),
-                  ),
-                ],
+              CrateSheetActions(
+                cancelKey: const ValueKey(kBuyCratesCancelButtonKey),
+                confirmKey: const ValueKey(kBuyCratesSaveButtonKey),
+                confirmText: 'Buy crates',
+                confirming: _saving,
+                onCancel: _saving ? null : () => Navigator.pop(context),
+                onConfirm: _save,
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 }

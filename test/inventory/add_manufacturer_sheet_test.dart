@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/add_manufacturer_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_manufacturers_tab.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -16,6 +17,7 @@ import '../helpers/viewports.dart';
 
 /// Issue #292: Add Manufacturer asks only name + crate value, only CEO and
 /// Manager see it, and the Crate Size Group Assets tiles leave the Crates tab.
+/// Since #389 Add New sits on the Manufacturers tab, not Empty Crates.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -66,10 +68,40 @@ void main() {
             .overrideWithValue(FirstRunSurfaceState.hasContent),
       ],
     );
-    await tester.tap(find.text('Empty Crates').first);
+    await tester.tap(find.widgetWithText(Tab, 'Empty Crates'));
     await tester.pumpAndSettle();
     // Guards the "doesn't see" cases against passing on the wrong tab.
     expect(find.text('Empty In Stock'), findsOneWidget);
+  }
+
+  /// #389: Add New lives on the Manufacturers tab — a new manufacturer has no
+  /// bottle products yet, so it would not appear on Empty Crates.
+  Future<void> openManufacturersTab(
+    WidgetTester tester, {
+    Size size = pixel7Portrait,
+    Set<String> grantedKeys = ownerGrants,
+    String roleSlug = 'ceo',
+    String roleName = 'CEO',
+    int roleRank = GateTier.ceo,
+  }) async {
+    await pumpScreen(
+      tester,
+      env: env,
+      size: size,
+      screen: const InventoryScreen(),
+      grantedKeys: grantedKeys,
+      roleSlug: roleSlug,
+      roleName: roleName,
+      roleRank: roleRank,
+      overrides: [
+        firstRunSurfaceStateProvider
+            .overrideWithValue(FirstRunSurfaceState.hasContent),
+      ],
+    );
+    await tester.tap(find.widgetWithText(Tab, 'Manufacturers'));
+    await tester.pumpAndSettle();
+    // Guards the "doesn't see" cases against passing on the wrong tab.
+    expect(find.byType(InventoryManufacturersTab), findsOneWidget);
   }
 
   Finder addNewButton() => find.widgetWithText(AppButton, 'Add New');
@@ -150,7 +182,7 @@ void main() {
       testWidgets(
           '${role.name} ${role.sees ? 'sees' : 'does not see'} Add Manufacturer',
           (tester) async {
-        await openCratesTab(
+        await openManufacturersTab(
           tester,
           grantedKeys: role.grants,
           roleSlug: role.slug,
@@ -166,7 +198,7 @@ void main() {
   group('Add Manufacturer sheet', () {
     testWidgets('asks for name and crate value only, and saves them',
         (tester) async {
-      await openCratesTab(tester);
+      await openManufacturersTab(tester);
       await openSheet(tester);
 
       final fields = find.descendant(
@@ -189,12 +221,14 @@ void main() {
       expect(rows.single.name, 'Guinness Nigeria');
       expect(rows.single.depositAmountKobo, 150000);
       expect(rows.single.emptyCrateStock, 0);
+      // The new manufacturer shows on the tab it was added from (#389).
+      expect(find.text('Guinness Nigeria'), findsOneWidget);
       await disposeScreen(tester);
     });
 
     testWidgets('an empty name is rejected and nothing is written',
         (tester) async {
-      await openCratesTab(tester);
+      await openManufacturersTab(tester);
       await openSheet(tester);
 
       await tester.enterText(sheetField('Name'), '   ');
@@ -216,7 +250,7 @@ void main() {
           businessId: env.businessId,
         ),
       );
-      await openCratesTab(tester);
+      await openManufacturersTab(tester);
       await openSheet(tester);
 
       await tester.enterText(sheetField('Name'), 'guinness nigeria');
@@ -234,7 +268,7 @@ void main() {
     testWidgets(
         'a failed activity log still keeps the manufacturer and closes the '
         'sheet', (tester) async {
-      await openCratesTab(tester);
+      await openManufacturersTab(tester);
       await openSheet(tester);
       // No staff row → the activity log insert fails its foreign key.
       await env.db.delete(env.db.users).go();
@@ -300,7 +334,7 @@ void main() {
       testWidgets(
           'scrolls and clears the device bottom padding at '
           '${size.width.toInt()}x${size.height.toInt()}', (tester) async {
-        await openCratesTab(tester, size: size);
+        await openManufacturersTab(tester, size: size);
         await openSheet(tester);
 
         final scroll = find.descendant(

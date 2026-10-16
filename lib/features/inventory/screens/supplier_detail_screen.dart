@@ -10,21 +10,25 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
 import 'package:reebaplus_pos/features/payments/widgets/record_supplier_activity.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_ledger_entry_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
 /// Key prefix on every ledger row, followed by the entry id. The test seam for
@@ -43,7 +47,16 @@ const String kSupplierCratesStorageKey = 'supplier-detail-crates';
 class SupplierDetailScreen extends ConsumerStatefulWidget {
   final String supplierId;
 
-  const SupplierDetailScreen({super.key, required this.supplierId});
+  /// The period the ledger opens on. Always the §30.6 default in the app; a
+  /// test passes an unbounded period so a golden never depends on today's date.
+  @visibleForTesting
+  final String initialTimeFilter;
+
+  const SupplierDetailScreen({
+    super.key,
+    required this.supplierId,
+    this.initialTimeFilter = 'This Month',
+  });
 
   @override
   ConsumerState<SupplierDetailScreen> createState() =>
@@ -52,9 +65,8 @@ class SupplierDetailScreen extends ConsumerStatefulWidget {
 
 class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     with SingleTickerProviderStateMixin {
-  String _timeFilter = 'This Month'; // §30.6/§30.11 default
+  late String _timeFilter; // §30.6/§30.11 default: 'This Month'
   DateTimeRange? _customRange;
-  bool _isScrolled = false;
 
   /// Ledger + Empty Crates. Only read when the business tracks crates; the
   /// other shape has no tabs at all.
@@ -63,6 +75,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   @override
   void initState() {
     super.initState();
+    _timeFilter = widget.initialTimeFilter;
     _tabController = TabController(length: 2, vsync: this);
   }
 
@@ -72,17 +85,19 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     super.dispose();
   }
 
-  List<String> get _periodOptions =>
-      datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
+  List<String> get _periodOptions => datePeriodLabelsForRole(
+    managerUp: Gates.seeExtendedDateRanges.allows(ref),
+  );
 
   String get _effectivePeriod {
     final isCustom = _timeFilter.startsWith('Custom:');
     final dropdownValue = isCustom ? 'Custom' : _timeFilter;
-    return _periodOptions.contains(dropdownValue) ? dropdownValue : _periodOptions.first;
+    return _periodOptions.contains(dropdownValue)
+        ? dropdownValue
+        : _periodOptions.first;
   }
 
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
@@ -100,6 +115,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider);
     final theme = Theme.of(context);
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final canManage = ref
         .watch(currentUserPermissionsProvider)
         .contains('suppliers.manage');
@@ -114,14 +130,17 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
       content = Center(
         child: Text(
           'You don’t have access to Supplier Accounts.',
-          style: TextStyle(color: _subtext),
+          style: context.regularStyle(14).copyWith(color: _subtext),
         ),
       );
     } else if (supplier == null) {
       content = supplierAsync.isLoading
           ? const Center(child: CircularProgressIndicator())
           : Center(
-              child: Text('Supplier not found', style: TextStyle(color: _subtext)),
+              child: Text(
+                'Supplier not found',
+                style: context.regularStyle(14).copyWith(color: _subtext),
+              ),
             );
     } else {
       content = _buildBody(context, theme, supplier, showCrates);
@@ -133,61 +152,51 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         decoration: AppDecorations.pageBackground(context),
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            backgroundColor: _isScrolled
-                ? _surface.withValues(alpha: 0.8)
-                : Colors.transparent,
-            elevation: 0,
+          // Solid Surface bar with a hairline, as every redesigned screen
+          // (#392); it no longer tints on scroll.
+          appBar: InventoryTopBar(
+            icon: AppIcons.supplier,
+            title: 'Supplier Details',
+            subtitle: supplier?.name,
+            height: inventoryTopBarHeight(context),
             leading: IconButton(
-              icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: context.getRSize(20)),
-              onPressed: () => Navigator.pop(context),
-            ),
-            title: Text(
-              'Supplier Details',
-              style: TextStyle(
-                color: _text,
-                fontSize: context.getRFontSize(18),
-                fontWeight: FontWeight.w800,
+              tooltip: 'Back',
+              constraints: const BoxConstraints(
+                minWidth: kMinInteractiveDimension,
+                minHeight: kMinInteractiveDimension,
               ),
+              icon: const Icon(AppIcons.arrowBack),
+              onPressed: () => Navigator.pop(context),
             ),
             actions: [
               if (isCeo && supplier != null)
-                IconButton(
-                  icon: Icon(
-                    AppIcons.edit,
-                    color: _text,
-                    size: context.getRSize(16),
-                  ),
+                InventoryBarAction(
+                  icon: AppIcons.edit,
                   tooltip: 'Edit supplier',
                   onPressed: () =>
                       SupplierFormSheet.show(context, existing: supplier),
                 ),
               if (isCeo && supplier != null)
                 IconButton(
-                  icon: Icon(
-                    AppIcons.delete,
-                    color: danger,
-                    size: context.getRSize(16),
-                  ),
                   tooltip: 'Delete supplier',
+                  constraints: const BoxConstraints(
+                    minWidth: kMinInteractiveDimension,
+                    minHeight: kMinInteractiveDimension,
+                  ),
+                  icon: AppIcon(
+                    AppIcons.delete,
+                    size: context.getRSize(20),
+                    color: f.danger,
+                  ),
                   onPressed: () => _confirmDelete(supplier),
                 ),
-              SizedBox(width: context.getRSize(8)),
             ],
           ),
-          body: NotificationListener<ScrollUpdateNotification>(
-            onNotification: (notif) {
-              if (notif.metrics.axis == Axis.vertical) {
-                final scrolled = notif.metrics.pixels > 10;
-                if (scrolled != _isScrolled) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() => _isScrolled = scrolled);
-                  });
-                }
-              }
-              return false;
-            },
-            child: content,
+          // A detail screen: the body caps at a fixed 960 and centres.
+          body: SafeArea(
+            top: false,
+            bottom: false,
+            child: InventoryDetailColumn(child: content),
           ),
           floatingActionButton: (canManage && supplier != null)
               ? AppFAB(
@@ -206,26 +215,41 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     );
   }
 
-  Widget _buildBody(BuildContext context, ThemeData theme, SupplierData supplier, bool showCrates) {
+  Widget _buildBody(
+    BuildContext context,
+    ThemeData theme,
+    SupplierData supplier,
+    bool showCrates,
+  ) {
     final balanceAsync = ref.watch(supplierBalanceProvider(widget.supplierId));
     final historyAsync = ref.watch(
       supplierLedgerHistoryProvider(widget.supplierId),
     );
     final balanceKobo = balanceAsync.valueOrNull ?? 0;
-    final history = historyAsync.valueOrNull ?? const <SupplierLedgerEntryData>[];
+    final history =
+        historyAsync.valueOrNull ?? const <SupplierLedgerEntryData>[];
 
     final scopeLabel = ref.watch(activeStoreLabelProvider);
     final isAllStores = ref.watch(lockedStoreProvider).value == null;
-    final stores = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    final stores =
+        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
     final storeNameById = {for (final s in stores) s.id: s.name};
 
     final filtered = history
         .where((e) => isDateInPeriod(e.activityDate, _timeFilter))
         .toList();
 
+    // The profile card and the balance card sit side by side when the
+    // measured width is at least 900, stacked below (#392).
     final headerSlivers = [
-      SliverToBoxAdapter(child: _buildHeader(context, theme, supplier)),
-      SliverToBoxAdapter(child: _buildBalanceCard(context, theme, balanceKobo, scopeLabel)),
+      SliverToBoxAdapter(
+        child: InventoryDetailHeaderCards(
+          builders: [
+            (_) => _buildHeader(context, theme, supplier),
+            (_) => _buildBalanceCard(context, theme, balanceKobo, scopeLabel),
+          ],
+        ),
+      ),
     ];
     final ledgerSlivers = _ledgerSlivers(
       context,
@@ -245,19 +269,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                context.getRSize(20),
                 context.getRSize(16),
-                context.getRSize(20),
                 context.getRSize(8),
+                context.getRSize(16),
+                context.getRSize(4),
               ),
-              child: Text(
-                'Activity Ledger',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(16),
-                  fontWeight: FontWeight.w800,
-                  color: _text,
-                ),
-              ),
+              child: const SectionHeader(title: 'Activity Ledger'),
             ),
           ),
           ...ledgerSlivers,
@@ -267,19 +284,20 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
 
     return TabbedSliverScaffold(
       controller: _tabController,
-      tabBarExtent: context.getRSize(60),
-      // _buildTabBar spends this much of the header on decoration, so it has
-      // to be reserved on top of the 48dp floor or the TabBar itself lands
-      // short of the tap-target minimum.
-      tabBarChromeExtent: _tabBarChromeExtent,
+      // The hairline under the tab bar is reserved on top of the 48dp floor,
+      // so every tab keeps its full tap target.
+      tabBarExtent: kMinInteractiveDimension,
+      tabBarChromeExtent: 1,
       headerSlivers: headerSlivers,
-      tabBar: Container(
-        color: Colors.transparent,
-        padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-        child: _buildTabBar(theme),
+      tabBar: InventoryDetailTabBar(
+        controller: _tabController,
+        labels: const ['Ledger', 'Empty Crates'],
       ),
       tabViews: [
-        TabSliverView(storageKey: kSupplierLedgerStorageKey, slivers: ledgerSlivers),
+        TabSliverView(
+          storageKey: kSupplierLedgerStorageKey,
+          slivers: ledgerSlivers,
+        ),
         TabSliverView(
           storageKey: kSupplierCratesStorageKey,
           slivers: _cratesTabSlivers(context, theme),
@@ -288,94 +306,30 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     );
   }
 
-  /// Height the pinned tab bar gives up to its bottom margin.
-  double get _tabBarBottomMargin => context.getRSize(8);
-
-  /// Width of the tab bar's outline. A decorated `Container` insets its child
-  /// by the border, so it costs height top and bottom.
-  static const double _tabBarBorderWidth = 1;
-
-  /// Everything in the pinned header that is not the TabBar: the bottom margin
-  /// plus the border on both edges. Read by the header delegate so the TabBar
-  /// keeps its full interactive height — reserving the margin alone left each
-  /// tab 46dp tall on a compact phone.
-  double get _tabBarChromeExtent =>
-      _tabBarBottomMargin + 2 * _tabBarBorderWidth;
-
-  Widget _buildTabBar(ThemeData theme) {
-    return Container(
-      margin: EdgeInsets.only(bottom: _tabBarBottomMargin),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.1),
-          width: _tabBarBorderWidth,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: TabBar(
-            controller: _tabController,
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicatorPadding: EdgeInsets.all(context.getRSize(4)),
-            indicator: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
-            ),
-            labelColor: theme.colorScheme.primary,
-            unselectedLabelColor: _text.withAlpha(150),
-            labelStyle: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: context.getRFontSize(13),
-            ),
-            unselectedLabelStyle: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: context.getRFontSize(13),
-            ),
-            dividerColor: Colors.transparent,
-            tabs: const [
-              Tab(text: 'Ledger'),
-              Tab(text: 'Empty Crates'),
-            ],
-          ),
-        ),
-    );
-  }
-
+  /// The supplier's profile card (#392): initials tile, name and the contact,
+  /// address, bank and notes lines (each only when there is something to say).
   Widget _buildHeader(BuildContext context, ThemeData theme, SupplierData s) {
-    return _GlassyCard(
-      margin: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(24),
-        context.getRSize(20),
-        context.getRSize(16),
-      ),
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
+    return Container(
       padding: EdgeInsets.all(context.getRSize(16)),
-      radius: 20,
+      decoration: AppDecorations.card(context),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: context.getRSize(60),
-            height: context.getRSize(60),
+            width: context.getRSize(56),
+            height: context.getRSize(56),
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+              color: f.infoTint,
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
             ),
-            child: Center(
-              child: Text(
-                _initials(s.name),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(22),
-                  fontWeight: FontWeight.w900,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
+            alignment: Alignment.center,
+            child: Text(
+              _initials(s.name),
+              style: context.extraBoldStyle(20).copyWith(color: f.info),
             ),
           ),
-          SizedBox(width: context.getRSize(16)),
+          SizedBox(width: context.getRSize(14)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,13 +337,10 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
               children: [
                 Text(
                   s.name,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.w800,
-                    color: _text,
-                  ),
+                  style: context.extraBoldStyle(18).copyWith(color: _text),
                 ),
-                if ((s.phone ?? '').isNotEmpty || (s.address ?? '').isNotEmpty) ...[
+                if ((s.phone ?? '').isNotEmpty ||
+                    (s.address ?? '').isNotEmpty) ...[
                   SizedBox(height: context.getRSize(8)),
                   _InfoRow(
                     icon: AppIcons.phone,
@@ -408,14 +359,17 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                     theme: theme,
                   ),
                 ],
-                if ((s.bankName ?? '').isNotEmpty || (s.bankAccountNumber ?? '').isNotEmpty) ...[
+                if ((s.bankName ?? '').isNotEmpty ||
+                    (s.bankAccountNumber ?? '').isNotEmpty) ...[
                   SizedBox(height: context.getRSize(4)),
                   _InfoRow(
                     icon: AppIcons.bank,
                     text: [
                       if ((s.bankName ?? '').isNotEmpty) s.bankName!,
-                      if ((s.bankAccountNumber ?? '').isNotEmpty) s.bankAccountNumber!,
-                      if ((s.bankAccountName ?? '').isNotEmpty) s.bankAccountName!,
+                      if ((s.bankAccountNumber ?? '').isNotEmpty)
+                        s.bankAccountNumber!,
+                      if ((s.bankAccountName ?? '').isNotEmpty)
+                        s.bankAccountName!,
                     ].join(' • '),
                     theme: theme,
                   ),
@@ -424,11 +378,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                   SizedBox(height: context.getRSize(6)),
                   Text(
                     s.notes!,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                      fontStyle: FontStyle.italic,
-                    ),
+                    style: context
+                        .regularStyle(12)
+                        .copyWith(color: _subtext, fontStyle: FontStyle.italic),
                   ),
                 ],
               ],
@@ -439,126 +391,119 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     );
   }
 
-  Widget _buildBalanceCard(BuildContext context, ThemeData theme, int balanceKobo, String scopeLabel) {
+  /// The balance card (#392): the label, the figure (red when we owe, green
+  /// when paid in advance), the scope and the period selector. Same maths as
+  /// before: Balance = SUM(payments) - SUM(invoices).
+  Widget _buildBalanceCard(
+    BuildContext context,
+    ThemeData theme,
+    int balanceKobo,
+    String scopeLabel,
+  ) {
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final owed = balanceKobo < 0;
-    final color = owed ? danger : (balanceKobo > 0 ? success : _text);
+    final color = owed ? f.danger : (balanceKobo > 0 ? f.green : _text);
     // Positive = we paid the supplier in advance (a prepayment), not credit we
     // hold on their behalf; negative = a debt we owe for unpaid goods.
     final label = owed
         ? 'Amount owed to supplier'
         : (balanceKobo > 0 ? 'Paid in advance' : 'Settled');
 
-    return _GlassyCard(
-      margin: EdgeInsets.symmetric(horizontal: context.getRSize(20)).copyWith(
-        bottom: context.getRSize(16),
-      ),
-      padding: EdgeInsets.all(context.getRSize(18)),
-      radius: 20,
-      child: Column(
+    return Container(
+      padding: EdgeInsets.all(context.getRSize(16)),
+      decoration: AppDecorations.card(context),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          AppIcons.creditBalance,
-                          size: context.getRSize(14),
-                          color: theme.colorScheme.primary,
-                        ),
-                        SizedBox(width: context.getRSize(8)),
-                        // Wraps rather than pushing past the card edge: next to
-                        // the period selector a 320dp phone leaves this label
-                        // ~135dp, short of "Amount owed to supplier".
-                        Flexible(
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(12),
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface.withAlpha(128),
-                            ),
-                          ),
-                        ),
-                      ],
+                    IconTile(
+                      icon: AppIcons.creditBalance,
+                      tone: owed
+                          ? IconTileTone.danger
+                          : (balanceKobo > 0
+                                ? IconTileTone.green
+                                : IconTileTone.neutral),
+                      size: 32,
                     ),
-                    SizedBox(height: context.getRSize(6)),
-                    Text(
-                      formatCurrency(balanceKobo.abs() / 100),
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(28),
-                        fontWeight: FontWeight.w900,
-                        color: color,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(4)),
-                    Text(
-                      scopeLabel,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(12),
-                        color: _subtext,
-                        fontWeight: FontWeight.w600,
+                    SizedBox(width: context.getRSize(8)),
+                    // Wraps rather than pushing past the card edge: next to
+                    // the period selector a 320dp phone leaves this label
+                    // ~135dp, short of "Amount owed to supplier".
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: context
+                            .semiBoldStyle(12)
+                            .copyWith(color: _subtext),
                       ),
                     ),
                   ],
                 ),
+                SizedBox(height: context.getRSize(8)),
+                Text(
+                  formatCurrency(balanceKobo.abs() / 100),
+                  style: context.extraBoldStyle(26).copyWith(color: color),
+                ),
+                SizedBox(height: context.getRSize(2)),
+                Text(
+                  scopeLabel,
+                  style: context.semiBoldStyle(12).copyWith(color: _subtext),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: context.getRSize(8)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'Period:',
+                style: context.semiBoldStyle(11).copyWith(color: _subtext),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Period:',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(10),
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withAlpha(128),
-                    ),
+              SizedBox(height: context.getRSize(4)),
+              SizedBox(
+                width: 120,
+                child: AppDropdown<String>(
+                  value: _effectivePeriod,
+                  isExpanded: false,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: context.getRSize(8),
+                    vertical: context.getRSize(6),
                   ),
-                  SizedBox(height: context.getRSize(4)),
-                  SizedBox(
-                    width: 120,
-                    child: AppDropdown<String>(
-                      value: _effectivePeriod,
-                      isExpanded: false,
-                      contentPadding: EdgeInsets.symmetric(horizontal: context.getRSize(8), vertical: context.getRSize(6)),
-                      items: _periodOptions
-                          .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                          .toList(),
-                      onChanged: (v) async {
-                        if (v == 'Custom') {
-                          final range = await showDateRangePicker(
-                            context: context,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
-                            initialDateRange: _customRange,
-                            builder: (context, child) => Theme(
-                              data: Theme.of(context),
-                              child: child!,
-                            ),
-                          );
-                          if (range != null) {
-                            setState(() {
-                              _customRange = range;
-                              _timeFilter = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
-                            });
-                          }
-                        } else if (v != null) {
-                          setState(() {
-                            _timeFilter = v;
-                            _customRange = null;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                ],
+                  items: _periodOptions
+                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                      .toList(),
+                  onChanged: (v) async {
+                    if (v == 'Custom') {
+                      final range = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        initialDateRange: _customRange,
+                        builder: (context, child) =>
+                            Theme(data: Theme.of(context), child: child!),
+                      );
+                      if (range != null) {
+                        setState(() {
+                          _customRange = range;
+                          _timeFilter =
+                              'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+                        });
+                      }
+                    } else if (v != null) {
+                      setState(() {
+                        _timeFilter = v;
+                        _customRange = null;
+                      });
+                    }
+                  },
+                ),
               ),
             ],
           ),
@@ -567,44 +512,11 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     );
   }
 
-  Widget _buildSummaryTile(
+  Widget _buildLedgerSummaryRow(
     ThemeData theme,
-    String label,
-    double amount,
-    Color color,
+    List<SupplierLedgerEntryData> filteredHistory,
   ) {
-    return _GlassyCard(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(14),
-        vertical: context.getRSize(10),
-      ),
-      radius: 12,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(11),
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withAlpha(128),
-            ),
-          ),
-          SizedBox(height: context.getRSize(4)),
-          Text(
-            formatCurrency(amount),
-            style: TextStyle(
-              fontSize: context.getRFontSize(15),
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLedgerSummaryRow(ThemeData theme, List<SupplierLedgerEntryData> filteredHistory) {
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     int totalInKobo = 0, totalOutKobo = 0;
     for (final entry in filteredHistory) {
       if (entry.voidedAt != null) continue;
@@ -619,28 +531,30 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(12),
-        context.getRSize(20),
+        context.getRSize(16),
+        context.getRSize(4),
+        context.getRSize(16),
         0,
       ),
       child: Row(
         children: [
           Expanded(
-            child: _buildSummaryTile(
-              theme,
-              'Total In',
-              totalInKobo / 100.0,
-              success,
+            child: SupplierTotalTile(
+              icon: AppIcons.arrowDown,
+              tone: IconTileTone.green,
+              label: 'Total In',
+              value: formatCurrency(totalInKobo / 100.0),
+              valueColor: f.green,
             ),
           ),
           SizedBox(width: context.getRSize(10)),
           Expanded(
-            child: _buildSummaryTile(
-              theme,
-              'Total Out',
-              totalOutKobo / 100.0,
-              danger,
+            child: SupplierTotalTile(
+              icon: AppIcons.arrowUp,
+              tone: IconTileTone.danger,
+              label: 'Total Out',
+              value: formatCurrency(totalOutKobo / 100.0),
+              valueColor: f.danger,
             ),
           ),
         ],
@@ -670,30 +584,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     if (entries.isEmpty) {
       return [
         summaryRow,
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(context.getRSize(40)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    AppIcons.bill,
-                    size: context.getRSize(48),
-                    color: theme.colorScheme.onSurface.withAlpha(40),
-                  ),
-                  SizedBox(height: context.getRSize(16)),
-                  Text(
-                    'No activity in this period',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface.withAlpha(128),
-                      fontSize: context.getRFontSize(14),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.all(context.getRSize(16)),
+            child: const InventoryEmptyCard(
+              icon: AppIcons.bill,
+              title: 'No activity in this period',
             ),
           ),
         ),
@@ -705,9 +601,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
       summaryRow,
       SliverPadding(
         padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
+          context.getRSize(16),
           context.getRSize(8),
-          context.getRSize(20),
+          context.getRSize(16),
           context.getRSize(96) + context.deviceBottomPadding,
         ),
         sliver: SliverList.builder(
@@ -737,10 +633,13 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   List<Widget> _cratesTabSlivers(BuildContext context, ThemeData theme) {
     final supplierAsync = ref.watch(supplierByIdProvider(widget.supplierId));
     final supplier = supplierAsync.valueOrNull;
-    final canManage =
-        ref.watch(currentUserPermissionsProvider).contains('suppliers.manage');
+    final canManage = ref
+        .watch(currentUserPermissionsProvider)
+        .contains('suppliers.manage');
     final balances =
-        ref.watch(supplierCrateBalancesProvider(widget.supplierId)).valueOrNull ??
+        ref
+            .watch(supplierCrateBalancesProvider(widget.supplierId))
+            .valueOrNull ??
         const <SupplierCrateBalanceWithManufacturer>[];
     final totalOwed = balances.fold<int>(0, (sum, b) => sum + b.balance);
     // Refundable deposit value = the per-manufacturer deposit rate applied to the
@@ -753,29 +652,31 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     );
     final active = balances.where((b) => b.balance != 0).toList();
     final totals =
-        ref.watch(supplierCrateMovementTotalsProvider(widget.supplierId)).valueOrNull ??
+        ref
+            .watch(supplierCrateMovementTotalsProvider(widget.supplierId))
+            .valueOrNull ??
         (received: 0, returned: 0);
 
     return [
       SliverPadding(
         padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
           context.getRSize(16),
-          context.getRSize(20),
+          context.getRSize(8),
+          context.getRSize(16),
           context.getRSize(96) + context.deviceBottomPadding,
         ),
         sliver: SliverList.list(
           children: [
             if (canManage && supplier != null) ...[
               _buildCrateActionCard(theme, supplier),
-              SizedBox(height: context.getRSize(16)),
+              SizedBox(height: context.getRSize(12)),
               // #214 — the standing-float door. Only a brand on `standing_float`
               // has money that moves on nothing but a real top-up or payout, so
               // this card simply is not there for a business without one, which is
               // every business until an owner switches a brand over.
               if (_floatBrands().isNotEmpty) ...[
                 _buildFloatActionCard(theme, supplier),
-                SizedBox(height: context.getRSize(16)),
+                SizedBox(height: context.getRSize(12)),
               ],
             ],
             _buildCrateSummaryCard(theme, totalOwed, depositValueKobo),
@@ -787,26 +688,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
             // all for a business whose brands are all on the default `none`
             // arrangement, which is every business until an owner switches one on.
             ..._buildPlacedDepositSection(context, theme),
-            Text(
-              'By manufacturer',
-              style: TextStyle(
-                fontSize: context.getRFontSize(14),
-                fontWeight: FontWeight.w800,
-                color: _text,
-              ),
-            ),
-            SizedBox(height: context.getRSize(12)),
+            const SectionHeader(title: 'By manufacturer'),
+            SizedBox(height: context.getRSize(8)),
             if (active.isEmpty)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: context.getRSize(20)),
-                child: Text(
-                  'No crate activity recorded with this supplier',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    color: _subtext,
-                  ),
-                ),
+              const InventoryEmptyCard(
+                icon: AppIcons.box,
+                title: 'No crate activity recorded with this supplier',
               )
             else
               ...active.map((b) => _buildSupplierCrateRow(theme, b)),
@@ -836,6 +723,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     BuildContext context,
     ThemeData theme,
   ) {
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final positions =
         ref
             .watch(supplierCrateDepositPositionsProvider(widget.supplierId))
@@ -860,23 +748,16 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     );
 
     return [
-      Text(
-        'Your money with this supplier',
-        style: TextStyle(
-          fontSize: context.getRFontSize(14),
-          fontWeight: FontWeight.w800,
-          color: _text,
-        ),
-      ),
-      SizedBox(height: context.getRSize(4)),
-      Text(
-        'Deposits you have actually paid for their crates. It is still yours — '
-        'you get it back when the empties go home.',
-        style: TextStyle(fontSize: context.getRFontSize(12), color: _subtext),
+      const SectionHeader(
+        title: 'Your money with this supplier',
+        subtitle:
+            'Deposits you have actually paid for their crates. It is still '
+            'yours — you get it back when the empties go home.',
       ),
       SizedBox(height: context.getRSize(12)),
-      _GlassyCard(
-        padding: EdgeInsets.all(context.getRSize(18)),
+      Container(
+        padding: EdgeInsets.all(context.getRSize(16)),
+        decoration: AppDecorations.card(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -885,19 +766,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 Expanded(
                   child: Text(
                     'Held by this supplier',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                    ),
+                    style: context.semiBoldStyle(12).copyWith(color: _subtext),
                   ),
                 ),
                 Text(
                   formatCurrency(totalPlaced / 100),
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.w800,
-                    color: _text,
-                  ),
+                  style: context.extraBoldStyle(18).copyWith(color: _text),
                 ),
               ],
             ),
@@ -908,19 +782,14 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                   Expanded(
                     child: Text(
                       'Awaiting confirmation',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(12),
-                        color: _subtext,
-                      ),
+                      style: context
+                          .semiBoldStyle(12)
+                          .copyWith(color: _subtext),
                     ),
                   ),
                   Text(
                     formatCurrency(totalPending / 100),
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(14),
-                      fontWeight: FontWeight.w700,
-                      color: Colors.amber.shade800,
-                    ),
+                    style: context.boldStyle(14).copyWith(color: f.warning),
                   ),
                 ],
               ),
@@ -939,11 +808,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                         children: [
                           Text(
                             p.manufacturerName,
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(13),
-                              fontWeight: FontWeight.w600,
-                              color: _text,
-                            ),
+                            style: context
+                                .semiBoldStyle(13)
+                                .copyWith(color: _text),
                           ),
                           // Deliberately NOT a shortfall line. A shortfall is
                           // brand-level across every supplier (ADR 0023 rule
@@ -957,21 +824,16 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                               '${p.position.unbackedCrates} crate'
                               '${p.position.unbackedCrates == 1 ? '' : 's'} '
                               'with no deposit paid',
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(11),
-                                color: _subtext,
-                              ),
+                              style: context
+                                  .regularStyle(12)
+                                  .copyWith(color: _subtext),
                             ),
                         ],
                       ),
                     ),
                     Text(
                       formatCurrency(p.position.placedDepositKobo / 100),
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(13),
-                        fontWeight: FontWeight.w700,
-                        color: _text,
-                      ),
+                      style: context.boldStyle(13).copyWith(color: _text),
                     ),
                   ],
                 ),
@@ -986,58 +848,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
 
   // The "+" action card pinned at the top of the Crates tab (§3.13).
   Widget _buildCrateActionCard(ThemeData theme, SupplierData supplier) {
-    return InkWell(
+    return SettingsRow(
+      icon: AppIcons.inventory,
+      tone: IconTileTone.info,
+      title: 'Record crate activity',
+      subtitle: 'Crates received from / returned to this supplier',
       onTap: () => _showRecordCrateSheet(supplier),
-      borderRadius: BorderRadius.circular(16),
-      child: _GlassyCard(
-        padding: EdgeInsets.all(context.getRSize(14)),
-        child: Row(
-          children: [
-            Container(
-              width: context.getRSize(40),
-              height: context.getRSize(40),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                AppIcons.inventory,
-                color: theme.colorScheme.primary,
-                size: context.getRSize(16),
-              ),
-            ),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Record crate activity',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(14),
-                      fontWeight: FontWeight.w700,
-                      color: _text,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    'Crates received from / returned to this supplier',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              AppIcons.chevronRight,
-              size: context.getRSize(13),
-              color: _subtext,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1062,59 +878,13 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   /// top-up and a payout are the two times real cash changes hands, and this
   /// is where they are recorded.
   Widget _buildFloatActionCard(ThemeData theme, SupplierData supplier) {
-    return InkWell(
+    return SettingsRow(
+      icon: AppIcons.transfer,
+      tone: IconTileTone.green,
+      title: 'Crate float money',
+      subtitle:
+          'Top up what this supplier holds, or record money they paid back',
       onTap: () => _showFloatMoneySheet(supplier),
-      borderRadius: BorderRadius.circular(16),
-      child: _GlassyCard(
-        padding: EdgeInsets.all(context.getRSize(14)),
-        child: Row(
-          children: [
-            Container(
-              width: context.getRSize(40),
-              height: context.getRSize(40),
-              decoration: BoxDecoration(
-                color: success.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                AppIcons.transfer,
-                color: success,
-                size: context.getRSize(16),
-              ),
-            ),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Crate float money',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(14),
-                      fontWeight: FontWeight.w700,
-                      color: _text,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    'Top up what this supplier holds, or record money they '
-                    'paid back',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              AppIcons.chevronRight,
-              size: context.getRSize(13),
-              color: _subtext,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1150,166 +920,134 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      useSafeArea: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
           final needsStorePick = !canPostDirectly && lockedStoreId == null;
-          return Padding(
+          // The theme supplies the sheet's Surface and shape (#392). One
+          // scrolling column, so the keyboard or a short window never
+          // overflows it; it lifts above the keyboard as it always has.
+          return SingleChildScrollView(
             padding: EdgeInsets.only(
               left: ctx.getRSize(20),
               right: ctx.getRSize(20),
-              top: ctx.getRSize(16),
+              top: ctx.getRSize(12),
               bottom:
                   MediaQuery.of(ctx).viewInsets.bottom +
                   ctx.deviceBottomPadding +
                   ctx.getRSize(16),
             ),
-            child: SingleChildScrollView(
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: ctx.getRSize(40),
-                        height: ctx.getRSize(4),
-                        decoration: BoxDecoration(
-                          color: Theme.of(ctx).dividerColor,
-                          borderRadius: BorderRadius.circular(2),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  InventorySheetHeader(
+                    title: 'Crate Float Money',
+                    subtitle: supplier.name,
+                  ),
+                  SizedBox(height: ctx.getRSize(12)),
+                  Text(
+                    'Only record money that actually changed hands. Crates '
+                    'coming and going do not move this.',
+                    style: ctx.regularStyle(12).copyWith(color: _subtext),
+                  ),
+                  SizedBox(height: ctx.getRSize(16)),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _crateMovementChip(
+                          ctx,
+                          label: 'Top up',
+                          selected: isTopUp,
+                          onTap: () => setSheet(() => isTopUp = true),
                         ),
                       ),
-                    ),
-                    SizedBox(height: ctx.getRSize(20)),
-                    Text(
-                      'Crate Float Money',
-                      style: TextStyle(
-                        fontSize: ctx.getRFontSize(18),
-                        fontWeight: FontWeight.w800,
-                        color: _text,
+                      SizedBox(width: ctx.getRSize(10)),
+                      Expanded(
+                        child: _crateMovementChip(
+                          ctx,
+                          label: 'They paid back',
+                          selected: !isTopUp,
+                          onTap: () => setSheet(() => isTopUp = false),
+                        ),
                       ),
-                    ),
-                    SizedBox(height: ctx.getRSize(4)),
-                    Text(
-                      supplier.name,
-                      style: TextStyle(
-                        fontSize: ctx.getRFontSize(13),
-                        color: Theme.of(ctx).colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: ctx.getRSize(12)),
-                    Text(
-                      'Only record money that actually changed hands. Crates '
-                      'coming and going do not move this.',
-                      style: TextStyle(
-                        fontSize: ctx.getRFontSize(12),
-                        color: _subtext,
-                      ),
-                    ),
-                    SizedBox(height: ctx.getRSize(16)),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _crateMovementChip(
-                            ctx,
-                            label: 'Top up',
-                            selected: isTopUp,
-                            onTap: () => setSheet(() => isTopUp = true),
+                    ],
+                  ),
+                  SizedBox(height: ctx.getRSize(16)),
+                  AppDropdown<String>(
+                    value: selectedId,
+                    labelText: 'Brand',
+                    hintText: 'Select a brand',
+                    items: brands
+                        .map(
+                          (m) => DropdownMenuItem(
+                            value: m.id,
+                            child: Text(m.name),
                           ),
-                        ),
-                        SizedBox(width: ctx.getRSize(10)),
-                        Expanded(
-                          child: _crateMovementChip(
-                            ctx,
-                            label: 'They paid back',
-                            selected: !isTopUp,
-                            onTap: () => setSheet(() => isTopUp = false),
-                          ),
-                        ),
-                      ],
-                    ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setSheet(() => selectedId = v),
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Select a brand' : null,
+                  ),
+                  if (needsStorePick) ...[
                     SizedBox(height: ctx.getRSize(16)),
                     AppDropdown<String>(
-                      value: selectedId,
-                      labelText: 'Brand',
-                      hintText: 'Select a brand',
-                      items: brands
+                      value: chosenStoreId,
+                      labelText: 'Store',
+                      hintText: 'Who should confirm this?',
+                      items: stores
                           .map(
-                            (m) => DropdownMenuItem(
-                              value: m.id,
-                              child: Text(m.name),
+                            (s) => DropdownMenuItem(
+                              value: s.id,
+                              child: Text(s.name),
                             ),
                           )
                           .toList(),
-                      onChanged: (v) => setSheet(() => selectedId = v),
-                      validator: (v) =>
-                          (v == null || v.isEmpty) ? 'Select a brand' : null,
-                    ),
-                    if (needsStorePick) ...[
-                      SizedBox(height: ctx.getRSize(16)),
-                      AppDropdown<String>(
-                        value: chosenStoreId,
-                        labelText: 'Store',
-                        hintText: 'Who should confirm this?',
-                        items: stores
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s.id,
-                                child: Text(s.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) => setSheet(() => chosenStoreId = v),
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Choose the store this belongs to'
-                            : null,
-                      ),
-                    ],
-                    SizedBox(height: ctx.getRSize(16)),
-                    AppInput(
-                      controller: amountCtrl,
-                      labelText: isTopUp
-                          ? 'Amount you paid the supplier'
-                          : 'Amount the supplier paid back',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [CurrencyInputFormatter()],
-                      validator: (v) => _typedKobo(v ?? '') > 0
-                          ? null
-                          : 'Enter the amount that changed hands',
-                    ),
-                    SizedBox(height: ctx.getRSize(16)),
-                    AppInput(
-                      controller: noteCtrl,
-                      labelText: 'Note (optional)',
-                    ),
-                    SizedBox(height: ctx.getRSize(24)),
-                    AppButton(
-                      text: canPostDirectly
-                          ? (isTopUp ? 'Record Top-up' : 'Record Payout')
-                          : 'Send for Confirmation',
-                      onPressed: () => _submitFloatMovement(
-                        ctx,
-                        supplier: supplier,
-                        manufacturerId: selectedId,
-                        brands: brands,
-                        amountText: amountCtrl.text,
-                        noteText: noteCtrl.text,
-                        isTopUp: isTopUp,
-                        canPostDirectly: canPostDirectly,
-                        staffId: staffId,
-                        storeId: chosenStoreId,
-                        formKey: formKey,
-                      ),
+                      onChanged: (v) => setSheet(() => chosenStoreId = v),
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Choose the store this belongs to'
+                          : null,
                     ),
                   ],
-                ),
+                  SizedBox(height: ctx.getRSize(16)),
+                  AppInput(
+                    controller: amountCtrl,
+                    labelText: isTopUp
+                        ? 'Amount you paid the supplier'
+                        : 'Amount the supplier paid back',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [CurrencyInputFormatter()],
+                    validator: (v) => _typedKobo(v ?? '') > 0
+                        ? null
+                        : 'Enter the amount that changed hands',
+                  ),
+                  SizedBox(height: ctx.getRSize(16)),
+                  AppInput(controller: noteCtrl, labelText: 'Note (optional)'),
+                  SizedBox(height: ctx.getRSize(24)),
+                  AppButton(
+                    text: canPostDirectly
+                        ? (isTopUp ? 'Record Top-up' : 'Record Payout')
+                        : 'Send for Confirmation',
+                    onPressed: () => _submitFloatMovement(
+                      ctx,
+                      supplier: supplier,
+                      manufacturerId: selectedId,
+                      brands: brands,
+                      amountText: amountCtrl.text,
+                      noteText: noteCtrl.text,
+                      isTopUp: isTopUp,
+                      canPostDirectly: canPostDirectly,
+                      staffId: staffId,
+                      storeId: chosenStoreId,
+                      formKey: formKey,
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -1419,20 +1157,22 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     int totalOwed,
     int depositHeldKobo,
   ) {
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final isOwe = totalOwed > 0;
     final isCredit = totalOwed < 0;
     final color = isOwe
         ? theme.colorScheme.primary
         : isCredit
-        ? success
+        ? f.green
         : _subtext;
     final headline = isOwe
         ? 'You owe ${totalOwed.abs()} crate${totalOwed.abs() == 1 ? '' : 's'}'
         : isCredit
         ? '${totalOwed.abs()} crate${totalOwed.abs() == 1 ? '' : 's'} credit'
         : 'All crates settled';
-    return _GlassyCard(
-      padding: EdgeInsets.all(context.getRSize(18)),
+    return Container(
+      padding: EdgeInsets.all(context.getRSize(16)),
+      decoration: AppDecorations.card(context),
       child: Row(
         children: [
           Expanded(
@@ -1441,19 +1181,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
               children: [
                 Text(
                   'Net crate balance',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext,
-                  ),
+                  style: context.semiBoldStyle(12).copyWith(color: _subtext),
                 ),
                 SizedBox(height: context.getRSize(4)),
                 Text(
                   headline,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
+                  style: context.extraBoldStyle(18).copyWith(color: color),
                 ),
               ],
             ),
@@ -1470,19 +1203,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
               children: [
                 Text(
                   'Deposit value (refundable)',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext,
-                  ),
+                  style: context.semiBoldStyle(12).copyWith(color: _subtext),
                 ),
                 SizedBox(height: context.getRSize(4)),
                 Text(
                   formatCurrency(depositHeldKobo / 100),
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.w800,
-                    color: _text,
-                  ),
+                  style: context.extraBoldStyle(18).copyWith(color: _text),
                 ),
               ],
             ),
@@ -1494,83 +1220,27 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
 
   // Cumulative crates received from / sent back to this supplier (running
   // totals, not the net balance). "Returned" is the count sent back to date.
-  Widget _buildCrateMovementStats(
-    ThemeData theme,
-    int received,
-    int returned,
-  ) {
+  Widget _buildCrateMovementStats(ThemeData theme, int received, int returned) {
     return Row(
       children: [
         Expanded(
-          child: _crateStatTile(
-            theme,
+          child: InventoryFigureCard(
             icon: AppIcons.receiving,
-            label: 'Crates received',
+            tone: IconTileTone.info,
             value: '$received',
-            color: theme.colorScheme.primary,
+            label: 'Crates received',
           ),
         ),
         SizedBox(width: context.getRSize(12)),
         Expanded(
-          child: _crateStatTile(
-            theme,
+          child: InventoryFigureCard(
             icon: AppIcons.refresh,
-            label: 'Crates returned',
+            tone: IconTileTone.green,
             value: '$returned',
-            color: success,
+            label: 'Crates returned',
           ),
         ),
       ],
-    );
-  }
-
-  Widget _crateStatTile(
-    ThemeData theme, {
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return _GlassyCard(
-      padding: EdgeInsets.all(context.getRSize(14)),
-      child: Row(
-        children: [
-          Container(
-            width: context.getRSize(34),
-            height: context.getRSize(34),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: context.getRSize(14)),
-          ),
-          SizedBox(width: context.getRSize(10)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.w800,
-                    color: _text,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(11),
-                    color: _subtext,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1581,57 +1251,30 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   ) {
     final bal = entry.balance;
     final isOwe = bal > 0;
-    final color = isOwe ? theme.colorScheme.primary : success;
-    final label = isOwe
-        ? '${bal.abs()} owed'
-        : '${bal.abs()} credit';
+    final label = isOwe ? '${bal.abs()} owed' : '${bal.abs()} credit';
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(10)),
-      child: _GlassyCard(
+      child: Container(
+        constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
         padding: EdgeInsets.all(context.getRSize(14)),
+        decoration: AppDecorations.card(context),
         child: Row(
           children: [
-            Container(
-              width: context.getRSize(38),
-              height: context.getRSize(38),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                AppIcons.box,
-                color: color,
-                size: context.getRSize(15),
-              ),
+            IconTile(
+              icon: AppIcons.box,
+              tone: isOwe ? IconTileTone.info : IconTileTone.green,
+              size: 40,
             ),
             SizedBox(width: context.getRSize(12)),
             Expanded(
               child: Text(
                 entry.manufacturerName,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w600,
-                  color: _text,
-                ),
+                style: context.boldStyle(15).copyWith(color: _text),
               ),
             ),
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(10),
-                vertical: context.getRSize(4),
-              ),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
+            TagPill(
+              label: label,
+              tone: isOwe ? TagPillTone.info : TagPillTone.green,
             ),
           ],
         ),
@@ -1648,8 +1291,10 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
       AppNotification.showError(context, 'No active session.');
       return;
     }
-    final manufacturers =
-        await ref.read(databaseProvider).inventoryDao.getAllManufacturers();
+    final manufacturers = await ref
+        .read(databaseProvider)
+        .inventoryDao
+        .getAllManufacturers();
     if (!mounted) return;
     if (manufacturers.isEmpty) {
       AppNotification.showError(context, 'Add a manufacturer first.');
@@ -1674,65 +1319,42 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      useSafeArea: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-        // The selected brand's Crate Money Arrangement decides the whole shape
-        // of this sheet (#211/#213). `per_delivery` means the deposit is real
-        // money on a real ledger: it is never hand-typed into the legacy crate
-        // column, and the refund a supplier hands back waits for a manager.
-        final selectedMfr = selectedId == null
-            ? null
-            : manufacturers.where((m) => m.id == selectedId).firstOrNull;
-        final isMoneyBrand =
-            selectedMfr != null &&
-            crateMoneyArrangementOf(selectedMfr.crateMoneyArrangement) ==
-                CrateMoneyArrangement.perDelivery;
-        final needsStorePick = isMoneyBrand && lockedStoreId == null;
-        return Padding(
-          padding: EdgeInsets.only(
-            left: ctx.getRSize(20),
-            right: ctx.getRSize(20),
-            top: ctx.getRSize(16),
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + ctx.deviceBottomPadding + ctx.getRSize(16),
-          ),
-          child: SingleChildScrollView(
+          // The selected brand's Crate Money Arrangement decides the whole shape
+          // of this sheet (#211/#213). `per_delivery` means the deposit is real
+          // money on a real ledger: it is never hand-typed into the legacy crate
+          // column, and the refund a supplier hands back waits for a manager.
+          final selectedMfr = selectedId == null
+              ? null
+              : manufacturers.where((m) => m.id == selectedId).firstOrNull;
+          final isMoneyBrand =
+              selectedMfr != null &&
+              crateMoneyArrangementOf(selectedMfr.crateMoneyArrangement) ==
+                  CrateMoneyArrangement.perDelivery;
+          final needsStorePick = isMoneyBrand && lockedStoreId == null;
+          // The theme supplies the sheet's Surface and shape (#392). One
+          // scrolling column; it lifts above the keyboard as it always has.
+          return SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: ctx.getRSize(20),
+              right: ctx.getRSize(20),
+              top: ctx.getRSize(12),
+              bottom:
+                  MediaQuery.of(ctx).viewInsets.bottom +
+                  ctx.deviceBottomPadding +
+                  ctx.getRSize(16),
+            ),
             child: Form(
               key: formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                    child: Container(
-                      width: ctx.getRSize(40),
-                      height: ctx.getRSize(4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(ctx).dividerColor,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: ctx.getRSize(20)),
-                  Text(
-                    'Empty Crates',
-                    style: TextStyle(
-                      fontSize: ctx.getRFontSize(18),
-                      fontWeight: FontWeight.w800,
-                      color: _text,
-                    ),
-                  ),
-                  SizedBox(height: ctx.getRSize(4)),
-                  Text(
-                    supplier.name,
-                    style: TextStyle(
-                      fontSize: ctx.getRFontSize(13),
-                      color: Theme.of(ctx).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  InventorySheetHeader(
+                    title: 'Empty Crates',
+                    subtitle: supplier.name,
                   ),
                   SizedBox(height: ctx.getRSize(20)),
                   // Movement toggle.
@@ -1771,8 +1393,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                         )
                         .toList(),
                     onChanged: (v) => setSheet(() => selectedId = v),
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Select a manufacturer' : null,
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'Select a manufacturer'
+                        : null,
                   ),
                   if (needsStorePick) ...[
                     SizedBox(height: ctx.getRSize(16)),
@@ -1826,10 +1449,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                       'A manager will confirm the deposit for these crates at '
                       "${selectedMfr.name}'s rate. You are only recording the "
                       'crates.',
-                      style: TextStyle(
-                        fontSize: ctx.getRFontSize(12),
-                        color: _subtext,
-                      ),
+                      style: ctx.regularStyle(12).copyWith(color: _subtext),
                     )
                   else ...[
                     AppInput(
@@ -1850,10 +1470,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                         'Type what the supplier actually handed back. Leave it '
                         'blank and a manager records the real figure. Anything '
                         'short of the deposit stays yours, still held.',
-                        style: TextStyle(
-                          fontSize: ctx.getRFontSize(12),
-                          color: _subtext,
-                        ),
+                        style: ctx.regularStyle(12).copyWith(color: _subtext),
                       ),
                     ],
                   ],
@@ -1879,8 +1496,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                 ],
               ),
             ),
-          ),
-        );
+          );
         },
       ),
     );
@@ -1888,6 +1504,8 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     depositCtrl.dispose();
   }
 
+  /// A two-way toggle chip in the crate sheets (#392): a 48dp stadium, primary
+  /// tint when chosen, hairline otherwise.
   Widget _crateMovementChip(
     BuildContext ctx, {
     required String label,
@@ -1895,28 +1513,34 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     required VoidCallback onTap,
   }) {
     final primary = Theme.of(ctx).colorScheme.primary;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: ctx.getRSize(12)),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected
-              ? primary.withValues(alpha: 0.12)
-              : Theme.of(ctx).cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? primary : Theme.of(ctx).dividerColor,
-            width: selected ? 1.5 : 1,
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Container(
+          constraints: const BoxConstraints(
+            minHeight: kMinInteractiveDimension,
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ctx.getRFontSize(14),
-            fontWeight: FontWeight.w700,
-            color: selected ? primary : _subtext,
+          padding: EdgeInsets.symmetric(vertical: ctx.getRSize(12)),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? primary.withValues(alpha: 0.12)
+                : Theme.of(ctx).cardColor,
+            borderRadius: radius,
+            border: Border.all(
+              color: selected ? primary : Theme.of(ctx).dividerColor,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: ctx
+                .boldStyle(14)
+                .copyWith(color: selected ? primary : _subtext),
           ),
         ),
       ),
@@ -2038,62 +1662,45 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   // --- Actions ---
 
   void _showEntryActions(SupplierData supplier, SupplierLedgerEntryData entry) {
-    final isVoidable =
-        entry.referenceType != 'void' && entry.voidedAt == null;
+    final isVoidable = entry.referenceType != 'void' && entry.voidedAt == null;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: _surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            ctx.getRSize(20),
-            ctx.getRSize(16),
-            ctx.getRSize(20),
-            ctx.getRSize(16) + ctx.deviceBottomPadding,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      useSafeArea: true,
+      builder: (ctx) => SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          ctx.getRSize(20),
+          ctx.getRSize(12),
+          ctx.getRSize(20),
+          ctx.getRSize(16) + ctx.deviceBottomPadding,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InventorySheetHeader(
+              title: 'Entry options',
+              subtitle:
+                  '${formatCurrency(entry.amountKobo / 100)} • '
+                  '${DateFormat('MMM d, y').format(entry.activityDate)}',
+            ),
+            SizedBox(height: ctx.getRSize(20)),
+            if (isVoidable)
+              AppButton(
+                text: 'Void / reverse this entry',
+                variant: AppButtonVariant.danger,
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _confirmVoid(supplier, entry);
+                },
+              )
+            else
               Text(
-                'Entry options',
-                style: TextStyle(
-                  color: _text,
-                  fontWeight: FontWeight.w800,
-                  fontSize: ctx.getRFontSize(16),
-                ),
+                entry.referenceType == 'void'
+                    ? 'This is a reversal entry and cannot be voided.'
+                    : 'This entry has already been voided.',
+                style: ctx.regularStyle(13).copyWith(color: _subtext),
               ),
-              SizedBox(height: ctx.getRSize(4)),
-              Text(
-                '${formatCurrency(entry.amountKobo / 100)} • '
-                '${DateFormat('MMM d, y').format(entry.activityDate)}',
-                style: TextStyle(color: _subtext, fontSize: ctx.getRFontSize(13)),
-              ),
-              SizedBox(height: ctx.getRSize(20)),
-              if (isVoidable)
-                AppButton(
-                  text: 'Void / reverse this entry',
-                  variant: AppButtonVariant.danger,
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _confirmVoid(supplier, entry);
-                  },
-                )
-              else
-                Text(
-                  entry.referenceType == 'void'
-                      ? 'This is a reversal entry and cannot be voided.'
-                      : 'This entry has already been voided.',
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: ctx.getRFontSize(13),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -2106,31 +1713,29 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        // Scrolls rather than overflows at large text or on a sideways phone.
+        scrollable: true,
         title: Text(
           'Void this entry?',
-          style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+          style: ctx.screenTitleStyle.copyWith(color: _text),
         ),
         content: Text(
           'A compensating reversal of ${formatCurrency(entry.amountKobo / 100)} '
           'will be appended to ${supplier.name}’s ledger. The original entry '
           'is kept for the record. This cannot be undone.',
-          style: TextStyle(color: _subtext),
+          style: ctx.regularStyle(14).copyWith(color: _subtext),
         ),
         actions: [
           AppButton(
             text: 'Cancel',
             variant: AppButtonVariant.ghost,
-            size: AppButtonSize.small,
+            isFullWidth: false,
             onPressed: () => Navigator.pop(ctx, false),
           ),
           AppButton(
             text: 'Void',
             variant: AppButtonVariant.danger,
-            size: AppButtonSize.small,
+            isFullWidth: false,
             onPressed: () => Navigator.pop(ctx, true),
           ),
         ],
@@ -2166,25 +1771,27 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _surface,
+        // Scrolls rather than overflows at large text or on a sideways phone.
+        scrollable: true,
         title: Text(
           'Delete supplier?',
-          style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+          style: ctx.screenTitleStyle.copyWith(color: _text),
         ),
         content: Text(
           'Remove ${supplier.name}? Their ledger history is kept, but they will '
           'no longer appear in the suppliers list.',
-          style: TextStyle(color: _subtext),
+          style: ctx.regularStyle(14).copyWith(color: _subtext),
         ),
         actions: [
           AppButton(
             text: 'Cancel',
             variant: AppButtonVariant.ghost,
+            isFullWidth: false,
             onPressed: () => Navigator.pop(ctx, false),
           ),
           AppButton(
             text: 'Delete',
-            size: AppButtonSize.small,
+            isFullWidth: false,
             onPressed: () => Navigator.pop(ctx, true),
           ),
         ],
@@ -2224,62 +1831,28 @@ class _InfoRow extends StatelessWidget {
   final String text;
   final ThemeData theme;
 
-  const _InfoRow({
-    required this.icon,
-    required this.text,
-    required this.theme,
-  });
+  const _InfoRow({required this.icon, required this.text, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     if (text.isEmpty) return const SizedBox.shrink();
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.only(top: context.getRSize(2)),
-          child: Icon(
-            icon,
-            size: context.getRSize(11),
-            color: theme.colorScheme.onSurface.withAlpha(128),
-          ),
+          child: AppIcon(icon, size: context.getRSize(14), color: muted),
         ),
         SizedBox(width: context.getRSize(8)),
         Expanded(
           child: Text(
             text,
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w500,
-              color: theme.colorScheme.onSurface.withAlpha(178),
-            ),
+            style: context.mediumStyle(13).copyWith(color: muted),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _GlassyCard extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry? padding;
-  final EdgeInsetsGeometry? margin;
-  final double radius;
-
-  const _GlassyCard({
-    required this.child,
-    this.padding,
-    this.margin,
-    this.radius = 16.0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassyCard(
-      padding: padding,
-      margin: margin,
-      radius: radius,
-      child: child,
     );
   }
 }

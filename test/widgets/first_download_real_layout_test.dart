@@ -140,7 +140,7 @@ void main() {
 
       await tester.tap(find.text('Empty Crates'));
       await deliver(tester);
-      expect(find.text('No manufacturers to track'), findsNothing);
+      expect(find.text('No bottle manufacturers yet'), findsNothing);
 
       await disposeScreen(tester);
     });
@@ -180,7 +180,7 @@ void main() {
 
       await tester.tap(find.text('Empty Crates'));
       await deliver(tester);
-      expect(find.text('No manufacturers to track'), findsOneWidget);
+      expect(find.text('No bottle manufacturers yet'), findsOneWidget);
 
       await disposeScreen(tester);
     });

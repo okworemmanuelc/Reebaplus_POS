@@ -2221,6 +2221,15 @@ final fullCratesByManufacturerProvider = businessScopedStream<Map<String, int>>(
   whenAbsent: const {},
 );
 
+/// Ids of manufacturers with at least one tracked bottle product
+/// (`unit == 'bottle' && trackEmpties`, not deleted). Business-wide — a product
+/// belongs to the business, not a store. Decides which brands the inventory
+/// Empty Crates tab lists (#389).
+final crateTrackedManufacturerIdsProvider = businessScopedStream<Set<String>>(
+  (ref, db, businessId) => db.inventoryDao.watchCrateTrackedManufacturerIds(),
+  whenAbsent: const {},
+);
+
 /// Open crate shortage per manufacturer (`manufacturerId → shortageCount`).
 /// When a store is locked, scopes to that store; otherwise sums shortages across
 /// all stores per manufacturer (#293, PRD #284 §7).

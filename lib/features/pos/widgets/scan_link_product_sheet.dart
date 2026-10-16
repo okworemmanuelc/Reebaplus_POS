@@ -3,7 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -86,31 +91,29 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
         title: Text(
           'Replace barcode?',
-          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
+          style: ctx.screenTitleStyle.copyWith(
+            color: Theme.of(ctx).colorScheme.onSurface,
           ),
         ),
         content: Text(
           'This replaces barcode $oldBarcode on $name. Continue?',
-          style: Theme.of(ctx).textTheme.bodyMedium,
+          style: ctx
+              .regularStyle(14)
+              .copyWith(color: Theme.of(ctx).colorScheme.onSurface),
         ),
         actions: [
           AppButton(
             text: 'Cancel',
             variant: AppButtonVariant.ghost,
-            size: AppButtonSize.small,
+            isFullWidth: false,
             onPressed: () => Navigator.pop(ctx, false),
           ),
           AppButton(
             text: 'Continue',
             variant: AppButtonVariant.primary,
-            size: AppButtonSize.small,
+            isFullWidth: false,
             onPressed: () => Navigator.pop(ctx, true),
           ),
         ],
@@ -122,9 +125,7 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final border = t.dividerColor;
-    final text = t.colorScheme.onSurface;
-    final primary = t.colorScheme.primary;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final results = _results;
 
     // A fixed share of the space the sheet is given, so the sheet doesn't jump
@@ -135,103 +136,29 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
     return LayoutBuilder(
       builder: (context, constraints) => Container(
         height: constraints.maxHeight * 0.85,
-        decoration: BoxDecoration(
-          color: t.colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 30,
-              offset: const Offset(0, -10),
-            ),
-          ],
-        ),
+        decoration: salesSheetDecoration(context),
         child: CustomScrollView(
           slivers: [
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
-                context.getRSize(24),
-                context.getRSize(16),
-                context.getRSize(24),
+                context.getRSize(20),
+                context.getRSize(12),
+                context.getRSize(20),
                 0,
               ),
               sliver: SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Drag Handle
-                    Center(
-                      child: Container(
-                        width: context.getRSize(40),
-                        height: context.getRSize(4),
-                        decoration: BoxDecoration(
-                          color: border.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(24)),
-
-                    // Header with Icon
-                    Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(context.getRSize(14)),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                primary.withValues(alpha: 0.2),
-                                primary.withValues(alpha: 0.1),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Icon(
-                            AppIcons.link,
-                            size: context.getRSize(20),
-                            color: primary,
-                          ),
-                        ),
-                        SizedBox(width: context.getRSize(16)),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Link to a product',
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(20),
-                                  fontWeight: FontWeight.w900,
-                                  color: text,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              Text(
-                                'Barcode ${widget.code}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(14),
-                                  color: text.withValues(alpha: 0.5),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Material(
-                          color: border.withValues(alpha: 0.1),
-                          shape: const CircleBorder(),
-                          child: IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: Icon(
-                              AppIcons.close,
-                              size: context.getRSize(20),
-                              color: text.withValues(alpha: 0.5),
-                            ),
-                          ),
+                    SalesSheetHeader(
+                      title: 'Link to a product',
+                      subtitle: 'Barcode ${widget.code}',
+                      leading: const IconTile(icon: AppIcons.link, size: 44),
+                      trailing: [
+                        SalesBackButton(
+                          icon: AppIcons.close,
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
@@ -241,7 +168,8 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
                       hintText: 'Search products by name',
                       prefixIcon: Icon(
                         AppIcons.search,
-                        size: context.getRSize(16),
+                        size: context.getRSize(18),
+                        color: muted,
                       ),
                       textInputAction: TextInputAction.search,
                       onChanged: _search,
@@ -251,11 +179,7 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
                       Text(
                         'No products match',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(14),
-                          color: text.withValues(alpha: 0.6),
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: context.semiBoldStyle(14).copyWith(color: muted),
                       ),
                   ],
                 ),
@@ -263,15 +187,15 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
             ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
-                context.getRSize(24),
+                context.getRSize(20),
                 0,
-                context.getRSize(24),
-                context.deviceBottomPadding + context.getRSize(24),
+                context.getRSize(20),
+                context.deviceBottomPadding + context.getRSize(20),
               ),
               sliver: SliverList.separated(
                 itemCount: results?.length ?? 0,
                 separatorBuilder: (_, _) =>
-                    SizedBox(height: context.getRSize(10)),
+                    SizedBox(height: context.getRSize(8)),
                 itemBuilder: (context, i) => _ScanLinkRow(
                   product: results![i],
                   onTap: () => _pick(results[i]),
@@ -295,46 +219,69 @@ class _ScanLinkRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final border = t.dividerColor;
     final text = t.colorScheme.onSurface;
+    final muted = t.textTheme.bodySmall?.color ?? text;
     // Same size + unit descriptor the POS grid tile shows under the name.
     final size = '${product.size ?? ''} ${product.unit ?? ''}'.trim();
     final barcode = product.barcode?.trim() ?? '';
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 
-    return Material(
-      color: border.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        key: ValueKey<String>('$kScanLinkRowKeyPrefix${product.id}'),
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.all(context.getRSize(14)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                size.isEmpty ? product.name : '${product.name} · $size',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(15),
-                  fontWeight: FontWeight.w800,
-                  color: text,
-                ),
+    return DecoratedBox(
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusL,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          key: ValueKey<String>('$kScanLinkRowKeyPrefix${product.id}'),
+          borderRadius: radius,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(12)),
+              child: Row(
+                children: [
+                  const IconTile(icon: AppIcons.box, size: 40),
+                  SizedBox(width: context.getRSize(10)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          size.isEmpty
+                              ? product.name
+                              : '${product.name} · $size',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.boldStyle(15).copyWith(color: text),
+                        ),
+                        SizedBox(height: context.getRSize(2)),
+                        Text(
+                          barcode.isEmpty
+                              ? 'No barcode yet'
+                              : 'Barcode $barcode',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context
+                              .regularStyle(12)
+                              .copyWith(color: muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(8)),
+                  AppIcon(
+                    AppIcons.chevronRight,
+                    size: context.getRSize(20),
+                    color: muted,
+                  ),
+                ],
               ),
-              SizedBox(height: context.getRSize(4)),
-              Text(
-                barcode.isEmpty ? 'No barcode yet' : 'Barcode $barcode',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  fontWeight: FontWeight.w600,
-                  color: text.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
