@@ -699,6 +699,14 @@ A pushed screen (Inventory's FAB, Home's quick action) on `AppDecorations.pageBa
 | Bottom inset | The footer adds `deviceBottomPadding` minus however far the drawer stops short of the screen's bottom (under 600dp on a tab root the drawer ends at the bottom bar, which already clears the inset) |
 | Nav list | Permission-gated; items not permitted to the current role are omitted entirely (hide-don't-block) |
 
+### Dashboard reports (`lib/features/dashboard/screens/` + `widgets/report_parts.dart`, #413 PR 1)
+
+**Restyle only: every figure comes from the unchanged `recon_data.dart` / `report_revenue.dart`; gates (`profitReportEntry`, `seeReportCostPrices`, `crateDepositsReport`, `supplierAccountsReport`, `viewApprovals`, `dailyReconciliation`) are untouched.**
+- **Top bar** (`ReportTopBar`, height `reportTopBarHeight` = CEO Settings' rule): solid Surface + hairline + `topBarShadow`, `ScreenHeader` with a 48dp `ReportBackButton` (`maybePop`), the report's tile, title, the active store (Sales Detail: the period) and 48dp `ReportBarAction`s (Export CSV). No scroll-reactive colour.
+- **Width**: list screens (hub, Sales Detail, Profit, Crate Deposits, Supplier Accounts) cap at the raw 720 (`reportGutter`, measured, minimum `getRSize(16)`); the top bar stays full width.
+- **Parts**: `ReportCard` (flat `AppDecorations.card`), `ReportHeadlineCard` (40 `IconTile`, muted label, ExtraBold 28 figure in a `FittedBox`, `ReportChip` wrap), `ReportValueRow` (label | value, value scales down, never ellipsises), `ReportHubCard` (48 `IconTile`, Bold 16 title, pending badge in `AppFixedColors.warning` or chevron; keys `reportCardKey`, `report-card-badge-<title>`), `ReportEmpty`.
+- **Colours**: profit / income in `AppFixedColors.green`, loss / owed in `danger`, refunded in `warning`. Never `Colors.*`.
+
 ### Bottom sheets
 
 | Property | Value |

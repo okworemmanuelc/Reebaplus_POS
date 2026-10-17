@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #413 PR 1: Dashboard reports restyle, hub + Sales Detail + Profit + Crate Deposits + Supplier Accounts (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-reports`, worktree `../drinkPosApp-wt-413`. **Restyle only: no figure, gate, write path, Drift/cloud/sync change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.** PR 2 (Daily Reconciliation list + detail) and PR 3 (Stock Approvals) follow.
+- New `dashboard/widgets/report_parts.dart` (local; shared-part candidates `ReportTopBar` and the figure / row / empty parts): top bar, 48dp back and export, `reportGutter` (720 list cap, measured), `ReportHeadlineCard`, `ReportChip`, `ReportValueRow`, `ReportHubCard`, `ReportEmpty`.
+- Hub is now a single 720-capped column of cards (was a 220dp-extent grid); Profit's period dropdown moved from the app bar into its own row.
+- Hard-coded colours (`0xFF22C55E`, `Colors.orange/green`, `colors.dart` danger/success) replaced by `AppFixedColors`.
+- Tests: `test/dashboard/report_screens_redesign_test.dart`; goldens `test/redesign/reports_golden_test.dart` (40 images).
+
 ### Release 2.0 (v2.0.0+10) — Google Play Store Public Release (2026-10-11)
 - **Version Bump**: Bumped version in `pubspec.yaml` to `2.0.0+10` (versionName `2.0`, versionCode `10`).
 - **Release Build**: Generated signed production Android App Bundle (`app-release.aab`, 99.2 MB) at `build/app/outputs/bundle/release/app-release.aab` via `flutter build appbundle --release --build-name=2.0 --build-number=10`.
