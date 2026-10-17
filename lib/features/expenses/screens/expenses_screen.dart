@@ -140,9 +140,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       child: Scaffold(
         backgroundColor: Colors.transparent,
         // One line: test/tour/drawer_presence_ban_test.dart reads it line by line.
-        drawer: context.isRailLayout
-            ? null
-            : const AppDrawer(activeRoute: 'expenses'),
+        // dart format off
+        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'expenses'),
+        // dart format on
         appBar: appBar,
         body: DrawerHost(
           // Side insets (a cutout, a sideways nav bar) are cleared here; under
