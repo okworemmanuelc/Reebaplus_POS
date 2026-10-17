@@ -6,9 +6,11 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/receipt_printer_settings_screen.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/profile/widgets/edit_profile_sheet.dart';
 
@@ -18,29 +20,21 @@ import 'package:reebaplus_pos/features/profile/widgets/edit_profile_sheet.dart';
 /// (moved here from the side menu for these roles). The CEO never sees this —
 /// they use CEO Settings. Role-gated here as defense-in-depth (hard rule #6);
 /// the drawer already hides it for the CEO.
+///
+/// Restyled in #442 (PRD #346 Wave 2 C): the CEO Settings menu's look — solid
+/// top bar, [SettingsRow]s, content capped at 720dp.
 class StaffSettingsScreen extends ConsumerWidget {
   const StaffSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context);
     final user = ref.watch(authProvider).currentUser;
     final slug = ref.watch(currentUserRoleProvider)?.slug;
 
-    final body = _buildBody(context, ref, user, slug);
-
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Settings',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: body,
+    return SettingsPageScaffold(
+      icon: AppIcons.settings,
+      title: 'Settings',
+      body: _buildBody(context, ref, user, slug),
     );
   }
 
@@ -60,55 +54,47 @@ class StaffSettingsScreen extends ConsumerWidget {
     // CEO uses CEO Settings; this page is for roles below CEO only.
     if (slug == 'ceo') return const SettingsNoAccess();
 
+    final gap = SizedBox(height: context.getRSize(12));
     return SettingsFadeIn(
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          24,
-          24,
-          24 + context.deviceBottomPadding,
-        ),
+      child: SettingsPageList(
+        listKey: const Key('staff-settings-list'),
         children: [
-          SettingsTile(
+          SettingsRow(
             icon: AppIcons.user,
+            tone: IconTileTone.info,
             title: 'Profile',
             subtitle: 'Edit your name and avatar',
-            trailing: _chevron(context),
-            onTap: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) => EditProfileSheet(user: user, parentRef: ref),
-            ),
+            onTap: () =>
+                EditProfileSheet.show(context, user: user, parentRef: ref),
           ),
-          const SizedBox(height: 16),
-          SettingsTile(
+          gap,
+          SettingsRow(
             icon: AppIcons.lock,
+            tone: IconTileTone.danger,
             title: 'Change PIN',
             subtitle: 'Update your unlock PIN',
-            trailing: _chevron(context),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => CreatePinScreen(user: user)),
             ),
           ),
-          const SizedBox(height: 16),
-          SettingsTile(
+          gap,
+          SettingsRow(
             icon: AppIcons.print,
+            tone: IconTileTone.neutral,
             title: 'Receipt printer',
             subtitle: 'Paper size for each printer (58mm or 80mm)',
-            trailing: _chevron(context),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => const ReceiptPrinterSettingsScreen(),
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          SettingsTile(
+          gap,
+          SettingsRow(
             icon: AppIcons.themeMode,
+            tone: IconTileTone.info,
             title: 'Display',
             subtitle: 'Light & dark mode',
-            trailing: _chevron(context),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ThemeSettingsScreen()),
             ),
@@ -117,9 +103,4 @@ class StaffSettingsScreen extends ConsumerWidget {
       ),
     );
   }
-
-  Widget _chevron(BuildContext context) => Icon(
-    AppIcons.chevronRight,
-    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
-  );
 }

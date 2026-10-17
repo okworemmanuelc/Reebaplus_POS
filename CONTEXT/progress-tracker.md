@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #442: Profile + Settings leftovers restyle (Wave 2 C, PR 1 of 3, 2026-10-17)
+Branch `feat/redesign-w2-settings`, worktree `../drinkPosApp-wt-442`. **Restyle only: no money/permission/write-path/sync change, no Drift/cloud change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`, `settings_widgets.dart` and `settings_screen.dart` untouched.**
+- New `lib/core/settings/settings_page_parts.dart` (shared-part candidates, local to #442): `SettingsPageBar` / `settingsBarHeight` (solid Surface + hairline + `topBarShadow` with `ScreenHeader`, back arrow when the route can pop), `SettingsPageScaffold`, `SettingsPageList` (raw 720 cap via `settingsGutter`, clears side insets and `deviceBottomPadding`), `SettingsCard`, `SettingsControlRow`, `kSettingsSheetMaxWidth` (640).
+- PR 1: Profile (`ScreenHeader` bar with the user name + role; `ProfileHeaderCard` / `ProfileStatGrid` / `ProfileInfoCard` rebuilt on `AppDecorations.card`, `IconTile`, `TagPill`, `SectionHeader`; amber / purple hard-codes replaced by `AppFixedColors`), `NotificationSettingsTile` (card + `IconTile`), Edit Profile (`EditProfileSheet.show`: theme sheet capped at 640, one shrink-wrapped scroll view at most 90% of the height, `AppInput`, 48dp swatches, `AppButton` Save; it used to be a non-scrolling `Column`), Staff Settings (`SettingsRow`s, 720 cap, CEO still gets no access).
+- `profile_ui.dart` keeps every public class and constructor parameter (Staff Detail still imports it and picks up the new look until #440 lands).
+- Tests: `test/profile/profile_screens_test.dart` (render, role gates, actions, no overflow at 360 @1.3 / 390x844 / 844x390 insets / 800x1280 / 1280x800, keyboard-up sheet at 360x640 and 390x844 @1.15), goldens `test/redesign/profile_settings_golden_test.dart` (`profile_*`, `staff_settings_*` x 4 sizes x light/dark, `edit_profile_sheet_*` x 2 sizes x light/dark).
+
 ### Issue #414: Subscription Locked + Thank You restyle (Wave 2 B, 2026-10-17)
 Branch `feat/redesign-w2-subscription`, worktree `../drinkPosApp-wt-414`. **Restyle only: no write of any kind (subscription columns stay cloud-owned, read-only), no Drift/cloud/sync change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`, `subscription_access.dart` / `subscription_thanks.dart` untouched.**
 - New `lib/features/subscription/widgets/subscription_parts.dart`: `SubscriptionStateFrame` (shared-part candidate): Scaffold on `AppDecorations.pageBackground` (the blurred `AuthBackground` photo is gone), content centred at the raw 720 cap, hero in the middle, actions under it, scrolls when short.
