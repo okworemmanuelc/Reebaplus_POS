@@ -925,7 +925,7 @@ class StaffSheetFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final h = MediaQuery.sizeOf(context).height;
+    final h = context.screenHeight;
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: h * 0.9),
       child: Padding(
