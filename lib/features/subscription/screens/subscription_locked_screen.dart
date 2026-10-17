@@ -4,7 +4,11 @@ import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/subscription/widgets/subscription_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -58,9 +62,7 @@ class _SubscriptionLockedScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final lockColor = theme.colorScheme.error;
+    final fixed = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
 
     final business = ref.watch(currentBusinessProvider);
     final trialEnded = business?.trialEndsAt;
@@ -77,92 +79,61 @@ class _SubscriptionLockedScreenState
         : 'This business\'s subscription is currently inactive. Renew to '
               'continue — your data is safe and waiting.';
 
-    return AuthBackground(
-      child: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight - 64,
+    return SubscriptionStateFrame(
+      hero: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: IconTile(
+              icon: AppIcons.lock,
+              tone: IconTileTone.danger,
+              size: 88,
+            ),
+          ),
+          SizedBox(height: context.getRSize(28)),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: context
+                .extraBoldStyle(26)
+                .copyWith(color: theme.colorScheme.onSurface),
+          ),
+          SizedBox(height: context.getRSize(10)),
+          Text(
+            body,
+            textAlign: TextAlign.center,
+            style: context
+                .regularStyle(15)
+                .copyWith(
+                  height: 1.45,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                child: IntrinsicHeight(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Spacer(),
-                      Center(
-                        child: Container(
-                          width: 96,
-                          height: 96,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: lockColor.withValues(alpha: 0.12),
-                            border: Border.all(
-                              color: lockColor.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Icon(
-                            AppIcons.lock,
-                            color: lockColor,
-                            size: 46,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: textColor,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        body,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 15,
-                          height: 1.45,
-                          color: textColor.withValues(alpha: 0.7),
-                        ),
-                      ),
-                      if (endedLine != null) ...[
-                        const SizedBox(height: 14),
-                        Text(
-                          endedLine,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: lockColor,
-                          ),
-                        ),
-                      ],
-                      const Spacer(),
-                      const SizedBox(height: 28),
-                      AppButton(
-                        text: 'Subscribe',
-                        icon: AppIcons.premium,
-                        onPressed: _showSubscribeInfo,
-                      ),
-                      const SizedBox(height: 12),
-                      AppButton(
-                        text: 'Sign out',
-                        variant: AppButtonVariant.ghost,
-                        onPressed: () => ref.read(authProvider).fullLogout(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
+          ),
+          if (endedLine != null) ...[
+            SizedBox(height: context.getRSize(14)),
+            Text(
+              endedLine,
+              textAlign: TextAlign.center,
+              style: context.semiBoldStyle(14).copyWith(color: fixed.danger),
+            ),
+          ],
+        ],
+      ),
+      actions: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppButton(
+            text: 'Subscribe',
+            icon: AppIcons.premium,
+            onPressed: _showSubscribeInfo,
+          ),
+          SizedBox(height: context.getRSize(12)),
+          AppButton(
+            text: 'Sign out',
+            variant: AppButtonVariant.ghost,
+            onPressed: () => ref.read(authProvider).fullLogout(),
+          ),
+        ],
       ),
     );
   }
