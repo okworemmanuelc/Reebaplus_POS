@@ -4,7 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/report_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -48,7 +52,8 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialPeriod != null && widget.initialPeriod!.startsWith('Custom:')) {
+    if (widget.initialPeriod != null &&
+        widget.initialPeriod!.startsWith('Custom:')) {
       final (start, end) = parseCustomDateRange(widget.initialPeriod!);
       if (start != null && end != null) {
         _customRange = DateTimeRange(start: start, end: end);
@@ -246,90 +251,126 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     final hasCostedData = data.products.isNotEmpty;
     final hasAnySales = hasCostedData || data.uncostedItems > 0;
 
-    return SharedScaffold(
-      activeRoute: 'dashboard',
-      appBar: AppBar(
-        title: Text(
-          'Profit Report',
-          style: context.h3.copyWith(fontWeight: FontWeight.bold),
-        ),
-        elevation: 0,
-        backgroundColor: context.backgroundColor,
-        leading: BackButton(color: context.primaryColor),
-        actions: [
-          IconButton(
-            tooltip: 'Export CSV',
-            icon: Icon(
-              AppIcons.fileCsv,
-              size: 18,
-              color: context.primaryColor,
-            ),
-            onPressed: hasCostedData ? () => _exportCsv(data) : null,
-          ),
-          SizedBox(
-            width: 130,
-            child: AppDropdown<String>(
-              value: _period.startsWith('Custom:') ? 'Custom' : _period,
-              items: kDatePeriodLabels
-                  .map(
-                    (p) => DropdownMenuItem(
-                      value: p,
-                      child: Text(p, style: const TextStyle(fontSize: 12)),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) async {
-                if (v == 'Custom') {
-                  final range = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                    initialDateRange: _customRange,
-                    builder: (context, child) => Theme(
-                      data: Theme.of(context),
-                      child: child!,
-                    ),
-                  );
-                  if (range != null) {
-                    setState(() {
-                      _customRange = range;
-                      _period = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
-                    });
-                  }
-                } else if (v != null) {
-                  setState(() {
-                    _period = v;
-                    _customRange = null;
-                  });
-                }
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: !hasAnySales
-          ? _emptyState(theme)
-          : ListView(
-              padding: EdgeInsets.all(context.spacingM).copyWith(
-                bottom: context.spacingM + context.deviceBottomPadding,
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: SharedScaffold(
+        activeRoute: 'dashboard',
+        backgroundColor: Colors.transparent,
+        appBar: ReportTopBar(
+          key: ReportKeys.topBar,
+          height: reportTopBarHeight(context),
+          header: ScreenHeader(
+            leading: const ReportBackButton(),
+            icon: AppIcons.chartPie,
+            title: 'Profit Report',
+            subtitle: ref.watch(activeStoreLabelProvider),
+            actions: [
+              ReportBarAction(
+                key: ReportKeys.export,
+                icon: AppIcons.fileCsv,
+                tooltip: 'Export CSV',
+                onPressed: hasCostedData ? () => _exportCsv(data) : null,
               ),
+            ],
+          ),
+        ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final gutter = reportGutter(context, constraints.maxWidth);
+            return Column(
               children: [
-                if (hasCostedData) _headline(theme, data, canSeeCost),
-                if (data.uncostedItems > 0) ...[
-                  if (hasCostedData) SizedBox(height: context.spacingM),
-                  _uncostedNote(
-                    theme,
-                    data.uncostedItems,
-                    allUncosted: !hasCostedData,
+                // The period filter moved from the old app bar (130dp wide)
+                // to its own row, so the title keeps its room at 320dp.
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    gutter,
+                    context.getRSize(12),
+                    gutter,
+                    context.getRSize(4),
                   ),
-                ],
-                if (hasCostedData) ...[
-                  SizedBox(height: context.spacingM),
-                  _breakdownCard(theme, data),
-                ],
+                  child: _periodDropdown(),
+                ),
+                Expanded(
+                  child: !hasAnySales
+                      ? const ReportEmpty(
+                          icon: AppIcons.analytics,
+                          message: 'No data for this period.',
+                        )
+                      : ListView(
+                          padding: EdgeInsets.fromLTRB(
+                            gutter,
+                            context.getRSize(8),
+                            gutter,
+                            context.getRSize(16) + context.deviceBottomPadding,
+                          ),
+                          children: [
+                            if (hasCostedData)
+                              _headline(theme, data, canSeeCost),
+                            if (data.uncostedItems > 0) ...[
+                              if (hasCostedData)
+                                SizedBox(height: context.getRSize(12)),
+                              _uncostedNote(
+                                theme,
+                                data.uncostedItems,
+                                allUncosted: !hasCostedData,
+                              ),
+                            ],
+                            if (hasCostedData) ...[
+                              SizedBox(height: context.getRSize(12)),
+                              _breakdownCard(theme, data),
+                            ],
+                          ],
+                        ),
+                ),
               ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _periodDropdown() {
+    return AppDropdown<String>(
+      key: ReportKeys.period,
+      value: _period.startsWith('Custom:') ? 'Custom' : _period,
+      items: kDatePeriodLabels
+          .map(
+            (p) => DropdownMenuItem(
+              value: p,
+              child: Text(
+                p,
+                style: context
+                    .mediumStyle(14)
+                    .copyWith(color: Theme.of(context).colorScheme.onSurface),
+              ),
             ),
+          )
+          .toList(),
+      onChanged: (v) async {
+        if (v == 'Custom') {
+          final range = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2020),
+            lastDate: DateTime.now().add(const Duration(days: 365)),
+            initialDateRange: _customRange,
+            builder: (context, child) =>
+                Theme(data: Theme.of(context), child: child!),
+          );
+          if (range != null) {
+            setState(() {
+              _customRange = range;
+              _period =
+                  'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+            });
+          }
+        } else if (v != null) {
+          setState(() {
+            _period = v;
+            _customRange = null;
+          });
+        }
+      },
     );
   }
 
@@ -338,23 +379,18 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     int items, {
     required bool allUncosted,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.spacingM),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
-      ),
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
+    return ReportCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            AppIcons.infoCircle,
-            size: 15,
-            color: theme.hintColor,
+          const IconTile(
+            icon: AppIcons.infoCircle,
+            tone: IconTileTone.warning,
+            size: 36,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: context.getRSize(12)),
           Expanded(
             child: Text(
               allUncosted
@@ -362,28 +398,8 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
                         'recorded buying price, so profit can\'t be calculated.'
                   : 'Profit excludes $items item${items == 1 ? '' : 's'} sold '
                         'with no recorded buying price.',
-              style: context.bodySmall.copyWith(color: theme.hintColor),
+              style: context.regularStyle(13).copyWith(color: muted),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _emptyState(ThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            AppIcons.analytics,
-            size: 40,
-            color: theme.hintColor.withValues(alpha: 0.5),
-          ),
-          SizedBox(height: context.spacingM),
-          Text(
-            'No data for this period.',
-            style: context.bodyMedium.copyWith(color: theme.hintColor),
           ),
         ],
       ),
@@ -391,136 +407,67 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   }
 
   Widget _headline(ThemeData theme, _ProfitData data, bool canSeeCost) {
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final profit = data.profitKobo;
-    final color = profit >= 0
-        ? const Color(0xFF22C55E)
-        : theme.colorScheme.error;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.spacingM),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(AppIcons.analytics, color: color, size: 16),
-              const SizedBox(width: 8),
-              Text(
-                'Gross Profit',
-                style: context.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: context.spacingS),
-          Text(
-            formatCurrency(profit / 100.0),
-            style: context.h2.copyWith(
-              fontWeight: FontWeight.w900,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          SizedBox(height: context.spacingS),
-          Wrap(
-            spacing: context.spacingS,
-            runSpacing: context.spacingS,
-            children: [
-              // #176 — the shared "Total Sales" (all lines − discounts,
-              // deposit-exclusive), identical to the Home dashboard and the
-              // Daily Reconciliation for the same period.
-              _chip(
-                theme,
-                'Total sales',
-                formatCurrency(data.totalSalesKobo / 100.0),
-              ),
-              _chip(
-                theme,
-                'Costed revenue',
-                formatCurrency(data.revenueKobo / 100.0),
-              ),
-              if (canSeeCost)
-                _chip(
-                  theme,
-                  'Cost of goods',
-                  formatCurrency(data.cogsKobo / 100.0),
-                ),
-              _chip(theme, 'Margin', '${data.marginPct.toStringAsFixed(1)}%'),
-              // #200 / US 32 — the catalogue-price concession, the reason a
-              // margin can read low without a single recorded discount. Shown
-              // only when a price was actually overridden this period; the label
-              // carries the direction so the amount never needs a minus sign.
-              if (data.concessionKobo != 0)
-                _chip(
-                  theme,
-                  data.concessionKobo > 0
-                      ? 'Sold below list price'
-                      : 'Sold above list price',
-                  formatCurrency(data.concessionKobo.abs() / 100.0),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(ThemeData theme, String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        '$label: $value',
-        style: context.bodySmall.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-          fontWeight: FontWeight.w600,
+    final color = profit >= 0 ? f.green : f.danger;
+    return ReportHeadlineCard(
+      icon: AppIcons.analytics,
+      tone: profit >= 0 ? IconTileTone.green : IconTileTone.danger,
+      label: 'Gross Profit',
+      figure: formatCurrency(profit / 100.0),
+      figureColor: color,
+      chips: [
+        // #176 — the shared "Total Sales" (all lines − discounts,
+        // deposit-exclusive), identical to the Home dashboard and the
+        // Daily Reconciliation for the same period.
+        ReportChip(
+          'Total sales: ${formatCurrency(data.totalSalesKobo / 100.0)}',
         ),
-      ),
+        ReportChip(
+          'Costed revenue: ${formatCurrency(data.revenueKobo / 100.0)}',
+        ),
+        if (canSeeCost)
+          ReportChip('Cost of goods: ${formatCurrency(data.cogsKobo / 100.0)}'),
+        ReportChip('Margin: ${data.marginPct.toStringAsFixed(1)}%'),
+        // #200 / US 32 — the catalogue-price concession, the reason a
+        // margin can read low without a single recorded discount. Shown
+        // only when a price was actually overridden this period; the label
+        // carries the direction so the amount never needs a minus sign.
+        if (data.concessionKobo != 0)
+          ReportChip(
+            '${data.concessionKobo > 0 ? 'Sold below list price' : 'Sold above list price'}: '
+            '${formatCurrency(data.concessionKobo.abs() / 100.0)}',
+          ),
+      ],
     );
   }
 
   Widget _breakdownCard(ThemeData theme, _ProfitData data) {
-    return Container(
-      padding: EdgeInsets.all(context.spacingM),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'By product',
-            style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const ReportGroupLabel('By product'),
+        SizedBox(height: context.getRSize(10)),
+        ReportCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < data.products.length; i++) ...[
+                if (i > 0) const ReportDivider(),
+                _productRow(theme, data.products[i]),
+              ],
+            ],
           ),
-          SizedBox(height: context.spacingS),
-          for (var i = 0; i < data.products.length; i++) ...[
-            if (i > 0)
-              Divider(
-                height: context.spacingM,
-                color: theme.dividerColor.withValues(alpha: 0.2),
-              ),
-            _productRow(theme, data.products[i]),
-          ],
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _productRow(ThemeData theme, _ProductProfit p) {
-    final color = p.profitKobo >= 0
-        ? const Color(0xFF22C55E)
-        : theme.colorScheme.error;
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
+    final color = p.profitKobo >= 0 ? f.green : f.danger;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -530,14 +477,16 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
             children: [
               Text(
                 p.name,
-                style: context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                style: context
+                    .boldStyle(14)
+                    .copyWith(color: theme.colorScheme.onSurface),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: context.getRSize(2)),
               Text(
                 '×${p.qty}  ·  Rev ${formatCurrency(p.revenueKobo / 100.0)}  ·  ${p.marginPct.toStringAsFixed(1)}%',
-                style: context.bodySmall.copyWith(color: theme.hintColor),
+                style: context.regularStyle(12).copyWith(color: muted),
               ),
               // #200 / US 32 — per-product concession, so margin review can see
               // WHICH product the money was given away on, not just the total.
@@ -548,18 +497,15 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
                             '${formatCurrency(p.concessionKobo / 100.0)}'
                       : 'Sold above list price by '
                             '${formatCurrency(p.concessionKobo.abs() / 100.0)}',
-                  style: context.bodySmall.copyWith(color: theme.hintColor),
+                  style: context.regularStyle(12).copyWith(color: muted),
                 ),
             ],
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: context.getRSize(8)),
         Text(
           formatCurrency(p.profitKobo / 100.0),
-          style: context.bodyMedium.copyWith(
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
+          style: context.extraBoldStyle(14).copyWith(color: color),
         ),
       ],
     );
