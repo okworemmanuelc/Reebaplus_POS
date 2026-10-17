@@ -28,6 +28,7 @@ abstract final class StaffKeys {
   static const Key accountCard = ValueKey<String>('staff-account-card');
   static const Key inviteBack = ValueKey<String>('staff-invite-back');
   static const Key inviteCode = ValueKey<String>('staff-invite-code');
+  static const Key detailList = ValueKey<String>('staff-detail-list');
   static const Key storesSheet = ValueKey<String>('staff-stores-sheet');
 
   static Key row(String membershipId) =>

@@ -12,11 +12,24 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
-import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';
+import 'package:reebaplus_pos/features/staff/widgets/staff_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_permissions_screen.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
-import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+
+/// Detail content cap: a raw 960 (the detail-screen rule).
+const double kStaffDetailMaxContentWidth = 960;
+
+/// The header and Account Details sit side by side once the measured column
+/// is at least this wide.
+const double kStaffSideBySideWidth = 900;
+
+Color _danger(BuildContext c) =>
+    (Theme.of(c).extension<AppFixedColors>() ?? AppFixedColors.light).danger;
 
 /// Staff detail screen (master plan §9.5-9.6). Shows the member's avatar,
 /// name, role, status, and assigned store, plus Change role / Suspend
@@ -145,10 +158,6 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
         title: const Text('Confirm role change'),
         content: Text(
           'Change role from ${currentRole?.name ?? 'Unknown'} to '
@@ -252,10 +261,6 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
         title: Text(suspending ? 'Suspend staff?' : 'Reactivate staff?'),
         content: Text(
           suspending
@@ -272,7 +277,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             onPressed: () => Navigator.pop(ctx, true),
             style: suspending
                 ? TextButton.styleFrom(
-                    foregroundColor: Theme.of(ctx).colorScheme.error,
+                    foregroundColor: _danger(ctx),
                   )
                 : null,
             child: Text(suspending ? 'Suspend' : 'Reactivate'),
@@ -376,10 +381,6 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
         title: const Text('Remove staff?'),
         content: Text(
           '${user.name} will permanently lose access to this business and their '
@@ -395,7 +396,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
-              foregroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: _danger(ctx),
             ),
             child: const Text('Remove'),
           ),
@@ -495,10 +496,6 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 user.name.trim().toLowerCase();
             return AlertDialog(
               scrollable: true,
-              backgroundColor: theme.colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
               title: const Text('Money still on this account'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -515,14 +512,11 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                     ),
                   ),
                   SizedBox(height: context.getRSize(16)),
-                  TextField(
+                  AppInput(
                     controller: controller,
                     autofocus: true,
                     onChanged: (_) => setDialogState(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'Type ${user.name} to confirm',
-                      border: const OutlineInputBorder(),
-                    ),
+                    labelText: 'Type ${user.name} to confirm',
                   ),
                 ],
               ),
@@ -534,7 +528,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 TextButton(
                   onPressed: matches ? () => Navigator.pop(ctx, true) : null,
                   style: TextButton.styleFrom(
-                    foregroundColor: theme.colorScheme.error,
+                    foregroundColor: _danger(ctx),
                   ),
                   child: const Text('Remove anyway'),
                 ),
@@ -582,87 +576,54 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: t.colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      useSafeArea: true,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheet) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                context.getRSize(20),
-                context.getRSize(16),
-                context.getRSize(20),
-                context.getRSize(16) + context.deviceBottomPadding,
+            return StaffSheetFrame(
+              key: StaffKeys.storesSheet,
+              title: 'Assigned stores',
+              subtitle: 'Pick the store(s) or van(s) ${user.name} works at.',
+              footer: AppButton(
+                text: 'Save',
+                onPressed: selected.isEmpty
+                    ? null
+                    : () => Navigator.pop(ctx, true),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Assigned stores',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: context.getRFontSize(18),
+                  // #140 — this list is deliberately the RAW store list
+                  // (vans included). Assigning a driver to a van is the
+                  // existing staff-to-store assignment; vans are hidden
+                  // from *pickers*, not from the place they are set up.
+                  // While Van Sales is switched off vans are dropped
+                  // here too; an existing van assignment stays in
+                  // `selected`, so saving never silently removes it.
+                  for (final s in assignableStores(allStores))
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: selected.contains(s.id),
+                      title: Text(s.name),
+                      subtitle: isVanStore(s)
+                          ? const Text('Van — sells on the road')
+                          : null,
+                      secondary: isVanStore(s)
+                          ? Icon(
+                              AppIcons.supplier,
+                              size: context.getRSize(18),
+                              color: t.textTheme.bodySmall?.color,
+                            )
+                          : null,
+                      onChanged: (v) => setSheet(() {
+                        if (v == true) {
+                          selected.add(s.id);
+                        } else {
+                          selected.remove(s.id);
+                        }
+                      }),
                     ),
-                  ),
-                  SizedBox(height: context.getRSize(4)),
-                  Text(
-                    'Pick the store(s) or van(s) ${user.name} works at.',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      color: t.textTheme.bodySmall?.color,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(12)),
-                  Flexible(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // #140 — this list is deliberately the RAW store list
-                          // (vans included). Assigning a driver to a van is the
-                          // existing staff-to-store assignment; vans are hidden
-                          // from *pickers*, not from the place they are set up.
-                          // While Van Sales is switched off vans are dropped
-                          // here too; an existing van assignment stays in
-                          // `selected`, so saving never silently removes it.
-                          for (final s in assignableStores(allStores))
-                            CheckboxListTile(
-                              contentPadding: EdgeInsets.zero,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              value: selected.contains(s.id),
-                              title: Text(s.name),
-                              subtitle: isVanStore(s)
-                                  ? const Text('Van — sells on the road')
-                                  : null,
-                              secondary: isVanStore(s)
-                                  ? Icon(
-                                      AppIcons.supplier,
-                                      size: context.getRSize(18),
-                                      color: t.textTheme.bodySmall?.color,
-                                    )
-                                  : null,
-                              onChanged: (v) => setSheet(() {
-                                if (v == true) {
-                                  selected.add(s.id);
-                                } else {
-                                  selected.remove(s.id);
-                                }
-                              }),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(12)),
-                  AppButton(
-                    text: 'Save',
-                    onPressed: selected.isEmpty
-                        ? null
-                        : () => Navigator.pop(ctx, true),
-                  ),
                 ],
               ),
             );
@@ -707,7 +668,6 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
     final t = Theme.of(context);
-    final text = t.colorScheme.onSurface;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
 
     final memberships =
@@ -722,9 +682,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final business = ref.watch(currentBusinessProvider);
 
     if (membership == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Staff')),
-        body: const Center(child: Text('Staff member not found.')),
+      return _scaffold(
+        context,
+        const Center(child: Text('Staff member not found.')),
       );
     }
 
@@ -758,103 +718,75 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         role?.slug != 'ceo' &&
         Gates.assignStaffStores.allows(ref);
 
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: t.colorScheme.surface,
-        elevation: 0,
-        iconTheme: IconThemeData(color: text),
-        title: Text(
-          'Staff',
-          style: TextStyle(
-            color: text,
-            fontWeight: FontWeight.w800,
-            fontSize: context.getRFontSize(18),
-          ),
-        ),
-      ),
-      body: user == null
+    final roleName = role?.name ?? 'Unknown';
+    final infoRows = user == null
+        ? const <StaffInfoRow>[]
+        : _infoRows(
+            membership,
+            user,
+            role,
+            assignedStoreNames,
+            canAssignStores ? () => _editStoreAssignments(user) : null,
+            subtext,
+          );
+
+    return _scaffold(
+      context,
+      user == null
           ? const Center(child: Text('Loading…'))
-          : ListView(
-              padding: EdgeInsets.all(context.getRSize(20)).copyWith(
-                bottom: context.getRSize(20) + context.deviceBottomPadding,
-              ),
+          : StaffColumn(
+              maxWidth: kStaffDetailMaxContentWidth,
+              scrollKey: StaffKeys.detailList,
+              top: context.getRSize(20),
+              bottom: context.getRSize(20) + context.deviceBottomPadding,
               children: [
-                ProfileHeaderCard(
-                  name: user.name,
-                  avatarColorHex: user.avatarColor,
-                  roleLabel: role?.name ?? 'Unknown',
-                  roleColor: roleTagColor(role?.slug),
-                  pills: [
-                    ProfilePill(
-                      icon: suspended
-                          ? AppIcons.userSuspended
-                          : AppIcons.checkCircle,
-                      label: suspended ? 'Suspended' : 'Active',
-                      color: suspended ? subtext : t.colorScheme.primary,
-                    ),
-                    ProfilePill(
-                      icon: AppIcons.store,
-                      label: _storeSummary(assignedStoreNames),
-                    ),
-                  ],
-                ),
-                SizedBox(height: context.getRSize(24)),
-                ProfileStatGrid(
-                  stats: [
-                    ProfileStat(
-                      label: 'Orders',
-                      value: _totalSalesKobo == null
-                          ? '…'
-                          : _ordersCount.toString(),
-                      icon: AppIcons.receipt,
-                      color: t.colorScheme.primary,
-                    ),
-                    ProfileStat(
-                      label: 'Total sales',
-                      value: _totalSalesKobo == null
-                          ? '…'
-                          : formatCurrency(_totalSalesKobo! / 100.0),
-                      icon: AppIcons.moneyBag,
-                      color: const Color(0xFFA855F7),
-                    ),
-                    ProfileStat(
-                      label: 'Stock Txns',
-                      value: _totalSalesKobo == null
-                          ? '…'
-                          : _stockTransactionsCount.toString(),
-                      icon: AppIcons.inventory,
-                      color: const Color(0xFFF59E0B),
-                    ),
-                    ProfileStat(
-                      label: 'Quick Sales',
-                      value: _totalSalesKobo == null
-                          ? '…'
-                          : _quickSalesCount.toString(),
-                      icon: AppIcons.quickSale,
-                      color: const Color(0xFF10B981),
-                    ),
-                    ProfileStat(
-                      label: 'Expenses',
-                      value: _totalSalesKobo == null
-                          ? '…'
-                          : formatCurrency(_totalExpensesKobo / 100.0),
-                      icon: AppIcons.profit,
-                      color: const Color(0xFFEF4444),
-                    ),
-                  ],
-                ),
-                SizedBox(height: context.getRSize(24)),
-                ProfileInfoCard(
-                  title: 'Account Details',
-                  rows: _infoRows(
-                    membership,
-                    user,
-                    role,
-                    assignedStoreNames,
-                    canAssignStores ? () => _editStoreAssignments(user) : null,
-                    subtext,
-                  ),
+                LayoutBuilder(
+                  builder: (context, c) {
+                    final header = StaffHeaderCard(
+                      name: user.name,
+                      avatarColorHex: user.avatarColor,
+                      roleName: roleName,
+                      roleSlug: role?.slug,
+                      suspended: suspended,
+                      storeLabel: _storeSummary(assignedStoreNames),
+                    );
+                    final account = StaffInfoCard(
+                      title: 'Account Details',
+                      rows: infoRows,
+                    );
+                    final stats = _statGrid(context);
+                    // Side by side when the MEASURED column is wide enough
+                    // (never a viewport predicate, PRD #239).
+                    if (c.maxWidth >= kStaffSideBySideWidth) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: header),
+                                SizedBox(width: context.getRSize(16)),
+                                Expanded(child: account),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: context.getRSize(24)),
+                          stats,
+                        ],
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        header,
+                        SizedBox(height: context.getRSize(24)),
+                        stats,
+                        SizedBox(height: context.getRSize(24)),
+                        account,
+                      ],
+                    );
+                  },
                 ),
                 // Manage actions — hidden in view-only (own card). Each action
                 // has its OWN permission (§9): Change role -> staff.change_role,
@@ -905,10 +837,68 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     );
   }
 
+  /// The page: solid top bar (48dp back, "Staff"), the soft page fade.
+  Widget _scaffold(BuildContext context, Widget body) {
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: StaffTopBar(
+          key: StaffKeys.topBar,
+          height: staffTopBarHeight(context),
+          header: const ScreenHeader(
+            icon: AppIcons.staff,
+            title: 'Staff',
+            leading: StaffBackButton(key: StaffKeys.detailBack),
+          ),
+        ),
+        body: SafeArea(top: false, bottom: false, child: body),
+      ),
+    );
+  }
+
+  Widget _statGrid(BuildContext context) {
+    String figure(String Function() f) => _totalSalesKobo == null ? '…' : f();
+    return StaffStatGrid(
+      stats: [
+        StaffStat(
+          label: 'Orders',
+          value: figure(() => _ordersCount.toString()),
+          icon: AppIcons.receipt,
+          tone: IconTileTone.info,
+        ),
+        StaffStat(
+          label: 'Total sales',
+          value: figure(() => formatCurrency(_totalSalesKobo! / 100.0)),
+          icon: AppIcons.moneyBag,
+          tone: IconTileTone.green,
+        ),
+        StaffStat(
+          label: 'Stock Txns',
+          value: figure(() => _stockTransactionsCount.toString()),
+          icon: AppIcons.inventory,
+          tone: IconTileTone.warning,
+        ),
+        StaffStat(
+          label: 'Quick Sales',
+          value: figure(() => _quickSalesCount.toString()),
+          icon: AppIcons.quickSale,
+          tone: IconTileTone.malt,
+        ),
+        StaffStat(
+          label: 'Expenses',
+          value: figure(() => formatCurrency(_totalExpensesKobo / 100.0)),
+          icon: AppIcons.profit,
+          tone: IconTileTone.danger,
+        ),
+      ],
+    );
+  }
+
   /// Account-detail rows for the info card. The last row is the per-user
   /// Permission access (§10.2.1) — shown only to a permissions manager, never on
   /// the own (read-only) card, and not for the CEO target (always full access).
-  List<ProfileInfoRow> _infoRows(
+  List<StaffInfoRow> _infoRows(
     UserBusinessData membership,
     UserData user,
     RoleData? role,
@@ -916,8 +906,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     VoidCallback? onEditStores,
     Color subtext,
   ) {
-    final rows = <ProfileInfoRow>[
-      ProfileInfoRow(
+    final rows = <StaffInfoRow>[
+      StaffInfoRow(
         icon: AppIcons.store,
         label: 'Assigned store${assignedStoreNames.length == 1 ? '' : 's'}',
         value: assignedStoreNames.isEmpty
@@ -925,12 +915,12 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             : assignedStoreNames.join(', '),
         onTap: onEditStores,
       ),
-      ProfileInfoRow(
+      StaffInfoRow(
         icon: AppIcons.email,
         label: 'Email',
         value: user.email ?? '—',
       ),
-      ProfileInfoRow(
+      StaffInfoRow(
         icon: AppIcons.time,
         label: 'Last login',
         value: membership.lastLoginAt == null
@@ -961,7 +951,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         stateColor = Theme.of(context).colorScheme.primary;
       }
       rows.add(
-        ProfileInfoRow(
+        StaffInfoRow(
           icon: AppIcons.userPermissions,
           label: 'Permission access',
           value: state,
