@@ -3,6 +3,7 @@
 // the five reference sizes (360 @1.3, 390x844, 844x390 with insets, 800x1280,
 // 1280x800).
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -200,14 +201,19 @@ void main() {
     });
 
     testWidgets('international plan shows the dollar price', (tester) async {
-      final intl = business.copyWith(subscriptionPlan: 'international');
+      final intl = business.copyWith(
+        subscriptionPlan: const Value('international'),
+      );
       await pump(tester, ThankYouSubscriptionScreen(business: intl));
       expect(find.text('\$10 per month'), findsOneWidget);
       await disposeScreen(tester);
     });
 
     testWidgets('Continue acknowledges this activation', (tester) async {
-      await pump(tester, ThankYouSubscriptionScreen(business: business));
+      final active = business.copyWith(
+        subscriptionStatus: 'active',
+      );
+      await pump(tester, ThankYouSubscriptionScreen(business: active));
       final ctx = tester.element(find.byType(ThankYouSubscriptionScreen));
       final svc = ProviderScope.containerOf(
         ctx,
@@ -215,13 +221,13 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
-      expect(svc.shouldCelebrate(business), isTrue);
+      expect(svc.shouldCelebrate(active), isTrue);
       await tester.tap(find.text('Continue'));
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
       await tester.pump();
-      expect(svc.shouldCelebrate(business), isFalse);
+      expect(svc.shouldCelebrate(active), isFalse);
       await disposeScreen(tester);
     });
 
