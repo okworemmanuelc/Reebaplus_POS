@@ -1655,13 +1655,27 @@ class _ExpenseCard extends StatelessWidget {
                       ],
                     ),
                     SizedBox(height: context.getRSize(6)),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ExpenseStatusPill(status: exp.status),
+                    ),
+                    SizedBox(height: context.getRSize(6)),
                     Row(
                       children: [
-                        Flexible(child: ExpenseStatusPill(status: exp.status)),
+                        Flexible(
+                          child: Text(
+                            _paymentMethodLabel(exp.paymentMethod),
+                            style: context
+                                .semiBoldStyle(13)
+                                .copyWith(color: subtextCol),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         SizedBox(width: context.getRSize(8)),
                         // The full "Sep 18, 2026 • 10:30 AM" stamp is wider
-                        // than a 320dp card can spare beside the status
-                        // badge; it shortens rather than overflowing (#256).
+                        // than a 320dp card can spare beside the method; it
+                        // shortens rather than overflowing (#256).
                         Expanded(
                           child: Text(
                             dateStr,
@@ -1674,15 +1688,6 @@ class _ExpenseCard extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                    SizedBox(height: context.getRSize(6)),
-                    Text(
-                      _paymentMethodLabel(exp.paymentMethod),
-                      style: context
-                          .semiBoldStyle(13)
-                          .copyWith(color: subtextCol),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: context.getRSize(8)),
                     Row(
