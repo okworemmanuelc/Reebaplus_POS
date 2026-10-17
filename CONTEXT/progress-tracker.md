@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #412: Expenses + Add Expense restyle (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-expenses`, worktree `../drinkPosApp-wt-412`. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue).**
+- New `lib/features/expenses/widgets/expense_parts.dart` (top bar, 720 gutter helper, card shell, status pill, chart palette, empty message, progress bar; shared-part candidates).
+- Expenses: solid top bar + `ScreenHeader`; flat total + budget cards; `TabBar` kept inside `TabbedSliverScaffold` (primary label/indicator); pending block on `warning*`; rows are flat cards with a category `IconTile` and a `TagPill` status; Stats cards flat; budget + reject pop-ups use `AppInput` (still `scrollable: true`); lists cap at raw 720 via per-sliver side gutters (no scroll view gets a height). `kExpenseRowKeyPrefix` unchanged.
+- Add Expense: `ScreenHeader` top bar with a 48dp back arrow, 720 form cap, same fields (category chips, payment dropdown, date field, receipt card); the date picker now inherits the theme.
+- Tests: `test/expenses/expenses_restyle_test.dart`; goldens `expenses_*` / `add_expense_*` (4 sizes x light/dark, fixed March 2026 dates via a Custom period; the form golden is Edit mode so its date is fixed).
+
 ### Issue #411: Payments (Supplier Accounts) restyle (Wave 2 B, 2026-10-16)
 Branch `feat/redesign-w2-payments` off `main` fed219a5, worktree `../drinkPosApp-wt-411`. One PR. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.**
 - New `lib/features/payments/widgets/payments_parts.dart` (shared-part candidates): `PaymentsTopBar`/`paymentsTopBarHeight`, `PaymentsLiveBell`, `PaymentsBackButton`, `paymentsGutter` (720 cap), `PaymentsSupplierRow`, `PaymentsFigureCard`, `PaymentsEmptyMessage`, sheet parts (`paymentsSheetKeyboardLift`, `paymentsSheetDecoration`, `PaymentsSheetHeader`, `PaymentsFormSheetLayout`, `PaymentsSheetFooter`, `PaymentsChooserFrame`, `PaymentsStoreBanner`, `PaymentsReceiptBox`).
