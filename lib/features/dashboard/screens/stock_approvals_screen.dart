@@ -12,6 +12,14 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/report_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 const kStockApprovalCardKeyPrefix = 'approval-card-';
 const kQuickSaleApprovalCardKeyPrefix = 'quick-sale-approval-card-';
@@ -48,8 +56,9 @@ class StockApprovalsScreen extends ConsumerWidget {
     // it — including when it is 0, which is the one case where the approval
     // mints an Uncosted batch and US 22's promise quietly fails.
     final recordedCostByProduct = {
-      for (final p in ref.watch(productsWithStockProvider(null)).valueOrNull ??
-          const <ProductDataWithStock>[])
+      for (final p
+          in ref.watch(productsWithStockProvider(null)).valueOrNull ??
+              const <ProductDataWithStock>[])
         p.product.id: p.product.buyingPriceKobo,
     };
 
@@ -86,57 +95,263 @@ class StockApprovalsScreen extends ConsumerWidget {
         ),
     ];
 
-    return Scaffold(
-      backgroundColor: context.backgroundColor,
-      appBar: AppBar(
-        title: Text(
-          'Approvals',
-          style: context.h3.copyWith(fontWeight: FontWeight.bold),
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: SharedScaffold(
+        activeRoute: 'dashboard',
+        backgroundColor: Colors.transparent,
+        appBar: ReportTopBar(
+          key: ReportKeys.topBar,
+          height: reportTopBarHeight(context),
+          header: ScreenHeader(
+            leading: const ReportBackButton(),
+            icon: AppIcons.clipboardList,
+            title: 'Approvals',
+            subtitle: ref.watch(activeStoreLabelProvider),
+          ),
         ),
-        elevation: 0,
-        backgroundColor: context.backgroundColor,
-        leading: BackButton(color: context.primaryColor),
-      ),
-      body: cards.isEmpty
-          ? _EmptyState()
-          : ListView.separated(
-              padding: EdgeInsets.fromLTRB(
-                context.spacingM,
-                context.spacingM,
-                context.spacingM,
-                context.spacingM + context.deviceBottomPadding,
+        body: cards.isEmpty
+            ? const ReportEmpty(
+                icon: AppIcons.auditCheck,
+                message: 'No pending approvals',
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final gutter = reportGutter(context, constraints.maxWidth);
+                  return ListView.separated(
+                    padding: EdgeInsets.fromLTRB(
+                      gutter,
+                      context.getRSize(16),
+                      gutter,
+                      context.getRSize(16) + context.deviceBottomPadding,
+                    ),
+                    itemCount: cards.length,
+                    separatorBuilder: (_, __) =>
+                        SizedBox(height: context.getRSize(12)),
+                    itemBuilder: (_, i) => cards[i],
+                  );
+                },
               ),
-              itemCount: cards.length,
-              separatorBuilder: (_, __) => SizedBox(height: context.spacingS),
-              itemBuilder: (_, i) => cards[i],
-            ),
+      ),
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
+AppFixedColors _fixed(BuildContext context) =>
+    Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+
+/// The fixed colours of one approval card: tile fill, ink (icon, quantity and
+/// amount). Colour mapping (no new colours): amber -> warning, blue -> info,
+/// teal -> info, indigo -> purple, red -> danger, green -> green.
+typedef _Accent = (Color tint, Color ink);
+
+/// The shared frame of the three approval cards (#413 PR 3): a flat card
+/// (surface fill, hairline, soft shadow) holding an [ExpansionTile] with an
+/// [IconTile], the title, a PENDING [TagPill] + time, and the quantity /
+/// amount on the right. The keyed [Material] stays the card (its colour,
+/// shape and clip are pinned by `stock_approvals_screen_test.dart`).
+class _ApprovalShell extends StatelessWidget {
+  const _ApprovalShell({
+    required this.cardKey,
+    required this.accent,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.trailing,
+    required this.children,
+  });
+
+  final Key cardKey;
+  final _Accent accent;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String trailing;
+  final List<Widget> children;
+
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            AppIcons.auditCheck,
-            size: 40,
-            color: Theme.of(context).hintColor,
+    final t = Theme.of(context);
+    final shadow =
+        t.extension<AppSchemeColors>()?.cardShadow ??
+        Colors.black.withValues(alpha: 0.05);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(color: shadow, blurRadius: 12, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Material(
+        key: cardKey,
+        color: context.surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: t.dividerColor),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Theme(
+          // Strip the default ExpansionTile dividers so it reads as one card.
+          data: t.copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.symmetric(
+              horizontal: context.getRSize(14),
+              vertical: context.getRSize(4),
+            ),
+            childrenPadding: EdgeInsets.fromLTRB(
+              context.getRSize(14),
+              0,
+              context.getRSize(14),
+              context.getRSize(14),
+            ),
+            leading: IconTile(
+              icon: icon,
+              tint: accent.$1,
+              iconColor: accent.$2,
+              size: 40,
+            ),
+            title: Text(
+              title,
+              style: context
+                  .boldStyle(15)
+                  .copyWith(color: t.colorScheme.onSurface),
+            ),
+            subtitle: Padding(
+              padding: EdgeInsets.only(top: context.getRSize(4)),
+              child: Row(
+                children: [
+                  const TagPill(
+                    label: 'PENDING',
+                    tone: TagPillTone.warning,
+                    dense: true,
+                  ),
+                  SizedBox(width: context.getRSize(8)),
+                  Flexible(
+                    child: Text(
+                      subtitle,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.regularStyle(12).copyWith(color: muted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            trailing: Text(
+              trailing,
+              style: context.extraBoldStyle(16).copyWith(color: accent.$2),
+            ),
+            children: children,
           ),
-          const SizedBox(height: 12),
-          Text(
-            'No pending approvals',
-            style: context.bodyMedium.copyWith(
-              color: Theme.of(context).hintColor,
+        ),
+      ),
+    );
+  }
+}
+
+/// A "label | value" line inside an expanded approval card.
+class _DetailRow extends StatelessWidget {
+  const _DetailRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: context.getRSize(96),
+            child: Text(
+              label,
+              style: context.regularStyle(13).copyWith(color: muted),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: context
+                  .mediumStyle(13)
+                  .copyWith(color: t.colorScheme.onSurface),
             ),
           ),
         ],
       ),
     );
   }
+}
+
+/// The busy spinner that replaces the Reject / Approve row while a decision
+/// is being written.
+class _BusyRow extends StatelessWidget {
+  const _BusyRow();
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Padding(
+      padding: EdgeInsets.all(8),
+      child: SizedBox(
+        width: 22,
+        height: 22,
+        child: CircularProgressIndicator(strokeWidth: 2.5),
+      ),
+    ),
+  );
+}
+
+/// Reject (outline) + the positive action (success), side by side.
+class _DecisionRow extends StatelessWidget {
+  const _DecisionRow({
+    required this.positiveText,
+    required this.onReject,
+    required this.onPositive,
+  });
+
+  final String positiveText;
+  final VoidCallback onReject;
+  final VoidCallback onPositive;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: AppButton(
+          text: 'Reject',
+          variant: AppButtonVariant.outline,
+          onPressed: onReject,
+        ),
+      ),
+      SizedBox(width: context.getRSize(12)),
+      Expanded(
+        child: AppButton(
+          text: positiveText,
+          variant: AppButtonVariant.success,
+          onPressed: onPositive,
+        ),
+      ),
+    ],
+  );
+}
+
+String _timeAgo(DateTime dt) {
+  final d = DateTime.now().difference(dt);
+  if (d.inMinutes < 1) return 'just now';
+  if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+  if (d.inHours < 24) return '${d.inHours}h ago';
+  if (d.inDays < 7) return '${d.inDays}d ago';
+  return _fullStamp(dt);
+}
+
+String _fullStamp(DateTime dt) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
+      '${two(dt.hour)}:${two(dt.minute)}';
 }
 
 class _ApprovalCard extends ConsumerStatefulWidget {
@@ -163,9 +378,12 @@ class _ApprovalCard extends ConsumerStatefulWidget {
 class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
   bool _busy = false;
 
-  Color get _accent => widget.request.quantityDiff < 0
-      ? Colors.red.shade600
-      : Colors.green.shade600;
+  _Accent get _accent {
+    final f = _fixed(context);
+    return widget.request.quantityDiff < 0
+        ? (f.dangerTint, f.danger)
+        : (f.greenTint, f.green);
+  }
 
   Future<void> _decide({required bool approve}) async {
     final approverId = ref.read(authProvider).currentUser?.id;
@@ -260,181 +478,38 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
     final qtyLabel = '${isRemove ? '−' : '+'}${r.quantityDiff.abs()}';
     final totalCostLabel = _totalCostLabel;
 
-    return Material(
-      key: stockApprovalCardKey(r.id),
-      color: context.surfaceColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusL),
-        side: BorderSide(color: _accent.withValues(alpha: 0.25)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        // Strip the default ExpansionTile dividers so it reads as one card.
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.symmetric(
-            horizontal: context.spacingM,
-            vertical: context.spacingXs,
-          ),
-          childrenPadding: EdgeInsets.fromLTRB(
-            context.spacingM,
-            0,
-            context.spacingM,
-            context.spacingM,
-          ),
-          leading: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isRemove ? AppIcons.arrowDown : AppIcons.arrowUp,
-              color: _accent,
-              size: 20,
-            ),
-          ),
-          title: Text(
-            r.summary,
-            style: context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Row(
-              children: [
-                _pendingChip(context),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    _timeAgo(r.createdAt),
-                    overflow: TextOverflow.ellipsis,
-                    style: context.bodySmall.copyWith(
-                      color: Theme.of(context).hintColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          trailing: Text(
-            qtyLabel,
-            style: context.bodyLarge.copyWith(
-              fontWeight: FontWeight.w800,
-              color: _accent,
-            ),
-          ),
-          children: [
-            _detailRow(context, 'Requested by', widget.requesterName),
-            _detailRow(context, 'Store', widget.storeName),
-            _detailRow(context, 'Reason', r.reason),
-            // #197 (PRD #155 US 22): what the goods cost, so the approver sees
-            // the money they are letting in — and can reject a wrong price
-            // instead of discovering it as a wrong profit figure later. Shown on
-            // an INCREASE only: a removal is valued by drawing the store's FIFO
-            // queue at approval time, not by the requester.
-            if (!isRemove) ...[
-              _detailRow(context, 'Cost per unit', _unitCostLabel),
-              if (totalCostLabel != null)
-                _detailRow(context, 'Total cost', totalCostLabel),
-            ],
-            _detailRow(context, 'When', _fullStamp(r.createdAt)),
-            SizedBox(height: context.spacingM),
-            if (_busy)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(8),
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  ),
-                ),
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      text: 'Reject',
-                      variant: AppButtonVariant.outline,
-                      onPressed: () => _decide(approve: false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      text: 'Approve',
-                      variant: AppButtonVariant.success,
-                      onPressed: () => _decide(approve: true),
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _pendingChip(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        'PENDING',
-        style: context.bodySmall.copyWith(
-          fontSize: context.getRFontSize(10),
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.6,
-          color: Colors.amber.shade800,
-        ),
-      ),
-    );
-  }
-
-  Widget _detailRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: context.getRSize(96),
-            child: Text(
-              label,
-              style: context.bodySmall.copyWith(
-                color: Theme.of(context).hintColor,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: context.bodySmall.copyWith(fontWeight: FontWeight.w500),
-            ),
-          ),
+    return _ApprovalShell(
+      cardKey: stockApprovalCardKey(r.id),
+      accent: _accent,
+      icon: isRemove ? AppIcons.arrowDown : AppIcons.arrowUp,
+      title: r.summary,
+      subtitle: _timeAgo(r.createdAt),
+      trailing: qtyLabel,
+      children: [
+        _DetailRow('Requested by', widget.requesterName),
+        _DetailRow('Store', widget.storeName),
+        _DetailRow('Reason', r.reason),
+        // #197 (PRD #155 US 22): what the goods cost, so the approver sees
+        // the money they are letting in — and can reject a wrong price
+        // instead of discovering it as a wrong profit figure later. Shown on
+        // an INCREASE only: a removal is valued by drawing the store's FIFO
+        // queue at approval time, not by the requester.
+        if (!isRemove) ...[
+          _DetailRow('Cost per unit', _unitCostLabel),
+          if (totalCostLabel != null) _DetailRow('Total cost', totalCostLabel),
         ],
-      ),
+        _DetailRow('When', _fullStamp(r.createdAt)),
+        SizedBox(height: context.getRSize(16)),
+        if (_busy)
+          const _BusyRow()
+        else
+          _DecisionRow(
+            positiveText: 'Approve',
+            onReject: () => _decide(approve: false),
+            onPositive: () => _decide(approve: true),
+          ),
+      ],
     );
-  }
-
-  String _timeAgo(DateTime dt) {
-    final d = DateTime.now().difference(dt);
-    if (d.inMinutes < 1) return 'just now';
-    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
-    if (d.inHours < 24) return '${d.inHours}h ago';
-    if (d.inDays < 7) return '${d.inDays}d ago';
-    return _fullStamp(dt);
-  }
-
-  String _fullStamp(DateTime dt) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
-        '${two(dt.hour)}:${two(dt.minute)}';
   }
 }
 
@@ -461,7 +536,10 @@ class _QuickSaleApprovalCardState
     extends ConsumerState<_QuickSaleApprovalCard> {
   bool _busy = false;
 
-  Color get _accent => Colors.blue.shade600;
+  _Accent get _accent {
+    final f = _fixed(context);
+    return (f.infoTint, f.info);
+  }
 
   Future<void> _decide({required bool approve}) async {
     final approverId = ref.read(authProvider).currentUser?.id;
@@ -519,173 +597,32 @@ class _QuickSaleApprovalCardState
         : qty.toString();
     final totalNaira = qty * r.unitPriceKobo / 100.0;
 
-    return Material(
-      key: quickSaleApprovalCardKey(r.id),
-      color: context.surfaceColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusL),
-        side: BorderSide(color: _accent.withValues(alpha: 0.25)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.symmetric(
-            horizontal: context.spacingM,
-            vertical: context.spacingXs,
+    return _ApprovalShell(
+      cardKey: quickSaleApprovalCardKey(r.id),
+      accent: _accent,
+      icon: AppIcons.quickSale,
+      title: r.itemName,
+      subtitle: 'Quick Sale · ${_timeAgo(r.createdAt)}',
+      trailing: formatCurrency(totalNaira),
+      children: [
+        _DetailRow('Requested by', widget.requesterName),
+        _DetailRow('Store', widget.storeName),
+        _DetailRow('Item', r.itemName),
+        _DetailRow('Quantity', qtyLabel),
+        _DetailRow('Unit price', formatCurrency(r.unitPriceKobo / 100.0)),
+        _DetailRow('Total', formatCurrency(totalNaira)),
+        _DetailRow('When', _fullStamp(r.createdAt)),
+        SizedBox(height: context.getRSize(16)),
+        if (_busy)
+          const _BusyRow()
+        else
+          _DecisionRow(
+            positiveText: 'Approve',
+            onReject: () => _decide(approve: false),
+            onPositive: () => _decide(approve: true),
           ),
-          childrenPadding: EdgeInsets.fromLTRB(
-            context.spacingM,
-            0,
-            context.spacingM,
-            context.spacingM,
-          ),
-          leading: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(AppIcons.quickSale, color: _accent, size: 18),
-          ),
-          title: Text(
-            r.itemName,
-            style: context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Row(
-              children: [
-                _pendingChip(context),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    'Quick Sale · ${_timeAgo(r.createdAt)}',
-                    overflow: TextOverflow.ellipsis,
-                    style: context.bodySmall.copyWith(
-                      color: Theme.of(context).hintColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          trailing: Text(
-            formatCurrency(totalNaira),
-            style: context.bodyLarge.copyWith(
-              fontWeight: FontWeight.w800,
-              color: _accent,
-            ),
-          ),
-          children: [
-            _detailRow(context, 'Requested by', widget.requesterName),
-            _detailRow(context, 'Store', widget.storeName),
-            _detailRow(context, 'Item', r.itemName),
-            _detailRow(context, 'Quantity', qtyLabel),
-            _detailRow(
-              context,
-              'Unit price',
-              formatCurrency(r.unitPriceKobo / 100.0),
-            ),
-            _detailRow(context, 'Total', formatCurrency(totalNaira)),
-            _detailRow(context, 'When', _fullStamp(r.createdAt)),
-            SizedBox(height: context.spacingM),
-            if (_busy)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(8),
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  ),
-                ),
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      text: 'Reject',
-                      variant: AppButtonVariant.outline,
-                      onPressed: () => _decide(approve: false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      text: 'Approve',
-                      variant: AppButtonVariant.success,
-                      onPressed: () => _decide(approve: true),
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
+      ],
     );
-  }
-
-  Widget _pendingChip(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        'PENDING',
-        style: context.bodySmall.copyWith(
-          fontSize: context.getRFontSize(10),
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.6,
-          color: Colors.amber.shade800,
-        ),
-      ),
-    );
-  }
-
-  Widget _detailRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: context.getRSize(96),
-            child: Text(
-              label,
-              style: context.bodySmall.copyWith(
-                color: Theme.of(context).hintColor,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: context.bodySmall.copyWith(fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _timeAgo(DateTime dt) {
-    final d = DateTime.now().difference(dt);
-    if (d.inMinutes < 1) return 'just now';
-    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
-    if (d.inHours < 24) return '${d.inHours}h ago';
-    if (d.inDays < 7) return '${d.inDays}d ago';
-    return _fullStamp(dt);
-  }
-
-  String _fullStamp(DateTime dt) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
-        '${two(dt.hour)}:${two(dt.minute)}';
   }
 }
 
@@ -726,8 +663,10 @@ class _CrateDepositApprovalCardState
   /// and the confirmation text all turn on this one flag.
   bool get _isRefund => !crateDepositMovementIsOutward(widget.request.kind);
 
-  Color get _accent =>
-      _isRefund ? Colors.teal.shade500 : Colors.indigo.shade400;
+  _Accent get _accent {
+    final f = _fixed(context);
+    return _isRefund ? (f.infoTint, f.info) : (f.purpleTint, f.purple);
+  }
 
   @override
   void dispose() {
@@ -790,8 +729,7 @@ class _CrateDepositApprovalCardState
       }
       if (!mounted) return;
       final short =
-          _isRefund &&
-          (amountKobo ?? 0) < widget.request.requestedAmountKobo;
+          _isRefund && (amountKobo ?? 0) < widget.request.requestedAmountKobo;
       AppNotification.showSuccess(
         context,
         confirm
@@ -822,204 +760,52 @@ class _CrateDepositApprovalCardState
   @override
   Widget build(BuildContext context) {
     final r = widget.request;
-    return Material(
-      key: crateDepositApprovalCardKey(r.id),
-      color: context.surfaceColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusL),
-        side: BorderSide(color: _accent.withValues(alpha: 0.25)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.symmetric(
-            horizontal: context.spacingM,
-            vertical: context.spacingXs,
-          ),
-          childrenPadding: EdgeInsets.fromLTRB(
-            context.spacingM,
-            0,
-            context.spacingM,
-            context.spacingM,
-          ),
-          leading: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              AppIcons.transfer,
-              color: _accent,
-              size: 18,
-            ),
-          ),
-          title: Text(
-            '${_isRefund ? 'Crate refund' : 'Crate deposit'} — ${r.summary}',
-            style: context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Row(
-              children: [
-                _pendingChip(context),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    _timeAgo(r.createdAt),
-                    overflow: TextOverflow.ellipsis,
-                    style: context.bodySmall.copyWith(
-                      color: Theme.of(context).hintColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          trailing: Text(
-            formatCurrency(r.requestedAmountKobo / 100),
-            style: context.bodyLarge.copyWith(
-              fontWeight: FontWeight.w800,
-              color: _accent,
-            ),
-          ),
-          children: [
-            _detailRow(context, 'Recorded by', widget.requesterName),
-            _detailRow(context, 'Store', widget.storeName),
-            _detailRow(context, 'Crates', '${r.crateCount}'),
-            _detailRow(
-              context,
-              'Rate per crate',
-              formatCurrency(r.ratePerCrateKobo / 100),
-            ),
-            _detailRow(context, 'When', _fullStamp(r.createdAt)),
-            SizedBox(height: context.spacingS),
-            Text(
-              _isRefund
-                  ? 'The empties are already recorded. This is only the money '
-                        '— enter what the supplier ACTUALLY handed back, even '
-                        'if it is less than the deposit. Anything short of it '
-                        'stays yours, still held by them.'
-                  : 'The crates are already recorded. This is only the money — '
-                        'change the amount if you paid something different, or '
-                        'reject it if no deposit changed hands. Either way the '
-                        'crate count stays as it is.',
-              style: context.bodySmall.copyWith(
-                color: Theme.of(context).hintColor,
-              ),
-            ),
-            SizedBox(height: context.spacingS),
-            TextField(
-              controller: _amountCtrl,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: _isRefund ? 'Amount refunded' : 'Amount paid',
-                prefixText: '$activeCurrencySymbol ',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            SizedBox(height: context.spacingM),
-            if (_busy)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(8),
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  ),
-                ),
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      text: 'Reject',
-                      variant: AppButtonVariant.outline,
-                      onPressed: () => _decide(confirm: false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      text: 'Confirm',
-                      variant: AppButtonVariant.success,
-                      onPressed: () => _decide(confirm: true),
-                    ),
-                  ),
-                ],
-              ),
-          ],
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return _ApprovalShell(
+      cardKey: crateDepositApprovalCardKey(r.id),
+      accent: _accent,
+      icon: AppIcons.transfer,
+      title: '${_isRefund ? 'Crate refund' : 'Crate deposit'} — ${r.summary}',
+      subtitle: _timeAgo(r.createdAt),
+      trailing: formatCurrency(r.requestedAmountKobo / 100),
+      children: [
+        _DetailRow('Recorded by', widget.requesterName),
+        _DetailRow('Store', widget.storeName),
+        _DetailRow('Crates', '${r.crateCount}'),
+        _DetailRow('Rate per crate', formatCurrency(r.ratePerCrateKobo / 100)),
+        _DetailRow('When', _fullStamp(r.createdAt)),
+        SizedBox(height: context.getRSize(8)),
+        Text(
+          _isRefund
+              ? 'The empties are already recorded. This is only the money '
+                    '— enter what the supplier ACTUALLY handed back, even '
+                    'if it is less than the deposit. Anything short of it '
+                    'stays yours, still held by them.'
+              : 'The crates are already recorded. This is only the money — '
+                    'change the amount if you paid something different, or '
+                    'reject it if no deposit changed hands. Either way the '
+                    'crate count stays as it is.',
+          style: context.regularStyle(13).copyWith(color: muted),
         ),
-      ),
-    );
-  }
-
-  Widget _pendingChip(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        'PENDING',
-        style: context.bodySmall.copyWith(
-          fontSize: context.getRFontSize(10),
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.6,
-          color: Colors.amber.shade800,
+        SizedBox(height: context.getRSize(8)),
+        AppInput(
+          controller: _amountCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          labelText: _isRefund ? 'Amount refunded' : 'Amount paid',
+          prefixText: '$activeCurrencySymbol ',
         ),
-      ),
-    );
-  }
-
-  Widget _detailRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: context.getRSize(96),
-            child: Text(
-              label,
-              style: context.bodySmall.copyWith(
-                color: Theme.of(context).hintColor,
-              ),
-            ),
+        SizedBox(height: context.getRSize(16)),
+        if (_busy)
+          const _BusyRow()
+        else
+          _DecisionRow(
+            positiveText: 'Confirm',
+            onReject: () => _decide(confirm: false),
+            onPositive: () => _decide(confirm: true),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: context.bodySmall.copyWith(fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
-  }
-
-  String _timeAgo(DateTime dt) {
-    final d = DateTime.now().difference(dt);
-    if (d.inMinutes < 1) return 'just now';
-    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
-    if (d.inHours < 24) return '${d.inHours}h ago';
-    if (d.inDays < 7) return '${d.inDays}d ago';
-    return _fullStamp(dt);
-  }
-
-  String _fullStamp(DateTime dt) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
-        '${two(dt.hour)}:${two(dt.minute)}';
   }
 }
 
@@ -1047,13 +833,16 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     return AlertDialog(
       scrollable: true,
       backgroundColor: context.surfaceColor,
       title: Text(
         'Reject request',
-        style: context.h3.copyWith(fontWeight: FontWeight.bold),
+        style: context.boldStyle(18).copyWith(color: t.colorScheme.onSurface),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1061,22 +850,16 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
         children: [
           Text(
             'Optionally tell the ${widget.subject} why their request was rejected.',
-            style: context.bodySmall.copyWith(
-              color: Theme.of(context).hintColor,
-            ),
+            style: context.regularStyle(13).copyWith(color: muted),
           ),
-          const SizedBox(height: 12),
-          TextField(
+          SizedBox(height: context.getRSize(12)),
+          AppInput(
+            key: const Key('approval-reject-reason'),
             controller: _ctrl,
             autofocus: true,
             maxLines: 2,
             textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(
-              hintText: 'Reason (optional)',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
+            hintText: 'Reason (optional)',
           ),
         ],
       ),

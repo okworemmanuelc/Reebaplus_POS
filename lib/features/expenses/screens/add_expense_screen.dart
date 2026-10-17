@@ -5,7 +5,12 @@ import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/expenses/widgets/expense_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -118,7 +123,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   String _paymentMethodCode = 'cash';
   DateTime _selectedDate = DateTime.now();
 
-  Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _cardBg => Theme.of(context).cardColor;
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
@@ -142,17 +146,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: isDark
-                ? const ColorScheme.dark(primary: danger, surface: dSurface)
-                : const ColorScheme.light(primary: danger, surface: lSurface),
-          ),
-          child: child!,
-        );
-      },
     );
     if (date != null) {
       setState(() => _selectedDate = date);
@@ -287,50 +280,43 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   /// the menu (the drawer picker is the single store control).
   Widget _recordingForBanner(BuildContext context, String label) {
     final primary = Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(12),
-        vertical: context.getRSize(10),
-      ),
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
+        color:
+            Theme.of(context).extension<AppFixedColors>()?.infoTint ??
+            primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
         border: Border.all(color: _border),
       ),
-      child: Row(
-        children: [
-          Icon(
-            AppIcons.store,
-            size: context.getRSize(13),
-            color: primary,
-          ),
-          SizedBox(width: context.getRSize(8)),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Recording for: ',
-                    style: TextStyle(
-                      color: _subtext,
-                      fontSize: context.getRFontSize(12),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(14),
+          vertical: context.getRSize(12),
+        ),
+        child: Row(
+          children: [
+            Icon(AppIcons.store, size: context.getRSize(16), color: primary),
+            SizedBox(width: context.getRSize(8)),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Recording for: ',
+                      style: context.regularStyle(12).copyWith(color: _subtext),
                     ),
-                  ),
-                  TextSpan(
-                    text: label,
-                    style: TextStyle(
-                      color: primary,
-                      fontSize: context.getRFontSize(12),
-                      fontWeight: FontWeight.w700,
+                    TextSpan(
+                      text: label,
+                      style: context.boldStyle(12).copyWith(color: primary),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -367,335 +353,318 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final showStoreBanner =
         !_isEditing && ref.watch(selectableStoresProvider).length > 1;
 
-    return Scaffold(
-      backgroundColor: _surface,
-      // Footer-button padding is nav-only (deviceBottomPadding): this screen is
-      // under MainLayout, whose Scaffold already resizes the body for the
-      // keyboard, so the inset must not re-add it. resizeToAvoidBottomInset:false
-      // is a harmless no-op here (the screen sees viewInsets 0 under MainLayout).
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        iconTheme: IconThemeData(color: _text),
-        title: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(context.getRSize(8)),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.error.withValues(alpha: 0.8),
-                    danger,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.error.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                AppIcons.expenses,
-                color: Colors.white,
-                size: context.getRSize(16),
-              ),
-            ),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _isEditing ? 'Edit Expense' : 'Record Expense',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(18),
-                        fontWeight: FontWeight.w800,
-                        color: _text,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    'Log operating costs',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(11),
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        // Footer-button padding is nav-only (deviceBottomPadding): this screen is
+        // under MainLayout, whose Scaffold already resizes the body for the
+        // keyboard, so the inset must not re-add it. resizeToAvoidBottomInset:false
+        // is a harmless no-op here (the screen sees viewInsets 0 under MainLayout).
+        resizeToAvoidBottomInset: false,
+        appBar: ExpenseTopBar(
+          key: ExpenseKeys.addTopBar,
+          height: expenseTopBarHeight(context),
+          header: ScreenHeader(
+            icon: AppIcons.expenses,
+            title: _isEditing ? 'Edit Expense' : 'Record Expense',
+            subtitle: 'Log operating costs',
+            leading: const ExpenseBackButton(),
+          ),
         ),
-      ),
-      body: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            // Scrollable Content
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.getRSize(20),
-                  vertical: context.getRSize(10),
-                ),
-                children: [
-                  if (showStoreBanner) ...[
-                    _recordingForBanner(context, writeStore.label),
-                    SizedBox(height: context.getRSize(16)),
-                  ],
-                  // Category (searchable + create-on-the-fly)
-                  AppInput(
-                    labelText: 'Category',
-                    controller: _categoryCtrl,
-                    hintText: 'Search or type a new category',
-                    suffixIcon: Icon(
-                      AppIcons.search,
-                      size: context.getRSize(14),
-                      color: _subtext,
-                    ),
-                    validator: (v) => v == null || v.trim().isEmpty
-                        ? 'Category is required'
-                        : null,
-                  ),
-                  if (suggestions.isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.only(top: context.getRSize(8)),
-                      child: Wrap(
-                        spacing: context.getRSize(8),
-                        runSpacing: context.getRSize(8),
-                        children: suggestions.map((cat) {
-                          return ActionChip(
-                            label: Text(
-                              cat,
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(12),
-                                color: _text,
-                              ),
-                            ),
-                            backgroundColor: _cardBg,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(color: _border),
-                            ),
-                            onPressed: () {
-                              _categoryCtrl.text = cat;
-                              _categoryCtrl.selection = TextSelection.collapsed(
-                                offset: cat.length,
-                              );
-                              setState(() {});
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  SizedBox(height: context.getRSize(16)),
-
-                  // Amount (immutable on edit — corrected by delete + re-record)
-                  AppInput(
-                    labelText: 'Amount',
-                    controller: _amountCtrl,
-                    enabled: !_isEditing,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [CurrencyInputFormatter()],
-                    hintText: '0.00',
-                    validator: (v) => v == null || v.trim().isEmpty
-                        ? 'Amount is required'
-                        : null,
-                  ),
-                  if (_isEditing)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        top: context.getRSize(4),
-                        left: context.getRSize(4),
-                      ),
-                      child: Text(
-                        'Amount and payment method can\'t be edited. '
-                        'To change them, delete and record again.',
-                        style: TextStyle(
-                          color: _subtext,
-                          fontSize: context.getRFontSize(11),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Form screen: capped at 720dp and centred through the gutter.
+              final gutter = expenseGutter(context, constraints.maxWidth);
+              return Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    // Scrollable Content
+                    Expanded(
+                      child: ListView(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: gutter,
+                          vertical: context.getRSize(10),
                         ),
-                      ),
-                    ),
-                  SizedBox(height: context.getRSize(16)),
-
-                  // Payment Method — immutable on edit, so show it read-only there.
-                  if (_isEditing)
-                    AppInput(
-                      labelText: 'Payment Method',
-                      enabled: false,
-                      controller: TextEditingController(
-                        text: _methodLabel(_paymentMethodCode),
-                      ),
-                    )
-                  else
-                    AppDropdown<String>(
-                      labelText: 'Payment Method',
-                      value: _paymentMethodCode,
-                      items: _kPaymentMethods
-                          .map(
-                            (m) => DropdownMenuItem(
-                              value: m.code,
-                              child: Text(m.label),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() {
-                            _paymentMethodCode = val;
-                          });
-                        }
-                      },
-                    ),
-                  SizedBox(height: context.getRSize(16)),
-
-                  AppInput(
-                    labelText: 'Date',
-                    readOnly: true,
-                    onTap: _pickDate,
-                    controller: TextEditingController(
-                      text: DateFormat('MMM d, y').format(_selectedDate),
-                    ),
-                    suffixIcon: Icon(
-                      AppIcons.calendar,
-                      size: context.getRSize(16),
-                      color: _subtext,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(16)),
-
-                  AppInput(
-                    labelText:
-                        'Description ${_categoryCtrl.text.trim().toLowerCase() == "others" ? "(Required)" : "(Optional)"}',
-                    controller: _descCtrl,
-                    maxLines: 2,
-                    hintText: 'What was this expense for?',
-                  ),
-                  SizedBox(height: context.getRSize(16)),
-
-                  AppInput(
-                    labelText: 'Reference / Receipt No. (Optional)',
-                    controller: _refCtrl,
-                    hintText: 'e.g. REC-0912...',
-                  ),
-                  SizedBox(height: context.getRSize(16)),
-
-                  // Receipt Upload (Large Expenses)
-                  if (_currentAmount >= largeExpenseThreshold) ...[
-                    Padding(
-                      padding: EdgeInsets.only(bottom: context.getRSize(8)),
-                      child: Text(
-                        'Receipt (Required for large expenses)',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(12),
-                          fontWeight: FontWeight.w700,
-                          color: _subtext,
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      onTap: _pickReceipt,
-                      child: Container(
-                        padding: EdgeInsets.all(context.getRSize(16)),
-                        decoration: BoxDecoration(
-                          color: _cardBg,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color:
-                                (_receiptFile == null &&
-                                    _existingReceiptPath == null)
-                                ? Theme.of(
-                                    context,
-                                  ).colorScheme.error.withValues(alpha: 0.5)
-                                : success,
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              (_receiptFile == null &&
-                                      _existingReceiptPath == null)
-                                  ? AppIcons.exportFile
-                                  : AppIcons.fileApproved,
-                              size: context.getRSize(18),
-                              color:
-                                  (_receiptFile == null &&
-                                      _existingReceiptPath == null)
-                                  ? danger
-                                  : success,
-                            ),
-                            SizedBox(width: context.getRSize(12)),
-                            Expanded(
-                              child: Text(
-                                _receiptFile?.name ??
-                                    (_existingReceiptPath != null
-                                        ? 'Receipt attached'
-                                        : 'Upload Receipt (JPG, PNG, PDF)'),
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(14),
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      (_receiptFile == null &&
-                                          _existingReceiptPath == null)
-                                      ? _subtext
-                                      : _text,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                        children: [
+                          if (showStoreBanner) ...[
+                            _recordingForBanner(context, writeStore.label),
+                            SizedBox(height: context.getRSize(16)),
                           ],
-                        ),
+                          // Category (searchable + create-on-the-fly)
+                          AppInput(
+                            labelText: 'Category',
+                            controller: _categoryCtrl,
+                            hintText: 'Search or type a new category',
+                            suffixIcon: Icon(
+                              AppIcons.search,
+                              size: context.getRSize(14),
+                              color: _subtext,
+                            ),
+                            validator: (v) => v == null || v.trim().isEmpty
+                                ? 'Category is required'
+                                : null,
+                          ),
+                          if (suggestions.isNotEmpty)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                top: context.getRSize(8),
+                              ),
+                              child: Wrap(
+                                spacing: context.getRSize(8),
+                                runSpacing: context.getRSize(8),
+                                children: suggestions.map((cat) {
+                                  return ActionChip(
+                                    label: Text(
+                                      cat,
+                                      style: context
+                                          .semiBoldStyle(12)
+                                          .copyWith(color: _text),
+                                    ),
+                                    backgroundColor: _cardBg,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(
+                                        AppSpacing.borderRadiusXL,
+                                      ),
+                                      side: BorderSide(color: _border),
+                                    ),
+                                    onPressed: () {
+                                      _categoryCtrl.text = cat;
+                                      _categoryCtrl.selection =
+                                          TextSelection.collapsed(
+                                            offset: cat.length,
+                                          );
+                                      setState(() {});
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          SizedBox(height: context.getRSize(16)),
+
+                          // Amount (immutable on edit — corrected by delete + re-record)
+                          AppInput(
+                            labelText: 'Amount',
+                            controller: _amountCtrl,
+                            enabled: !_isEditing,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [CurrencyInputFormatter()],
+                            hintText: '0.00',
+                            validator: (v) => v == null || v.trim().isEmpty
+                                ? 'Amount is required'
+                                : null,
+                          ),
+                          if (_isEditing)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                top: context.getRSize(4),
+                                left: context.getRSize(4),
+                              ),
+                              child: Text(
+                                'Amount and payment method can\'t be edited. '
+                                'To change them, delete and record again.',
+                                style: context
+                                    .regularStyle(11)
+                                    .copyWith(color: _subtext),
+                              ),
+                            ),
+                          SizedBox(height: context.getRSize(16)),
+
+                          // Payment Method — immutable on edit, so show it read-only there.
+                          if (_isEditing)
+                            AppInput(
+                              labelText: 'Payment Method',
+                              enabled: false,
+                              controller: TextEditingController(
+                                text: _methodLabel(_paymentMethodCode),
+                              ),
+                            )
+                          else
+                            AppDropdown<String>(
+                              labelText: 'Payment Method',
+                              value: _paymentMethodCode,
+                              items: _kPaymentMethods
+                                  .map(
+                                    (m) => DropdownMenuItem(
+                                      value: m.code,
+                                      child: Text(
+                                        m.label,
+                                        style: context
+                                            .mediumStyle(14)
+                                            .copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
+                                            ),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _paymentMethodCode = val;
+                                  });
+                                }
+                              },
+                            ),
+                          SizedBox(height: context.getRSize(16)),
+
+                          AppInput(
+                            labelText: 'Date',
+                            readOnly: true,
+                            onTap: _pickDate,
+                            controller: TextEditingController(
+                              text: DateFormat(
+                                'MMM d, y',
+                              ).format(_selectedDate),
+                            ),
+                            suffixIcon: Icon(
+                              AppIcons.calendar,
+                              size: context.getRSize(16),
+                              color: _subtext,
+                            ),
+                          ),
+                          SizedBox(height: context.getRSize(16)),
+
+                          AppInput(
+                            labelText:
+                                'Description ${_categoryCtrl.text.trim().toLowerCase() == "others" ? "(Required)" : "(Optional)"}',
+                            controller: _descCtrl,
+                            maxLines: 2,
+                            hintText: 'What was this expense for?',
+                          ),
+                          SizedBox(height: context.getRSize(16)),
+
+                          AppInput(
+                            labelText: 'Reference / Receipt No. (Optional)',
+                            controller: _refCtrl,
+                            hintText: 'e.g. REC-0912...',
+                          ),
+                          SizedBox(height: context.getRSize(16)),
+
+                          // Receipt Upload (Large Expenses)
+                          if (_currentAmount >= largeExpenseThreshold) ...[
+                            Padding(
+                              padding: EdgeInsets.only(
+                                bottom: context.getRSize(8),
+                              ),
+                              child: Text(
+                                'Receipt (Required for large expenses)',
+                                style: context
+                                    .boldStyle(12)
+                                    .copyWith(color: _subtext),
+                              ),
+                            ),
+                            Builder(
+                              builder: (context) {
+                                final missing =
+                                    _receiptFile == null &&
+                                    _existingReceiptPath == null;
+                                final ink = missing ? f.danger : f.green;
+                                final radius = BorderRadius.circular(
+                                  AppSpacing.borderRadiusL,
+                                );
+                                return Material(
+                                  color: _cardBg,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: radius,
+                                    side: BorderSide(
+                                      color: missing
+                                          ? f.dangerOutline
+                                          : f.green,
+                                    ),
+                                  ),
+                                  child: InkWell(
+                                    borderRadius: radius,
+                                    onTap: _pickReceipt,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        minHeight: kMinInteractiveDimension,
+                                      ),
+                                      child: Padding(
+                                        padding: EdgeInsets.all(
+                                          context.getRSize(16),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              missing
+                                                  ? AppIcons.exportFile
+                                                  : AppIcons.fileApproved,
+                                              size: context.getRSize(20),
+                                              color: ink,
+                                            ),
+                                            SizedBox(
+                                              width: context.getRSize(12),
+                                            ),
+                                            Expanded(
+                                              child: Text(
+                                                _receiptFile?.name ??
+                                                    (_existingReceiptPath !=
+                                                            null
+                                                        ? 'Receipt attached'
+                                                        : 'Upload Receipt (JPG, PNG, PDF)'),
+                                                style: context
+                                                    .boldStyle(14)
+                                                    .copyWith(
+                                                      color: missing
+                                                          ? _subtext
+                                                          : _text,
+                                                    ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            SizedBox(height: context.getRSize(16)),
+                          ],
+
+                          AppInput(
+                            labelText: 'Recorded By',
+                            controller: _recordedByCtrl,
+                            enabled: false,
+                            hintText: 'Name of staff',
+                          ),
+                          SizedBox(height: context.getRSize(24)),
+                        ],
                       ),
                     ),
-                    SizedBox(height: context.getRSize(16)),
+
+                    // Button
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        context.getRSize(16),
+                        gutter,
+                        context.deviceBottomPadding + context.getRSize(16),
+                      ),
+                      child: AppButton(
+                        text: _isEditing ? 'Save Changes' : 'Save Expense',
+                        variant: AppButtonVariant.danger,
+                        onPressed: _submit,
+                      ),
+                    ),
                   ],
-
-                  AppInput(
-                    labelText: 'Recorded By',
-                    controller: _recordedByCtrl,
-                    enabled: false,
-                    hintText: 'Name of staff',
-                  ),
-                  SizedBox(height: context.getRSize(24)),
-                ],
-              ),
-            ),
-
-            // Button
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                context.getRSize(20),
-                context.getRSize(16),
-                context.getRSize(20),
-                context.deviceBottomPadding + context.getRSize(16),
-              ),
-              child: AppButton(
-                text: _isEditing ? 'Save Changes' : 'Save Expense',
-                variant: AppButtonVariant.danger,
-                onPressed: _submit,
-              ),
-            ),
-          ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

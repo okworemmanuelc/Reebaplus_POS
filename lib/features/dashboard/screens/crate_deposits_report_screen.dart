@@ -4,7 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart' show CrateDepositSummary;
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/report_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -78,53 +82,60 @@ class CrateDepositsReportScreen extends ConsumerWidget {
     final held = heldByCustomer.entries.where((e) => e.value != 0).toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return SharedScaffold(
-      activeRoute: 'dashboard',
-      appBar: AppBar(
-        title: Text(
-          'Crate Deposits',
-          style: context.h3.copyWith(fontWeight: FontWeight.bold),
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: SharedScaffold(
+        activeRoute: 'dashboard',
+        backgroundColor: Colors.transparent,
+        appBar: ReportTopBar(
+          key: ReportKeys.topBar,
+          height: reportTopBarHeight(context),
+          header: ScreenHeader(
+            leading: const ReportBackButton(),
+            icon: AppIcons.beerMug,
+            title: 'Crate Deposits',
+            subtitle: ref.watch(activeStoreLabelProvider),
+            actions: [
+              if (summary != null)
+                ReportBarAction(
+                  key: ReportKeys.export,
+                  icon: AppIcons.export,
+                  tooltip: 'Export CSV',
+                  onPressed: () => _exportCsv(context, summary, held, nameOf),
+                ),
+            ],
+          ),
         ),
-        elevation: 0,
-        backgroundColor: context.backgroundColor,
-        leading: BackButton(color: context.primaryColor),
-        actions: [
-          if (summary != null)
-            IconButton(
-              tooltip: 'Export CSV',
-              icon: Icon(
-                AppIcons.export,
-                size: 18,
-                color: context.primaryColor,
-              ),
-              onPressed: () => _exportCsv(context, summary, held, nameOf),
-            ),
-        ],
-      ),
-      body: summaryAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load: $e')),
-        data: (s) => ListView(
-          padding: EdgeInsets.all(
-            context.spacingM,
-          ).copyWith(bottom: context.spacingM + context.deviceBottomPadding),
-          children: [
-            _heldCard(context, s),
-            SizedBox(height: context.spacingM),
-            _breakdownCard(context, s),
-            SizedBox(height: context.spacingM),
-            Text(
-              'By customer',
-              style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: context.spacingS),
-            if (held.isEmpty)
-              _emptyHint(context)
-            else
-              ...held.map(
-                (e) => _customerTile(context, nameOf(e.key), e.value),
-              ),
-          ],
+        body: summaryAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Could not load: $e')),
+          data: (s) => LayoutBuilder(
+            builder: (context, constraints) {
+              final gutter = reportGutter(context, constraints.maxWidth);
+              return ListView(
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  context.getRSize(16),
+                  gutter,
+                  context.getRSize(16) + context.deviceBottomPadding,
+                ),
+                children: [
+                  _heldCard(context, s),
+                  SizedBox(height: context.getRSize(12)),
+                  _breakdownCard(context, s),
+                  SizedBox(height: context.getRSize(16)),
+                  const ReportGroupLabel('By customer'),
+                  SizedBox(height: context.getRSize(10)),
+                  if (held.isEmpty)
+                    _emptyHint(context)
+                  else
+                    ...held.map(
+                      (e) => _customerTile(context, nameOf(e.key), e.value),
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -132,97 +143,43 @@ class CrateDepositsReportScreen extends ConsumerWidget {
 
   // Big "held now" headline.
   Widget _heldCard(BuildContext context, CrateDepositSummary s) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.spacingL),
-      decoration: BoxDecoration(
-        color: context.primaryColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: context.primaryColor.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                AppIcons.beerMug,
-                size: 16,
-                color: context.primaryColor,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Deposits held now',
-                style: context.bodySmall.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).hintColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            formatCurrency(s.heldKobo / 100.0),
-            style: context.h2.copyWith(
-              fontWeight: FontWeight.w900,
-              color: context.primaryColor,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Returnable crate deposits recorded for customers.',
-            style: context.bodySmall.copyWith(
-              color: Theme.of(context).hintColor,
-            ),
-          ),
-        ],
-      ),
+    return ReportHeadlineCard(
+      icon: AppIcons.beerMug,
+      tone: IconTileTone.warning,
+      label: 'Deposits held now',
+      figure: formatCurrency(s.heldKobo / 100.0),
+      figureColor: Theme.of(context).colorScheme.primary,
+      note: 'Returnable crate deposits recorded for customers.',
     );
   }
 
   // Taken − Refunded − Kept = Held, with the identity spelled out.
   Widget _breakdownCard(BuildContext context, CrateDepositSummary s) {
-    return Container(
-      padding: EdgeInsets.all(context.spacingM),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: Theme.of(context).dividerColor),
-      ),
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return ReportCard(
       child: Column(
         children: [
           _row(context, 'Deposits taken', s.takenKobo, null),
-          _row(
-            context,
-            'Refunded',
-            s.refundedKobo,
-            Colors.orange,
-            prefix: '− ',
-          ),
-          _row(
-            context,
-            'Kept (income)',
-            s.keptKobo,
-            Colors.green,
-            prefix: '− ',
-          ),
-          Divider(
-            height: context.spacingL,
-            color: Theme.of(context).dividerColor,
-          ),
+          _row(context, 'Refunded', s.refundedKobo, f.warning, prefix: '− '),
+          _row(context, 'Kept (income)', s.keptKobo, f.green, prefix: '− '),
+          const ReportDivider(),
           _row(
             context,
             'Held now',
             s.heldKobo,
-            context.primaryColor,
+            t.colorScheme.primary,
             bold: true,
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Held = Taken − Refunded − Kept',
-            style: context.bodySmall.copyWith(
-              color: Theme.of(context).hintColor,
-              fontStyle: FontStyle.italic,
+          SizedBox(height: context.getRSize(6)),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Held = Taken − Refunded − Kept',
+              style: context
+                  .regularStyle(12)
+                  .copyWith(color: muted, fontStyle: FontStyle.italic),
             ),
           ),
         ],
@@ -238,87 +195,80 @@ class CrateDepositsReportScreen extends ConsumerWidget {
     bool bold = false,
     String prefix = '',
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: context.bodyMedium.copyWith(
-              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
-            ),
-          ),
-          Text(
-            '$prefix${formatCurrency(kobo / 100.0)}',
-            style: context.bodyMedium.copyWith(
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
-      ),
+    return ReportValueRow(
+      label: label,
+      value: '$prefix${formatCurrency(kobo / 100.0)}',
+      valueColor: color,
+      bold: bold,
     );
   }
 
   Widget _customerTile(BuildContext context, String name, int kobo) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: EdgeInsets.symmetric(
-        horizontal: context.spacingM,
-        vertical: context.spacingS + 2,
-      ),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(context.radiusM),
-        border: Border.all(color: Theme.of(context).dividerColor),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-            ),
+    final t = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.getRSize(8)),
+      child: ReportCard(
+        padding: EdgeInsets.all(context.getRSize(14)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 32),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                flex: 3,
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context
+                      .boldStyle(14)
+                      .copyWith(color: t.colorScheme.onSurface),
+                ),
+              ),
+              SizedBox(width: context.getRSize(12)),
+              Flexible(
+                flex: 2,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    formatCurrency(kobo / 100.0),
+                    maxLines: 1,
+                    style: context
+                        .extraBoldStyle(14)
+                        .copyWith(color: t.colorScheme.primary),
+                  ),
+                ),
+              ),
+            ],
           ),
-          Text(
-            formatCurrency(kobo / 100.0),
-            style: context.bodyMedium.copyWith(
-              fontWeight: FontWeight.w800,
-              color: context.primaryColor,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _emptyHint(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.spacingL),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: Theme.of(context).dividerColor),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            AppIcons.box,
-            size: 28,
-            color: Theme.of(context).hintColor,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'No deposits are being held right now.',
-            style: context.bodySmall.copyWith(
-              color: Theme.of(context).hintColor,
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return ReportCard(
+      padding: EdgeInsets.all(context.getRSize(20)),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          children: [
+            const IconTile(
+              icon: AppIcons.box,
+              tone: IconTileTone.neutral,
+              size: 48,
             ),
-          ),
-        ],
+            SizedBox(height: context.getRSize(10)),
+            Text(
+              'No deposits are being held right now.',
+              textAlign: TextAlign.center,
+              style: context.mediumStyle(13).copyWith(color: muted),
+            ),
+          ],
+        ),
       ),
     );
   }
