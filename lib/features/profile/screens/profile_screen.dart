@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -20,8 +22,8 @@ import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -31,9 +33,8 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
+  AppFixedColors get _fixed =>
+      Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
 
   /// The signed-in user's own orders WITH their item lines (#195) — the lines
   /// are what "Sales Volume" is summed from, so the figure is the same
@@ -106,24 +107,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // §32: PRO (paid) / FREE TRIAL pill shown in the header when subscribed.
     final subAccess = ref.watch(currentBusinessSubscriptionProvider);
 
-    final appBar = AppBar(
-      backgroundColor: _surface,
-      elevation: 0,
-      leading: IconButton(
-        icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: 20),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: AppBarHeader(
-        icon: AppIcons.user,
-        title: user.name,
-        subtitle: roleName.toUpperCase(),
-      ),
+    final appBar = SettingsPageBar(
+      height: settingsBarHeight(context),
+      icon: AppIcons.user,
+      title: user.name,
+      subtitle: roleName.toUpperCase(),
     );
 
     if (!_contentReady) {
-      return SharedScaffold(
-        activeRoute: 'profile',
-        backgroundColor: _bg,
+      return _frame(
         appBar: appBar,
         body: Center(
           child: CircularProgressIndicator(
@@ -133,14 +125,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
     }
 
-    return SharedScaffold(
-      activeRoute: 'profile',
-      backgroundColor: _bg,
+    final gap = context.getRSize(16);
+    return _frame(
       appBar: appBar,
-      body: ListView(
-        padding: EdgeInsets.all(
-          context.getRSize(20),
-        ).copyWith(bottom: context.getRSize(20) + context.deviceBottomPadding),
+      body: SettingsPageList(
+        listKey: const Key('profile-list'),
         children: [
           ProfileHeaderCard(
             name: user.name,
@@ -156,14 +145,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   label: subAccess.badgeLabel!,
                   color: subAccess == SubscriptionAccess.active
                       ? Theme.of(context).colorScheme.primary
-                      : const Color(0xFFF59E0B),
+                      : _fixed.warning,
                 ),
               ProfilePill(icon: AppIcons.store, label: storeName),
             ],
           ),
-          SizedBox(height: context.getRSize(24)),
+          SizedBox(height: gap),
           ProfileStatGrid(stats: _buildStats()),
-          SizedBox(height: context.getRSize(24)),
+          SizedBox(height: gap),
           ProfileInfoCard(
             title: 'Account Details',
             rows: [
@@ -190,11 +179,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ],
           ),
-          SizedBox(height: context.getRSize(24)),
+          SizedBox(height: gap),
           // Per-device push permission for console broadcasts (#138 Slice 2) —
           // ungated so every staff member can manage their own notifications.
           const NotificationSettingsTile(),
-          SizedBox(height: context.getRSize(24)),
+          SizedBox(height: gap),
           AppButton(
             text: 'Edit Profile',
             variant: AppButtonVariant.outline,
@@ -210,7 +199,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           // member can leave & delete their own account (no permission needed).
           // Both hidden while the role is still resolving (hide-don't-block).
           if (isOwnerRole(role)) ...[
-            SizedBox(height: context.getRSize(16)),
+            SizedBox(height: gap),
             AppButton(
               text: 'Delete Business',
               variant: AppButtonVariant.danger,
@@ -222,7 +211,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
           ] else if (canSelfResign(role)) ...[
-            SizedBox(height: context.getRSize(16)),
+            SizedBox(height: gap),
             AppButton(
               text: 'Leave / delete my account',
               variant: AppButtonVariant.danger,
@@ -230,8 +219,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onPressed: _confirmAndResign,
             ),
           ],
-          SizedBox(height: context.getRSize(100)),
         ],
+      ),
+    );
+  }
+
+  /// The page frame: flat page background under the shared scaffold (drawer
+  /// and all), with the solid settings-style top bar.
+  Widget _frame({required PreferredSizeWidget appBar, required Widget body}) {
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: SharedScaffold(
+        activeRoute: 'profile',
+        backgroundColor: Colors.transparent,
+        appBar: appBar,
+        body: body,
       ),
     );
   }
@@ -261,13 +263,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         label: 'Completed',
         value: completed.length.toString(),
         icon: AppIcons.checkDouble,
-        color: AppColors.success,
+        color: _fixed.green,
       ),
       ProfileStat(
         label: 'Sales Volume',
         value: formatCurrency(totalSales),
         icon: AppIcons.naira,
-        color: const Color(0xFFA855F7),
+        color: _fixed.purple,
       ),
     ];
   }
@@ -339,11 +341,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   /// Self-service edit of the logged-in user's own name + avatar colour.
   /// No role gate — a user can always edit their own profile.
   void _openEditProfileSheet(UserData user) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => EditProfileSheet(user: user, parentRef: ref),
-    );
+    EditProfileSheet.show(context, user: user, parentRef: ref);
   }
 }
