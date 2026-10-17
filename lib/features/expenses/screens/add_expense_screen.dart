@@ -495,7 +495,16 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                                   .map(
                                     (m) => DropdownMenuItem(
                                       value: m.code,
-                                      child: Text(m.label),
+                                      child: Text(
+                                        m.label,
+                                        style: context
+                                            .mediumStyle(14)
+                                            .copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
+                                            ),
+                                      ),
                                     ),
                                   )
                                   .toList(),

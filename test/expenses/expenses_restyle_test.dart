@@ -146,13 +146,40 @@ void main() {
     await close(tester);
   });
 
-  testWidgets('Reject still needs a reason and rejects the expense', (
+  Future<String?> statusOf(WidgetTester tester, String description) async {
+    final db = env.db;
+    final row = await tester.runAsync(
+      () => (db.select(
+        db.expenses,
+      )..where((t) => t.description.equals(description))).getSingle(),
+    );
+    return row?.status;
+  }
+
+  testWidgets('Approve marks the pending expense approved', (tester) async {
+    await pumpList(tester);
+    expect(await statusOf(tester, 'Generator diesel 1'), 'pending');
+    await tester.tap(find.widgetWithText(AppButton, 'Approve'));
+    await settle(tester);
+    expect(await statusOf(tester, 'Generator diesel 1'), 'approved');
+    expect(tester.takeException(), isNull);
+    await close(tester);
+  });
+
+  testWidgets('Reject needs a reason, then marks the expense rejected', (
     tester,
   ) async {
     await pumpList(tester);
+    // The pending block's Reject (the first one on the screen).
     await tester.tap(find.widgetWithText(AppButton, 'Reject').first);
     await settle(tester);
     expect(find.byKey(ExpenseKeys.rejectField), findsOneWidget);
+    final dialogReject = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.widgetWithText(AppButton, 'Reject'),
+    );
+    // Empty reason: the confirm button is disabled.
+    expect(tester.widget<AppButton>(dialogReject).onPressed, isNull);
     await tester.enterText(
       find.descendant(
         of: find.byKey(ExpenseKeys.rejectField),
@@ -161,6 +188,9 @@ void main() {
       'No receipt',
     );
     await tester.pump();
+    await tester.tap(dialogReject);
+    await settle(tester);
+    expect(await statusOf(tester, 'Generator diesel 1'), 'rejected');
     expect(tester.takeException(), isNull);
     await close(tester);
   });

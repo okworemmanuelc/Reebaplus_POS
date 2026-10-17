@@ -449,7 +449,17 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                     : _effectivePeriod,
                 width: context.getRSize(130),
                 items: _periodOptions.map((String val) {
-                  return DropdownMenuItem<String>(value: val, child: Text(val));
+                  return DropdownMenuItem<String>(
+                    value: val,
+                    child: Text(
+                      val,
+                      style: context
+                          .mediumStyle(14)
+                          .copyWith(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                    ),
+                  );
                 }).toList(),
                 onChanged: (val) async {
                   if (val == 'Custom') {
