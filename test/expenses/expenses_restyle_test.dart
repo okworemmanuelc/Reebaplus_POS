@@ -33,6 +33,18 @@ void main() {
   setUp(() async {
     env = await setupScreenTestEnvironment(businessName: 'Stallion Global');
     final db = env.db;
+    // The harness signs in as 'test-user-id'; approve / reject write it as the
+    // approver, so the row must exist (FK).
+    await db
+        .into(db.users)
+        .insert(
+          UsersCompanion.insert(
+            id: const Value('test-user-id'),
+            businessId: env.businessId,
+            name: 'Test Admin',
+            pin: '1234',
+          ),
+        );
     final cat = UuidV7.generate();
     await db
         .into(db.expenseCategories)
@@ -161,6 +173,7 @@ void main() {
     expect(await statusOf(tester, 'Generator diesel 1'), 'pending');
     await tester.tap(find.widgetWithText(AppButton, 'Approve'));
     await settle(tester);
+    await settle(tester);
     expect(await statusOf(tester, 'Generator diesel 1'), 'approved');
     expect(tester.takeException(), isNull);
     await close(tester);
@@ -191,6 +204,8 @@ void main() {
     await tester.tap(dialogReject);
     await settle(tester);
     expect(await statusOf(tester, 'Generator diesel 1'), 'rejected');
+    // Let the success toast's timer run out before the tree is disposed.
+    await tester.pump(const Duration(seconds: 10));
     expect(tester.takeException(), isNull);
     await close(tester);
   });
