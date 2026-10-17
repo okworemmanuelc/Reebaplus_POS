@@ -4,8 +4,12 @@ import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/subscription/widgets/subscription_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -107,118 +111,89 @@ class _ThankYouSubscriptionScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final successColor =
-        theme.extension<AppSemanticColors>()?.success ??
-        const Color(0xFF30D158);
+    final fixed = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
 
     final periodEnd = widget.business.currentPeriodEnd;
     final renewsLine = periodEnd == null
         ? null
         : 'Renews ${DateFormat('d MMM yyyy').format(periodEnd)}';
 
-    return AuthBackground(
-      child: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight - 64,
-                ),
-                child: IntrinsicHeight(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Spacer(),
-                      _buildIcon(successColor),
-                      const SizedBox(height: 28),
-                      SlideTransition(
-                        position: _contentSlide,
-                        child: FadeTransition(
-                          opacity: _contentOpacity,
-                          child: Column(
-                            children: [
-                              Text(
-                                'Thank you for subscribing!',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
-                                  color: textColor,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                '${widget.business.name} is now on the '
-                                'Reebaplus monthly plan. Every feature is '
-                                'unlocked — thank you for going PRO.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  height: 1.45,
-                                  color: textColor.withValues(alpha: 0.7),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              _planChip(theme, successColor, renewsLine),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      const SizedBox(height: 28),
-                      FadeTransition(
-                        opacity: _contentOpacity,
-                        child: AppButton(
-                          text: 'Continue',
-                          isLoading: _continuing,
-                          onPressed: _onContinue,
-                        ),
-                      ),
-                    ],
+    return SubscriptionStateFrame(
+      hero: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildIcon(fixed),
+          SizedBox(height: context.getRSize(28)),
+          SlideTransition(
+            position: _contentSlide,
+            child: FadeTransition(
+              opacity: _contentOpacity,
+              child: Column(
+                children: [
+                  Text(
+                    'Thank you for subscribing!',
+                    textAlign: TextAlign.center,
+                    style: context
+                        .extraBoldStyle(28)
+                        .copyWith(color: theme.colorScheme.onSurface),
                   ),
-                ),
+                  SizedBox(height: context.getRSize(10)),
+                  Text(
+                    '${widget.business.name} is now on the '
+                    'Reebaplus monthly plan. Every feature is '
+                    'unlocked — thank you for going PRO.',
+                    textAlign: TextAlign.center,
+                    style: context
+                        .regularStyle(15)
+                        .copyWith(
+                          height: 1.45,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  SizedBox(height: context.getRSize(24)),
+                  _planCard(theme, renewsLine),
+                ],
               ),
-            );
-          },
+            ),
+          ),
+        ],
+      ),
+      actions: FadeTransition(
+        opacity: _contentOpacity,
+        child: AppButton(
+          text: 'Continue',
+          isLoading: _continuing,
+          onPressed: _onContinue,
         ),
       ),
     );
   }
 
-  Widget _planChip(ThemeData theme, Color successColor, String? renewsLine) {
-    final textColor = theme.brightness == Brightness.dark
-        ? Colors.white
-        : Colors.black;
+  Widget _planCard(ThemeData theme, String? renewsLine) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: successColor.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: successColor.withValues(alpha: 0.3)),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(16),
+        vertical: context.getRSize(12),
       ),
+      decoration: AppDecorations.card(context),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             _priceLine,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: textColor,
-            ),
+            textAlign: TextAlign.center,
+            style: context
+                .boldStyle(16)
+                .copyWith(color: theme.colorScheme.onSurface),
           ),
           if (renewsLine != null) ...[
-            const SizedBox(height: 2),
+            SizedBox(height: context.getRSize(2)),
             Text(
               renewsLine,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: textColor.withValues(alpha: 0.6),
-              ),
+              textAlign: TextAlign.center,
+              style: context
+                  .regularStyle(13)
+                  .copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
         ],
@@ -226,15 +201,16 @@ class _ThankYouSubscriptionScreenState
     );
   }
 
-  Widget _buildIcon(Color successColor) {
+  Widget _buildIcon(AppFixedColors fixed) {
+    final ring = context.getRSize(110);
     return Center(
       child: FadeTransition(
         opacity: _iconOpacity,
         child: ScaleTransition(
           scale: _iconScale,
           child: SizedBox(
-            width: 120,
-            height: 120,
+            width: context.getRSize(120),
+            height: context.getRSize(120),
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -244,12 +220,12 @@ class _ThankYouSubscriptionScreenState
                     return Transform.scale(
                       scale: _pulseScale.value,
                       child: Container(
-                        width: 110,
-                        height: 110,
+                        width: ring,
+                        height: ring,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: successColor.withValues(alpha: 0.25),
+                            color: fixed.green.withValues(alpha: 0.25),
                             width: 2,
                           ),
                         ),
@@ -257,21 +233,10 @@ class _ThankYouSubscriptionScreenState
                     );
                   },
                 ),
-                Container(
-                  width: 88,
-                  height: 88,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: successColor.withValues(alpha: 0.15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: successColor.withValues(alpha: 0.2),
-                        blurRadius: 30,
-                        spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Icon(AppIcons.premium, color: successColor, size: 46),
+                const IconTile(
+                  icon: AppIcons.premium,
+                  tone: IconTileTone.green,
+                  size: 88,
                 ),
               ],
             ),

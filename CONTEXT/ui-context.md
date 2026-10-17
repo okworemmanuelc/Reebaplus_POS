@@ -758,6 +758,10 @@ handles insets. See `CLAUDE.md` for the full platform-specific rule.
 
 ---
 
+### Subscription states (`lib/features/subscription/`, #414)
+
+Full-screen states, not list screens: `SubscriptionStateFrame` = Scaffold + `AppDecorations.pageBackground` (no blurred photo), `SafeArea`, content centred at the raw `kSettingsMaxContentWidth` (720), hero centred in the free space and the actions under it; scrolls when short. **Locked**: 88 danger `IconTile` (lock), ExtraBold 26 title, Regular 15 muted body, SemiBold danger "Your free trial ended on …" line (trial only), primary Subscribe (opens the unchanged "coming soon" pop-up) and ghost Sign out. **Thank You**: 88 green `IconTile` inside the pulsing ring, ExtraBold 28 title, muted body, flat `AppDecorations.card` plan card (Bold 16 price, Regular 13 muted "Renews …"), primary Continue. Read-only: no write of any kind. Goldens `subscription_locked_*` / `thank_you_subscription_*`.
+
 ## Brand logo
 
 The official Reebaplus logo (ring mark "R+" with a rising arrow, plus the
