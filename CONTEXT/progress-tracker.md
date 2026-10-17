@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #413 PR 3: Stock Approvals (Wave 2 B, 2026-10-17) - last PR of #413
+Branch `feat/redesign-w2-approvals`, stacked on `feat/redesign-w2-recon` (PR #418). **Restyle only: still Manager/CEO (`Gates.viewApprovals`), crate cards still behind `Gates.confirmCrateDeposit`, approve/reject still through the unchanged DAOs (`adjustStock` path); no figure, write path, Drift/cloud/sync change.**
+- `ReportTopBar` + 720 cap (measured); three flat approval cards (`IconTile`, `TagPill` PENDING, `AppButton`) built on one local `_ApprovalShell` (keyed `Material` kept: surface fill, radius 16, hairline, clip, `ExpansionTile`, so `stock_approvals_screen_test.dart` is unchanged).
+- Colours: amber -> `warning`, blue/teal -> `info`, indigo -> `purple`, red -> `danger`, green -> `green` (no new colours).
+- Pop-ups: reject-reason `AlertDialog` (`scrollable: true`) and the crate-deposit amount box now use `AppInput`; `AppInput` gained an optional `textCapitalization` (default none) so the reason keeps sentence caps.
+- Tests: `test/dashboard/stock_approvals_redesign_test.dart` (keyboard-up at 360x640 and 390x844 @1.15); goldens `test/redesign/stock_approvals_golden_test.dart` (8 images).
+
 ### Issue #413 PR 2: Daily Reconciliation list + detail + changed-since-review badge (Wave 2 B, 2026-10-16)
 Branch `feat/redesign-w2-recon`, stacked on `feat/redesign-w2-reports` (PR #415). **Restyle only: `recon_data.dart` untouched; every figure and card order unchanged; no cash balance (Hard Rule #8); no gate, write path, Drift/cloud/sync change.**
 - List: `ReportTopBar`, period `AppDropdown` (still `showDateRangePicker` for Custom, explicit item styles), day cards with `StatusPill` (Mismatch) and the badge, 720 raw cap, Export CSV kept.
