@@ -6,11 +6,12 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Settings > Receipt printer. Lists this device's printers with the paper
 /// width saved for each, so a wrong answer to the one-time "which paper?"
@@ -77,13 +78,21 @@ class _ReceiptPrinterSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final subtext = t.colorScheme.onSurface.withValues(alpha: 0.6);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
 
-    return GlassyScaffold(
+    return SettingsPageScaffold(
+      icon: AppIcons.print,
       title: 'Receipt printer',
       actions: [
         IconButton(
-          icon: const Icon(AppIcons.refresh),
+          icon: AppIcon(
+            AppIcons.refresh,
+            color: _loading ? t.disabledColor : t.colorScheme.onSurface,
+          ),
+          constraints: const BoxConstraints(
+            minWidth: kMinInteractiveDimension,
+            minHeight: kMinInteractiveDimension,
+          ),
           tooltip: 'Refresh printers',
           onPressed: _loading ? null : _load,
         ),
@@ -93,101 +102,60 @@ class _ReceiptPrinterSettingsScreenState
               child: CircularProgressIndicator(color: t.colorScheme.primary),
             )
           : SettingsFadeIn(
-              child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    24,
-                    24,
-                    24 + context.deviceBottomPadding,
+              child: SettingsPageList(
+                listKey: const Key('receipt-printer-list'),
+                children: [
+                  Text(
+                    'Printers cannot tell the app which paper they use, so '
+                    'the app asks the first time it prints to a new '
+                    'printer. Change the answer here if a receipt comes out '
+                    'too narrow or too wide.',
+                    style: context.regularStyle(13).copyWith(color: muted),
                   ),
-                  children: [
-                    Text(
-                      'Printers cannot tell the app which paper they use, so '
-                      'the app asks the first time it prints to a new '
-                      'printer. Change the answer here if a receipt comes out '
-                      'too narrow or too wide.',
-                      style: TextStyle(fontSize: 13, color: subtext),
-                    ),
-                    const SizedBox(height: 20),
-                    if (_devices.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 24),
-                        child: Text(
-                          Platform.isAndroid
-                              ? 'No paired printers found.\nPair your printer '
-                                    'in Bluetooth settings, then tap refresh.'
-                              : 'No printers found nearby.\nMake sure your '
-                                    'printer is switched on and in range, '
-                                    'then tap refresh.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: subtext),
-                        ),
+                  SizedBox(height: context.getRSize(20)),
+                  if (_devices.isEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(top: context.getRSize(24)),
+                      child: Text(
+                        Platform.isAndroid
+                            ? 'No paired printers found.\nPair your printer '
+                                  'in Bluetooth settings, then tap refresh.'
+                            : 'No printers found nearby.\nMake sure your '
+                                  'printer is switched on and in range, '
+                                  'then tap refresh.',
+                        textAlign: TextAlign.center,
+                        style: context.regularStyle(14).copyWith(color: muted),
                       ),
-                    for (final d in _devices) ...[
-                      _printerCard(context, d),
-                      const SizedBox(height: 16),
-                    ],
+                    ),
+                  for (final d in _devices) ...[
+                    _printerCard(context, d),
+                    SizedBox(height: context.getRSize(12)),
                   ],
-                ),
+                ],
+              ),
             ),
     );
   }
 
   Widget _printerCard(BuildContext context, BluetoothInfo device) {
-    final t = Theme.of(context);
-    final subtext = t.colorScheme.onSurface.withValues(alpha: 0.6);
     final size = _sizes[device.macAdress];
     final isLast = device.macAdress == _lastMac;
 
-    return GlassyCard(
-      padding: const EdgeInsets.all(16),
-      radius: 16,
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: t.colorScheme.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  AppIcons.print,
-                  color: t.colorScheme.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      device.name.isEmpty ? device.macAdress : device.name,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: t.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      isLast
-                          ? 'Last used'
-                          : size == null
-                          ? 'Not set yet. Asked on first print'
-                          : device.macAdress,
-                      style: TextStyle(fontSize: 13, color: subtext),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          SettingsControlRow(
+            icon: AppIcons.print,
+            tone: IconTileTone.neutral,
+            title: device.name.isEmpty ? device.macAdress : device.name,
+            subtitle: isLast
+                ? 'Last used'
+                : size == null
+                ? 'Not set yet. Asked on first print'
+                : device.macAdress,
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: context.getRSize(14)),
           SizedBox(
             width: double.infinity,
             child: SegmentedButton<ReceiptPaperSize>(

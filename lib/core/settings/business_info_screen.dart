@@ -11,14 +11,17 @@ import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// CEO Settings > Business Info (§10.1). Edits the business name, type, and
 /// currency. Name/type persist to the `businesses` row via [BusinessesDao];
@@ -265,81 +268,73 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
       ...kSelectableBusinessTypes,
       if (_type != null && !kSelectableBusinessTypes.contains(_type)) _type!,
     ];
-    return GlassyScaffold(
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final above = SizedBox(height: context.getRSize(16));
+    final below = SizedBox(height: context.getRSize(10));
+    final gap = SizedBox(height: context.getRSize(16));
+    return SettingsPageScaffold(
+      icon: AppIcons.business,
       title: 'Business Info',
       body: !canManage
           ? const SettingsNoAccess()
           : _loading
           ? const SizedBox.shrink()
           : SettingsFadeIn(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  24,
-                  24,
-                  24,
-                  24 + context.deviceBottomPadding,
-                ),
+              child: SettingsPageList(
+                listKey: const Key('business-info-list'),
                 children: [
-                  const SettingsSectionTitle('Logo'),
-                  const SizedBox(height: 16),
-                  GlassyCard(
-                    padding: const EdgeInsets.all(16),
-                    radius: 16,
+                  const SectionHeader(
+                    title: 'Logo',
+                    variant: SectionHeaderVariant.group,
+                  ),
+                  below,
+                  SettingsCard(
                     child: _LogoSection(
                       logoLocalPath: _pendingLogo != null || _pendingRemoveLogo
                           ? null
                           : _logoLocalPath,
                       pendingBytes: _pendingLogo?.bytes,
                       onPick: _pickLogo,
-                      onRemove: _logoLocalPath != null ||
-                              _pendingLogo != null
+                      onRemove: _logoLocalPath != null || _pendingLogo != null
                           ? _removeLogo
                           : null,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const SettingsSectionTitle('Business'),
-                  const SizedBox(height: 16),
-                  GlassyCard(
-                    padding: const EdgeInsets.all(16),
-                    radius: 16,
+                  above,
+                  const SectionHeader(
+                    title: 'Business',
+                    variant: SectionHeaderVariant.group,
+                  ),
+                  below,
+                  SettingsCard(
                     child: Column(
                       children: [
-                        TextField(
+                        AppInput(
                           controller: _nameController,
                           textCapitalization: TextCapitalization.words,
-                          decoration: AppDecorations.authInputDecoration(
-                            context,
-                            label: 'Business name',
-                            prefixIcon: AppIcons.business,
-                          ),
+                          labelText: 'Business name',
+                          prefixIcon: Icon(AppIcons.business, color: muted),
                         ),
-                        const SizedBox(height: 16),
-                        TextField(
+                        gap,
+                        AppInput(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                           ],
-                          decoration: AppDecorations.authInputDecoration(
-                            context,
-                            label: 'Phone number',
-                            prefixIcon: AppIcons.phone,
-                          ),
+                          labelText: 'Phone number',
+                          prefixIcon: Icon(AppIcons.phone, color: muted),
                         ),
-                        const SizedBox(height: 16),
+                        gap,
                         AppDropdown<String>(
                           value: _type,
                           isExpanded: true,
                           labelText: 'Business type',
-                          prefixIcon:
-                              const Icon(AppIcons.category, size: 20),
+                          prefixIcon: Icon(AppIcons.category, color: muted),
                           items: [
                             for (final type in typeOptions)
-                              DropdownMenuItem(
-                                value: type,
-                                child: Text(type),
-                              ),
+                              DropdownMenuItem(value: type, child: Text(type)),
                           ],
                           onChanged: (v) => setState(() {
                             _type = v;
@@ -348,40 +343,25 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           }),
                         ),
                         if (isCrateBusiness(_type)) ...[
-                          const SizedBox(height: 8),
-                          SwitchListTile(
+                          SizedBox(height: context.getRSize(8)),
+                          _SwitchRow(
                             value: _tracksEmptyCrates,
                             onChanged: (v) =>
                                 setState(() => _tracksEmptyCrates = v),
-                            activeThumbColor:
-                                Theme.of(context).colorScheme.primary,
-                            activeTrackColor: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.35),
-                            title: Text(
-                              'Track empty crates',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            subtitle: Text(
-                              'Enable to track returnable bottles and crate deposits.',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            contentPadding: EdgeInsets.zero,
+                            title: 'Track empty crates',
+                            subtitle:
+                                'Enable to track returnable bottles and crate deposits.',
                           ),
                         ],
-                        const SizedBox(height: 16),
+                        gap,
                         AppDropdown<String>(
                           value: _currency,
                           isExpanded: true,
                           labelText: 'Currency',
-                          prefixIcon:
-                              const Icon(AppIcons.payments, size: 20),
+                          prefixIcon: Icon(AppIcons.payments, color: muted),
                           items: [
                             for (final code in _currencyCodes)
-                              DropdownMenuItem(
-                                value: code,
-                                child: Text(code),
-                              ),
+                              DropdownMenuItem(value: code, child: Text(code)),
                           ],
                           onChanged: (v) =>
                               setState(() => _currency = v ?? _currency),
@@ -389,15 +369,16 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const SettingsSectionTitle('Tax'),
-                  const SizedBox(height: 16),
-                  GlassyCard(
-                    padding: const EdgeInsets.all(16),
-                    radius: 16,
+                  above,
+                  const SectionHeader(
+                    title: 'Tax',
+                    variant: SectionHeaderVariant.group,
+                  ),
+                  below,
+                  SettingsCard(
                     child: Column(
                       children: [
-                        SwitchListTile(
+                        _SwitchRow(
                           value: _vatEnabled,
                           onChanged: (v) => setState(() {
                             _vatEnabled = v;
@@ -410,25 +391,14 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                               ).ratePercentLabel;
                             }
                           }),
-                          activeThumbColor:
-                              Theme.of(context).colorScheme.primary,
-                          activeTrackColor: Theme.of(
-                            context,
-                          ).colorScheme.primary.withValues(alpha: 0.35),
-                          title: Text(
-                            'Charge VAT',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          subtitle: Text(
-                            'Only enable if your business is registered to '
-                            'charge VAT. It appears on the daily closing.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          contentPadding: EdgeInsets.zero,
+                          title: 'Charge VAT',
+                          subtitle:
+                              'Only enable if your business is registered to '
+                              'charge VAT. It appears on the daily closing.',
                         ),
                         if (_vatEnabled) ...[
-                          const SizedBox(height: 8),
-                          TextField(
+                          SizedBox(height: context.getRSize(8)),
+                          AppInput(
                             controller: _vatRateController,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -438,47 +408,73 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                                 RegExp(r'^\d*\.?\d*'),
                               ),
                             ],
-                            decoration: AppDecorations.authInputDecoration(
-                              context,
-                              label: 'VAT rate (%)',
-                              prefixIcon: AppIcons.divide,
-                            ),
+                            labelText: 'VAT rate (%)',
+                            prefixIcon: Icon(AppIcons.divide, color: muted),
                           ),
                           // #176 — inclusive/exclusive basis (inclusive default).
-                          const SizedBox(height: 8),
-                          SwitchListTile(
+                          SizedBox(height: context.getRSize(8)),
+                          _SwitchRow(
                             value: _vatBasis == VatBasis.inclusive,
                             onChanged: (v) => setState(() {
                               _vatBasis = v
                                   ? VatBasis.inclusive
                                   : VatBasis.exclusive;
                             }),
-                            activeThumbColor:
-                                Theme.of(context).colorScheme.primary,
-                            activeTrackColor: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.35),
-                            title: Text(
-                              'Prices already include VAT',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            subtitle: Text(
-                              'On: your marked prices contain VAT (most shops), '
-                              'so the closing shows the VAT portion within them. '
-                              'Off: VAT is added on top of your prices.',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            contentPadding: EdgeInsets.zero,
+                            title: 'Prices already include VAT',
+                            subtitle:
+                                'On: your marked prices contain VAT (most shops), '
+                                'so the closing shows the VAT portion within them. '
+                                'Off: VAT is added on top of your prices.',
                           ),
                         ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  _SaveButton(saving: _saving, onPressed: _save),
+                  above,
+                  AppButton(
+                    text: 'Save changes',
+                    onPressed: _saving ? null : _save,
+                  ),
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// A switch row inside a settings card: Bold 15 title, Regular 13 muted
+/// subtitle, the primary-coloured [Switch] on the right (48dp tall at least).
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
+    required this.value,
+    required this.onChanged,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      activeThumbColor: t.colorScheme.primary,
+      activeTrackColor: t.colorScheme.primary.withValues(alpha: 0.35),
+      title: Text(
+        title,
+        style: context.boldStyle(15).copyWith(color: t.colorScheme.onSurface),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: context.regularStyle(13).copyWith(color: muted),
+      ),
+      contentPadding: EdgeInsets.zero,
     );
   }
 }
@@ -505,97 +501,79 @@ class _LogoSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
     final hasLogo = logoLocalPath != null || pendingBytes != null;
+    final edge = context.getRSize(80);
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 
     Widget avatar;
     if (pendingBytes != null) {
       avatar = Image.memory(
         pendingBytes!,
-        width: context.getRSize(80),
-        height: context.getRSize(80),
+        width: edge,
+        height: edge,
         fit: BoxFit.cover,
       );
     } else if (logoLocalPath != null) {
       avatar = Image.file(
         File(logoLocalPath!),
-        width: context.getRSize(80),
-        height: context.getRSize(80),
+        width: edge,
+        height: edge,
         fit: BoxFit.cover,
       );
     } else {
       avatar = Icon(
         AppIcons.business,
         size: context.getRSize(40),
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+        color: muted,
       );
     }
 
     return Row(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            width: context.getRSize(80),
-            height: context.getRSize(80),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.3),
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: avatar,
-            ),
+        Container(
+          width: edge,
+          height: edge,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: radius,
+            border: Border.all(color: theme.dividerColor),
           ),
+          child: ClipRRect(borderRadius: radius, child: Center(child: avatar)),
         ),
         SizedBox(width: context.getRSize(16)),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
-                onTap: onPick,
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: context.getRSize(16),
-                    vertical: context.getRSize(10),
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    hasLogo ? 'Change logo' : 'Upload logo',
-                    style: TextStyle(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: context.getRFontSize(14),
-                    ),
-                  ),
-                ),
+              AppButton(
+                text: hasLogo ? 'Change logo' : 'Upload logo',
+                variant: AppButtonVariant.outline,
+                size: AppButtonSize.small,
+                isFullWidth: false,
+                onPressed: onPick,
               ),
               if (onRemove != null) ...[
-                SizedBox(height: context.getRSize(8)),
-                GestureDetector(
-                  onTap: onRemove,
+                SizedBox(height: context.getRSize(4)),
+                TextButton(
+                  onPressed: onRemove,
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                    minimumSize: const Size(0, kMinInteractiveDimension),
+                    padding: EdgeInsets.zero,
+                    alignment: Alignment.centerLeft,
+                  ),
                   child: Text(
                     'Remove logo',
-                    style: TextStyle(
-                      color: theme.colorScheme.error,
-                      fontSize: context.getRFontSize(13),
-                    ),
+                    style: context.semiBoldStyle(13),
                   ),
                 ),
               ],
-              SizedBox(height: context.getRSize(6)),
+              SizedBox(height: context.getRSize(4)),
               Text(
                 'PNG or JPG, max 512×512 px.',
-                style: TextStyle(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  fontSize: context.getRFontSize(11),
-                ),
+                style: context.regularStyle(12).copyWith(color: muted),
               ),
             ],
           ),
@@ -610,33 +588,4 @@ class _LogoSection extends StatelessWidget {
 class _PendingLogo {
   const _PendingLogo(this.bytes);
   final Uint8List bytes;
-}
-
-class _SaveButton extends StatelessWidget {
-  final bool saving;
-  final VoidCallback onPressed;
-  const _SaveButton({required this.saving, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: saving ? null : onPressed,
-      child: Opacity(
-        opacity: saving ? 0.6 : 1,
-        child: Container(
-          height: 54,
-          alignment: Alignment.center,
-          decoration: AppDecorations.primaryGradient(context, radius: 14),
-          child: const Text(
-            'Save changes',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
