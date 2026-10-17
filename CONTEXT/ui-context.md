@@ -696,6 +696,7 @@ Pages behind CEO Settings follow the CEO Settings menu (no mockups). **Restyle o
 - **Width**: list and form pages cap at the raw `kSettingsMaxContentWidth` (720, `settingsGutter`, measured, minimum `getRSize(16)`); the top bar spans the full width. Sheets cap at 640.
 - **Rows and cards**: `SettingsRow` for navigation rows, `SettingsCard` (= `AppDecorations.card`) + `SettingsControlRow` (48 `IconTile`, Bold 16 title, Regular 13 muted subtitle, optional trailing control) for toggles and info.
 - **Profile**: header card (avatar initials in the avatar colour, ExtraBold 20 name, role tag, pills), stat cards (40 `IconTile` in fixed green / purple / primary), `Account Details` card (48dp rows). `profile_ui.dart` is shared with Staff Detail.
+- **Business Info / Appearance / Display / Receipt printer** (PR 2): `SectionHeader` (group) over a `SettingsCard`; fields are `AppInput` / `AppDropdown`, switches are Bold 15 title + Regular 13 muted subtitle rows, Save is a full-width `AppButton`. Appearance cards keep their keys; Display and Appearance mark the active choice with a 2dp outline.
 - **Edit Profile** (`EditProfileSheet.show`): theme sheet, `ScreenHeader`, `AppInput`, 8 hex swatches (48dp targets), `AppButton`; scrolls above the keyboard.
 
 ### App bar

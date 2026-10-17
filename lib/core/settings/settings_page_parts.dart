@@ -185,9 +185,14 @@ class SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: AppDecorations.card(context),
-      child: Padding(
-        padding: padding ?? EdgeInsets.all(context.getRSize(16)),
-        child: child,
+      // A transparent Material so a ListTile / SwitchListTile inside the card
+      // paints its ink on top of the card's fill instead of under it.
+      child: Material(
+        type: MaterialType.transparency,
+        child: Padding(
+          padding: padding ?? EdgeInsets.all(context.getRSize(16)),
+          child: child,
+        ),
       ),
     );
   }

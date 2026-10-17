@@ -540,7 +540,10 @@ class _LogoSection extends StatelessWidget {
             borderRadius: radius,
             border: Border.all(color: theme.dividerColor),
           ),
-          child: ClipRRect(borderRadius: radius, child: Center(child: avatar)),
+          child: ClipRRect(
+            borderRadius: radius,
+            child: Center(child: avatar),
+          ),
         ),
         SizedBox(width: context.getRSize(16)),
         Expanded(
@@ -564,10 +567,7 @@ class _LogoSection extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     alignment: Alignment.centerLeft,
                   ),
-                  child: Text(
-                    'Remove logo',
-                    style: context.semiBoldStyle(13),
-                  ),
+                  child: Text('Remove logo', style: context.semiBoldStyle(13)),
                 ),
               ],
               SizedBox(height: context.getRSize(4)),
