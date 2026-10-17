@@ -91,16 +91,22 @@ class RecordInvoiceSheet extends ConsumerStatefulWidget {
   final String supplierId;
   final String supplierName;
 
+  /// The date the sheet opens on. Null (every app caller) = today; goldens
+  /// pass a fixed date so they don't change with the calendar.
+  final DateTime? initialDate;
+
   const RecordInvoiceSheet({
     super.key,
     required this.supplierId,
     required this.supplierName,
+    this.initialDate,
   });
 
   static void show(
     BuildContext context, {
     required String supplierId,
     required String supplierName,
+    DateTime? initialDate,
   }) {
     showModalBottomSheet(
       context: context,
@@ -109,6 +115,7 @@ class RecordInvoiceSheet extends ConsumerStatefulWidget {
       builder: (_) => RecordInvoiceSheet(
         supplierId: supplierId,
         supplierName: supplierName,
+        initialDate: initialDate,
       ),
     );
   }
@@ -121,7 +128,7 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet> {
   final _amountCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  DateTime _dateReceived = DateTime.now();
+  late DateTime _dateReceived = widget.initialDate ?? DateTime.now();
   bool _saving = false;
 
   @override
@@ -296,12 +303,22 @@ class RecordPaymentSheet extends ConsumerStatefulWidget {
   final String? supplierId;
   final String? supplierName;
 
-  const RecordPaymentSheet({super.key, this.supplierId, this.supplierName});
+  /// The date the sheet opens on. Null (every app caller) = today; goldens
+  /// pass a fixed date so they don't change with the calendar.
+  final DateTime? initialDate;
+
+  const RecordPaymentSheet({
+    super.key,
+    this.supplierId,
+    this.supplierName,
+    this.initialDate,
+  });
 
   static void show(
     BuildContext context, {
     String? supplierId,
     String? supplierName,
+    DateTime? initialDate,
   }) {
     showModalBottomSheet(
       context: context,
@@ -310,6 +327,7 @@ class RecordPaymentSheet extends ConsumerStatefulWidget {
       builder: (_) => RecordPaymentSheet(
         supplierId: supplierId,
         supplierName: supplierName,
+        initialDate: initialDate,
       ),
     );
   }
@@ -323,7 +341,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet> {
   final _refCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String _method = 'cash'; // cash | transfer | pos | other
-  DateTime _paidOn = DateTime.now();
+  late DateTime _paidOn = widget.initialDate ?? DateTime.now();
   PlatformFile? _receipt;
   String? _selectedSupplierId;
   bool _saving = false;

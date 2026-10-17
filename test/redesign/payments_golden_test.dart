@@ -161,6 +161,7 @@ void main() {
             c,
             supplierId: sample.supplierId,
             supplierName: 'Adamu Distribution Ltd',
+            initialDate: DateTime(2026, 3, 14),
           ),
         ),
         (
@@ -169,6 +170,7 @@ void main() {
             c,
             supplierId: sample.supplierId,
             supplierName: 'Adamu Distribution Ltd',
+            initialDate: DateTime(2026, 3, 14),
           ),
         ),
         (
