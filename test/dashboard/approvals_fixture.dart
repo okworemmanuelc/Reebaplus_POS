@@ -2,7 +2,6 @@
 // Sample data only; every date is fixed so a golden never depends on the clock.
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 import '../helpers/screen_harness.dart';
 
