@@ -13,7 +13,6 @@ import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscripti
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/subscription/widgets/subscription_parts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -210,9 +209,7 @@ void main() {
     });
 
     testWidgets('Continue acknowledges this activation', (tester) async {
-      final active = business.copyWith(
-        subscriptionStatus: 'active',
-      );
+      final active = business.copyWith(subscriptionStatus: 'active');
       await pump(tester, ThankYouSubscriptionScreen(business: active));
       final ctx = tester.element(find.byType(ThankYouSubscriptionScreen));
       final svc = ProviderScope.containerOf(
