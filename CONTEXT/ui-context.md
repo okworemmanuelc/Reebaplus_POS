@@ -709,6 +709,8 @@ A pushed screen (Inventory's FAB, Home's quick action) on `AppDecorations.pageBa
 
 **Daily Reconciliation (#413 PR 2):** list = `ReportTopBar` + period `AppDropdown` + flat day cards (`StatusPill` danger for Mismatch, `ChangedSinceReviewBadge`), 720 cap. Detail = raw 960 (`kReconDetailMaxWidth`), cards stacked below 900 measured width and in two columns (first half left, rest right) from 900; the reviewed banner and the breakdown stay full width. Card icons/figures use `AppFixedColors` (info, green, danger, warning); `ChangedSinceReviewBadge` is a warning `TagPill`. Figures and the card set stay exactly as `recon_data.dart` yields them (Hard Rule #8).
 
+**Stock Approvals (#413 PR 3):** `ReportTopBar` + 720 cap. Each request (Quick Sale, crate deposit or refund, stock add/remove) is a flat card: surface fill, hairline, soft shadow, 40 `IconTile` (danger remove, green add, info Quick Sale and refund, purple deposit), Bold 15 title, PENDING `TagPill`, ExtraBold amount in the same fixed colour, `ExpansionTile` details, `AppButton` Reject (outline) + Approve / Confirm (success). The reject-reason pop-up and the crate amount box use `AppInput`; the pop-up is `AlertDialog(scrollable: true)`.
+
 ### Bottom sheets
 
 | Property | Value |
