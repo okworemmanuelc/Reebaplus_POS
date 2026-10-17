@@ -233,7 +233,7 @@ class _ThankYouSubscriptionScreenState
                     );
                   },
                 ),
-                IconTile(
+                const IconTile(
                   icon: AppIcons.premium,
                   tone: IconTileTone.green,
                   size: 88,

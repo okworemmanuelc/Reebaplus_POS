@@ -83,7 +83,7 @@ class _SubscriptionLockedScreenState
       hero: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
+          const Center(
             child: IconTile(
               icon: AppIcons.lock,
               tone: IconTileTone.danger,
