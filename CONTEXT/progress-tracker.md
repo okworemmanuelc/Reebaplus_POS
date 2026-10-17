@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #414: Subscription Locked + Thank You restyle (Wave 2 B, 2026-10-17)
+Branch `feat/redesign-w2-subscription`, worktree `../drinkPosApp-wt-414`. **Restyle only: no write of any kind (subscription columns stay cloud-owned, read-only), no Drift/cloud/sync change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`, `subscription_access.dart` / `subscription_thanks.dart` untouched.**
+- New `lib/features/subscription/widgets/subscription_parts.dart`: `SubscriptionStateFrame` (shared-part candidate): Scaffold on `AppDecorations.pageBackground` (the blurred `AuthBackground` photo is gone), content centred at the raw 720 cap, hero in the middle, actions under it, scrolls when short.
+- Locked: danger `IconTile` lock, ExtraBold title, muted body, danger "trial ended on" line (kept), Subscribe (info pop-up unchanged) + Sign out (ghost). Blocks the app exactly as before.
+- Thank You: green `IconTile` with the pulse ring (the glow shadow is gone), `AppDecorations.card` plan card (price + renews), Continue acknowledges as before.
+- Tests: `test/subscription/subscription_screens_test.dart` (render, Subscribe pop-up, Continue acknowledges, 720 cap, no overflow at 360 @1.3 / 390x844 / 844x390 insets / 800x1280 / 1280x800 light + dark); goldens `test/redesign/subscription_golden_test.dart` (16).
+
 ### Release 2.0 (v2.0.0+10) — Google Play Store Public Release (2026-10-11)
 - **Version Bump**: Bumped version in `pubspec.yaml` to `2.0.0+10` (versionName `2.0`, versionCode `10`).
 - **Release Build**: Generated signed production Android App Bundle (`app-release.aab`, 99.2 MB) at `build/app/outputs/bundle/release/app-release.aab` via `flutter build appbundle --release --build-name=2.0 --build-number=10`.
