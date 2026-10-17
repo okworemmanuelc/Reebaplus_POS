@@ -707,6 +707,8 @@ A pushed screen (Inventory's FAB, Home's quick action) on `AppDecorations.pageBa
 - **Parts**: `ReportCard` (flat `AppDecorations.card`), `ReportHeadlineCard` (40 `IconTile`, muted label, ExtraBold 28 figure in a `FittedBox`, `ReportChip` wrap), `ReportValueRow` (label | value, value scales down, never ellipsises), `ReportHubCard` (48 `IconTile`, Bold 16 title, pending badge in `AppFixedColors.warning` or chevron; keys `reportCardKey`, `report-card-badge-<title>`), `ReportEmpty`.
 - **Colours**: profit / income in `AppFixedColors.green`, loss / owed in `danger`, refunded in `warning`. Never `Colors.*`.
 
+**Daily Reconciliation (#413 PR 2):** list = `ReportTopBar` + period `AppDropdown` + flat day cards (`StatusPill` danger for Mismatch, `ChangedSinceReviewBadge`), 720 cap. Detail = raw 960 (`kReconDetailMaxWidth`), cards stacked below 900 measured width and in two columns (first half left, rest right) from 900; the reviewed banner and the breakdown stay full width. Card icons/figures use `AppFixedColors` (info, green, danger, warning); `ChangedSinceReviewBadge` is a warning `TagPill`. Figures and the card set stay exactly as `recon_data.dart` yields them (Hard Rule #8).
+
 ### Bottom sheets
 
 | Property | Value |
