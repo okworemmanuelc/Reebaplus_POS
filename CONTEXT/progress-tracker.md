@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #440 part 1/2: Staff Management, Staff Detail, Invite Staff restyle (Wave 2 C, 2026-10-17)
+Branch `feat/redesign-w2-staff`, worktree `../drinkPosApp-wt-440`. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.** Every `Gate`, the bare `.contains('staff.…')` write-site re-checks, the role-by-tier order and every write path / confirmation are unchanged.
+- New `lib/features/staff/widgets/staff_parts.dart` (shared-part candidates): `StaffTopBar` (+ optional TabBar bottom), `StaffBackButton`, `staffGutter` / `StaffColumn` (raw 720 or 960 centred column), `StaffListRow`, `StaffInviteCard`, `StaffHeaderCard`, `StaffStatGrid`, `StaffInfoCard` / `StaffInfoRow`, `StaffRoleOptionCard`, `StaffSheetFrame`, role-to-tone mapping.
+- Staff Detail no longer imports `features/profile/widgets/profile_ui.dart` (owned by the Profile issue); its header, stat tiles and Account Details card are local `Staff*` parts.
+- Wide: Staff Management / Invite Staff cap at the raw 720; Staff Detail at a raw 960, header and Account Details side by side from a measured 900.
+- Tests: `test/staff/staff_restyle_test.dart`, `test/helpers/staff_fixture.dart`; goldens `test/redesign/staff_golden_test.dart` (staff_management / staff_detail / invite_staff x 4 sizes x light/dark, staff_stores_sheet x 2 sizes x light/dark).
+
 ### Issue #414: Subscription Locked + Thank You restyle (Wave 2 B, 2026-10-17)
 Branch `feat/redesign-w2-subscription`, worktree `../drinkPosApp-wt-414`. **Restyle only: no write of any kind (subscription columns stay cloud-owned, read-only), no Drift/cloud/sync change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`, `subscription_access.dart` / `subscription_thanks.dart` untouched.**
 - New `lib/features/subscription/widgets/subscription_parts.dart`: `SubscriptionStateFrame` (shared-part candidate): Scaffold on `AppDecorations.pageBackground` (the blurred `AuthBackground` photo is gone), content centred at the raw 720 cap, hero in the middle, actions under it, scrolls when short.

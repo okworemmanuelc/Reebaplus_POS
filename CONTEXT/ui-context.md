@@ -689,6 +689,15 @@ Local parts in `widgets/payments_parts.dart`. **Restyle only: every figure, gate
 - **Transaction History**: period `AppDropdown` (long ranges behind `Gates.seeExtendedDateRanges`), Total In / Out `PaymentsFigureCard`s (FittedBox figures), `SupplierLedgerEntryTile` rows (flat card, 40 `IconTile` green / danger / neutral for a void, Bold 15 name, SemiBold 12 subtitle, ExtraBold 15 signed figure; a void is faded and struck through).
 - **Sheets**: supplier form and Record Invoice / Payment keep the draggable sheet (tap-out kept) on their own Surface with the theme shape; `PaymentsFormSheetLayout` pins header and button when the sheet is at least `getRSize(340)` tall, else scrolls everything; the button lifts by `paymentsSheetKeyboardLift` plus `deviceBottomPadding`. The chooser is a theme sheet (`PaymentsChooserFrame`) with two `SettingsRow`s. The confirm dialog is the theme dialog.
 
+### Staff (`lib/features/staff/`, #440, PRD #346 Wave 2 C)
+
+Local parts in `widgets/staff_parts.dart`. **Restyle only: every gate, write path, confirmation and wording is unchanged.**
+- **Top bar** (`StaffTopBar`, CEO Settings' height rule): solid Surface + hairline + `topBarShadow`, `ScreenHeader` (staff tile; Staff Management keeps its 48dp `MenuButton` only off the rail and a `TabBar` under the header; pushed screens get a 48dp back arrow). No bell (the screens never had one). Never changes on scroll.
+- **Width**: Staff Management and Invite Staff cap at the raw `kSettingsMaxContentWidth` (720, `staffGutter`, minimum gutter `getRSize(16)`); Staff Detail caps at a raw 960 (`kStaffDetailMaxContentWidth`) and puts the header card and Account Details side by side once the measured column is 900 or more. Sheets use Material's 640.
+- **Staff Management**: `AppInput` search (+ `AppDropdown` store filter, side by side when the column is 420 or more, else stacked), `StaffListRow` flat cards (44 initial tile, Bold 15 name, muted email / phone / address, role `TagPill` via `staffRoleTone` CEO warning / Manager info / Cashier green / rest neutral, "You" and "Suspended" pills, last login, chevron only when tappable; faded rows for suspended or a Manager viewing a CEO / Manager), "SUSPENDED" as a group `SectionHeader`. Invites: `StaffInviteCard` (mono code, role tag, three meta lines, danger Revoke).
+- **Staff Detail**: `StaffHeaderCard` (60 gradient initials tile, ExtraBold name, role / Active-Suspended / store pills), `StaffStatGrid` (measured 2 / 3 / 5 columns, fixed-colour `IconTile`s, FittedBox figures), `StaffInfoCard` (Account Details rows, the store row and Permission access still tap), `AppButton` actions behind their own gates. Pop-ups are the theme dialog; the driver-balance pop-up's name box is an `AppInput` in a `scrollable: true` dialog. The Assigned stores sheet is a theme sheet with `StaffSheetFrame`.
+- **Invite Staff**: `AppInput` / `AppDropdown` form, `StaffRoleOptionCard`s (selected = primary border on `primaryTint`), the generated code in a `primaryTint` card in `monoStyle`.
+
 ### App bar
 
 | Property | Value |

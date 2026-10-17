@@ -80,8 +80,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     // businesses' activity on one business's screen.
     final sales = await db.ordersDao.getSalesTotalsForStaff(m.userId);
     final stockCount = await db.stockLedgerDao.countPerformedByStaff(m.userId);
-    final quickSalesCount = await db.quickSaleRequestsDao
-        .countRequestedByStaff(m.userId);
+    final quickSalesCount = await db.quickSaleRequestsDao.countRequestedByStaff(
+      m.userId,
+    );
     final expensesTotalKobo = await db.expensesDao.getTotalRecordedByStaff(
       m.userId,
     );
@@ -120,8 +121,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       return;
     }
     // Owner protection: the original business creator's role is immutable.
-    final targetUser =
-        ref.read(usersByBusinessProvider).valueOrNull?[membership.userId];
+    final targetUser = ref
+        .read(usersByBusinessProvider)
+        .valueOrNull?[membership.userId];
     final ownerId = ref.read(currentBusinessProvider)?.ownerId;
     if (ownerId != null &&
         targetUser?.authUserId != null &&
@@ -243,8 +245,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     }
     // Owner protection: the original business creator cannot be suspended by
     // anyone — including an appointed CEO.
-    final targetUser =
-        ref.read(usersByBusinessProvider).valueOrNull?[membership.userId];
+    final targetUser = ref
+        .read(usersByBusinessProvider)
+        .valueOrNull?[membership.userId];
     final ownerId = ref.read(currentBusinessProvider)?.ownerId;
     if (ownerId != null &&
         targetUser?.authUserId != null &&
@@ -276,9 +279,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: suspending
-                ? TextButton.styleFrom(
-                    foregroundColor: _danger(ctx),
-                  )
+                ? TextButton.styleFrom(foregroundColor: _danger(ctx))
                 : null,
             child: Text(suspending ? 'Suspend' : 'Reactivate'),
           ),
@@ -364,7 +365,10 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         user.authUserId != null &&
         user.authUserId == ownerId) {
       if (mounted) {
-        AppNotification.showError(context, 'You cannot remove the business owner.');
+        AppNotification.showError(
+          context,
+          'You cannot remove the business owner.',
+        );
       }
       return;
     }
@@ -395,9 +399,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(
-              foregroundColor: _danger(ctx),
-            ),
+            style: TextButton.styleFrom(foregroundColor: _danger(ctx)),
             child: const Text('Remove'),
           ),
         ],
@@ -527,9 +529,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 ),
                 TextButton(
                   onPressed: matches ? () => Navigator.pop(ctx, true) : null,
-                  style: TextButton.styleFrom(
-                    foregroundColor: _danger(ctx),
-                  ),
+                  style: TextButton.styleFrom(foregroundColor: _danger(ctx)),
                   child: const Text('Remove anyway'),
                 ),
               ],
@@ -929,9 +929,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       ),
     ];
 
-    if (!widget.readOnly &&
-        role != null &&
-        Gates.manageSettings.allows(ref)) {
+    if (!widget.readOnly && role != null && Gates.manageSettings.allows(ref)) {
       final isCeo = role.slug == 'ceo';
       final overrideCount = isCeo
           ? 0

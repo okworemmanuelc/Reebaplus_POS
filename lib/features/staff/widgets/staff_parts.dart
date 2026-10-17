@@ -546,6 +546,7 @@ class StaffHeaderCard extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.all(context.getRSize(20)),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             StaffInitialTile(
               name: name,
@@ -721,7 +722,10 @@ class StaffInfoRow extends StatelessWidget {
           children: [
             Icon(icon, size: context.getRSize(18), color: muted),
             SizedBox(width: context.getRSize(12)),
-            Text(label, style: context.semiBoldStyle(13).copyWith(color: muted)),
+            Text(
+              label,
+              style: context.semiBoldStyle(13).copyWith(color: muted),
+            ),
             SizedBox(width: context.getRSize(12)),
             Expanded(
               child: Text(
