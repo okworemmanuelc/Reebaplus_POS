@@ -35,8 +35,9 @@ class _NotificationSettingsTileState
   }
 
   Future<void> _refresh() async {
-    final status =
-        await ref.read(pushNotificationServiceProvider).currentPermission();
+    final status = await ref
+        .read(pushNotificationServiceProvider)
+        .currentPermission();
     if (mounted) setState(() => _status = status);
   }
 
@@ -95,7 +96,8 @@ class _NotificationSettingsTileState
     }
     switch (_status!) {
       case PushPermissionStatus.granted:
-        final f = Theme.of(context).extension<AppFixedColors>() ??
+        final f =
+            Theme.of(context).extension<AppFixedColors>() ??
             AppFixedColors.light;
         return AppIcon(
           AppIcons.checkCircle,

@@ -138,8 +138,7 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final fixed =
-        t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final fixed = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     final gutter = context.getRSize(20);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     // One shrink-wrapped scroll view capped at 90% of the screen height (the

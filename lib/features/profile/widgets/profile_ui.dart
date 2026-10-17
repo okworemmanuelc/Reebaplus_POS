@@ -239,7 +239,9 @@ class ProfileStatCard extends StatelessWidget {
             SizedBox(height: context.getRSize(2)),
             Text(
               stat.label,
-              style: context.regularStyle(12).copyWith(color: _subtextOf(context)),
+              style: context
+                  .regularStyle(12)
+                  .copyWith(color: _subtextOf(context)),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
