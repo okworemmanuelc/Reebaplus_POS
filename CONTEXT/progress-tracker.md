@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #411: Payments (Supplier Accounts) restyle (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-payments` off `main` fed219a5, worktree `../drinkPosApp-wt-411`. One PR. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.**
+- New `lib/features/payments/widgets/payments_parts.dart` (shared-part candidates): `PaymentsTopBar`/`paymentsTopBarHeight`, `PaymentsLiveBell`, `PaymentsBackButton`, `paymentsGutter` (720 cap), `PaymentsSupplierRow`, `PaymentsFigureCard`, `PaymentsEmptyMessage`, sheet parts (`paymentsSheetKeyboardLift`, `paymentsSheetDecoration`, `PaymentsSheetHeader`, `PaymentsFormSheetLayout`, `PaymentsSheetFooter`, `PaymentsChooserFrame`, `PaymentsStoreBanner`, `PaymentsReceiptBox`).
+- Supplier Accounts + Transaction History: solid top bar with `ScreenHeader`, 720-capped flat card lists, `SettingsRow` history link, `SectionHeader`; the `_isScrolled` tint is gone. `SupplierLedgerEntryTile` (also used by Supplier Detail) is flat cards with an `IconTile`; the six Supplier Detail ledger goldens were regenerated for it.
+- Sheets: supplier form, Record Invoice, Record Payment keep their draggable sheets and tap-out; they now use the theme sheet shape, a `ScreenHeader`, and lift the button above the keyboard. The Record Activity chooser is a theme sheet of two `SettingsRow`s. Payment method stays an `AppDropdown`. The confirm dialog uses the theme dialog and has no text box.
+- Untouched: the balance sign mapping (wallet: negative = Owed, positive = Credit), `Gates.seeExtendedDateRanges`, the store lock, every write path and signature.
+- Tests: `test/payments/payments_redesign_test.dart` (32), goldens `test/redesign/payments_golden_test.dart` (32).
+
 ### Issue #413 PR 3: Stock Approvals (Wave 2 B, 2026-10-17) - last PR of #413
 Branch `feat/redesign-w2-approvals`, stacked on `feat/redesign-w2-recon` (PR #418). **Restyle only: still Manager/CEO (`Gates.viewApprovals`), crate cards still behind `Gates.confirmCrateDeposit`, approve/reject still through the unchanged DAOs (`adjustStock` path); no figure, write path, Drift/cloud/sync change.**
 - `ReportTopBar` + 720 cap (measured); three flat approval cards (`IconTile`, `TagPill` PENDING, `AppButton`) built on one local `_ApprovalShell` (keyed `Material` kept: surface fill, radius 16, hairline, clip, `ExpansionTile`, so `stock_approvals_screen_test.dart` is unchanged).
