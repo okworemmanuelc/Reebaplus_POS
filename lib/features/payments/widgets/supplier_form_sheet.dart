@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/features/payments/widgets/payments_parts.dart';
 import 'package:drift/drift.dart' show Value;
 
 /// Add or edit a supplier (§21.5). Editing is CEO-only — gate at the caller
@@ -18,7 +19,10 @@ class SupplierFormSheet extends ConsumerStatefulWidget {
 
   const SupplierFormSheet({super.key, this.existing});
 
-  static Future<SupplierData?> show(BuildContext context, {SupplierData? existing}) {
+  static Future<SupplierData?> show(
+    BuildContext context, {
+    SupplierData? existing,
+  }) {
     return showModalBottomSheet<SupplierData>(
       context: context,
       isScrollControlled: true,
@@ -74,10 +78,6 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
     super.dispose();
   }
 
-  Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _border => Theme.of(context).dividerColor;
-
   static String? _orNull(String s) {
     final t = s.trim();
     return t.isEmpty ? null : t;
@@ -87,15 +87,11 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
         title: Text(
           _isEdit ? 'Save Changes?' : 'Save Supplier?',
-          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(
+            ctx,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         content: Text(
           _isEdit
@@ -195,7 +191,9 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
           entityType: 'supplier',
           entityId: id,
         );
-        final created = (await db.catalogDao.getAllSuppliers()).firstWhere((s) => s.id == id);
+        final created = (await db.catalogDao.getAllSuppliers()).firstWhere(
+          (s) => s.id == id,
+        );
         if (mounted) Navigator.pop(context, created);
       }
     } catch (_) {
@@ -210,6 +208,63 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final fields = <Widget>[
+      AppInput(
+        labelText: 'Supplier Name',
+        controller: _nameCtrl,
+        hintText: 'e.g. SABMiller Nigeria',
+        validator: (v) =>
+            (v == null || v.trim().isEmpty) ? 'This field is required' : null,
+      ),
+      SizedBox(height: context.getRSize(16)),
+      AppInput(
+        labelText: 'Phone (optional)',
+        controller: _phoneCtrl,
+        hintText: 'e.g. 08012345678',
+        keyboardType: TextInputType.phone,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      ),
+      SizedBox(height: context.getRSize(16)),
+      AppInput(
+        labelText: 'Email (optional)',
+        controller: _emailCtrl,
+        hintText: 'e.g. sales@supplier.com',
+        keyboardType: TextInputType.emailAddress,
+      ),
+      SizedBox(height: context.getRSize(16)),
+      AppInput(
+        labelText: 'Address (optional)',
+        controller: _addressCtrl,
+        hintText: 'e.g. 123 Industrial Ave',
+      ),
+      SizedBox(height: context.getRSize(16)),
+      AppInput(
+        labelText: 'Bank Account Name (optional)',
+        controller: _bankAcctNameCtrl,
+        hintText: 'e.g. SABMiller Nigeria Ltd',
+      ),
+      SizedBox(height: context.getRSize(16)),
+      AppInput(
+        labelText: 'Account Number (optional)',
+        controller: _bankAcctNumberCtrl,
+        hintText: 'e.g. 0123456789',
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      ),
+      SizedBox(height: context.getRSize(16)),
+      AppInput(
+        labelText: 'Bank (optional)',
+        controller: _bankNameCtrl,
+        hintText: 'e.g. GTBank',
+      ),
+      SizedBox(height: context.getRSize(16)),
+      AppInput(
+        labelText: 'Notes (optional)',
+        controller: _notesCtrl,
+        hintText: 'Any extra details',
+        maxLines: 3,
+      ),
+    ];
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.pop(context),
@@ -223,183 +278,29 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
           return GestureDetector(
             onTap: () {},
             child: Container(
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-              ),
+              key: PaymentsKeys.formSheet,
+              decoration: paymentsSheetDecoration(context),
               child: Form(
                 key: _formKey,
-                child: Column(
-                  children: [
-                    _buildHeader(context),
-                    Expanded(
-                      child: ListView(
-                        controller: scrollController,
-                        padding: EdgeInsets.fromLTRB(
-                          context.getRSize(20),
-                          context.getRSize(10),
-                          context.getRSize(20),
-                          context.getRSize(20),
-                        ),
-                        children: [
-                          AppInput(
-                            labelText: 'Supplier Name',
-                            controller: _nameCtrl,
-                            hintText: 'e.g. SABMiller Nigeria',
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'This field is required'
-                                : null,
-                          ),
-                          SizedBox(height: context.getRSize(16)),
-                          AppInput(
-                            labelText: 'Phone (optional)',
-                            controller: _phoneCtrl,
-                            hintText: 'e.g. 08012345678',
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                          ),
-                          SizedBox(height: context.getRSize(16)),
-                          AppInput(
-                            labelText: 'Email (optional)',
-                            controller: _emailCtrl,
-                            hintText: 'e.g. sales@supplier.com',
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          SizedBox(height: context.getRSize(16)),
-                          AppInput(
-                            labelText: 'Address (optional)',
-                            controller: _addressCtrl,
-                            hintText: 'e.g. 123 Industrial Ave',
-                          ),
-                          SizedBox(height: context.getRSize(16)),
-                          AppInput(
-                            labelText: 'Bank Account Name (optional)',
-                            controller: _bankAcctNameCtrl,
-                            hintText: 'e.g. SABMiller Nigeria Ltd',
-                          ),
-                          SizedBox(height: context.getRSize(16)),
-                          AppInput(
-                            labelText: 'Account Number (optional)',
-                            controller: _bankAcctNumberCtrl,
-                            hintText: 'e.g. 0123456789',
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                          ),
-                          SizedBox(height: context.getRSize(16)),
-                          AppInput(
-                            labelText: 'Bank (optional)',
-                            controller: _bankNameCtrl,
-                            hintText: 'e.g. GTBank',
-                          ),
-                          SizedBox(height: context.getRSize(16)),
-                          AppInput(
-                            labelText: 'Notes (optional)',
-                            controller: _notesCtrl,
-                            hintText: 'Any extra details',
-                            maxLines: 3,
-                          ),
-                        ],
-                      ),
+                child: PaymentsFormSheetLayout(
+                  scrollController: scrollController,
+                  header: PaymentsSheetHeader(
+                    icon: AppIcons.bank,
+                    title: _isEdit ? 'Edit Supplier' : 'Add New Supplier',
+                    subtitle: 'Company & bank details',
+                  ),
+                  fields: fields,
+                  footer: PaymentsSheetFooter(
+                    child: AppButton(
+                      text: _isEdit ? 'Save Changes' : 'Add Supplier',
+                      onPressed: _save,
                     ),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        context.getRSize(20),
-                        context.getRSize(16),
-                        context.getRSize(20),
-                        context.deviceBottomPadding + context.getRSize(16),
-                      ),
-                      child: AppButton(
-                        text: _isEdit ? 'Save Changes' : 'Add Supplier',
-                        onPressed: _save,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(12),
-        context.getRSize(20),
-        0,
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: context.getRSize(40),
-            height: context.getRSize(4),
-            decoration: BoxDecoration(
-              color: _border,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          SizedBox(height: context.getRSize(20)),
-          Row(
-            children: [
-              Container(
-                width: context.getRSize(44),
-                height: context.getRSize(44),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.7),
-                      Theme.of(context).colorScheme.primary,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  AppIcons.bank,
-                  color: Colors.white,
-                  size: context.getRSize(20),
-                ),
-              ),
-              SizedBox(width: context.getRSize(14)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _isEdit ? 'Edit Supplier' : 'Add New Supplier',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(18),
-                        fontWeight: FontWeight.w800,
-                        color: _text,
-                      ),
-                    ),
-                    Text(
-                      'Company & bank details',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(13),
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: context.getRSize(10)),
-        ],
       ),
     );
   }

@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
-import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// The one "changed since review" marker (#174 / #192).
 ///
@@ -13,7 +10,8 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 /// so they are the same widget rather than two hand-rolled pills.
 ///
 /// Neutral WARNING treatment, deliberately not the error red a stock mismatch
-/// gets: history mutating after a review is a "look again", not a fault.
+/// gets: history mutating after a review is a "look again", not a fault. Since
+/// the redesign (#413) it is a [TagPill] in the warning tone.
 class ChangedSinceReviewBadge extends StatelessWidget {
   const ChangedSinceReviewBadge({super.key, required this.label});
 
@@ -23,37 +21,6 @@ class ChangedSinceReviewBadge extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final warn = theme.extension<AppSemanticColors>()!.warning;
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(8),
-        vertical: context.getRSize(4),
-      ),
-      decoration: BoxDecoration(
-        color: warn.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: warn.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(AppIcons.sync, size: 10, color: warn),
-          SizedBox(width: context.getRSize(5)),
-          // Flexible so a long label + amount ("Net cash movement − ₦2,400,000")
-          // shrinks inside its line instead of overflowing it on a narrow phone.
-          Flexible(
-            child: Text(
-              label,
-              style: context.bodySmall.copyWith(
-                color: warn,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      TagPill(label: label, tone: TagPillTone.warning, icon: AppIcons.sync);
 }

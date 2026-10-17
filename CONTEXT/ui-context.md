@@ -680,6 +680,15 @@ Local parts in `lib/features/expenses/widgets/expense_parts.dart`. **Restyle onl
 - **Pop-ups**: Monthly budget and Reject use `AppInput` inside `AlertDialog(scrollable: true)`; Delete is a theme dialog with a danger action.
 - **Add Expense form**: `AppInput` / `AppDropdown` fields, `ActionChip` category suggestions, the receipt picker as a tappable card (danger outline until attached, green after), danger `AppButton` footer with `deviceBottomPadding`.
 
+### Supplier Accounts (`lib/features/payments/`, #411, PRD #346 Wave 2 B)
+
+Local parts in `widgets/payments_parts.dart`. **Restyle only: every figure, gate, balance sign and write path is unchanged.**
+- **Top bar** (`PaymentsTopBar`, Home's height rule): solid Surface + hairline + `topBarShadow`, `ScreenHeader` (payments tile "Supplier Accounts", or receipt tile "Transaction History" with a 48dp back arrow), the live bell, the 48dp `MenuButton` only under 600dp. Never changes on scroll.
+- **Width**: list screens cap at the raw 720 (`paymentsGutter`, measured, minimum gutter `getRSize(16)`). 800 beside the rail is nearly full width; 1280 is 720 centred.
+- **Supplier Accounts**: `SettingsRow` "Transaction history", `SectionHeader` "Suppliers" with "Balances for: store", then a `PaymentsSupplierRow` per supplier (44 bank tile, Bold 15 name, muted contacts, balance Bold 13 in fixed danger "Owed" / green "Credit" / muted "Settled"). Add Supplier stays the `AppFAB`.
+- **Transaction History**: period `AppDropdown` (long ranges behind `Gates.seeExtendedDateRanges`), Total In / Out `PaymentsFigureCard`s (FittedBox figures), `SupplierLedgerEntryTile` rows (flat card, 40 `IconTile` green / danger / neutral for a void, Bold 15 name, SemiBold 12 subtitle, ExtraBold 15 signed figure; a void is faded and struck through).
+- **Sheets**: supplier form and Record Invoice / Payment keep the draggable sheet (tap-out kept) on their own Surface with the theme shape; `PaymentsFormSheetLayout` pins header and button when the sheet is at least `getRSize(340)` tall, else scrolls everything; the button lifts by `paymentsSheetKeyboardLift` plus `deviceBottomPadding`. The chooser is a theme sheet (`PaymentsChooserFrame`) with two `SettingsRow`s. The confirm dialog is the theme dialog.
+
 ### App bar
 
 | Property | Value |
@@ -708,6 +717,18 @@ Local parts in `lib/features/expenses/widgets/expense_parts.dart`. **Restyle onl
 | Short windows | Under 560dp of height (after insets, measured from the drawer's own constraints) the header scrolls with the list; the footer stays pinned |
 | Bottom inset | The footer adds `deviceBottomPadding` minus however far the drawer stops short of the screen's bottom (under 600dp on a tab root the drawer ends at the bottom bar, which already clears the inset) |
 | Nav list | Permission-gated; items not permitted to the current role are omitted entirely (hide-don't-block) |
+
+### Dashboard reports (`lib/features/dashboard/screens/` + `widgets/report_parts.dart`, #413 PR 1)
+
+**Restyle only: every figure comes from the unchanged `recon_data.dart` / `report_revenue.dart`; gates (`profitReportEntry`, `seeReportCostPrices`, `crateDepositsReport`, `supplierAccountsReport`, `viewApprovals`, `dailyReconciliation`) are untouched.**
+- **Top bar** (`ReportTopBar`, height `reportTopBarHeight` = CEO Settings' rule): solid Surface + hairline + `topBarShadow`, `ScreenHeader` with a 48dp `ReportBackButton` (`maybePop`), the report's tile, title, the active store (Sales Detail: the period) and 48dp `ReportBarAction`s (Export CSV). No scroll-reactive colour.
+- **Width**: list screens (hub, Sales Detail, Profit, Crate Deposits, Supplier Accounts) cap at the raw 720 (`reportGutter`, measured, minimum `getRSize(16)`); the top bar stays full width.
+- **Parts**: `ReportCard` (flat `AppDecorations.card`), `ReportHeadlineCard` (40 `IconTile`, muted label, ExtraBold 28 figure in a `FittedBox`, `ReportChip` wrap), `ReportValueRow` (label | value, value scales down, never ellipsises), `ReportHubCard` (48 `IconTile`, Bold 16 title, pending badge in `AppFixedColors.warning` or chevron; keys `reportCardKey`, `report-card-badge-<title>`), `ReportEmpty`.
+- **Colours**: profit / income in `AppFixedColors.green`, loss / owed in `danger`, refunded in `warning`. Never `Colors.*`.
+
+**Daily Reconciliation (#413 PR 2):** list = `ReportTopBar` + period `AppDropdown` + flat day cards (`StatusPill` danger for Mismatch, `ChangedSinceReviewBadge`), 720 cap. Detail = raw 960 (`kReconDetailMaxWidth`), cards stacked below 900 measured width and in two columns (first half left, rest right) from 900; the reviewed banner and the breakdown stay full width. Card icons/figures use `AppFixedColors` (info, green, danger, warning); `ChangedSinceReviewBadge` is a warning `TagPill`. Figures and the card set stay exactly as `recon_data.dart` yields them (Hard Rule #8).
+
+**Stock Approvals (#413 PR 3):** `ReportTopBar` + 720 cap. Each request (Quick Sale, crate deposit or refund, stock add/remove) is a flat card: surface fill, hairline, soft shadow, 40 `IconTile` (danger remove, green add, info Quick Sale and refund, purple deposit), Bold 15 title, PENDING `TagPill`, ExtraBold amount in the same fixed colour, `ExpansionTile` details, `AppButton` Reject (outline) + Approve / Confirm (success). The reject-reason pop-up and the crate amount box use `AppInput`; the pop-up is `AlertDialog(scrollable: true)`.
 
 ### Bottom sheets
 

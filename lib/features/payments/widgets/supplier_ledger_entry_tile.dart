@@ -3,10 +3,13 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// §21.10 — one supplier ledger row (invoice / payment / void). Invoices are
 /// red/negative, payments green/positive, voids muted with strikethrough.
@@ -61,14 +64,17 @@ class SupplierLedgerEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).colorScheme.onSurface;
-    final subtext =
-        Theme.of(context).textTheme.bodySmall?.color ??
-        Theme.of(context).iconTheme.color!;
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final text = t.colorScheme.onSurface;
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
 
     final isVoided = entry.voidedAt != null;
     final credit = entry.signedAmountKobo >= 0;
-    final color = isVoided ? subtext : (credit ? success : danger);
+    final tone = isVoided
+        ? IconTileTone.neutral
+        : (credit ? IconTileTone.green : IconTileTone.danger);
+    final color = isVoided ? subtext : (credit ? f.green : f.danger);
     final sign = entry.signedAmountKobo < 0 ? '-' : '+';
     final hasReceipt = (entry.receiptPath ?? '').isNotEmpty;
 
@@ -83,85 +89,87 @@ class SupplierLedgerEntryTile extends StatelessWidget {
       if ((storeName ?? '').isNotEmpty) storeName!,
     ].join(' • ');
 
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
     return Opacity(
       opacity: isVoided ? 0.55 : 1,
-      child: GlassyCard(
-        margin: EdgeInsets.only(bottom: context.getRSize(12)),
-        radius: 16,
-        padding: EdgeInsets.zero,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: EdgeInsets.all(context.getRSize(16)),
-            child: Row(
-              children: [
-                Container(
-                  width: context.getRSize(40),
-                  height: context.getRSize(40),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(_icon, color: color, size: context.getRSize(16)),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: context.getRSize(12)),
+        child: DecoratedBox(
+          decoration: AppDecorations.card(context),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: radius,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: kMinInteractiveDimension,
                 ),
-                SizedBox(width: context.getRSize(14)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                child: Padding(
+                  padding: EdgeInsets.all(context.getRSize(14)),
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              supplierName ?? _friendlyRefType,
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(15),
-                                fontWeight: FontWeight.bold,
-                                color: text,
-                                decoration: isVoided
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                              ),
-                              maxLines: 1,
+                      IconTile(icon: _icon, tone: tone, size: 40),
+                      SizedBox(width: context.getRSize(12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    supplierName ?? _friendlyRefType,
+                                    style: context
+                                        .boldStyle(15)
+                                        .copyWith(
+                                          color: text,
+                                          decoration: isVoided
+                                              ? TextDecoration.lineThrough
+                                              : null,
+                                        ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (hasReceipt) ...[
+                                  SizedBox(width: context.getRSize(6)),
+                                  AppIcon(
+                                    AppIcons.attachment,
+                                    size: context.getRSize(14),
+                                    color: subtext,
+                                  ),
+                                ],
+                              ],
+                            ),
+                            SizedBox(height: context.getRSize(4)),
+                            Text(
+                              subtitle,
+                              style: context
+                                  .semiBoldStyle(12)
+                                  .copyWith(color: subtext),
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          if (hasReceipt) ...[
-                            SizedBox(width: context.getRSize(6)),
-                            Icon(
-                              AppIcons.attachment,
-                              size: context.getRSize(11),
-                              color: subtext,
-                            ),
                           ],
-                        ],
-                      ),
-                      SizedBox(height: context.getRSize(4)),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(12),
-                          color: subtext,
-                          fontWeight: FontWeight.w600,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(width: context.getRSize(8)),
+                      Text(
+                        '$sign${formatCurrency(entry.amountKobo / 100)}',
+                        style: context
+                            .extraBoldStyle(15)
+                            .copyWith(
+                              color: color,
+                              decoration: isVoided
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
                       ),
                     ],
                   ),
                 ),
-                SizedBox(width: context.getRSize(8)),
-                Text(
-                  '$sign${formatCurrency(entry.amountKobo / 100)}',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(15),
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                    decoration: isVoided ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

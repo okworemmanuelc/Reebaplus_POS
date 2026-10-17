@@ -14,6 +14,35 @@ Branch `feat/redesign-w2-expenses`, worktree `../drinkPosApp-wt-412`. **Restyle 
 - Add Expense: `ScreenHeader` top bar with a 48dp back arrow, 720 form cap, same fields (category chips, payment dropdown, date field, receipt card); the date picker now inherits the theme.
 - Tests: `test/expenses/expenses_restyle_test.dart`; goldens `expenses_*` / `add_expense_*` (4 sizes x light/dark, fixed March 2026 dates via a Custom period; the form golden is Edit mode so its date is fixed).
 
+### Issue #411: Payments (Supplier Accounts) restyle (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-payments` off `main` fed219a5, worktree `../drinkPosApp-wt-411`. One PR. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.**
+- New `lib/features/payments/widgets/payments_parts.dart` (shared-part candidates): `PaymentsTopBar`/`paymentsTopBarHeight`, `PaymentsLiveBell`, `PaymentsBackButton`, `paymentsGutter` (720 cap), `PaymentsSupplierRow`, `PaymentsFigureCard`, `PaymentsEmptyMessage`, sheet parts (`paymentsSheetKeyboardLift`, `paymentsSheetDecoration`, `PaymentsSheetHeader`, `PaymentsFormSheetLayout`, `PaymentsSheetFooter`, `PaymentsChooserFrame`, `PaymentsStoreBanner`, `PaymentsReceiptBox`).
+- Supplier Accounts + Transaction History: solid top bar with `ScreenHeader`, 720-capped flat card lists, `SettingsRow` history link, `SectionHeader`; the `_isScrolled` tint is gone. `SupplierLedgerEntryTile` (also used by Supplier Detail) is flat cards with an `IconTile`; the six Supplier Detail ledger goldens were regenerated for it.
+- Sheets: supplier form, Record Invoice, Record Payment keep their draggable sheets and tap-out; they now use the theme sheet shape, a `ScreenHeader`, and lift the button above the keyboard. The Record Activity chooser is a theme sheet of two `SettingsRow`s. Payment method stays an `AppDropdown`. The confirm dialog uses the theme dialog and has no text box.
+- Untouched: the balance sign mapping (wallet: negative = Owed, positive = Credit), `Gates.seeExtendedDateRanges`, the store lock, every write path and signature.
+- Tests: `test/payments/payments_redesign_test.dart` (32), goldens `test/redesign/payments_golden_test.dart` (32).
+
+### Issue #413 PR 3: Stock Approvals (Wave 2 B, 2026-10-17) - last PR of #413
+Branch `feat/redesign-w2-approvals`, stacked on `feat/redesign-w2-recon` (PR #418). **Restyle only: still Manager/CEO (`Gates.viewApprovals`), crate cards still behind `Gates.confirmCrateDeposit`, approve/reject still through the unchanged DAOs (`adjustStock` path); no figure, write path, Drift/cloud/sync change.**
+- `ReportTopBar` + 720 cap (measured); three flat approval cards (`IconTile`, `TagPill` PENDING, `AppButton`) built on one local `_ApprovalShell` (keyed `Material` kept: surface fill, radius 16, hairline, clip, `ExpansionTile`, so `stock_approvals_screen_test.dart` is unchanged).
+- Colours: amber -> `warning`, blue/teal -> `info`, indigo -> `purple`, red -> `danger`, green -> `green` (no new colours).
+- Pop-ups: reject-reason `AlertDialog` (`scrollable: true`) and the crate-deposit amount box now use `AppInput`; `AppInput` gained an optional `textCapitalization` (default none) so the reason keeps sentence caps.
+- Tests: `test/dashboard/stock_approvals_redesign_test.dart` (keyboard-up at 360x640 and 390x844 @1.15); goldens `test/redesign/stock_approvals_golden_test.dart` (8 images).
+
+### Issue #413 PR 2: Daily Reconciliation list + detail + changed-since-review badge (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-recon`, stacked on `feat/redesign-w2-reports` (PR #415). **Restyle only: `recon_data.dart` untouched; every figure and card order unchanged; no cash balance (Hard Rule #8); no gate, write path, Drift/cloud/sync change.**
+- List: `ReportTopBar`, period `AppDropdown` (still `showDateRangePicker` for Custom, explicit item styles), day cards with `StatusPill` (Mismatch) and the badge, 720 raw cap, Export CSV kept.
+- Detail: raw 960 column; cards in two columns (reading order kept) when the measured width is >= 900; Colors.blueAccent/redAccent, semantic and `colorScheme.error` replaced by `AppFixedColors`.
+- `ChangedSinceReviewBadge` is now a warning `TagPill` (same label, same two call sites).
+- Tests: `test/dashboard/recon_screens_redesign_test.dart`; goldens `test/redesign/recon_golden_test.dart` (16 images).
+
+### Issue #413 PR 1: Dashboard reports restyle, hub + Sales Detail + Profit + Crate Deposits + Supplier Accounts (Wave 2 B, 2026-10-16)
+Branch `feat/redesign-w2-reports`, worktree `../drinkPosApp-wt-413`. **Restyle only: no figure, gate, write path, Drift/cloud/sync change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.** PR 2 (Daily Reconciliation list + detail) and PR 3 (Stock Approvals) follow.
+- New `dashboard/widgets/report_parts.dart` (local; shared-part candidates `ReportTopBar` and the figure / row / empty parts): top bar, 48dp back and export, `reportGutter` (720 list cap, measured), `ReportHeadlineCard`, `ReportChip`, `ReportValueRow`, `ReportHubCard`, `ReportEmpty`.
+- Hub is now a single 720-capped column of cards (was a 220dp-extent grid); Profit's period dropdown moved from the app bar into its own row.
+- Hard-coded colours (`0xFF22C55E`, `Colors.orange/green`, `colors.dart` danger/success) replaced by `AppFixedColors`.
+- Tests: `test/dashboard/report_screens_redesign_test.dart`; goldens `test/redesign/reports_golden_test.dart` (40 images).
+
 ### Release 2.0 (v2.0.0+10) — Google Play Store Public Release (2026-10-11)
 - **Version Bump**: Bumped version in `pubspec.yaml` to `2.0.0+10` (versionName `2.0`, versionCode `10`).
 - **Release Build**: Generated signed production Android App Bundle (`app-release.aab`, 99.2 MB) at `build/app/outputs/bundle/release/app-release.aab` via `flutter build appbundle --release --build-name=2.0 --build-number=10`.

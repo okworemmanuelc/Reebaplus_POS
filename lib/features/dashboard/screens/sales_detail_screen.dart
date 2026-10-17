@@ -7,7 +7,11 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/report_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 
 /// Shows when the user taps "Total Sales" or "Net Profit" on the dashboard.
@@ -158,7 +162,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
     ); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
 
     final rows = _buildRows();
 
@@ -181,121 +185,106 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         : totalRevenue;
     final headerLabel = isProfitMode ? 'Net Profit' : 'Total Sales';
     final headerColor = isProfitMode && totalProfit != null
-        ? (totalProfit >= 0 ? const Color(0xFF22C55E) : colorScheme.error)
+        ? (totalProfit >= 0 ? f.green : f.danger)
         : colorScheme.primary;
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: colorScheme.surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            AppIcons.arrowBackIosNew,
-            size: 18,
-            color: colorScheme.onSurface,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$headerLabel Breakdown',
-              style: textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: colorScheme.onSurface,
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: ReportTopBar(
+          key: ReportKeys.topBar,
+          height: reportTopBarHeight(context),
+          header: ScreenHeader(
+            leading: const ReportBackButton(),
+            icon: isProfitMode ? AppIcons.analytics : AppIcons.naira,
+            title: '$headerLabel Breakdown',
+            subtitle: widget.period,
+            actions: [
+              ReportBarAction(
+                key: ReportKeys.export,
+                icon: AppIcons.fileCsv,
+                tooltip: 'Export CSV',
+                onPressed: rows.isEmpty ? null : _exportCsv,
               ),
-            ),
-            Text(
-              widget.period,
-              style: textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Export CSV',
-            icon: Icon(
-              AppIcons.fileCsv,
-              size: 18,
-              color: colorScheme.onSurface,
-            ),
-            onPressed: rows.isEmpty ? null : _exportCsv,
+            ],
           ),
-        ],
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : rows.isEmpty
+            ? _buildEmpty(context)
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final gutter = reportGutter(context, constraints.maxWidth);
+                  final showProfit = isProfitMode && hasProfit;
+                  return CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          context.getRSize(16),
+                          gutter,
+                          0,
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          // ── Summary card at the top ──────────────────
+                          child: _buildSummaryCard(
+                            context,
+                            label: headerLabel,
+                            value: headerValue,
+                            color: headerColor,
+                            rowCount: rows.length,
+                            totalRevenue: totalRevenue,
+                            totalProfit: totalProfit,
+                            discounts: discounts,
+                            isProfitMode: isProfitMode,
+                          ),
+                        ),
+                      ),
+                      // ── Table header ─────────────────────────────────
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          context.getRSize(8),
+                          gutter,
+                          context.getRSize(4),
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          child: _buildTableHeader(
+                            context,
+                            showProfit: showProfit,
+                          ),
+                        ),
+                      ),
+                      // ── Rows ─────────────────────────────────────────
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          0,
+                          gutter,
+                          context.getRSize(16) + context.deviceBottomPadding,
+                        ),
+                        sliver: SliverList.separated(
+                          itemCount: rows.length,
+                          separatorBuilder: (_, _) =>
+                              SizedBox(height: context.getRSize(8)),
+                          itemBuilder: (ctx, idx) =>
+                              _buildRow(ctx, rows[idx], showProfit: showProfit),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : rows.isEmpty
-          ? _buildEmpty(context)
-          : Column(
-              children: [
-                // ── Summary card at the top ──────────────────────────────
-                _buildSummaryCard(
-                  context,
-                  label: headerLabel,
-                  value: headerValue,
-                  color: headerColor,
-                  rowCount: rows.length,
-                  totalRevenue: totalRevenue,
-                  totalProfit: totalProfit,
-                  discounts: discounts,
-                  isProfitMode: isProfitMode,
-                ),
-                // ── Table header ─────────────────────────────────────────
-                _buildTableHeader(
-                  context,
-                  showProfit: isProfitMode && hasProfit,
-                ),
-                const Divider(height: 1),
-                // ── Rows ─────────────────────────────────────────────────
-                Expanded(
-                  child: ListView.separated(
-                    padding: EdgeInsets.only(
-                      bottom: context.deviceBottomPadding,
-                    ),
-                    itemCount: rows.length,
-                    separatorBuilder: (_, __) =>
-                        Divider(height: 1, color: theme.dividerColor),
-                    itemBuilder: (ctx, idx) => _buildRow(
-                      ctx,
-                      rows[idx],
-                      showProfit: isProfitMode && hasProfit,
-                      isEven: idx.isEven,
-                    ),
-                  ),
-                ),
-              ],
-            ),
     );
   }
 
   Widget _buildEmpty(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            AppIcons.analytics,
-            size: 48,
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.2),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No sales data for this period',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.4),
-            ),
-          ),
-        ],
-      ),
+    return const ReportEmpty(
+      icon: AppIcons.analytics,
+      message: 'No sales data for this period',
     );
   }
 
@@ -310,106 +299,36 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
     required double discounts,
     required bool isProfitMode,
   }) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      margin: EdgeInsets.all(context.spacingM),
-      padding: EdgeInsets.all(context.spacingM),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isProfitMode
-                    ? AppIcons.analytics
-                    : AppIcons.naira,
-                color: color,
-                size: context.getRSize(18),
-              ),
-              SizedBox(width: context.getRSize(8)),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: context.getRSize(8)),
-          Text(
-            formatCurrency(value),
-            style: TextStyle(
-              fontSize: context.getRFontSize(28),
-              fontWeight: FontWeight.w900,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          SizedBox(height: context.getRSize(4)),
-          Wrap(
-            spacing: context.getRSize(8),
-            runSpacing: context.getRSize(4),
-            children: [
-              _chip(context, '$rowCount item${rowCount == 1 ? '' : 's'} sold'),
-              if (isProfitMode && totalProfit != null)
-                _chip(context, 'Revenue: ${formatCurrency(totalRevenue)}'),
-              // #195 — the order-level discount that the per-item rows below
-              // cannot show. Without it the rows would look like they don't add
-              // up to the headline.
-              if (discounts != 0)
-                _chip(context, 'Less discounts: ${formatCurrency(discounts)}'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(BuildContext context, String text) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(10),
-        vertical: context.getRSize(4),
-      ),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: context.getRFontSize(11),
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+    return ReportHeadlineCard(
+      icon: isProfitMode ? AppIcons.analytics : AppIcons.naira,
+      tone: isProfitMode ? IconTileTone.green : IconTileTone.info,
+      label: label,
+      figure: formatCurrency(value),
+      figureColor: color,
+      chips: [
+        ReportChip('$rowCount item${rowCount == 1 ? '' : 's'} sold'),
+        if (isProfitMode && totalProfit != null)
+          ReportChip('Revenue: ${formatCurrency(totalRevenue)}'),
+        // #195 — the order-level discount that the per-item rows below
+        // cannot show. Without it the rows would look like they don't add
+        // up to the headline.
+        if (discounts != 0)
+          ReportChip('Less discounts: ${formatCurrency(discounts)}'),
+      ],
     );
   }
 
   Widget _buildTableHeader(BuildContext context, {required bool showProfit}) {
-    final subtext = Theme.of(
-      context,
-    ).colorScheme.onSurface.withValues(alpha: 0.45);
-    final style = TextStyle(
-      fontSize: context.getRFontSize(11),
-      fontWeight: FontWeight.w700,
-      color: subtext,
-      letterSpacing: 0.5,
-    );
-
-    return Container(
-      color: Theme.of(context).colorScheme.surface,
-      padding: EdgeInsets.symmetric(
-        horizontal: context.spacingM,
-        vertical: context.getRSize(10),
-      ),
+    final muted =
+        Theme.of(context).textTheme.bodySmall?.color ??
+        Theme.of(context).colorScheme.onSurface;
+    final style = context
+        .boldStyle(11)
+        .copyWith(color: muted, letterSpacing: 0.5);
+    // Same inset as a row card (1 border + 14 padding), so the labels sit over
+    // their columns.
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: context.getRSize(15)),
       child: Row(
         children: [
           Expanded(flex: 3, child: Text('PRODUCT', style: style)),
@@ -418,12 +337,12 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
             child: Text('QTY', style: style, textAlign: TextAlign.center),
           ),
           SizedBox(
-            width: context.getRSize(80),
+            width: context.getRSize(88),
             child: Text('REVENUE', style: style, textAlign: TextAlign.right),
           ),
           if (showProfit)
             SizedBox(
-              width: context.getRSize(80),
+              width: context.getRSize(88),
               child: Text('PROFIT', style: style, textAlign: TextAlign.right),
             ),
         ],
@@ -435,94 +354,87 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
     BuildContext context,
     _SaleRow row, {
     required bool showProfit,
-    required bool isEven,
   }) {
     final theme = Theme.of(context);
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
     final profitColor = row.profit == null
-        ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-        : (row.profit! >= 0
-              ? const Color(0xFF22C55E)
-              : theme.colorScheme.error);
+        ? muted
+        : (row.profit! >= 0 ? f.green : f.danger);
 
-    return Container(
-      color: isEven
-          ? Colors.transparent
-          : theme.colorScheme.onSurface.withValues(alpha: 0.02),
-      padding: EdgeInsets.symmetric(
-        horizontal: context.spacingM,
-        vertical: context.getRSize(10),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Product + Date
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  row.productName,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
+    return ReportCard(
+      padding: EdgeInsets.all(context.getRSize(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 34),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Product + Date
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    row.productName,
+                    style: context
+                        .boldStyle(14)
+                        .copyWith(color: theme.colorScheme.onSurface),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: context.getRSize(2)),
-                Text(
-                  DateFormat('dd MMM, HH:mm').format(row.date),
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(11),
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  Text(
+                    DateFormat('dd MMM, HH:mm').format(row.date),
+                    style: context.regularStyle(12).copyWith(color: muted),
                   ),
-                ),
-              ],
-            ),
-          ),
-          // Qty
-          SizedBox(
-            width: context.getRSize(50),
-            child: Text(
-              '×${row.qty}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.w700,
-                color: theme.colorScheme.primary,
+                ],
               ),
             ),
-          ),
-          // Revenue
-          SizedBox(
-            width: context.getRSize(80),
-            child: Text(
-              formatCurrency(row.revenue),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-          ),
-          // Profit/Loss
-          if (showProfit)
+            // Qty
             SizedBox(
-              width: context.getRSize(80),
+              width: context.getRSize(50),
               child: Text(
-                row.profit != null ? formatCurrency(row.profit!) : '—',
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  fontWeight: FontWeight.w700,
-                  color: profitColor,
+                '×${row.qty}',
+                textAlign: TextAlign.center,
+                style: context
+                    .boldStyle(13)
+                    .copyWith(color: theme.colorScheme.primary),
+              ),
+            ),
+            // Revenue
+            SizedBox(
+              width: context.getRSize(88),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  formatCurrency(row.revenue),
+                  maxLines: 1,
+                  style: context
+                      .semiBoldStyle(13)
+                      .copyWith(color: theme.colorScheme.onSurface),
                 ),
               ),
             ),
-        ],
+            // Profit/Loss
+            if (showProfit)
+              SizedBox(
+                width: context.getRSize(88),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    row.profit != null ? formatCurrency(row.profit!) : '—',
+                    maxLines: 1,
+                    style: context
+                        .extraBoldStyle(13)
+                        .copyWith(color: profitColor),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
