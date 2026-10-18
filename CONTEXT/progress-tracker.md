@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #442: Security, Subscription page, Activity Logs, Delete Business (Wave 2 C, PR 3 of 3, 2026-10-17)
+Branch `feat/redesign-w2-settings-3` (based on PR 2's branch). **Restyle only: Subscription stays read-only (the Subscribe / Renew button still just opens the "coming soon" pop-up; no write to the cloud-owned columns), Delete Business keeps every confirmation step (PIN re-entry, same-user check, `delete_business` RPC via `deleteBusinessAndAccount`), the `settings.manage` / `activity_logs.view` / `settings.delete_business` gates, the auto-lock and biometric writes and the per-role `activity_logs.view` grant are unchanged.**
+- Security: `SettingsCard` + `SettingsControlRow` (auto-lock with 1/3/5/10/15/30 min `ChoiceChip`s, re-tap turns it off; biometric switch).
+- Subscription page: plan card with a fixed-tone `TagPill` (ACTIVE green, FREE TRIAL warning, TRIAL ENDED / INACTIVE danger), 48dp detail row, Subscribe / Renew `AppButton`; the local `_amber` / `_green` / `_red` colours are gone.
+- Activity Logs access: one `SettingsCard` + `SettingsControlRow` + `Switch` per role (CEO locked on).
+- Activity Logs (drawer root): `SettingsPageBar` with the `MenuButton` (under 600dp) + `NotificationBell`, 720 list cap, log rows are `AppDecorations.card` + `IconTile` (green sale / warning stock / purple customer / info) + a `TagPill` store name. The store name still comes from the static `kStores` list (shows "N/A" for a real store): kept, found not changed.
+- Delete Business: danger banner (`AppFixedColors` danger tint / outline) + danger `AppButton`.
+- Tests: `test/settings/settings_leftovers_pr3_test.dart` (render, gates, Security preset saves, Subscribe pop-up is info only and the business row is untouched, no overflow for all five screens at the five sizes), goldens `test/redesign/settings_leftovers_pr3_golden_test.dart` (`security_*`, `subscription_settings_*`, `activity_logs_access_*`, `activity_log_*`, `delete_business_*`; fixed 2026 dates, never relative to now).
+
 ### Issue #442: Business Info, Appearance, Display, Receipt printer (Wave 2 C, PR 2 of 3, 2026-10-17)
 Branch `feat/redesign-w2-settings-2` (based on PR 1's branch). **Restyle only: the business info save path (incl. the explicit `lastUpdatedAt` bump inside `businessesDao.updateInfo`), VAT opt-in OFF by default + storage keys, `settings.manage` gates, the appearance write and the paired-printer list (58/80, last used first) are unchanged.**
 - Business Info: `SettingsPageScaffold` + `SectionHeader` groups (Logo / Business / Tax) + `SettingsCard`; `AppInput` / `AppDropdown` / `AppButton`; VAT and crate switches are `_SwitchRow`s (Bold 15 / Regular 13); logo pick is an outline `AppButton`, "Remove logo" a 48dp text button. 720 form cap.
