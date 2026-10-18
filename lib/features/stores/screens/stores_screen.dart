@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -12,17 +14,17 @@ import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
-import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/stores/screens/store_details_screen.dart';
+import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
 
 class StoresScreen extends ConsumerStatefulWidget {
   const StoresScreen({super.key});
@@ -32,13 +34,6 @@ class StoresScreen extends ConsumerStatefulWidget {
 }
 
 class _StoresScreenState extends ConsumerState<StoresScreen> {
-  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _subtext =>
-      Theme.of(context).textTheme.bodySmall?.color ??
-      Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
   List<StoreData> _stores = [];
   StreamSubscription<List<StoreData>>? _storesSub;
 
@@ -61,6 +56,53 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     super.dispose();
   }
 
+  /// The name, address and country fields shared by the Add and Edit sheets.
+  List<Widget> _formFields(
+    BuildContext ctx, {
+    required TextEditingController nameCtrl,
+    required TextEditingController addressCtrl,
+    required String nameHint,
+    required String countryValue,
+    required ValueChanged<String> onCountry,
+  }) {
+    return [
+      AppInput(
+        controller: nameCtrl,
+        labelText: 'Store Name',
+        hintText: nameHint,
+        prefixIcon: const Icon(AppIcons.store, size: 20),
+        validator: (v) =>
+            v == null || v.trim().isEmpty ? 'Name is required' : null,
+      ),
+      SizedBox(height: ctx.getRSize(16)),
+      AppInput(
+        controller: addressCtrl,
+        labelText: 'Street Address',
+        hintText: 'e.g. 14 Market Road',
+        prefixIcon: const Icon(AppIcons.map, size: 20),
+        validator: (v) =>
+            v == null || v.trim().isEmpty ? 'Street Address is required' : null,
+      ),
+      SizedBox(height: ctx.getRSize(16)),
+      StoresAutocompleteField(
+        label: 'Country',
+        icon: AppIcons.public,
+        initial: countryValue,
+        options: kCountries,
+        onChanged: onCountry,
+        fieldBuilder: (c, controller, focusNode, onSubmitted) => AppInput(
+          controller: controller,
+          focusNode: focusNode,
+          textCapitalization: TextCapitalization.words,
+          onChanged: onCountry,
+          onFieldSubmitted: (_) => onSubmitted(),
+          prefixIcon: const Icon(AppIcons.public, size: 20),
+        ),
+      ),
+      SizedBox(height: ctx.getRSize(24)),
+    ];
+  }
+
   // ── Add Store ──────────────────────────────────────────────────────────
   void _showAddSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
@@ -69,165 +111,76 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     bool saving = false;
     String countryValue = kDefaultCountry;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
+    showStoresSheet<void>(
+      context,
+      (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
-            child: Container(
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-              ),
-              padding: EdgeInsets.fromLTRB(
-                rSize(ctx, 24),
-                rSize(ctx, 20),
-                rSize(ctx, 24),
-                rSize(ctx, 32),
-              ),
-              child: SpotlightTarget(
-                id: SpotlightTargetId.createStoreForm,
-                child: Form(
-                  key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Handle
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: _border,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: rSize(ctx, 20)),
-
-                      // Title
-                      Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.all(rSize(ctx, 10)),
-                            decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              AppIcons.store,
-                              color: Theme.of(context).colorScheme.primary,
-                              size: rSize(ctx, 18),
-                            ),
-                          ),
-                          SizedBox(width: rSize(ctx, 12)),
-                          Text(
-                            'New Store',
-                            style: TextStyle(
-                              fontSize: rFontSize(ctx, 18),
-                              fontWeight: FontWeight.bold,
-                              color: _text,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: rSize(ctx, 24)),
-
-                      AppInput(
-                        controller: nameCtrl,
-                        labelText: 'Store Name',
-                        hintText: 'e.g. Main Store, Annex B',
-                        prefixIcon:
-                            const Icon(AppIcons.store, size: 20),
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Name is required'
-                            : null,
-                      ),
-                      SizedBox(height: rSize(ctx, 16)),
-
-                      AppInput(
-                        controller: addressCtrl,
-                        labelText: 'Street Address',
-                        hintText: 'e.g. 14 Market Road',
-                        prefixIcon: const Icon(AppIcons.map, size: 20),
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Street Address is required'
-                            : null,
-                      ),
-                      SizedBox(height: rSize(ctx, 16)),
-
-                      _AppAutocompleteField(
-                        label: 'Country',
-                        icon: AppIcons.public,
-                        initial: countryValue,
-                        options: kCountries,
-                        onChanged: (v) => setSheet(() => countryValue = v),
-                      ),
-                      SizedBox(height: rSize(ctx, 28)),
-
-                      // Save button
-                      AppButton(
-                        text: 'Save Store',
-                        onPressed: saving
-                            ? null
-                            : () async {
-                                if (!formKey.currentState!.validate()) return;
-                                // Re-check at the write boundary (hard rule #6).
-                                if (!Gates.manageStores.allowsNow(ref)) {
-                                  showGateDenied(ctx, Gates.manageStores);
-                                  return;
-                                }
-                                setSheet(() => saving = true);
-                                try {
-                                  final db = ref.read(databaseProvider);
-                                  final combinedLocation = [
-                                    addressCtrl.text.trim(),
-                                    countryValue.trim(),
-                                  ]
-                                      .where((p) => p.isNotEmpty)
-                                      .join(', ');
-
-                                  final currentUserId =
-                                      ref.read(authProvider).currentUser?.id;
-                                  await db.storesDao.createStore(
-                                    name: nameCtrl.text.trim(),
-                                    location: combinedLocation,
-                                    userId: currentUserId,
-                                  );
-                                  try {
-                                    await ref
-                                        .read(authProvider)
-                                        .refreshCurrentUser();
-                                  } catch (_) {
-                                    // Refresh failure after commit must not trigger
-                                    // "Could not save store" or allow a duplicate retry.
-                                  }
-                                  if (ctx.mounted) Navigator.pop(ctx);
-                                } catch (e) {
-                                  setSheet(() => saving = false);
-                                  if (ctx.mounted) {
-                                    AppNotification.showError(
-                                      ctx,
-                                      'Could not save store. Please try again.',
-                                    );
-                                  }
-                                }
-                              },
-                      ),
-                    ],
+          return SpotlightTarget(
+            id: SpotlightTargetId.createStoreForm,
+            child: Form(
+              key: formKey,
+              child: StoreSheetFrame(
+                icon: AppIcons.store,
+                title: 'New Store',
+                children: [
+                  ..._formFields(
+                    ctx,
+                    nameCtrl: nameCtrl,
+                    addressCtrl: addressCtrl,
+                    nameHint: 'e.g. Main Store, Annex B',
+                    countryValue: countryValue,
+                    onCountry: (v) => setSheet(() => countryValue = v),
                   ),
-                ),
+                  AppButton(
+                    text: 'Save Store',
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (!formKey.currentState!.validate()) return;
+                            // Re-check at the write boundary (hard rule #6).
+                            if (!Gates.manageStores.allowsNow(ref)) {
+                              showGateDenied(ctx, Gates.manageStores);
+                              return;
+                            }
+                            setSheet(() => saving = true);
+                            try {
+                              final db = ref.read(databaseProvider);
+                              final combinedLocation = [
+                                addressCtrl.text.trim(),
+                                countryValue.trim(),
+                              ].where((p) => p.isNotEmpty).join(', ');
+
+                              final currentUserId = ref
+                                  .read(authProvider)
+                                  .currentUser
+                                  ?.id;
+                              await db.storesDao.createStore(
+                                name: nameCtrl.text.trim(),
+                                location: combinedLocation,
+                                userId: currentUserId,
+                              );
+                              try {
+                                await ref
+                                    .read(authProvider)
+                                    .refreshCurrentUser();
+                              } catch (_) {
+                                // Refresh failure after commit must not trigger
+                                // "Could not save store" or allow a duplicate retry.
+                              }
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            } catch (e) {
+                              setSheet(() => saving = false);
+                              if (ctx.mounted) {
+                                AppNotification.showError(
+                                  ctx,
+                                  'Could not save store. Please try again.',
+                                );
+                              }
+                            }
+                          },
+                  ),
+                ],
               ),
-            ),
             ),
           );
         },
@@ -259,148 +212,61 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     bool saving = false;
     String countryValue = initCountry;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
+    showStoresSheet<void>(
+      context,
+      (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
-            child: Container(
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
+          return Form(
+            key: formKey,
+            child: StoreSheetFrame(
+              icon: AppIcons.edit,
+              title: 'Edit Store',
+              children: [
+                ..._formFields(
+                  ctx,
+                  nameCtrl: nameCtrl,
+                  addressCtrl: addressCtrl,
+                  nameHint: 'e.g. Main Store',
+                  countryValue: countryValue,
+                  onCountry: (v) => setSheet(() => countryValue = v),
                 ),
-              ),
-              padding: EdgeInsets.fromLTRB(
-                rSize(ctx, 24),
-                rSize(ctx, 20),
-                rSize(ctx, 24),
-                rSize(ctx, 32),
-              ),
-              child: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: _border,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: rSize(ctx, 20)),
-                      Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.all(rSize(ctx, 10)),
-                            decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              AppIcons.edit,
-                              color: Theme.of(context).colorScheme.primary,
-                              size: rSize(ctx, 18),
-                            ),
-                          ),
-                          SizedBox(width: rSize(ctx, 12)),
-                          Text(
-                            'Edit Store',
-                            style: TextStyle(
-                              fontSize: rFontSize(ctx, 18),
-                              fontWeight: FontWeight.bold,
-                              color: _text,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: rSize(ctx, 24)),
+                AppButton(
+                  text: 'Save Changes',
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
+                          // Re-check at the write boundary (hard rule #6).
+                          if (!Gates.manageStores.allowsNow(ref)) {
+                            showGateDenied(ctx, Gates.manageStores);
+                            return;
+                          }
+                          setSheet(() => saving = true);
+                          final db = ref.read(databaseProvider);
+                          final combinedLocation = [
+                            addressCtrl.text.trim(),
+                            countryValue.trim(),
+                          ].where((p) => p.isNotEmpty).join(', ');
 
-                      AppInput(
-                        controller: nameCtrl,
-                        labelText: 'Store Name',
-                        hintText: 'e.g. Main Store',
-                        prefixIcon:
-                            const Icon(AppIcons.store, size: 20),
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Name is required'
-                            : null,
-                      ),
-                      SizedBox(height: rSize(ctx, 16)),
-
-                      AppInput(
-                        controller: addressCtrl,
-                        labelText: 'Street Address',
-                        hintText: 'e.g. 14 Market Road',
-                        prefixIcon: const Icon(AppIcons.map, size: 20),
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Street Address is required'
-                            : null,
-                      ),
-                      SizedBox(height: rSize(ctx, 16)),
-
-                      _AppAutocompleteField(
-                        label: 'Country',
-                        icon: AppIcons.public,
-                        initial: countryValue,
-                        options: kCountries,
-                        onChanged: (v) => setSheet(() => countryValue = v),
-                      ),
-                      SizedBox(height: rSize(ctx, 28)),
-
-                      AppButton(
-                        text: 'Save Changes',
-                        onPressed: saving
-                            ? null
-                            : () async {
-                                if (!formKey.currentState!.validate()) return;
-                                // Re-check at the write boundary (hard rule #6).
-                                if (!Gates.manageStores.allowsNow(ref)) {
-                                  showGateDenied(ctx, Gates.manageStores);
-                                  return;
-                                }
-                                setSheet(() => saving = true);
-                                final db = ref.read(databaseProvider);
-                                final combinedLocation = [
-                                  addressCtrl.text.trim(),
-                                  countryValue.trim(),
-                                ]
-                                    .where((p) => p.isNotEmpty)
-                                    .join(', ');
-
-                                try {
-                                  await db.storesDao.updateStore(
-                                    id: store.id,
-                                    name: nameCtrl.text.trim(),
-                                    location: combinedLocation,
-                                  );
-                                  if (ctx.mounted) Navigator.pop(ctx);
-                                } catch (e) {
-                                  setSheet(() => saving = false);
-                                  if (ctx.mounted) {
-                                    AppNotification.showError(
-                                      ctx,
-                                      'Could not save store. Please try again.',
-                                    );
-                                  }
-                                }
-                              },
-                      ),
-                    ],
-                  ),
+                          try {
+                            await db.storesDao.updateStore(
+                              id: store.id,
+                              name: nameCtrl.text.trim(),
+                              location: combinedLocation,
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          } catch (e) {
+                            setSheet(() => saving = false);
+                            if (ctx.mounted) {
+                              AppNotification.showError(
+                                ctx,
+                                'Could not save store. Please try again.',
+                              );
+                            }
+                          }
+                        },
                 ),
-              ),
+              ],
             ),
           );
         },
@@ -419,119 +285,93 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Delete Store',
-          style: TextStyle(
-            color: _text,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
+      builder: (ctx) {
+        final t = Theme.of(ctx);
+        final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+        return AlertDialog(
+          scrollable: true,
+          title: Text(
+            'Delete Store',
+            style: ctx.screenTitleStyle.copyWith(color: t.colorScheme.onSurface),
           ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you sure you want to delete "${store.name}"?',
-              style: TextStyle(color: _subtext),
-            ),
-            if (stock > 0) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppColors.warning.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      AppIcons.warning,
-                      color: AppColors.warning,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'This store has $stock units in stock. Deleting it will also remove its inventory records.',
-                        style: const TextStyle(
-                          color: AppColors.warning,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to delete "${store.name}"?',
+                style: ctx.regularStyle(14).copyWith(color: muted),
               ),
+              if (stock > 0) ...[
+                SizedBox(height: ctx.getRSize(12)),
+                StoresNotice(
+                  tone: IconTileTone.warning,
+                  icon: AppIcons.warning,
+                  text:
+                      'This store has $stock units in stock. Deleting it will also remove its inventory records.',
+                ),
+              ],
             ],
-          ],
-        ),
-        actions: [
-          AppButton(
-            text: 'Cancel',
-            variant: AppButtonVariant.ghost,
-            size: AppButtonSize.small,
-            onPressed: () => Navigator.pop(ctx),
           ),
-          AppButton(
-            text: 'Delete',
-            variant: AppButtonVariant.danger,
-            size: AppButtonSize.small,
-            onPressed: () async {
-              Navigator.pop(ctx);
-              // Re-check at the write boundary (hard rule #6) — deleting a
-              // store needs `stores.manage`.
-              if (!Gates.manageStores.allowsNow(ref)) {
-                showGateDenied(context, Gates.manageStores);
-                return;
-              }
-              // Soft-delete the store: hard-delete would orphan
-              // inventory and ledger FKs. The cloud-side cascade in 0001
-              // is ON DELETE CASCADE for inventory, but realtime DELETE
-              // events confuse local listeners. Soft-delete + enqueue is
-              // the consistent path with the rest of the codebase.
-              final db = ref.read(databaseProvider);
-              final whComp = StoresCompanion(
-                id: Value(store.id),
-                isDeleted: const Value(true),
-                lastUpdatedAt: Value(DateTime.now()),
-              );
-              try {
-                await (db.update(
-                  db.stores,
-                )..where((t) => t.id.equals(store.id))).write(whComp);
-                // Full-row enqueue: a partial stores upsert omits the NOT NULL name.
-                await db.syncDao.enqueueUpsert(
-                  'stores',
-                  store
-                      .toCompanion(true)
-                      .copyWith(
-                        isDeleted: const Value(true),
-                        lastUpdatedAt: whComp.lastUpdatedAt,
-                      ),
-                );
-              } catch (e) {
-                if (context.mounted) {
-                  AppNotification.showError(
-                    context,
-                    'Could not delete store. Please try again.',
-                  );
+          actions: [
+            AppButton(
+              text: 'Cancel',
+              variant: AppButtonVariant.ghost,
+              size: AppButtonSize.small,
+              isFullWidth: false,
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            AppButton(
+              text: 'Delete',
+              variant: AppButtonVariant.danger,
+              size: AppButtonSize.small,
+              isFullWidth: false,
+              onPressed: () async {
+                Navigator.pop(ctx);
+                // Re-check at the write boundary (hard rule #6) — deleting a
+                // store needs `stores.manage`.
+                if (!Gates.manageStores.allowsNow(ref)) {
+                  showGateDenied(context, Gates.manageStores);
+                  return;
                 }
-              }
-            },
-          ),
-        ],
-      ),
+                // Soft-delete the store: hard-delete would orphan
+                // inventory and ledger FKs. The cloud-side cascade in 0001
+                // is ON DELETE CASCADE for inventory, but realtime DELETE
+                // events confuse local listeners. Soft-delete + enqueue is
+                // the consistent path with the rest of the codebase.
+                final db = ref.read(databaseProvider);
+                final whComp = StoresCompanion(
+                  id: Value(store.id),
+                  isDeleted: const Value(true),
+                  lastUpdatedAt: Value(DateTime.now()),
+                );
+                try {
+                  await (db.update(
+                    db.stores,
+                  )..where((t) => t.id.equals(store.id))).write(whComp);
+                  // Full-row enqueue: a partial stores upsert omits the NOT NULL name.
+                  await db.syncDao.enqueueUpsert(
+                    'stores',
+                    store
+                        .toCompanion(true)
+                        .copyWith(
+                          isDeleted: const Value(true),
+                          lastUpdatedAt: whComp.lastUpdatedAt,
+                        ),
+                  );
+                } catch (e) {
+                  if (context.mounted) {
+                    AppNotification.showError(
+                      context,
+                      'Could not delete store. Please try again.',
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -549,129 +389,93 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     // Browse composite: a named gate can't own this one — the all-stores
     // viewer leg is a provider (store assignment), not a permission key — so
     // the composition stays here, citing the named gates for each key leg.
-    final canSeeStores = canManage ||
+    final canSeeStores =
+        canManage ||
         ref.watch(canViewAllStoresProvider) ||
         Gates.requestStoreTransfer.allows(ref) ||
         Gates.dispatchStoreTransfer.allows(ref) ||
         Gates.receiveStoreTransfer.allows(ref);
-    return SharedScaffold(
-      activeRoute: 'store',
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        leading: context.isRailLayout ? null : const MenuButton(),
-        title: AppBarHeader(
-          icon: AppIcons.store,
-          title: 'Stores',
-          subtitle: ref.watch(activeStoreLabelProvider),
-        ),
-        actions: [
-          const NotificationBell(),
-          SizedBox(width: rSize(context, 8)),
-        ],
-      ),
-      floatingActionButton: canManage
-          ? SpotlightTarget(
-              id: SpotlightTargetId.createStoreFab,
-              child: AppFAB(
-                onPressed: () => _showAddSheet(context),
-                icon: AppIcons.add,
-                label: 'Add Store',
-              ),
-            )
-          : null,
-      body: !canSeeStores
-          ? Center(
-              child: Padding(
-                padding: EdgeInsets.all(rSize(context, 32)),
-                child: Text(
-                  'You don’t have access to Stores.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: rFontSize(context, 14),
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: SharedScaffold(
+        activeRoute: 'store',
+        backgroundColor: Colors.transparent,
+        appBar: StoresTopBar(
+          key: StoresKeys.topBar,
+          height: storesTopBarHeight(context),
+          header: ScreenHeader(
+            icon: AppIcons.store,
+            title: 'Stores',
+            subtitle: ref.watch(activeStoreLabelProvider),
+            leading: context.isRailLayout
+                ? null
+                : const SizedBox.square(
+                    dimension: kMinInteractiveDimension,
+                    child: MenuButton(),
                   ),
+            actions: const [StoresLiveBell()],
+          ),
+        ),
+        floatingActionButton: canManage
+            ? SpotlightTarget(
+                id: SpotlightTargetId.createStoreFab,
+                child: AppFAB(
+                  onPressed: () => _showAddSheet(context),
+                  icon: AppIcons.add,
+                  label: 'Add Store',
                 ),
-              ),
-            )
-          : Builder(
-              builder: (context) {
-                final stores = _stores;
-
-                if (stores.isEmpty) {
-                  return AppRefreshWrapper(
-                    child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      child: SizedBox(
-                        height: context.sheetMaxHeight(0.6),
-                        child: _buildEmptyState(context),
+              )
+            : null,
+        body: !canSeeStores
+            ? const StoresMessage(
+                key: StoresKeys.noAccess,
+                text: 'You don’t have access to Stores.',
+              )
+            : Builder(
+                builder: (context) {
+                  final stores = _stores;
+                  if (stores.isEmpty) {
+                    return const AppRefreshWrapper(
+                      child: CustomScrollView(
+                        physics: AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: StoresMessage(
+                              key: StoresKeys.empty,
+                              icon: AppIcons.store,
+                              title: 'No Stores Yet',
+                              text:
+                                  'Tap "Add Store" to create\nyour first storage location.',
+                            ),
+                          ),
+                        ],
                       ),
+                    );
+                  }
+                  return AppRefreshWrapper(
+                    child: CustomScrollView(
+                      key: StoresKeys.list,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        storesSliver(
+                          SliverList.separated(
+                            itemCount: stores.length,
+                            separatorBuilder: (_, _) =>
+                                SizedBox(height: context.getRSize(12)),
+                            itemBuilder: (context, index) =>
+                                _buildStoreCard(context, stores[index]),
+                          ),
+                          top: context.getRSize(16),
+                          // Clears the Add Store FAB.
+                          bottom:
+                              context.getRSize(88) + context.deviceBottomPadding,
+                        ),
+                      ],
                     ),
                   );
-                }
-
-                return AppRefreshWrapper(
-                  child: ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.fromLTRB(
-                      rSize(context, 16),
-                      rSize(context, 16),
-                      rSize(context, 16),
-                      rSize(context, 100) + context.deviceBottomPadding,
-                    ),
-                    itemCount: stores.length,
-                    itemBuilder: (context, index) =>
-                        _buildStoreCard(context, stores[index]),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-
-  // ── Empty state ────────────────────────────────────────────────────────────
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: EdgeInsets.all(rSize(context, 24)),
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              AppIcons.store,
-              size: rSize(context, 40),
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.5),
-            ),
-          ),
-          SizedBox(height: rSize(context, 20)),
-          Text(
-            'No Stores Yet',
-            style: TextStyle(
-              fontSize: rFontSize(context, 18),
-              fontWeight: FontWeight.bold,
-              color: _text,
-            ),
-          ),
-          SizedBox(height: rSize(context, 8)),
-          Text(
-            'Tap "Add Store" to create\nyour first storage location.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: rFontSize(context, 14),
-              color: _subtext,
-              height: 1.5,
-            ),
-          ),
-        ],
+                },
+              ),
       ),
     );
   }
@@ -692,6 +496,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
 }
 
 // ── Reactive store card ────────────────────────────────────────────────────
+
 class _StoreCard extends ConsumerStatefulWidget {
   final StoreData store;
   final VoidCallback onEdit;
@@ -710,17 +515,7 @@ class _StoreCard extends ConsumerStatefulWidget {
 
 class _StoreCardState extends ConsumerState<_StoreCard> {
   List<ProductDataWithStock> _inventory = [];
-
   StreamSubscription<List<ProductDataWithStock>>? _invSub;
-  Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _subtext =>
-      Theme.of(context).textTheme.bodySmall?.color ??
-      Theme.of(context).iconTheme.color!;
-  // Stronger border for card edges and dividers — more visible in light mode
-  Color get _strongBorder => Theme.of(context).dividerColor;
-  // Subtle blue-tinted stripe for stats/actions section in light mode
-  Color get _stripe => Theme.of(context).cardColor;
 
   @override
   void initState() {
@@ -758,27 +553,22 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     final totalStock = _inventory.fold<int>(0, (s, p) => s + p.totalStock);
     final productCount = _inventory.where((p) => p.totalStock > 0).length;
+    final location = widget.store.location;
+    final hasLocation = location != null && location.isNotEmpty;
+    final canManage = Gates.manageStores.allows(ref);
+    final hairline = Divider(height: 1, thickness: 1, color: t.dividerColor);
 
-    return Container(
-      margin: EdgeInsets.only(bottom: rSize(context, 14)),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _strongBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
+    return StoresCardShell(
+      key: StoresKeys.card(widget.store.id),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Main row
+          // Main row — the whole row opens Store Details.
           InkWell(
             onTap: () {
               Navigator.push(
@@ -788,316 +578,132 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                 ),
               );
             },
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: Padding(
-              padding: EdgeInsets.all(rSize(context, 16)),
-              child: Row(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(rSize(context, 12)),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      AppIcons.store,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: rSize(context, 20),
-                    ),
-                  ),
-                  SizedBox(width: rSize(context, 14)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.store.name,
-                          style: TextStyle(
-                            fontSize: rFontSize(context, 16),
-                            fontWeight: FontWeight.bold,
-                            color: _text,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: kMinInteractiveDimension,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(context.getRSize(14)),
+                child: Row(
+                  children: [
+                    const IconTile(icon: AppIcons.store, size: 44),
+                    SizedBox(width: context.getRSize(12)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.store.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.boldStyle(15).copyWith(
+                              color: t.colorScheme.onSurface,
+                            ),
                           ),
-                        ),
-                        if (widget.store.location != null &&
-                            widget.store.location!.isNotEmpty) ...[
-                          SizedBox(height: rSize(context, 3)),
-                          Row(
-                            children: [
-                              Icon(
-                                AppIcons.location,
-                                size: rSize(context, 12),
-                                color: _subtext,
-                              ),
-                              SizedBox(width: rSize(context, 4)),
-                              Expanded(
-                                child: Text(
-                                  widget.store.location!,
-                                  style: TextStyle(
-                                    fontSize: rFontSize(context, 12),
-                                    color: _subtext,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                          if (hasLocation) ...[
+                            SizedBox(height: context.getRSize(3)),
+                            Row(
+                              children: [
+                                AppIcon(
+                                  AppIcons.location,
+                                  size: context.getRSize(14),
+                                  color: muted,
                                 ),
-                              ),
-                            ],
-                          ),
+                                SizedBox(width: context.getRSize(4)),
+                                Expanded(
+                                  child: Text(
+                                    location,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: context
+                                        .regularStyle(12)
+                                        .copyWith(color: muted),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  Icon(
-                    AppIcons.chevronRight,
-                    size: rSize(context, 13),
-                    color: _subtext,
-                  ),
-                ],
+                    SizedBox(width: context.getRSize(8)),
+                    AppIcon(
+                      AppIcons.chevronRight,
+                      size: context.getRSize(20),
+                      color: muted,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-
-          // Stats row
-          Container(
-            decoration: BoxDecoration(
-              color: _stripe,
-              border: Border(top: BorderSide(color: _strongBorder)),
-            ),
+          hairline,
+          IntrinsicHeight(
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: _statCell(
+                  child: StoreFigure(
                     icon: AppIcons.inventory,
+                    tone: IconTileTone.info,
                     label: 'Total Units',
                     value: totalStock.toString(),
-                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
-                Container(width: 1, height: 36, color: _strongBorder),
+                VerticalDivider(width: 1, thickness: 1, color: t.dividerColor),
                 Expanded(
-                  child: _statCell(
+                  child: StoreFigure(
                     icon: AppIcons.tag,
+                    tone: IconTileTone.green,
                     label: 'Products',
                     value: productCount.toString(),
-                    color: AppColors.success,
                   ),
                 ),
               ],
             ),
           ),
-
           // Actions row — Edit/Delete a store is CEO-only (`stores.manage`).
           // Hidden entirely for browse-only viewers (hide-don't-block).
-          if (Gates.manageStores.allows(ref))
-            Container(
-              decoration: BoxDecoration(
-                color: _stripe,
-                border: Border(top: BorderSide(color: _strongBorder)),
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(16),
-                ),
-              ),
+          if (canManage) ...[
+            hairline,
+            IntrinsicHeight(
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    child: _actionButton(
-                      icon: AppIcons.edit,
-                      color: Theme.of(context).colorScheme.primary,
-                      label: 'Edit',
-                      onTap: widget.onEdit,
+                    child: KeyedSubtree(
+                      key: StoresKeys.edit(widget.store.id),
+                      child: StoreCardAction(
+                        icon: AppIcons.edit,
+                        color: t.colorScheme.primary,
+                        label: 'Edit',
+                        onTap: widget.onEdit,
+                      ),
                     ),
                   ),
-                  Container(width: 1, height: 36, color: _strongBorder),
+                  VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: t.dividerColor,
+                  ),
                   Expanded(
-                    child: _actionButton(
-                      icon: AppIcons.delete,
-                      color: Theme.of(context).colorScheme.error,
-                      label: 'Delete',
-                      onTap: widget.onDelete,
+                    child: KeyedSubtree(
+                      key: StoresKeys.delete(widget.store.id),
+                      child: StoreCardAction(
+                        icon: AppIcons.delete,
+                        color: f.danger,
+                        label: 'Delete',
+                        onTap: widget.onDelete,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statCell({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        vertical: rSize(context, 10),
-        horizontal: rSize(context, 12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: rSize(context, 12), color: color),
-          SizedBox(width: rSize(context, 6)),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: rFontSize(context, 13),
-                  fontWeight: FontWeight.bold,
-                  color: _text,
-                ),
-              ),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: rFontSize(context, 10),
-                  color: _subtext,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionButton({
-    required IconData icon,
-    required Color color,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: rSize(context, 10)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: rSize(context, 13), color: color),
-            SizedBox(height: rSize(context, 3)),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: rFontSize(context, 10),
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
           ],
-        ),
+        ],
       ),
-    );
-  }
-}
-
-// ── Autocomplete field styled to match AppInput for use in store sheets ────
-class _AppAutocompleteField extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final String initial;
-  final List<String> options;
-  final ValueChanged<String> onChanged;
-
-  const _AppAutocompleteField({
-    required this.label,
-    required this.icon,
-    required this.initial,
-    required this.options,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: subtextColor,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Autocomplete<String>(
-          initialValue: TextEditingValue(text: initial),
-          optionsBuilder: (value) {
-            final q = value.text.trim().toLowerCase();
-            if (q.isEmpty) return options;
-            return options.where((o) => o.toLowerCase().contains(q));
-          },
-          onSelected: onChanged,
-          fieldViewBuilder: (ctx, controller, focusNode, onSubmitted) {
-            return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              textCapitalization: TextCapitalization.words,
-              onChanged: onChanged,
-              onSubmitted: (_) => onSubmitted(),
-              style: TextStyle(
-                color: t.colorScheme.onSurface,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-              decoration: InputDecoration(
-                prefixIcon: Icon(icon, size: 20),
-                fillColor: t.inputDecorationTheme.fillColor,
-                filled: true,
-              ),
-            );
-          },
-          optionsViewBuilder: (ctx, onSelected, opts) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                color: t.colorScheme.surface,
-                elevation: 4,
-                borderRadius: BorderRadius.circular(10),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxHeight: 220,
-                    maxWidth: 320,
-                  ),
-                  child: ListView(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    children: opts
-                        .map(
-                          (o) => InkWell(
-                            onTap: () => onSelected(o),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              child: Text(
-                                o,
-                                style: TextStyle(color: t.colorScheme.onSurface),
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ],
     );
   }
 }
