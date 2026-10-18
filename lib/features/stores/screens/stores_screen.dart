@@ -320,6 +320,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               text: 'Cancel',
               variant: AppButtonVariant.ghost,
               size: AppButtonSize.small,
+              height: kMinInteractiveDimension,
               isFullWidth: false,
               onPressed: () => Navigator.pop(ctx),
             ),
@@ -327,6 +328,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               text: 'Delete',
               variant: AppButtonVariant.danger,
               size: AppButtonSize.small,
+              height: kMinInteractiveDimension,
               isFullWidth: false,
               onPressed: () async {
                 Navigator.pop(ctx);

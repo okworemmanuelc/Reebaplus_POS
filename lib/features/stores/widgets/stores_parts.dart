@@ -612,9 +612,9 @@ class StoreStatTile extends StatelessWidget {
             child: Text(
               value,
               maxLines: 1,
-              style: context.extraBoldStyle(20).copyWith(
-                color: t.colorScheme.onSurface,
-              ),
+              style: context
+                  .extraBoldStyle(20)
+                  .copyWith(color: t.colorScheme.onSurface),
             ),
           ),
           Text(

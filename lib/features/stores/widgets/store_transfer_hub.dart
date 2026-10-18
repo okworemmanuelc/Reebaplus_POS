@@ -36,27 +36,27 @@ class StoreTransferHub extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final incomingReqs =
         ref.watch(storeIncomingRequestsProvider(storeId)).valueOrNull ??
-            const <StockTransferData>[];
+        const <StockTransferData>[];
     final incomingTransfers =
         ref.watch(storeIncomingTransfersProvider(storeId)).valueOrNull ??
-            const <StockTransferData>[];
+        const <StockTransferData>[];
     final outgoingReqs =
         ref.watch(storeOutgoingRequestsProvider(storeId)).valueOrNull ??
-            const <StockTransferData>[];
+        const <StockTransferData>[];
     final outgoingTransfers =
         ref.watch(storeOutgoingTransfersProvider(storeId)).valueOrNull ??
-            const <StockTransferData>[];
+        const <StockTransferData>[];
 
     final products =
         ref.watch(productsWithStockProvider(null)).valueOrNull ??
-            const <ProductDataWithStock>[];
+        const <ProductDataWithStock>[];
     final productNames = {
       for (final p in products) p.product.id: p.product.name,
     };
-    final productMap = {
-      for (final p in products) p.product.id: p.product,
-    };
-    final emptiesMap = ref.watch(storeEmptiesByManufacturerProvider(storeId)).valueOrNull ?? const <String, int>{};
+    final productMap = {for (final p in products) p.product.id: p.product};
+    final emptiesMap =
+        ref.watch(storeEmptiesByManufacturerProvider(storeId)).valueOrNull ??
+        const <String, int>{};
     // Deliberately UNfiltered (#140): this is a name lookup for rendering, not
     // a picker. A van can never be a transfer endpoint — `request_stock_screen`
     // drops it from both dropdowns — but if a legacy row ever names one, show
@@ -65,20 +65,21 @@ class StoreTransferHub extends ConsumerWidget {
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
     final storeNames = {for (final s in stores) s.id: s.name};
     final users =
-        ref.watch(usersByBusinessProvider).valueOrNull ?? const <String, UserData>{};
+        ref.watch(usersByBusinessProvider).valueOrNull ??
+        const <String, UserData>{};
 
     // Stock-on-hand at THIS store, for the Accept dialog's availability hint.
     final hereStock = {
-      for (final p in ref
-              .watch(productsByStoreProvider(storeId))
-              .valueOrNull ??
-          const <ProductDataWithStock>[])
+      for (final p
+          in ref.watch(productsByStoreProvider(storeId)).valueOrNull ??
+              const <ProductDataWithStock>[])
         p.product.id: p.totalStock,
     };
 
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    final hasAny = incomingReqs.isNotEmpty ||
+    final hasAny =
+        incomingReqs.isNotEmpty ||
         incomingTransfers.isNotEmpty ||
         outgoingReqs.isNotEmpty ||
         outgoingTransfers.isNotEmpty;
@@ -105,8 +106,13 @@ class StoreTransferHub extends ConsumerWidget {
           builder: (t) {
             final p = productMap[t.productId];
             final manufacturerId = p?.manufacturerId;
-            final isCrateEligible = p != null && p.unit?.toLowerCase() == 'bottle' && p.trackEmpties;
-            final availableEmpties = manufacturerId != null ? (emptiesMap[manufacturerId] ?? 0) : 0;
+            final isCrateEligible =
+                p != null &&
+                p.unit?.toLowerCase() == 'bottle' &&
+                p.trackEmpties;
+            final availableEmpties = manufacturerId != null
+                ? (emptiesMap[manufacturerId] ?? 0)
+                : 0;
             return _TransferActionCard(
               transfer: t,
               mode: _CardMode.fulfil,
@@ -191,7 +197,7 @@ class StoreTransferHub extends ConsumerWidget {
     final historyAsync = ref.watch(storeTransferHistoryProvider(storeId));
     final products =
         ref.watch(productsWithStockProvider(null)).valueOrNull ??
-            const <ProductDataWithStock>[];
+        const <ProductDataWithStock>[];
     final productNames = {
       for (final p in products) p.product.id: p.product.name,
     };
@@ -240,8 +246,9 @@ class StoreTransferHub extends ConsumerWidget {
                   final productName =
                       productNames[tr.productId] ?? 'Unknown Product';
                   final isIn = tr.toLocationId == storeId;
-                  final counterpartyId =
-                      isIn ? tr.fromLocationId : tr.toLocationId;
+                  final counterpartyId = isIn
+                      ? tr.fromLocationId
+                      : tr.toLocationId;
                   final counterpartyName =
                       storeNames[counterpartyId] ?? 'Unknown Store';
 
@@ -287,18 +294,19 @@ class StoreTransferHub extends ConsumerWidget {
                           children: [
                             TagPill(
                               label: isIn ? 'IN' : 'OUT',
-                              tone:
-                                  isIn ? TagPillTone.green : TagPillTone.info,
+                              tone: isIn ? TagPillTone.green : TagPillTone.info,
                               dense: true,
                             ),
                             SizedBox(height: context.getRSize(6)),
                             Text(
                               tr.status.toUpperCase(),
-                              style: context.semiBoldStyle(11).copyWith(
-                                color: tr.status == 'cancelled'
-                                    ? f.danger
-                                    : muted,
-                              ),
+                              style: context
+                                  .semiBoldStyle(11)
+                                  .copyWith(
+                                    color: tr.status == 'cancelled'
+                                        ? f.danger
+                                        : muted,
+                                  ),
                             ),
                           ],
                         ),
@@ -390,7 +398,10 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
     final empties = result.empties;
     await _run(
       'stores.dispatch_transfer',
-      (uid) => ref.read(databaseProvider).stockTransferDao.dispatchTransfer(
+      (uid) => ref
+          .read(databaseProvider)
+          .stockTransferDao
+          .dispatchTransfer(
             transferId: widget.transfer.id,
             dispatchedBy: uid,
             quantity: qty,
@@ -403,127 +414,45 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
   }
 
   Future<void> _reject() => _run(
-        'stores.dispatch_transfer',
-        (uid) => ref.read(databaseProvider).stockTransferDao.rejectRequest(
-              transferId: widget.transfer.id,
-              rejectedBy: uid,
-            ),
-        'Request declined.',
-      );
+    'stores.dispatch_transfer',
+    (uid) => ref
+        .read(databaseProvider)
+        .stockTransferDao
+        .rejectRequest(transferId: widget.transfer.id, rejectedBy: uid),
+    'Request declined.',
+  );
 
   Future<void> _receive() => _run(
-        'stores.receive_transfer',
-        (uid) => ref.read(databaseProvider).stockTransferDao.receiveTransfer(
-              transferId: widget.transfer.id,
-              receivedBy: uid,
-            ),
-        'Transfer received — stock updated.',
-      );
+    'stores.receive_transfer',
+    (uid) => ref
+        .read(databaseProvider)
+        .stockTransferDao
+        .receiveTransfer(transferId: widget.transfer.id, receivedBy: uid),
+    'Transfer received — stock updated.',
+  );
 
   Future<void> _cancel() => _run(
-        'stores.dispatch_transfer',
-        (uid) => ref.read(databaseProvider).stockTransferDao.cancelTransfer(
-              transferId: widget.transfer.id,
-              cancelledBy: uid,
-            ),
-        'Transfer cancelled — stock restored.',
-      );
+    'stores.dispatch_transfer',
+    (uid) => ref
+        .read(databaseProvider)
+        .stockTransferDao
+        .cancelTransfer(transferId: widget.transfer.id, cancelledBy: uid),
+    'Transfer cancelled — stock restored.',
+  );
 
   /// Accept dialog: confirm or alter the dispatched quantity and optionally send empty crates.
-  Future<({int quantity, int empties})?> _askQuantity() async {
-    final qtyCtrl =
-        TextEditingController(text: widget.transfer.quantity.toString());
-    final emptiesCtrl = TextEditingController(text: '0');
-    final showEmptiesField = widget.isCrateEligible && widget.availableEmpties > 0;
-
-    final result = await showDialog<({int quantity, int empties})>(
+  Future<({int quantity, int empties})?> _askQuantity() {
+    final showEmptiesField =
+        widget.isCrateEligible && widget.availableEmpties > 0;
+    return showDialog<({int quantity, int empties})>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        scrollable: true,
-        title: Text(
-          'Dispatch quantity',
-          style: ctx.screenTitleStyle.copyWith(
-            color: Theme.of(ctx).colorScheme.onSurface,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Requested: ${widget.transfer.quantity}   ·   '
-              'Available here: ${widget.availableHere}',
-              style: ctx.regularStyle(12).copyWith(
-                color: Theme.of(ctx).textTheme.bodySmall?.color,
-              ),
-            ),
-            SizedBox(height: context.getRSize(12)),
-            AppInput(
-              controller: qtyCtrl,
-              labelText: 'Quantity to send',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-            if (showEmptiesField) ...[
-              SizedBox(height: context.getRSize(12)),
-              AppInput(
-                controller: emptiesCtrl,
-                labelText: 'Empty crates to send (optional)',
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              SizedBox(height: context.getRSize(4)),
-              Text(
-                'Available here: ${widget.availableEmpties}',
-                style: ctx.regularStyle(11).copyWith(
-                  color: Theme.of(ctx).textTheme.bodySmall?.color,
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          AppButton(
-            text: 'Cancel',
-            variant: AppButtonVariant.ghost,
-            size: AppButtonSize.small,
-            isFullWidth: false,
-            onPressed: () => Navigator.pop(ctx),
-          ),
-          AppButton(
-            text: 'Dispatch',
-            size: AppButtonSize.small,
-            isFullWidth: false,
-            onPressed: () {
-              final q = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-              if (q <= 0) {
-                AppNotification.showError(ctx, 'Enter a quantity above 0.');
-                return;
-              }
-              int empties = 0;
-              if (showEmptiesField) {
-                empties = int.tryParse(emptiesCtrl.text.trim()) ?? 0;
-                if (empties < 0) {
-                  AppNotification.showError(ctx, 'Enter a valid empty crates count.');
-                  return;
-                }
-                if (empties > widget.availableEmpties) {
-                  AppNotification.showError(
-                    ctx,
-                    'Cannot send more than available empties (${widget.availableEmpties}).',
-                  );
-                  return;
-                }
-              }
-              Navigator.pop(ctx, (quantity: q, empties: empties));
-            },
-          ),
-        ],
+      builder: (_) => _DispatchDialog(
+        requested: widget.transfer.quantity,
+        availableHere: widget.availableHere,
+        showEmptiesField: showEmptiesField,
+        availableEmpties: widget.availableEmpties,
       ),
     );
-    qtyCtrl.dispose();
-    emptiesCtrl.dispose();
-    return result;
   }
 
   @override
@@ -643,6 +572,130 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
       variant: danger ? AppButtonVariant.danger : AppButtonVariant.primary,
       height: kMinInteractiveDimension,
       onPressed: onTap,
+    );
+  }
+}
+
+/// The Accept dialog: confirm or alter the dispatched quantity and optionally
+/// send empty crates. **Owns its controllers** (created and disposed in this
+/// State): the caller used to dispose them the moment `showDialog` returned,
+/// while the dialog was still animating out with its fields mounted, which
+/// threw "A TextEditingController was used after being disposed."
+class _DispatchDialog extends StatefulWidget {
+  const _DispatchDialog({
+    required this.requested,
+    required this.availableHere,
+    required this.showEmptiesField,
+    required this.availableEmpties,
+  });
+
+  final int requested;
+  final int availableHere;
+  final bool showEmptiesField;
+  final int availableEmpties;
+
+  @override
+  State<_DispatchDialog> createState() => _DispatchDialogState();
+}
+
+class _DispatchDialogState extends State<_DispatchDialog> {
+  late final TextEditingController _qtyCtrl = TextEditingController(
+    text: widget.requested.toString(),
+  );
+  final TextEditingController _emptiesCtrl = TextEditingController(text: '0');
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    _emptiesCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit(BuildContext ctx) {
+    final q = int.tryParse(_qtyCtrl.text.trim()) ?? 0;
+    if (q <= 0) {
+      AppNotification.showError(ctx, 'Enter a quantity above 0.');
+      return;
+    }
+    int empties = 0;
+    if (widget.showEmptiesField) {
+      empties = int.tryParse(_emptiesCtrl.text.trim()) ?? 0;
+      if (empties < 0) {
+        AppNotification.showError(ctx, 'Enter a valid empty crates count.');
+        return;
+      }
+      if (empties > widget.availableEmpties) {
+        AppNotification.showError(
+          ctx,
+          'Cannot send more than available empties (${widget.availableEmpties}).',
+        );
+        return;
+      }
+    }
+    Navigator.pop(ctx, (quantity: q, empties: empties));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color;
+    return AlertDialog(
+      scrollable: true,
+      title: Text(
+        'Dispatch quantity',
+        style: context.screenTitleStyle.copyWith(
+          color: t.colorScheme.onSurface,
+        ),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Requested: ${widget.requested}   ·   '
+            'Available here: ${widget.availableHere}',
+            style: context.regularStyle(12).copyWith(color: muted),
+          ),
+          SizedBox(height: context.getRSize(12)),
+          AppInput(
+            controller: _qtyCtrl,
+            labelText: 'Quantity to send',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+          if (widget.showEmptiesField) ...[
+            SizedBox(height: context.getRSize(12)),
+            AppInput(
+              controller: _emptiesCtrl,
+              labelText: 'Empty crates to send (optional)',
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            SizedBox(height: context.getRSize(4)),
+            Text(
+              'Available here: ${widget.availableEmpties}',
+              style: context.regularStyle(11).copyWith(color: muted),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        AppButton(
+          text: 'Cancel',
+          variant: AppButtonVariant.ghost,
+          size: AppButtonSize.small,
+          height: kMinInteractiveDimension,
+          isFullWidth: false,
+          onPressed: () => Navigator.pop(context),
+        ),
+        AppButton(
+          text: 'Dispatch',
+          size: AppButtonSize.small,
+          height: kMinInteractiveDimension,
+          isFullWidth: false,
+          onPressed: () => _submit(context),
+        ),
+      ],
     );
   }
 }

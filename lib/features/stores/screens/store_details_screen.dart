@@ -65,7 +65,10 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
     super.dispose();
   }
 
-  void _openRequestScreen({String? fixedDestStoreId, String? fixedSourceStoreId}) {
+  void _openRequestScreen({
+    String? fixedDestStoreId,
+    String? fixedSourceStoreId,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -116,9 +119,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
           key: StoresKeys.detailsTopBar,
           height: storesTopBarHeight(context),
           header: ScreenHeader(
-            leading: StoresBackButton(
-              onPressed: () => Navigator.pop(context),
-            ),
+            leading: StoresBackButton(onPressed: () => Navigator.pop(context)),
             icon: AppIcons.store,
             title: _store.name,
             subtitle: _store.location ?? 'Main Storage',
@@ -296,7 +297,11 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
         if (!sideBySide) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [value, SizedBox(height: gap), tiles(c.maxWidth)],
+            children: [
+              value,
+              SizedBox(height: gap),
+              tiles(c.maxWidth),
+            ],
           );
         }
         final rightWidth = (c.maxWidth - gap) * 3 / 5;
@@ -342,9 +347,9 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
               ),
               title: Text(
                 'Inventory',
-                style: context.boldStyle(15).copyWith(
-                  color: t.colorScheme.onSurface,
-                ),
+                style: context
+                    .boldStyle(15)
+                    .copyWith(color: t.colorScheme.onSurface),
               ),
               subtitle: Text(
                 '${stocked.length} product${stocked.length == 1 ? '' : 's'} in stock',
@@ -356,7 +361,9 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                         padding: EdgeInsets.all(context.getRSize(20)),
                         child: Text(
                           'No stock in this store yet.',
-                          style: context.regularStyle(13).copyWith(color: muted),
+                          style: context
+                              .regularStyle(13)
+                              .copyWith(color: muted),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -366,7 +373,9 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                           item.totalStock <= item.product.lowStockThreshold;
                       return Container(
                         decoration: BoxDecoration(
-                          border: Border(top: BorderSide(color: t.dividerColor)),
+                          border: Border(
+                            top: BorderSide(color: t.dividerColor),
+                          ),
                         ),
                         child: Padding(
                           padding: EdgeInsets.symmetric(
@@ -383,9 +392,11 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                                       item.product.name,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: context.boldStyle(14).copyWith(
-                                        color: t.colorScheme.onSurface,
-                                      ),
+                                      style: context
+                                          .boldStyle(14)
+                                          .copyWith(
+                                            color: t.colorScheme.onSurface,
+                                          ),
                                     ),
                                     if ((item.product.unit ?? '').isNotEmpty)
                                       Text(
