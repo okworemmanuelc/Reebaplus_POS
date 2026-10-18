@@ -73,9 +73,10 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
             SizedBox(width: context.getRSize(8)),
           ],
         ),
-        drawer: context.isRailLayout
-            ? null
-            : const AppDrawer(activeRoute: 'activity_logs'),
+        // One line: test/tour/drawer_presence_ban_test.dart reads it line by line.
+        // dart format off
+        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'activity_logs'),
+        // dart format on
         body: DrawerHost(
           child: Column(
             children: [
