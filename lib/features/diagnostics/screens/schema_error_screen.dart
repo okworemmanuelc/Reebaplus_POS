@@ -3,13 +3,30 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/section_header.dart';
+
+/// The widest the content gets on a tablet (the app-wide 720 for list and form
+/// screens). Repeated here as a literal: the shared constant lives in the
+/// Settings screen, whose imports pull in the providers this screen must not
+/// depend on.
+const double _kContentMaxWidth = 720;
 
 /// Refuse-to-boot screen shown when [SchemaAudit] detects unhealable schema
 /// drift. Surfaces the diagnostic file path so support can ask the user to
 /// share it. The "Retry" button kills the app — the next launch re-runs
 /// `beforeOpen`, which gives heal another shot.
+///
+/// Launched with a bare `runApp` before `ProviderScope`, the theme controller
+/// or the router exist, so it owns its `MaterialApp` and uses only pure theme
+/// code (`AppTheme.dark()` is a synchronous static [ThemeData]: bundled font,
+/// no providers, no preferences). It stays dark-only, as it always was (#443).
 class SchemaErrorScreen extends StatelessWidget {
   final SchemaAuditResult audit;
 
@@ -19,124 +36,196 @@ class SchemaErrorScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true),
-      home: Scaffold(
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                const Icon(AppIcons.warning, size: 56, color: Colors.amber),
-                const SizedBox(height: 16),
-                const Text(
-                  'Schema corruption detected',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'The local database is missing columns or tables that the app '
-                  'requires. The app could not automatically repair the issue. '
-                  'Please contact support and share the diagnostic file below.',
-                  style: TextStyle(fontSize: 14, height: 1.4),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _kv('Schema version', '${audit.schemaVersion}'),
-                        _kv('Audited at', audit.ranAt.toIso8601String()),
-                        if (audit.businessId != null)
-                          _kv('Business ID', '${audit.businessId}'),
-                        if (audit.deviceUserId != null)
-                          _kv('Device user ID', '${audit.deviceUserId}'),
-                        const SizedBox(height: 12),
-                        if (audit.missingTables.isNotEmpty) ...[
-                          const Text(
-                            'Missing tables',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          for (final t in audit.missingTables)
-                            Text(
-                              '• ${t.table}'
-                              '${t.healed ? "  (healed)" : ""}'
-                              '${t.healError != null ? "  — ${t.healError}" : ""}',
-                              style: const TextStyle(fontSize: 13),
+      theme: AppTheme.dark(),
+      home: _SchemaErrorBody(audit: audit),
+    );
+  }
+}
+
+class _SchemaErrorBody extends StatelessWidget {
+  final SchemaAuditResult audit;
+
+  const _SchemaErrorBody({required this.audit});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final gap = context.getRSize(12);
+
+    Widget block(String? title, List<Widget> children) => Padding(
+      padding: EdgeInsets.only(bottom: gap),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.all(context.getRSize(14)),
+        decoration: AppDecorations.card(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (title != null) ...[
+              SectionHeader(title: title, variant: SectionHeaderVariant.group),
+              SizedBox(height: context.getRSize(6)),
+            ],
+            ...children,
+          ],
+        ),
+      ),
+    );
+
+    Widget line(String text) => Padding(
+      padding: EdgeInsets.symmetric(vertical: context.getRSize(2)),
+      child: Text(
+        text,
+        style: context
+            .regularStyle(13)
+            .copyWith(color: t.colorScheme.onSurface),
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: t.scaffoldBackgroundColor,
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _kContentMaxWidth),
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(20)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const IconTile(
+                        icon: AppIcons.warning,
+                        tone: IconTileTone.danger,
+                        size: 56,
+                      ),
+                      SizedBox(width: context.getRSize(14)),
+                      Expanded(
+                        child: Text(
+                          'Schema corruption detected',
+                          style: context
+                              .extraBoldStyle(22)
+                              .copyWith(color: t.colorScheme.onSurface),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                  Text(
+                    'The local database is missing columns or tables that the '
+                    'app requires. The app could not automatically repair the '
+                    'issue. Please contact support and share the diagnostic '
+                    'file below.',
+                    style: context
+                        .regularStyle(14)
+                        .copyWith(color: muted, height: 1.4),
+                  ),
+                  SizedBox(height: context.getRSize(16)),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          block(null, [
+                            _kv(
+                              context,
+                              'Schema version',
+                              '${audit.schemaVersion}',
                             ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (audit.missingColumns.isNotEmpty) ...[
-                          const Text(
-                            'Missing columns',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          for (final c in audit.missingColumns)
-                            Text(
-                              '• ${c.table}.${c.expectedColumn} '
-                              '(${c.expectedType})'
-                              '${c.healed ? "  (healed)" : ""}'
-                              '${c.healError != null ? "  — ${c.healError}" : ""}',
-                              style: const TextStyle(fontSize: 13),
+                            _kv(
+                              context,
+                              'Audited at',
+                              audit.ranAt.toIso8601String(),
                             ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (audit.recentMigrationEvents.isNotEmpty) ...[
-                          const Text(
-                            'Recent migration events',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          for (final ev in audit.recentMigrationEvents)
-                            Text(
-                              '• v${ev.version} ${ev.step} [${ev.severity}]'
-                              '${ev.errorMessage != null ? "  — ${ev.errorMessage}" : ""}',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (audit.reportPath != null) ...[
-                          const Text(
-                            'Diagnostic report',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            audit.reportPath!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          OutlinedButton.icon(
-                            icon: const Icon(AppIcons.copy, size: 16),
-                            label: const Text('Copy report path'),
-                            onPressed: () {
-                              Clipboard.setData(
-                                ClipboardData(text: audit.reportPath!),
-                              );
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Path copied to clipboard'),
-                                  duration: Duration(seconds: 2),
+                            if (audit.businessId != null)
+                              _kv(
+                                context,
+                                'Business ID',
+                                '${audit.businessId}',
+                              ),
+                            if (audit.deviceUserId != null)
+                              _kv(
+                                context,
+                                'Device user ID',
+                                '${audit.deviceUserId}',
+                              ),
+                          ]),
+                          if (audit.missingTables.isNotEmpty)
+                            block('Missing tables', [
+                              for (final t in audit.missingTables)
+                                line(
+                                  '• ${t.table}'
+                                  '${t.healed ? "  (healed)" : ""}'
+                                  '${t.healError != null ? "  — ${t.healError}" : ""}',
                                 ),
-                              );
-                            },
-                          ),
+                            ]),
+                          if (audit.missingColumns.isNotEmpty)
+                            block('Missing columns', [
+                              for (final c in audit.missingColumns)
+                                line(
+                                  '• ${c.table}.${c.expectedColumn} '
+                                  '(${c.expectedType})'
+                                  '${c.healed ? "  (healed)" : ""}'
+                                  '${c.healError != null ? "  — ${c.healError}" : ""}',
+                                ),
+                            ]),
+                          if (audit.recentMigrationEvents.isNotEmpty)
+                            block('Recent migration events', [
+                              for (final ev in audit.recentMigrationEvents)
+                                line(
+                                  '• v${ev.version} ${ev.step} [${ev.severity}]'
+                                  '${ev.errorMessage != null ? "  — ${ev.errorMessage}" : ""}',
+                                ),
+                            ]),
+                          if (audit.reportPath != null)
+                            block('Diagnostic report', [
+                              SelectableText(
+                                audit.reportPath!,
+                                style: context.monoStyle.copyWith(
+                                  fontSize: context.getRFontSize(12),
+                                  color: t.colorScheme.onSurface,
+                                ),
+                              ),
+                              SizedBox(height: context.getRSize(10)),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: IntrinsicWidth(
+                                  child: AppButton(
+                                    text: 'Copy report path',
+                                    icon: AppIcons.copy,
+                                    variant: AppButtonVariant.outline,
+                                    size: AppButtonSize.small,
+                                    height: kMinInteractiveDimension,
+                                    isFullWidth: false,
+                                    onPressed: () {
+                                      Clipboard.setData(
+                                        ClipboardData(text: audit.reportPath!),
+                                      );
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Path copied to clipboard',
+                                          ),
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ]),
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
+                  SizedBox(height: context.getRSize(12)),
+                  AppButton(
+                    text: 'Close app',
+                    variant: AppButtonVariant.danger,
                     onPressed: () {
                       // Closing the app forces a cold restart, which re-runs
                       // beforeOpen and gives heal another attempt.
@@ -148,10 +237,9 @@ class SchemaErrorScreen extends StatelessWidget {
                         exit(0);
                       }
                     },
-                    child: const Text('Close app'),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -159,22 +247,31 @@ class SchemaErrorScreen extends StatelessWidget {
     );
   }
 
-  Widget _kv(String k, String v) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 2),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 130,
-          child: Text(
-            k,
-            style: const TextStyle(fontSize: 13, color: Colors.white70),
+  Widget _kv(BuildContext context, String k, String v) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: context.getRSize(2)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: context.getRSize(130),
+            child: Text(
+              k,
+              style: context.mediumStyle(13).copyWith(color: muted),
+            ),
           ),
-        ),
-        Expanded(
-          child: SelectableText(v, style: const TextStyle(fontSize: 13)),
-        ),
-      ],
-    ),
-  );
+          Expanded(
+            child: SelectableText(
+              v,
+              style: context
+                  .semiBoldStyle(13)
+                  .copyWith(color: t.colorScheme.onSurface),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
