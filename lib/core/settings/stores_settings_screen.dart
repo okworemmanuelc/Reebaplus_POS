@@ -122,10 +122,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
         staffId: db.currentUserId,
       );
       if (!mounted) return;
-      AppNotification.showSuccess(
-        context,
-        isVan ? 'Van saved.' : 'Store saved.',
-      );
+      AppNotification.showSuccess(context, isVan ? 'Van saved.' : 'Store saved.');
     } catch (_) {
       if (!mounted) return;
       AppNotification.showError(
@@ -272,9 +269,8 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
                         child: Text(
                           'No vans yet.',
                           style: t.textTheme.bodySmall?.copyWith(
-                            color: t.colorScheme.onSurface.withValues(
-                              alpha: 0.5,
-                            ),
+                            color:
+                                t.colorScheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ),
@@ -446,7 +442,9 @@ class _AddLocationSheetState extends State<_AddLocationSheet> {
               decoration: AppDecorations.authInputDecoration(
                 context,
                 label: isVan ? 'Van name' : 'Store name',
-                prefixIcon: isVan ? AppIcons.supplier : AppIcons.store,
+                prefixIcon: isVan
+                    ? AppIcons.supplier
+                    : AppIcons.store,
               ),
               validator: (v) => (v == null || v.trim().isEmpty)
                   ? (isVan ? 'Give the van a name' : 'Give the store a name')

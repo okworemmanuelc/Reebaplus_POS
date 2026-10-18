@@ -32,46 +32,40 @@ void main() {
   // (roleId, slug, userId, [granted gate-relevant permission keys]).
   // Grants mirror the default matrix in migration 0043 (only the keys that
   // drive a §27.3 sidebar gate are listed).
-  final roles =
-      <({String roleId, String slug, String userId, List<String> keys})>[
-        (
-          roleId: 'role-ceo',
-          slug: 'ceo',
-          userId: 'user-ceo',
-          keys: [
-            'sales.make',
-            'customers.add',
-            'suppliers.manage',
-            'expenses.create',
-            'settings.manage',
-            'activity_logs.view',
-            'staff.invite',
-          ],
-        ),
-        (
-          roleId: 'role-manager',
-          slug: 'manager',
-          userId: 'user-manager',
-          keys: [
-            'sales.make',
-            'customers.add',
-            'expenses.create',
-            'staff.invite',
-          ],
-        ),
-        (
-          roleId: 'role-cashier',
-          slug: 'cashier',
-          userId: 'user-cashier',
-          keys: ['sales.make', 'customers.add'],
-        ),
-        (
-          roleId: 'role-stock',
-          slug: 'stock_keeper',
-          userId: 'user-stock',
-          keys: ['stock.view'], // none of these drive a gate
-        ),
-      ];
+  final roles = <({String roleId, String slug, String userId, List<String> keys})>[
+    (
+      roleId: 'role-ceo',
+      slug: 'ceo',
+      userId: 'user-ceo',
+      keys: [
+        'sales.make',
+        'customers.add',
+        'suppliers.manage',
+        'expenses.create',
+        'settings.manage',
+        'activity_logs.view',
+        'staff.invite',
+      ],
+    ),
+    (
+      roleId: 'role-manager',
+      slug: 'manager',
+      userId: 'user-manager',
+      keys: ['sales.make', 'customers.add', 'expenses.create', 'staff.invite'],
+    ),
+    (
+      roleId: 'role-cashier',
+      slug: 'cashier',
+      userId: 'user-cashier',
+      keys: ['sales.make', 'customers.add'],
+    ),
+    (
+      roleId: 'role-stock',
+      slug: 'stock_keeper',
+      userId: 'user-stock',
+      keys: ['stock.view'], // none of these drive a gate
+    ),
+  ];
 
   // The sidebar gates under test → the label they guard. settings.manage
   // guards two rows (Stores and CEO Settings).
@@ -99,9 +93,7 @@ void main() {
     db.businessIdResolver = () => businessId;
     await db.customSelect('SELECT 1').get(); // force onCreate
 
-    await db
-        .into(db.businesses)
-        .insert(
+    await db.into(db.businesses).insert(
           BusinessesCompanion.insert(
             id: const Value(businessId),
             name: 'Test Biz',
@@ -109,9 +101,7 @@ void main() {
         );
 
     for (final r in roles) {
-      await db
-          .into(db.roles)
-          .insert(
+      await db.into(db.roles).insert(
             RolesCompanion.insert(
               id: Value(r.roleId),
               businessId: businessId,
@@ -120,9 +110,7 @@ void main() {
               isSystemDefault: const Value(true),
             ),
           );
-      await db
-          .into(db.users)
-          .insert(
+      await db.into(db.users).insert(
             UsersCompanion.insert(
               id: Value(r.userId),
               businessId: businessId,
@@ -130,9 +118,7 @@ void main() {
               pin: '0000',
             ),
           );
-      await db
-          .into(db.userBusinesses)
-          .insert(
+      await db.into(db.userBusinesses).insert(
             UserBusinessesCompanion.insert(
               id: Value(UuidV7.generate()),
               businessId: businessId,
@@ -141,9 +127,7 @@ void main() {
             ),
           );
       for (final key in r.keys) {
-        await db
-            .into(db.rolePermissions)
-            .insert(
+        await db.into(db.rolePermissions).insert(
               RolePermissionsCompanion.insert(
                 id: Value(UuidV7.generate()),
                 businessId: businessId,
@@ -160,24 +144,24 @@ void main() {
   // Renders every gated label behind its real gate expression, plus the three
   // always-visible items (Home/Inventory/Orders).
   Widget harness(ProviderContainer container) => UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      home: Scaffold(
-        body: Consumer(
-          builder: (_, ref, __) => Column(
-            children: [
-              const Text('Home'),
-              const Text('Inventory'),
-              const Text('Orders'),
-              for (final g in gates)
-                if (ref.watch(currentUserPermissionsProvider).contains(g.$1))
-                  Text(g.$2),
-            ],
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (_, ref, __) => Column(
+                children: [
+                  const Text('Home'),
+                  const Text('Inventory'),
+                  const Text('Orders'),
+                  for (final g in gates)
+                    if (ref.watch(currentUserPermissionsProvider).contains(g.$1))
+                      Text(g.$2),
+                ],
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 
   // What each role should see among the gated rows (the always-on three are
   // asserted separately).
@@ -208,9 +192,8 @@ void main() {
         overrides: [databaseProvider.overrideWithValue(db)],
       );
       addTearDown(container.dispose);
-      container.read(authProvider).value = await db.storesDao.getUserById(
-        r.userId,
-      );
+      container.read(authProvider).value =
+          await db.storesDao.getUserById(r.userId);
 
       await tester.pumpWidget(harness(container));
       await tester.pumpAndSettle();

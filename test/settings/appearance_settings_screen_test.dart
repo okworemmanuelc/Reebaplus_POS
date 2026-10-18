@@ -42,65 +42,45 @@ void main() {
     db.userIdResolver = () => ceoUserId;
     await db.customSelect('SELECT 1').get();
 
-    await db
-        .into(db.businesses)
-        .insert(
+    await db.into(db.businesses).insert(
           BusinessesCompanion.insert(
-            id: const Value(businessId),
-            name: 'Test Biz',
-          ),
+              id: const Value(businessId), name: 'Test Biz'),
         );
     for (final r in [
       (ceoRoleId, 'CEO', 'ceo'),
       (cashierRoleId, 'Cashier', 'cashier'),
     ]) {
-      await db
-          .into(db.roles)
-          .insert(
-            RolesCompanion.insert(
-              id: Value(r.$1),
-              businessId: businessId,
-              name: r.$2,
-              slug: r.$3,
-              isSystemDefault: const Value(true),
-            ),
-          );
+      await db.into(db.roles).insert(RolesCompanion.insert(
+            id: Value(r.$1),
+            businessId: businessId,
+            name: r.$2,
+            slug: r.$3,
+            isSystemDefault: const Value(true),
+          ));
     }
     for (final u in [
       (ceoUserId, 'Carla CEO', ceoRoleId),
       (cashierUserId, 'Cathy Cashier', cashierRoleId),
     ]) {
-      await db
-          .into(db.users)
-          .insert(
-            UsersCompanion.insert(
-              id: Value(u.$1),
-              businessId: businessId,
-              name: u.$2,
-              pin: '0000',
-            ),
-          );
-      await db
-          .into(db.userBusinesses)
-          .insert(
-            UserBusinessesCompanion.insert(
-              id: Value(UuidV7.generate()),
-              businessId: businessId,
-              userId: u.$1,
-              roleId: u.$3,
-            ),
-          );
-    }
-    await db
-        .into(db.rolePermissions)
-        .insert(
-          RolePermissionsCompanion.insert(
+      await db.into(db.users).insert(UsersCompanion.insert(
+            id: Value(u.$1),
+            businessId: businessId,
+            name: u.$2,
+            pin: '0000',
+          ));
+      await db.into(db.userBusinesses).insert(UserBusinessesCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
-            roleId: ceoRoleId,
-            permissionKey: 'settings.manage',
-          ),
-        );
+            userId: u.$1,
+            roleId: u.$3,
+          ));
+    }
+    await db.into(db.rolePermissions).insert(RolePermissionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: businessId,
+          roleId: ceoRoleId,
+          permissionKey: 'settings.manage',
+        ));
   });
 
   tearDown(() async {
@@ -126,15 +106,14 @@ void main() {
   }
 
   Future<String?> settingValue(String key) async {
-    final row = await (db.select(
-      db.settings,
-    )..where((t) => t.key.equals(key))).getSingleOrNull();
+    final row = await (db.select(db.settings)
+          ..where((t) => t.key.equals(key)))
+        .getSingleOrNull();
     return row?.value;
   }
 
-  testWidgets('CEO picks an accent → writes synced setting + enqueues', (
-    tester,
-  ) async {
+  testWidgets('CEO picks an accent → writes synced setting + enqueues',
+      (tester) async {
     await pumpScreen(tester, ceoUserId);
 
     await tester.tap(find.text('Green'));

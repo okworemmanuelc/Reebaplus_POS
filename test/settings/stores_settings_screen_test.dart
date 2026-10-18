@@ -51,67 +51,47 @@ void main() {
     db.userIdResolver = () => ceoUserId;
     await db.customSelect('SELECT 1').get();
 
-    await db
-        .into(db.businesses)
-        .insert(
+    await db.into(db.businesses).insert(
           BusinessesCompanion.insert(
-            id: const Value(businessId),
-            name: 'Test Biz',
-          ),
+              id: const Value(businessId), name: 'Test Biz'),
         );
     for (final r in [
       (ceoRoleId, 'CEO', 'ceo'),
       (cashierRoleId, 'Cashier', 'cashier'),
     ]) {
-      await db
-          .into(db.roles)
-          .insert(
-            RolesCompanion.insert(
-              id: Value(r.$1),
-              businessId: businessId,
-              name: r.$2,
-              slug: r.$3,
-              isSystemDefault: const Value(true),
-            ),
-          );
+      await db.into(db.roles).insert(RolesCompanion.insert(
+            id: Value(r.$1),
+            businessId: businessId,
+            name: r.$2,
+            slug: r.$3,
+            isSystemDefault: const Value(true),
+          ));
     }
     for (final u in [
       (ceoUserId, 'Carla CEO', ceoRoleId),
       (cashierUserId, 'Cathy Cashier', cashierRoleId),
     ]) {
-      await db
-          .into(db.users)
-          .insert(
-            UsersCompanion.insert(
-              id: Value(u.$1),
-              businessId: businessId,
-              name: u.$2,
-              pin: '0000',
-            ),
-          );
-      await db
-          .into(db.userBusinesses)
-          .insert(
-            UserBusinessesCompanion.insert(
-              id: Value(UuidV7.generate()),
-              businessId: businessId,
-              userId: u.$1,
-              roleId: u.$3,
-            ),
-          );
+      await db.into(db.users).insert(UsersCompanion.insert(
+            id: Value(u.$1),
+            businessId: businessId,
+            name: u.$2,
+            pin: '0000',
+          ));
+      await db.into(db.userBusinesses).insert(UserBusinessesCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: businessId,
+            userId: u.$1,
+            roleId: u.$3,
+          ));
     }
     // The CEO holds both axes: stores.manage owns a warehouse, van.manage a van.
     for (final key in ['stores.manage', 'van.manage']) {
-      await db
-          .into(db.rolePermissions)
-          .insert(
-            RolePermissionsCompanion.insert(
-              id: Value(UuidV7.generate()),
-              businessId: businessId,
-              roleId: ceoRoleId,
-              permissionKey: key,
-            ),
-          );
+      await db.into(db.rolePermissions).insert(RolePermissionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: businessId,
+            roleId: ceoRoleId,
+            permissionKey: key,
+          ));
     }
     // The store onboarding mints, so the screen always has one card to render.
     await db.storesDao.createStore(name: 'Main Warehouse');
@@ -160,9 +140,8 @@ void main() {
 
   Future<List<StoreData>> allStores() => db.storesDao.getActiveStores();
 
-  testWidgets('Add a store inserts a non-van location + enqueues it', (
-    tester,
-  ) async {
+  testWidgets('Add a store inserts a non-van location + enqueues it',
+      (tester) async {
     await pumpScreen(tester, ceoUserId);
 
     await addLocation(
@@ -175,9 +154,8 @@ void main() {
 
     expect(tester.takeException(), isNull);
 
-    final added = withoutVans(
-      await allStores(),
-    ).firstWhere((s) => s.name == 'Second Branch');
+    final added = withoutVans(await allStores())
+        .firstWhere((s) => s.name == 'Second Branch');
     expect(added.kind, kStoreKindStore);
     expect(isVanStore(added), isFalse);
     expect(added.location, '12 Market Road');
@@ -195,9 +173,8 @@ void main() {
     );
   });
 
-  testWidgets('Add a van inserts a van location without disposing its fields', (
-    tester,
-  ) async {
+  testWidgets('Add a van inserts a van location without disposing its fields',
+      (tester) async {
     debugOverrideVanSalesEnabled(true);
     addTearDown(() => debugOverrideVanSalesEnabled(null));
     await pumpScreen(tester, ceoUserId);
@@ -220,9 +197,8 @@ void main() {
     expect(vans.single.location, 'ABC-123-XY');
   });
 
-  testWidgets('a van never lands in the store list, and vice versa', (
-    tester,
-  ) async {
+  testWidgets('a van never lands in the store list, and vice versa',
+      (tester) async {
     debugOverrideVanSalesEnabled(true);
     addTearDown(() => debugOverrideVanSalesEnabled(null));
     await pumpScreen(tester, ceoUserId);
@@ -249,9 +225,8 @@ void main() {
     expect(onlyVans(stores).map((s) => s.name), ['Blue Hilux']);
   });
 
-  testWidgets('switched off: no Vans section, even for the CEO', (
-    tester,
-  ) async {
+  testWidgets('switched off: no Vans section, even for the CEO',
+      (tester) async {
     debugOverrideVanSalesEnabled(false);
     addTearDown(() => debugOverrideVanSalesEnabled(null));
     await pumpScreen(tester, ceoUserId);
@@ -261,9 +236,8 @@ void main() {
     expect(find.text('Add a van'), findsNothing);
   });
 
-  testWidgets('an empty name is rejected — no row, sheet stays open', (
-    tester,
-  ) async {
+  testWidgets('an empty name is rejected — no row, sheet stays open',
+      (tester) async {
     await pumpScreen(tester, ceoUserId);
     final before = (await allStores()).length;
 
@@ -276,9 +250,8 @@ void main() {
     expect(await allStores(), hasLength(before));
   });
 
-  testWidgets('dismissing the sheet adds nothing and disposes cleanly', (
-    tester,
-  ) async {
+  testWidgets('dismissing the sheet adds nothing and disposes cleanly',
+      (tester) async {
     await pumpScreen(tester, ceoUserId);
     final before = (await allStores()).length;
 
@@ -293,12 +266,14 @@ void main() {
     expect(await allStores(), hasLength(before));
   });
 
-  testWidgets('the retired "coming in a future update" copy is gone', (
-    tester,
-  ) async {
+  testWidgets('the retired "coming in a future update" copy is gone',
+      (tester) async {
     await pumpScreen(tester, ceoUserId);
 
-    expect(find.textContaining('coming in a future update'), findsNothing);
+    expect(
+      find.textContaining('coming in a future update'),
+      findsNothing,
+    );
     expect(find.text('Add a store'), findsOneWidget);
   });
 

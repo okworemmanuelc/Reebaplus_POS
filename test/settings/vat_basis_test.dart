@@ -10,19 +10,23 @@ void main() {
   group('computeVatKobo — basis', () {
     test('exclusive: VAT is added on top of the net base', () {
       // ₦100,000 @ 7.5% exclusive → ₦7,500.
-      expect(computeVatKobo(10000000, 750, basis: VatBasis.exclusive), 750000);
+      expect(
+        computeVatKobo(10000000, 750, basis: VatBasis.exclusive),
+        750000,
+      );
     });
 
     test('inclusive: VAT is the portion within VAT-inclusive takings', () {
       // ₦100,000 @ 7.5% inclusive → 100,000 × 750 / 10,750 = ₦6,976.74 → ₦6,977.
-      expect(computeVatKobo(10000000, 750, basis: VatBasis.inclusive), 697674);
+      expect(
+        computeVatKobo(10000000, 750, basis: VatBasis.inclusive),
+        697674,
+      );
     });
 
     test('inclusive is the default when no basis is passed', () {
-      expect(
-        computeVatKobo(10000000, 750),
-        computeVatKobo(10000000, 750, basis: VatBasis.inclusive),
-      );
+      expect(computeVatKobo(10000000, 750),
+          computeVatKobo(10000000, 750, basis: VatBasis.inclusive));
     });
 
     test('inclusive is always ≤ exclusive for the same base + rate', () {
@@ -64,11 +68,8 @@ void main() {
     });
 
     test('carries an explicit exclusive basis + its label', () {
-      const c = VatConfig(
-        enabled: true,
-        rateBps: 750,
-        basis: VatBasis.exclusive,
-      );
+      const c =
+          VatConfig(enabled: true, rateBps: 750, basis: VatBasis.exclusive);
       expect(c.basisLabel, 'exclusive');
     });
   });

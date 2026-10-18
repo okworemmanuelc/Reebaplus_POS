@@ -7,7 +7,8 @@ void main() {
   group('computeVatKobo (exclusive basis)', () {
     test('7.5% of ₦175,000 (17,500,000 kobo) = ₦13,125', () {
       // 17_500_000 * 750 / 10000 = 1_312_500 kobo = ₦13,125.
-      expect(computeVatKobo(17500000, 750, basis: VatBasis.exclusive), 1312500);
+      expect(computeVatKobo(17500000, 750, basis: VatBasis.exclusive),
+          1312500);
     });
 
     test('rounds half-away-from-zero to the nearest kobo', () {
@@ -45,18 +46,9 @@ void main() {
     });
 
     test('ratePercentLabel trims a trailing .0', () {
-      expect(
-        const VatConfig(enabled: true, rateBps: 750).ratePercentLabel,
-        '7.5',
-      );
-      expect(
-        const VatConfig(enabled: true, rateBps: 2000).ratePercentLabel,
-        '20',
-      );
-      expect(
-        const VatConfig(enabled: true, rateBps: 500).ratePercentLabel,
-        '5',
-      );
+      expect(const VatConfig(enabled: true, rateBps: 750).ratePercentLabel, '7.5');
+      expect(const VatConfig(enabled: true, rateBps: 2000).ratePercentLabel, '20');
+      expect(const VatConfig(enabled: true, rateBps: 500).ratePercentLabel, '5');
     });
   });
 }
