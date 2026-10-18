@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #443: Sync Issues + Diagnostics restyle (Wave 2 C, 2026-10-19)
+Branch `feat/redesign-w2-sync`, worktree `../drinkPosApp-wt-443`. One PR. **Restyle only: no Drift/cloud/sync/permission change (no `pos-parity` issue), no new package; `SyncPullBanner`, `AppRefreshWrapper`, the outbox, the auto-recovery allowlist and the backoff are untouched.**
+- New `lib/features/sync/widgets/sync_parts.dart` (shared-part candidates): `SyncTopBar`, `syncGutter` (720 cap), `SyncCard`, `SyncHint`, `SyncMessageCard`, `SyncFactRow`, `SyncItemCard`, `SyncAction`, `SyncRoleToggleRow`.
+- Sync Issues, Sync Issues access, the Resolve unsynced data dialog and the Schema error screen rebuilt from the shared parts (see `ui-context.md`). Schema error stays dark-only and provider-free (`AppTheme.dark()` is a pure static `ThemeData`); the error texts, codes, copy-path and close behaviour are unchanged.
+- One shared change: `AppInput` gained an optional `autocorrect` (default true) so the typed DISCARD box keeps `autocorrect: false`.
+- Tests: `test/sync/sync_issues_restyle_test.dart`, `sync_issues_access_screen_test.dart`, `resolve_unsynced_dialog_restyle_test.dart` (keyboard up at 360x640 / 390x844 @1.15), `test/diagnostics/schema_error_screen_test.dart` (no `ProviderScope`); goldens `test/redesign/sync_golden_test.dart` (40).
+
 ### Issue #414: Subscription Locked + Thank You restyle (Wave 2 B, 2026-10-17)
 Branch `feat/redesign-w2-subscription`, worktree `../drinkPosApp-wt-414`. **Restyle only: no write of any kind (subscription columns stay cloud-owned, read-only), no Drift/cloud/sync change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`, `subscription_access.dart` / `subscription_thanks.dart` untouched.**
 - New `lib/features/subscription/widgets/subscription_parts.dart`: `SubscriptionStateFrame` (shared-part candidate): Scaffold on `AppDecorations.pageBackground` (the blurred `AuthBackground` photo is gone), content centred at the raw 720 cap, hero in the middle, actions under it, scrolls when short.
