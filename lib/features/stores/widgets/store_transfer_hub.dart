@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
@@ -210,130 +211,127 @@ class StoreTransferHub extends ConsumerWidget {
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
 
-    return Theme(
-      data: t.copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        title: const SectionHeader(
-          title: 'Transfer history',
-          variant: SectionHeaderVariant.group,
-        ),
-        children: [
-          historyAsync.when(
-            data: (transfers) {
-              if (transfers.isEmpty) {
+    return StoresExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: const SectionHeader(
+        title: 'Transfer history',
+        variant: SectionHeaderVariant.group,
+      ),
+      children: [
+        historyAsync.when(
+          data: (transfers) {
+            if (transfers.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(context.getRSize(16)),
+                decoration: AppDecorations.card(context),
+                child: Text(
+                  'No past transfers for this store.',
+                  style: context.regularStyle(13).copyWith(color: muted),
+                ),
+              );
+            }
+
+            final displayedTransfers = transfers.take(30).toList();
+
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: displayedTransfers.length,
+              separatorBuilder: (context, index) =>
+                  SizedBox(height: context.getRSize(8)),
+              itemBuilder: (context, index) {
+                final tr = displayedTransfers[index];
+                final productName =
+                    productNames[tr.productId] ?? 'Unknown Product';
+                final isIn = tr.toLocationId == storeId;
+                final counterpartyId = isIn
+                    ? tr.fromLocationId
+                    : tr.toLocationId;
+                final counterpartyName =
+                    storeNames[counterpartyId] ?? 'Unknown Store';
+
+                final dateStr = DateFormat(
+                  'MMM d, y • h:mm a',
+                ).format(tr.lastUpdatedAt);
+
                 return Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.all(context.getRSize(16)),
                   decoration: AppDecorations.card(context),
-                  child: Text(
-                    'No past transfers for this store.',
-                    style: context.regularStyle(13).copyWith(color: muted),
-                  ),
-                );
-              }
-
-              final displayedTransfers = transfers.take(30).toList();
-
-              return ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: displayedTransfers.length,
-                separatorBuilder: (context, index) =>
-                    SizedBox(height: context.getRSize(8)),
-                itemBuilder: (context, index) {
-                  final tr = displayedTransfers[index];
-                  final productName =
-                      productNames[tr.productId] ?? 'Unknown Product';
-                  final isIn = tr.toLocationId == storeId;
-                  final counterpartyId = isIn
-                      ? tr.fromLocationId
-                      : tr.toLocationId;
-                  final counterpartyName =
-                      storeNames[counterpartyId] ?? 'Unknown Store';
-
-                  final dateStr = DateFormat(
-                    'MMM d, y • h:mm a',
-                  ).format(tr.lastUpdatedAt);
-
-                  return Container(
-                    decoration: AppDecorations.card(context),
-                    padding: EdgeInsets.all(context.getRSize(12)),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$productName · ${tr.quantity} unit(s)',
-                                style: context
-                                    .boldStyle(13)
-                                    .copyWith(color: text),
-                              ),
-                              SizedBox(height: context.getRSize(4)),
-                              Text(
-                                '${isIn ? "From" : "To"} $counterpartyName',
-                                style: context
-                                    .regularStyle(12)
-                                    .copyWith(color: muted),
-                              ),
-                              SizedBox(height: context.getRSize(4)),
-                              Text(
-                                dateStr,
-                                style: context
-                                    .regularStyle(11)
-                                    .copyWith(color: muted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(width: context.getRSize(8)),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                  padding: EdgeInsets.all(context.getRSize(12)),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            TagPill(
-                              label: isIn ? 'IN' : 'OUT',
-                              tone: isIn ? TagPillTone.green : TagPillTone.info,
-                              dense: true,
-                            ),
-                            SizedBox(height: context.getRSize(6)),
                             Text(
-                              tr.status.toUpperCase(),
+                              '$productName · ${tr.quantity} unit(s)',
                               style: context
-                                  .semiBoldStyle(11)
-                                  .copyWith(
-                                    color: tr.status == 'cancelled'
-                                        ? f.danger
-                                        : muted,
-                                  ),
+                                  .boldStyle(13)
+                                  .copyWith(color: text),
+                            ),
+                            SizedBox(height: context.getRSize(4)),
+                            Text(
+                              '${isIn ? "From" : "To"} $counterpartyName',
+                              style: context
+                                  .regularStyle(12)
+                                  .copyWith(color: muted),
+                            ),
+                            SizedBox(height: context.getRSize(4)),
+                            Text(
+                              dateStr,
+                              style: context
+                                  .regularStyle(11)
+                                  .copyWith(color: muted),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: CircularProgressIndicator(),
-              ),
+                      ),
+                      SizedBox(width: context.getRSize(8)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          TagPill(
+                            label: isIn ? 'IN' : 'OUT',
+                            tone: isIn ? TagPillTone.green : TagPillTone.info,
+                            dense: true,
+                          ),
+                          SizedBox(height: context.getRSize(6)),
+                          Text(
+                            tr.status.toUpperCase(),
+                            style: context
+                                .semiBoldStyle(11)
+                                .copyWith(
+                                  color: tr.status == 'cancelled'
+                                      ? f.danger
+                                      : muted,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: CircularProgressIndicator(),
             ),
-            error: (err, stack) => Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  'Error loading history: $err',
-                  style: TextStyle(color: f.danger),
-                ),
+          ),
+          error: (err, stack) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                'Error loading history: $err',
+                style: TextStyle(color: f.danger),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -686,6 +684,7 @@ class _DispatchDialogState extends State<_DispatchDialog> {
           size: AppButtonSize.small,
           height: kMinInteractiveDimension,
           isFullWidth: false,
+          width: context.getRSize(120),
           onPressed: () => Navigator.pop(context),
         ),
         AppButton(
@@ -693,6 +692,7 @@ class _DispatchDialogState extends State<_DispatchDialog> {
           size: AppButtonSize.small,
           height: kMinInteractiveDimension,
           isFullWidth: false,
+          width: context.getRSize(120),
           onPressed: () => _submit(context),
         ),
       ],

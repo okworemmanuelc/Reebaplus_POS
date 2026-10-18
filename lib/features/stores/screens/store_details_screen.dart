@@ -333,94 +333,85 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
         // the card's own fill visible.
         child: Material(
           type: MaterialType.transparency,
-          child: Theme(
-            data: t.copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              initiallyExpanded: true,
-              tilePadding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(16),
-              ),
-              leading: const IconTile(
-                icon: AppIcons.inventory,
-                tone: IconTileTone.green,
-                size: 40,
-              ),
-              title: Text(
-                'Inventory',
-                style: context
-                    .boldStyle(15)
-                    .copyWith(color: t.colorScheme.onSurface),
-              ),
-              subtitle: Text(
-                '${stocked.length} product${stocked.length == 1 ? '' : 's'} in stock',
-                style: context.regularStyle(12).copyWith(color: muted),
-              ),
-              children: stocked.isEmpty
-                  ? [
-                      Padding(
-                        padding: EdgeInsets.all(context.getRSize(20)),
-                        child: Text(
-                          'No stock in this store yet.',
-                          style: context
-                              .regularStyle(13)
-                              .copyWith(color: muted),
-                          textAlign: TextAlign.center,
+          child: StoresExpansionTile(
+            initiallyExpanded: true,
+            tilePadding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
+            leading: const IconTile(
+              icon: AppIcons.inventory,
+              tone: IconTileTone.green,
+              size: 40,
+            ),
+            title: Text(
+              'Inventory',
+              style: context
+                  .boldStyle(15)
+                  .copyWith(color: t.colorScheme.onSurface),
+            ),
+            subtitle: Text(
+              '${stocked.length} product${stocked.length == 1 ? '' : 's'} in stock',
+              style: context.regularStyle(12).copyWith(color: muted),
+            ),
+            children: stocked.isEmpty
+                ? [
+                    Padding(
+                      padding: EdgeInsets.all(context.getRSize(20)),
+                      child: Text(
+                        'No stock in this store yet.',
+                        style: context.regularStyle(13).copyWith(color: muted),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ]
+                : stocked.map((item) {
+                    final isLow =
+                        item.totalStock <= item.product.lowStockThreshold;
+                    return Container(
+                      decoration: BoxDecoration(
+                        border: Border(top: BorderSide(color: t.dividerColor)),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: context.getRSize(16),
+                          vertical: context.getRSize(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.product.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: context
+                                        .boldStyle(14)
+                                        .copyWith(
+                                          color: t.colorScheme.onSurface,
+                                        ),
+                                  ),
+                                  if ((item.product.unit ?? '').isNotEmpty)
+                                    Text(
+                                      item.product.unit!,
+                                      style: context
+                                          .regularStyle(12)
+                                          .copyWith(color: muted),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(width: context.getRSize(8)),
+                            TagPill(
+                              label: '${item.totalStock} units',
+                              tone: isLow
+                                  ? TagPillTone.danger
+                                  : TagPillTone.green,
+                            ),
+                          ],
                         ),
                       ),
-                    ]
-                  : stocked.map((item) {
-                      final isLow =
-                          item.totalStock <= item.product.lowStockThreshold;
-                      return Container(
-                        decoration: BoxDecoration(
-                          border: Border(
-                            top: BorderSide(color: t.dividerColor),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: context.getRSize(16),
-                            vertical: context.getRSize(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.product.name,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: context
-                                          .boldStyle(14)
-                                          .copyWith(
-                                            color: t.colorScheme.onSurface,
-                                          ),
-                                    ),
-                                    if ((item.product.unit ?? '').isNotEmpty)
-                                      Text(
-                                        item.product.unit!,
-                                        style: context
-                                            .regularStyle(12)
-                                            .copyWith(color: muted),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(width: context.getRSize(8)),
-                              TagPill(
-                                label: '${item.totalStock} units',
-                                tone: isLow
-                                    ? TagPillTone.danger
-                                    : TagPillTone.green,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-            ),
+                    );
+                  }).toList(),
           ),
         ),
       ),

@@ -646,3 +646,53 @@ class StoreStatTile extends StatelessWidget {
     );
   }
 }
+
+/// An [ExpansionTile] whose chevron is drawn from `AppIcons` (the tile's own
+/// arrow is a Material icon) and follows the open / closed state it owns.
+class StoresExpansionTile extends StatefulWidget {
+  const StoresExpansionTile({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.leading,
+    this.tilePadding,
+    this.initiallyExpanded = false,
+    required this.children,
+  });
+
+  final Widget title;
+  final Widget? subtitle;
+  final Widget? leading;
+  final EdgeInsetsGeometry? tilePadding;
+  final bool initiallyExpanded;
+  final List<Widget> children;
+
+  @override
+  State<StoresExpansionTile> createState() => _StoresExpansionTileState();
+}
+
+class _StoresExpansionTileState extends State<StoresExpansionTile> {
+  late bool _expanded = widget.initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Theme(
+      data: t.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        initiallyExpanded: widget.initiallyExpanded,
+        onExpansionChanged: (v) => setState(() => _expanded = v),
+        tilePadding: widget.tilePadding,
+        leading: widget.leading,
+        title: widget.title,
+        subtitle: widget.subtitle,
+        trailing: AppIcon(
+          _expanded ? AppIcons.chevronUp : AppIcons.chevronDown,
+          size: context.getRSize(22),
+          color: t.textTheme.bodySmall?.color,
+        ),
+        children: widget.children,
+      ),
+    );
+  }
+}
