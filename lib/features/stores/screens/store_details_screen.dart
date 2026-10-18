@@ -2,18 +2,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
-import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/stores/screens/request_stock_screen.dart';
 import 'package:reebaplus_pos/features/stores/widgets/store_transfer_hub.dart';
+import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 class StoreDetailsScreen extends ConsumerStatefulWidget {
   final StoreData store;
@@ -32,14 +34,6 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
   StreamSubscription<StoreData?>? _storeSub;
   StreamSubscription<List<ProductDataWithStock>>? _inventorySub;
   StreamSubscription<List<CustomerData>>? _customersSub;
-
-  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _subtext =>
-      Theme.of(context).textTheme.bodySmall?.color ??
-      Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
 
   StoreData get _store => _liveStore ?? widget.store;
 
@@ -94,7 +88,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                 : ref.watch(myUserStoresProvider(userId)).valueOrNull)
             ?.map((s) => s.storeId)
             .toSet() ??
-            const <String>{};
+        const <String>{};
     final hasFullAccess = canViewAll || assignedIds.contains(widget.store.id);
     final canRequest = Gates.requestStoreTransfer.allows(ref);
 
@@ -112,58 +106,89 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
         .length;
     final customersCount = _customers.length;
 
-    return SharedScaffold(
-      activeRoute: 'store',
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(AppIcons.arrowBackIosNew, color: _text, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: AppBarHeader(
-          icon: AppIcons.store,
-          title: _store.name,
-          subtitle: _store.location ?? 'Main Storage',
-        ),
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 600;
-          if (!hasFullAccess) {
-            return _buildRestrictedView(canRequest);
-          }
-          return ListView(
-            padding: EdgeInsets.all(rSize(context, 16)).copyWith(
-              bottom: rSize(context, 16) + context.deviceBottomPadding,
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: SharedScaffold(
+        activeRoute: 'store',
+        backgroundColor: Colors.transparent,
+        appBar: StoresTopBar(
+          key: StoresKeys.detailsTopBar,
+          height: storesTopBarHeight(context),
+          header: ScreenHeader(
+            leading: StoresBackButton(
+              onPressed: () => Navigator.pop(context),
             ),
-            children: [
-              _buildMetricOverview(totalStock, totalValue),
-              SizedBox(height: rSize(context, 20)),
-              _buildStatsGrid(isWide, activeProducts, lowStock, customersCount),
-              SizedBox(height: rSize(context, 24)),
-              _buildInventoryList(),
-              SizedBox(height: rSize(context, 16)),
-              if (canRequest) ...[
-                AppButton(
-                  text: 'Request Stock',
-                  icon: AppIcons.settlement,
-                  variant: AppButtonVariant.secondary,
-                  isFullWidth: true,
-                  onPressed: () =>
-                      _openRequestScreen(fixedDestStoreId: widget.store.id),
-                ),
-                SizedBox(height: rSize(context, 16)),
-              ],
-              _buildQuickActions(isWide),
-              SizedBox(height: rSize(context, 24)),
-              StoreTransferHub(storeId: widget.store.id),
-              SizedBox(height: rSize(context, 100)),
-            ],
-          );
-        },
+            icon: AppIcons.store,
+            title: _store.name,
+            subtitle: _store.location ?? 'Main Storage',
+          ),
+        ),
+        body: CustomScrollView(
+          key: hasFullAccess ? StoresKeys.detailsBody : StoresKeys.restricted,
+          slivers: [
+            storesSliver(
+              SliverToBoxAdapter(
+                child: hasFullAccess
+                    ? _buildFullView(
+                        canRequest: canRequest,
+                        totalStock: totalStock,
+                        totalValue: totalValue,
+                        activeProducts: activeProducts,
+                        lowStock: lowStock,
+                        customersCount: customersCount,
+                      )
+                    : _buildRestrictedView(canRequest),
+              ),
+              cap: kStoreDetailsMaxContentWidth,
+              top: context.getRSize(16),
+              bottom: context.getRSize(24) + context.deviceBottomPadding,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildFullView({
+    required bool canRequest,
+    required int totalStock,
+    required double totalValue,
+    required int activeProducts,
+    required int lowStock,
+    required int customersCount,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHeaderCards(
+          totalStock,
+          totalValue,
+          activeProducts,
+          lowStock,
+          customersCount,
+        ),
+        SizedBox(height: context.getRSize(20)),
+        _buildInventoryList(),
+        SizedBox(height: context.getRSize(16)),
+        if (canRequest) ...[
+          AppButton(
+            key: StoresKeys.requestStock,
+            text: 'Request Stock',
+            icon: AppIcons.settlement,
+            variant: AppButtonVariant.secondary,
+            isFullWidth: true,
+            onPressed: () =>
+                _openRequestScreen(fixedDestStoreId: widget.store.id),
+          ),
+          SizedBox(height: context.getRSize(16)),
+        ],
+        _buildQuickActions(),
+        SizedBox(height: context.getRSize(24)),
+        KeyedSubtree(
+          key: StoresKeys.transferHub,
+          child: StoreTransferHub(storeId: widget.store.id),
+        ),
+      ],
     );
   }
 
@@ -171,446 +196,250 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
   // Read-only browse of the store's stock + a single "Request Stock" action.
   // No metrics, no management, no transfer hub.
   Widget _buildRestrictedView(bool canRequest) {
-    return ListView(
-      padding: EdgeInsets.all(rSize(context, 16)).copyWith(
-        bottom: rSize(context, 16) + context.deviceBottomPadding,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          padding: EdgeInsets.all(rSize(context, 14)),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                AppIcons.infoCircle,
-                size: rSize(context, 16),
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              SizedBox(width: rSize(context, 10)),
-              Expanded(
-                child: Text(
-                  "You can browse this store's stock and request items. Full "
-                  "management is available only for stores you're assigned to.",
-                  style: TextStyle(
-                    color: _subtext,
-                    fontSize: rFontSize(context, 12),
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
-          ),
+        const StoresNotice(
+          text:
+              "You can browse this store's stock and request items. Full "
+              "management is available only for stores you're assigned to.",
         ),
-        SizedBox(height: rSize(context, 20)),
+        SizedBox(height: context.getRSize(20)),
         _buildInventoryList(),
-        SizedBox(height: rSize(context, 16)),
+        SizedBox(height: context.getRSize(16)),
         if (canRequest)
           AppButton(
+            key: StoresKeys.requestStock,
             text: 'Request Stock from this store',
             icon: AppIcons.settlement,
             isFullWidth: true,
             onPressed: () =>
                 _openRequestScreen(fixedSourceStoreId: widget.store.id),
           ),
-        SizedBox(height: rSize(context, 100)),
       ],
     );
   }
 
-  Widget _buildMetricOverview(int totalStock, double totalValue) {
-    return Container(
-      padding: EdgeInsets.all(rSize(context, 20)),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.secondary,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Store Value',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    fontSize: rFontSize(context, 14),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(height: rSize(context, 4)),
-                Text(
-                  formatCurrency(totalValue),
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: rFontSize(context, 28),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: rSize(context, 16),
-              vertical: rSize(context, 8),
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  totalStock.toString(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                Text(
-                  'Total Units',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatsGrid(
-    bool isWide,
+  /// Store Value + the three figure tiles: stacked, or side by side once the
+  /// measured content column is at least [kStoreDetailsSideBySideWidth]
+  /// (never a viewport predicate - PRD #239).
+  Widget _buildHeaderCards(
+    int totalStock,
+    double totalValue,
     int activeProducts,
     int lowStock,
     int customersCount,
   ) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: isWide ? 3 : 2,
-      mainAxisSpacing: rSize(context, 12),
-      crossAxisSpacing: rSize(context, 12),
-      childAspectRatio: 1.1,
-      children: [
-        _buildStatCard(
-          'Products',
-          activeProducts.toString(),
-          AppIcons.inventory,
-          AppColors.success,
-        ),
-        _buildStatCard(
-          'Low Stock',
-          lowStock.toString(),
-          AppIcons.warning,
-          AppColors.danger,
-        ),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            // §12.1: focus the app-wide active store on this store, then open
-            // the Customers tab (which now follows the nav-drawer picker).
-            final nav = ref.read(navigationProvider);
-            nav.setLockedStore(widget.store.id);
-            Navigator.of(context).pop();
-            nav.setIndex(4);
-          },
-          child: _buildStatCard(
-            'Customers',
-            customersCount.toString(),
-            AppIcons.customers,
-            const Color(0xFF06B6D4),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Container(
-      padding: EdgeInsets.all(rSize(context, 16)),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: EdgeInsets.all(rSize(context, 8)),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: rSize(context, 16)),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, c) {
+        final gap = context.getRSize(12);
+        final sideBySide = c.maxWidth >= kStoreDetailsSideBySideWidth;
+        final value = StatCard(
+          key: StoresKeys.storeValue,
+          icon: AppIcons.inventory,
+          tone: IconTileTone.info,
+          title: 'Store Value',
+          value: formatCurrency(totalValue),
+          subtitle: 'Total Units',
+          pillLabel: totalStock.toString(),
+          pillTone: TagPillTone.info,
+        );
+        Widget tiles(double width) {
+          final cols = width >= context.getRSize(480) ? 3 : 2;
+          final tileWidth = (width - gap * (cols - 1)) / cols;
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: rFontSize(context, 20),
-                  fontWeight: FontWeight.w900,
-                  color: _text,
+              SizedBox(
+                width: tileWidth,
+                child: StoreStatTile(
+                  icon: AppIcons.inventory,
+                  tone: IconTileTone.green,
+                  label: 'Products',
+                  value: activeProducts.toString(),
                 ),
               ),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: rFontSize(context, 12),
-                  color: _subtext,
-                  fontWeight: FontWeight.w500,
+              SizedBox(
+                width: tileWidth,
+                child: StoreStatTile(
+                  icon: AppIcons.warning,
+                  tone: IconTileTone.danger,
+                  label: 'Low Stock',
+                  value: lowStock.toString(),
+                ),
+              ),
+              SizedBox(
+                width: tileWidth,
+                child: StoreStatTile(
+                  key: StoresKeys.customersTile,
+                  icon: AppIcons.customers,
+                  tone: IconTileTone.info,
+                  label: 'Customers',
+                  value: customersCount.toString(),
+                  onTap: () {
+                    // §12.1: focus the app-wide active store on this store,
+                    // then open the Customers tab (which now follows the
+                    // nav-drawer picker).
+                    final nav = ref.read(navigationProvider);
+                    nav.setLockedStore(widget.store.id);
+                    Navigator.of(context).pop();
+                    nav.setIndex(4);
+                  },
                 ),
               ),
             ],
-          ),
-        ],
-      ),
+          );
+        }
+
+        if (!sideBySide) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [value, SizedBox(height: gap), tiles(c.maxWidth)],
+          );
+        }
+        final rightWidth = (c.maxWidth - gap) * 3 / 5;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 2, child: value),
+            SizedBox(width: gap),
+            SizedBox(width: rightWidth, child: tiles(rightWidth)),
+          ],
+        );
+      },
     );
   }
 
   // ── Inventory List ──────────────────────────────────────────────────────────
   Widget _buildInventoryList() {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final stocked = _inventory.where((p) => p.totalStock > 0).toList()
       ..sort((a, b) => b.totalStock.compareTo(a.totalStock));
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          initiallyExpanded: true,
-          tilePadding: EdgeInsets.symmetric(
-            horizontal: rSize(context, 16),
-            vertical: 0,
-          ),
-          leading: Container(
-            padding: EdgeInsets.all(rSize(context, 8)),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              AppIcons.inventory,
-              color: AppColors.success,
-              size: rSize(context, 14),
-            ),
-          ),
-          title: Text(
-            'Inventory',
-            style: TextStyle(
-              fontSize: rFontSize(context, 15),
-              fontWeight: FontWeight.bold,
-              color: _text,
-            ),
-          ),
-          subtitle: Text(
-            '${stocked.length} product${stocked.length == 1 ? '' : 's'} in stock',
-            style: TextStyle(fontSize: rFontSize(context, 12), color: _subtext),
-          ),
-          children: stocked.isEmpty
-              ? [
-                  Padding(
-                    padding: EdgeInsets.all(rSize(context, 20)),
-                    child: Text(
-                      'No stock in this store yet.',
-                      style: TextStyle(
-                        color: _subtext,
-                        fontSize: rFontSize(context, 13),
+    return DecoratedBox(
+      key: StoresKeys.inventoryCard,
+      decoration: AppDecorations.card(context),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
+        // ListTile paints on the nearest Material; a transparent one keeps
+        // the card's own fill visible.
+        child: Material(
+          type: MaterialType.transparency,
+          child: Theme(
+            data: t.copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              initiallyExpanded: true,
+              tilePadding: EdgeInsets.symmetric(
+                horizontal: context.getRSize(16),
+              ),
+              leading: const IconTile(
+                icon: AppIcons.inventory,
+                tone: IconTileTone.green,
+                size: 40,
+              ),
+              title: Text(
+                'Inventory',
+                style: context.boldStyle(15).copyWith(
+                  color: t.colorScheme.onSurface,
+                ),
+              ),
+              subtitle: Text(
+                '${stocked.length} product${stocked.length == 1 ? '' : 's'} in stock',
+                style: context.regularStyle(12).copyWith(color: muted),
+              ),
+              children: stocked.isEmpty
+                  ? [
+                      Padding(
+                        padding: EdgeInsets.all(context.getRSize(20)),
+                        child: Text(
+                          'No stock in this store yet.',
+                          style: context.regularStyle(13).copyWith(color: muted),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ]
-              : stocked.map((item) {
-                  final isLow =
-                      item.totalStock <= item.product.lowStockThreshold;
-                  return Container(
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: _border)),
-                    ),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: rSize(context, 16),
-                        vertical: rSize(context, 12),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.product.name,
-                                  style: TextStyle(
-                                    fontSize: rFontSize(context, 14),
-                                    fontWeight: FontWeight.w600,
-                                    color: _text,
-                                  ),
-                                ),
-                                if ((item.product.unit ?? '').isNotEmpty) ...[
-                                  SizedBox(height: rSize(context, 2)),
-                                  Text(
-                                    item.product.unit!,
-                                    style: TextStyle(
-                                      fontSize: rFontSize(context, 11),
-                                      color: _subtext,
+                    ]
+                  : stocked.map((item) {
+                      final isLow =
+                          item.totalStock <= item.product.lowStockThreshold;
+                      return Container(
+                        decoration: BoxDecoration(
+                          border: Border(top: BorderSide(color: t.dividerColor)),
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: context.getRSize(16),
+                            vertical: context.getRSize(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.product.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: context.boldStyle(14).copyWith(
+                                        color: t.colorScheme.onSurface,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: rSize(context, 10),
-                              vertical: rSize(context, 4),
-                            ),
-                            decoration: BoxDecoration(
-                              color: isLow
-                                  ? Theme.of(
-                                      context,
-                                    ).colorScheme.error.withValues(alpha: 0.1)
-                                  : AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${item.totalStock} units',
-                              style: TextStyle(
-                                fontSize: rFontSize(context, 12),
-                                fontWeight: FontWeight.bold,
-                                color: isLow
-                                    ? AppColors.danger
-                                    : AppColors.success,
+                                    if ((item.product.unit ?? '').isNotEmpty)
+                                      Text(
+                                        item.product.unit!,
+                                        style: context
+                                            .regularStyle(12)
+                                            .copyWith(color: muted),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
+                              SizedBox(width: context.getRSize(8)),
+                              TagPill(
+                                label: '${item.totalStock} units',
+                                tone: isLow
+                                    ? TagPillTone.danger
+                                    : TagPillTone.green,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
+                        ),
+                      );
+                    }).toList(),
+            ),
+          ),
         ),
       ),
     );
   }
 
   // ── Quick Actions ───────────────────────────────────────────────────────────
-  Widget _buildQuickActions(bool isWide) {
+  Widget _buildQuickActions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Quick Actions',
-          style: TextStyle(
-            fontSize: rFontSize(context, 16),
-            fontWeight: FontWeight.bold,
-            color: _text,
+        const SectionHeader(title: 'Quick Actions'),
+        SizedBox(height: context.getRSize(12)),
+        KeyedSubtree(
+          key: StoresKeys.viewInventory,
+          child: SettingsRow(
+            icon: AppIcons.inventory,
+            tone: IconTileTone.info,
+            title: 'View Inventory',
+            subtitle: 'Check and manage stock',
+            onTap: () {
+              // §12.1: focus the app-wide active store on this store, then
+              // open the Inventory tab (which now follows the nav-drawer
+              // picker).
+              final nav = ref.read(navigationProvider);
+              nav.setLockedStore(widget.store.id);
+              nav.setIndex(2);
+            },
           ),
         ),
-        SizedBox(height: rSize(context, 12)),
-        _actionTile(
-          'View Inventory',
-          'Check and manage stock',
-          AppIcons.inventory,
-          Theme.of(context).colorScheme.primary,
-          () {
-            // §12.1: focus the app-wide active store on this store, then open
-            // the Inventory tab (which now follows the nav-drawer picker).
-            final nav = ref.read(navigationProvider);
-            nav.setLockedStore(widget.store.id);
-            nav.setIndex(2);
-          },
-        ),
       ],
-    );
-  }
-
-  Widget _actionTile(
-    String title,
-    String subtitle,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: EdgeInsets.all(rSize(context, 16)),
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: EdgeInsets.all(rSize(context, 10)),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: rSize(context, 18)),
-            ),
-            SizedBox(height: rSize(context, 12)),
-            Text(
-              title,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: rFontSize(context, 14),
-                color: _text,
-              ),
-            ),
-            SizedBox(height: rSize(context, 2)),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: rFontSize(context, 11),
-                color: _subtext,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -26,6 +26,13 @@ abstract final class StoresKeys {
   static const detailsBody = ValueKey<String>('store-details-body');
   static const restricted = ValueKey<String>('store-details-restricted');
   static const settingsList = ValueKey<String>('stores-settings-list');
+  static const detailsTopBar = ValueKey<String>('store-details-top-bar');
+  static const storeValue = ValueKey<String>('store-details-value');
+  static const customersTile = ValueKey<String>('store-details-customers');
+  static const inventoryCard = ValueKey<String>('store-details-inventory');
+  static const requestStock = ValueKey<String>('store-details-request');
+  static const viewInventory = ValueKey<String>('store-details-view-inventory');
+  static const transferHub = ValueKey<String>('store-transfer-hub');
 
   static Key card(String storeId) => ValueKey<String>('stores-card-$storeId');
   static Key edit(String storeId) =>
@@ -564,6 +571,78 @@ class StoresAutocompleteField extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+/// One figure tile of Store Details (Products / Low Stock / Customers): a
+/// flat card with an [IconTile] over the value and its label. With [onTap]
+/// the whole tile is tappable (the Customers tile).
+class StoreStatTile extends StatelessWidget {
+  const StoreStatTile({
+    super.key,
+    required this.icon,
+    required this.tone,
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final IconTileTone tone;
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final content = Padding(
+      padding: EdgeInsets.all(context.getRSize(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconTile(icon: icon, tone: tone, size: 40),
+          SizedBox(height: context.getRSize(10)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: context.extraBoldStyle(20).copyWith(
+                color: t.colorScheme.onSurface,
+              ),
+            ),
+          ),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: context.regularStyle(12).copyWith(color: muted),
+          ),
+        ],
+      ),
+    );
+    return DecoratedBox(
+      decoration: AppDecorations.card(context),
+      child: onTap == null
+          ? content
+          : Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
+                onTap: onTap,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minHeight: kMinInteractiveDimension,
+                  ),
+                  child: content,
+                ),
+              ),
+            ),
     );
   }
 }
