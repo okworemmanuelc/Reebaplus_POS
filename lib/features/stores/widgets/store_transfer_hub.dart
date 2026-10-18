@@ -7,10 +7,15 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// The per-store Stock Transfer hub (§16.8.2) embedded in a store's details for
 /// a viewer with full access to that store. Four sections, each hidden when
@@ -71,9 +76,8 @@ class StoreTransferHub extends ConsumerWidget {
         p.product.id: p.totalStock,
     };
 
-    final text = Theme.of(context).colorScheme.onSurface;
-    final subtext = Theme.of(context).textTheme.bodySmall?.color;
-
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final hasAny = incomingReqs.isNotEmpty ||
         incomingTransfers.isNotEmpty ||
         outgoingReqs.isNotEmpty ||
@@ -82,30 +86,16 @@ class StoreTransferHub extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Stock Transfers',
-          style: TextStyle(
-            fontSize: context.getRFontSize(16),
-            fontWeight: FontWeight.bold,
-            color: text,
-          ),
-        ),
+        const SectionHeader(title: 'Stock Transfers'),
         SizedBox(height: context.getRSize(12)),
         if (!hasAny)
           Container(
             width: double.infinity,
             padding: EdgeInsets.all(context.getRSize(16)),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
+            decoration: AppDecorations.card(context),
             child: Text(
               'No active transfers for this store.',
-              style: TextStyle(
-                color: subtext,
-                fontSize: context.getRFontSize(13),
-              ),
+              style: context.regularStyle(13).copyWith(color: muted),
             ),
           ),
         _section(
@@ -178,20 +168,14 @@ class StoreTransferHub extends ConsumerWidget {
     required Widget Function(StockTransferData) builder,
   }) {
     if (rows.isEmpty) return const SizedBox.shrink();
-    final subtext = Theme.of(context).textTheme.bodySmall?.color;
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontSize: context.getRFontSize(11),
-              fontWeight: FontWeight.bold,
-              color: subtext,
-              letterSpacing: 0.4,
-            ),
+          SectionHeader(
+            title: title.toUpperCase(),
+            variant: SectionHeaderVariant.group,
           ),
           SizedBox(height: context.getRSize(8)),
           for (final t in rows) ...[
@@ -215,22 +199,18 @@ class StoreTransferHub extends ConsumerWidget {
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
     final storeNames = {for (final s in stores) s.id: s.name};
 
-    final text = Theme.of(context).colorScheme.onSurface;
-    final subtext = Theme.of(context).textTheme.bodySmall?.color;
-    final border = Theme.of(context).dividerColor;
-    final surface = Theme.of(context).colorScheme.surface;
+    final t = Theme.of(context);
+    final text = t.colorScheme.onSurface;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
 
     return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      data: t.copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        title: Text(
-          'Transfer history',
-          style: TextStyle(
-            fontSize: context.getRFontSize(14),
-            fontWeight: FontWeight.bold,
-            color: text,
-          ),
+        title: const SectionHeader(
+          title: 'Transfer history',
+          variant: SectionHeaderVariant.group,
         ),
         children: [
           historyAsync.when(
@@ -239,17 +219,10 @@ class StoreTransferHub extends ConsumerWidget {
                 return Container(
                   width: double.infinity,
                   padding: EdgeInsets.all(context.getRSize(16)),
-                  decoration: BoxDecoration(
-                    color: surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: border),
-                  ),
+                  decoration: AppDecorations.card(context),
                   child: Text(
                     'No past transfers for this store.',
-                    style: TextStyle(
-                      color: subtext,
-                      fontSize: context.getRFontSize(13),
-                    ),
+                    style: context.regularStyle(13).copyWith(color: muted),
                   ),
                 );
               }
@@ -260,22 +233,24 @@ class StoreTransferHub extends ConsumerWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: displayedTransfers.length,
-                separatorBuilder: (context, index) => SizedBox(height: context.getRSize(8)),
+                separatorBuilder: (context, index) =>
+                    SizedBox(height: context.getRSize(8)),
                 itemBuilder: (context, index) {
-                  final t = displayedTransfers[index];
-                  final productName = productNames[t.productId] ?? 'Unknown Product';
-                  final isIn = t.toLocationId == storeId;
-                  final counterpartyId = isIn ? t.fromLocationId : t.toLocationId;
-                  final counterpartyName = storeNames[counterpartyId] ?? 'Unknown Store';
-                  
-                  final dateStr = DateFormat('MMM d, y • h:mm a').format(t.lastUpdatedAt);
+                  final tr = displayedTransfers[index];
+                  final productName =
+                      productNames[tr.productId] ?? 'Unknown Product';
+                  final isIn = tr.toLocationId == storeId;
+                  final counterpartyId =
+                      isIn ? tr.fromLocationId : tr.toLocationId;
+                  final counterpartyName =
+                      storeNames[counterpartyId] ?? 'Unknown Store';
+
+                  final dateStr = DateFormat(
+                    'MMM d, y • h:mm a',
+                  ).format(tr.lastUpdatedAt);
 
                   return Container(
-                    decoration: BoxDecoration(
-                      color: surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: border),
-                    ),
+                    decoration: AppDecorations.card(context),
                     padding: EdgeInsets.all(context.getRSize(12)),
                     child: Row(
                       children: [
@@ -284,64 +259,45 @@ class StoreTransferHub extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '$productName · ${t.quantity} unit(s)',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: text,
-                                  fontSize: context.getRFontSize(13),
-                                ),
+                                '$productName · ${tr.quantity} unit(s)',
+                                style: context
+                                    .boldStyle(13)
+                                    .copyWith(color: text),
                               ),
                               SizedBox(height: context.getRSize(4)),
                               Text(
                                 '${isIn ? "From" : "To"} $counterpartyName',
-                                style: TextStyle(
-                                  color: subtext,
-                                  fontSize: context.getRFontSize(12),
-                                ),
+                                style: context
+                                    .regularStyle(12)
+                                    .copyWith(color: muted),
                               ),
                               SizedBox(height: context.getRSize(4)),
                               Text(
                                 dateStr,
-                                style: TextStyle(
-                                  color: subtext,
-                                  fontSize: context.getRFontSize(11),
-                                ),
+                                style: context
+                                    .regularStyle(11)
+                                    .copyWith(color: muted),
                               ),
                             ],
                           ),
                         ),
+                        SizedBox(width: context.getRSize(8)),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: context.getRSize(8),
-                                vertical: context.getRSize(3),
-                              ),
-                              decoration: BoxDecoration(
-                                color: isIn
-                                    ? AppColors.success.withValues(alpha: 0.1)
-                                    : AppColors.info.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                isIn ? 'IN' : 'OUT',
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(10),
-                                  fontWeight: FontWeight.bold,
-                                  color: isIn ? AppColors.success : AppColors.info,
-                                ),
-                              ),
+                            TagPill(
+                              label: isIn ? 'IN' : 'OUT',
+                              tone:
+                                  isIn ? TagPillTone.green : TagPillTone.info,
+                              dense: true,
                             ),
                             SizedBox(height: context.getRSize(6)),
                             Text(
-                              t.status.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(10),
-                                fontWeight: FontWeight.w600,
-                                color: t.status == 'cancelled'
-                                    ? AppColors.danger
-                                    : subtext,
+                              tr.status.toUpperCase(),
+                              style: context.semiBoldStyle(11).copyWith(
+                                color: tr.status == 'cancelled'
+                                    ? f.danger
+                                    : muted,
                               ),
                             ),
                           ],
@@ -363,7 +319,7 @@ class StoreTransferHub extends ConsumerWidget {
                 padding: const EdgeInsets.all(16.0),
                 child: Text(
                   'Error loading history: $err',
-                  style: const TextStyle(color: AppColors.danger),
+                  style: TextStyle(color: f.danger),
                 ),
               ),
             ),
@@ -484,8 +440,12 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
       context: context,
       builder: (ctx) => AlertDialog(
         scrollable: true,
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
-        title: const Text('Dispatch quantity'),
+        title: Text(
+          'Dispatch quantity',
+          style: ctx.screenTitleStyle.copyWith(
+            color: Theme.of(ctx).colorScheme.onSurface,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -493,8 +453,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
             Text(
               'Requested: ${widget.transfer.quantity}   ·   '
               'Available here: ${widget.availableHere}',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
+              style: ctx.regularStyle(12).copyWith(
                 color: Theme.of(ctx).textTheme.bodySmall?.color,
               ),
             ),
@@ -516,8 +475,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
               SizedBox(height: context.getRSize(4)),
               Text(
                 'Available here: ${widget.availableEmpties}',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(11),
+                style: ctx.regularStyle(11).copyWith(
                   color: Theme.of(ctx).textTheme.bodySmall?.color,
                 ),
               ),
@@ -525,11 +483,17 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
           ],
         ),
         actions: [
-          TextButton(
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.small,
+            isFullWidth: false,
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
           ),
-          TextButton(
+          AppButton(
+            text: 'Dispatch',
+            size: AppButtonSize.small,
+            isFullWidth: false,
             onPressed: () {
               final q = int.tryParse(qtyCtrl.text.trim()) ?? 0;
               if (q <= 0) {
@@ -553,7 +517,6 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
               }
               Navigator.pop(ctx, (quantity: q, empties: empties));
             },
-            child: const Text('Dispatch'),
           ),
         ],
       ),
@@ -565,12 +528,9 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
 
   @override
   Widget build(BuildContext context) {
-    final surface = Theme.of(context).colorScheme.surface;
-    final border = Theme.of(context).dividerColor;
-    final text = Theme.of(context).colorScheme.onSurface;
-    final subtext = Theme.of(context).textTheme.bodySmall?.color;
-    final primary = Theme.of(context).colorScheme.primary;
-
+    final t = Theme.of(context);
+    final text = t.colorScheme.onSurface;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final canDispatch = Gates.dispatchStoreTransfer.allows(ref);
     final canReceive = Gates.receiveStoreTransfer.allows(ref);
 
@@ -583,66 +543,80 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
       _CardMode.dispatched =>
         'Dispatched to ${widget.counterpartyStore} — in transit',
     };
+    final tone = switch (widget.mode) {
+      _CardMode.fulfil => IconTileTone.info,
+      _CardMode.receive => IconTileTone.green,
+      _CardMode.requested => IconTileTone.neutral,
+      _CardMode.dispatched => IconTileTone.warning,
+    };
 
     return Container(
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border),
-      ),
+      decoration: AppDecorations.card(context),
       padding: EdgeInsets.all(context.getRSize(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              IconTile(icon: AppIcons.transfer, tone: tone, size: 40),
+              SizedBox(width: context.getRSize(12)),
               Expanded(
-                child: Text(
-                  '${widget.productName} · ${widget.transfer.quantity} unit(s)',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: text,
-                    fontSize: context.getRFontSize(14),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${widget.productName} · ${widget.transfer.quantity} unit(s)',
+                      style: context.boldStyle(14).copyWith(color: text),
+                    ),
+                    SizedBox(height: context.getRSize(4)),
+                    Text(
+                      subtitle,
+                      style: context.regularStyle(12).copyWith(color: muted),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          SizedBox(height: context.getRSize(4)),
-          Text(
-            subtitle,
-            style: TextStyle(
-              color: subtext,
-              fontSize: context.getRFontSize(12),
-            ),
-          ),
           if (widget.mode == _CardMode.fulfil && canDispatch) ...[
             SizedBox(height: context.getRSize(12)),
-            Row(
-              children: [
-                Expanded(
-                  child: _btn(
-                    label: _busy ? 'Working…' : 'Accept & Dispatch',
-                    color: primary,
-                    onTap: _busy ? null : _accept,
-                  ),
-                ),
-                SizedBox(width: context.getRSize(8)),
-                Expanded(
-                  child: _btn(
-                    label: 'Reject',
-                    color: Theme.of(context).colorScheme.error,
-                    onTap: _busy ? null : _reject,
-                  ),
-                ),
-              ],
+            // Two buttons side by side while each has room for its label,
+            // stacked otherwise (measured, never a viewport predicate).
+            LayoutBuilder(
+              builder: (context, c) {
+                final accept = _btn(
+                  label: _busy ? 'Working…' : 'Accept & Dispatch',
+                  onTap: _busy ? null : _accept,
+                );
+                final reject = _btn(
+                  label: 'Reject',
+                  danger: true,
+                  onTap: _busy ? null : _reject,
+                );
+                if (c.maxWidth >= context.getRSize(340)) {
+                  return Row(
+                    children: [
+                      Expanded(child: accept),
+                      SizedBox(width: context.getRSize(8)),
+                      Expanded(child: reject),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    accept,
+                    SizedBox(height: context.getRSize(8)),
+                    reject,
+                  ],
+                );
+              },
             ),
           ],
           if (widget.mode == _CardMode.receive && canReceive) ...[
             SizedBox(height: context.getRSize(12)),
             _btn(
               label: _busy ? 'Working…' : 'Confirm Receipt',
-              color: primary,
               onTap: _busy ? null : _receive,
             ),
           ],
@@ -650,7 +624,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
             SizedBox(height: context.getRSize(12)),
             _btn(
               label: _busy ? 'Working…' : 'Cancel Transfer',
-              color: Theme.of(context).colorScheme.error,
+              danger: true,
               onTap: _busy ? null : _cancel,
             ),
           ],
@@ -661,29 +635,14 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
 
   Widget _btn({
     required String label,
-    required Color color,
     required VoidCallback? onTap,
+    bool danger = false,
   }) {
-    return SizedBox(
-      height: context.getRSize(40),
-      child: ElevatedButton(
-        onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          padding: EdgeInsets.zero,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: context.getRFontSize(13),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
+    return AppButton(
+      text: label,
+      variant: danger ? AppButtonVariant.danger : AppButtonVariant.primary,
+      height: kMinInteractiveDimension,
+      onPressed: onTap,
     );
   }
 }
