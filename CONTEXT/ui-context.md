@@ -762,6 +762,15 @@ handles insets. See `CLAUDE.md` for the full platform-specific rule.
 
 Full-screen states, not list screens: `SubscriptionStateFrame` = Scaffold + `AppDecorations.pageBackground` (no blurred photo), `SafeArea`, content centred at the raw `kSettingsMaxContentWidth` (720), hero centred in the free space and the actions under it; scrolls when short. **Locked**: 88 danger `IconTile` (lock), ExtraBold 26 title, Regular 15 muted body, SemiBold danger "Your free trial ended on …" line (trial only), primary Subscribe (opens the unchanged "coming soon" pop-up) and ghost Sign out. **Thank You**: 88 green `IconTile` inside the pulsing ring, ExtraBold 28 title, muted body, flat `AppDecorations.card` plan card (Bold 16 price, Regular 13 muted "Renews …"), primary Continue. Read-only: no write of any kind. Goldens `subscription_locked_*` / `thank_you_subscription_*`.
 
+### Stores (`lib/features/stores/`, `stores_settings_screen.dart`, #441, PRD #346 Wave 2 C)
+
+Local parts in `lib/features/stores/widgets/stores_parts.dart` (shared-part candidates).
+
+- **Top bar** (`StoresTopBar`, height `storesTopBarHeight` = CEO Settings' rule): solid Surface + hairline + `topBarShadow`, `ScreenHeader` — store tile, "Stores", the active store; live bell; the 48dp `MenuButton` only under 600dp. CEO Settings > Stores uses the same bar with a 48dp back arrow (`maybePop`) and no subtitle.
+- **List**: one flat `AppDecorations.card` per store, capped at the raw `kSettingsMaxContentWidth` (720) and centred (`storesSliver`). The top row (44 `IconTile`, name Bold 15 up to 2 lines, muted location up to 2 lines, chevron) opens Store Details; under it a hairline, "Total Units" (info) and "Products" (green) `StoreFigure`s, then — only with `Gates.manageStores` — 48dp Edit / Delete text actions. Empty: neutral `IconTile` + "No Stores Yet". No access: the same centred sentence as before. The list clears the Add Store `AppFAB` with 88 + `deviceBottomPadding`.
+- **Sheets** (`StoreSheetFrame`, `showStoresSheet`): the theme sheet shape on its own Surface, capped at 640; hairline handle, 44 `IconTile` + `screenTitleStyle` title (+ optional muted subtitle), then fields; one shrink-wrapped scroll view capped at 90% of the screen height with `deviceBottomPadding` below, so it scrolls with the keyboard up. Fields are `AppInput`; the Country picker is `StoresAutocompleteField` (label over `AppInput`, 48dp option rows). The Delete dialog is `scrollable` and its stock warning is a `StoresNotice`.
+- **CEO Settings > Stores**: 720 cap; a flat card per location (name + address `AppInput`, 48dp "Save changes"), 48dp outlined "Add a store" / "Add a van", a `SectionHeader` "Vans" with the muted explainer. Compact on purpose: the 800x600 test surface must show "Add a van" without scrolling.
+
 ## Brand logo
 
 The official Reebaplus logo (ring mark "R+" with a rising arrow, plus the

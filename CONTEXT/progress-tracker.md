@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #441: Stores restyle, part 1 of 2 (Wave 2 C, 2026-10-19)
+Branch `feat/redesign-w2-stores`, worktree `../drinkPosApp-wt-441`. PR 1 = Stores list + Add / Edit / Delete + CEO Settings > Stores; PR 2 (Store Details + Transfer hub + Dispatch dialog) branches from it. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue).**
+- New `lib/features/stores/widgets/stores_parts.dart` (shared-part candidates): `StoresTopBar`/`storesTopBarHeight`, `StoresLiveBell`, `StoresBackButton`, `storesGutter`/`storesSliver` (raw 720 cap), `StoresMessage`, `StoresNotice`, `StoreFigure`, `StoreCardAction`, `StoresCardShell`, `StoreSheetFrame` + `showStoresSheet` (640 cap), `StoresAutocompleteField`.
+- Stores list: solid top bar + `ScreenHeader`, flat `AppDecorations.card` per store (whole top row opens Store Details; Total Units / Products figures; Edit / Delete 48dp actions only behind `Gates.manageStores`). Add Store stays the `AppFAB` (spotlight targets kept). Add / Edit sheets use `StoreSheetFrame`; the Delete dialog is `scrollable` with a warning notice.
+- CEO Settings > Stores: `ScreenHeader` bar with a 48dp back arrow, 720 cap, flat location cards with `AppInput` + `AppButton`, `SectionHeader` "Vans"; the `manageStores` / `vanManage` guards and every write path are untouched. `SettingsNoAccess` / `SettingsFadeIn` (frozen file) replaced locally.
+- Found, not changed: the Stores list has a Delete action (soft-delete behind `manageStores`); the brief said there was no delete path. Kept and restyled only.
+- Tests: `test/stores/stores_screen_test.dart` (29), `test/settings/stores_settings_screen_test.dart` (finders scoped to the sheet: the cards behind it now hold `AppInput` = `TextFormField`s); goldens `test/redesign/stores_golden_test.dart` (`stores_*`, `stores_settings_*`, `add_store_sheet_*`, `edit_store_sheet_*`, `stores_add_location_sheet_*`).
+
 ### Issue #414: Subscription Locked + Thank You restyle (Wave 2 B, 2026-10-17)
 Branch `feat/redesign-w2-subscription`, worktree `../drinkPosApp-wt-414`. **Restyle only: no write of any kind (subscription columns stay cloud-owned, read-only), no Drift/cloud/sync change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`, `subscription_access.dart` / `subscription_thanks.dart` untouched.**
 - New `lib/features/subscription/widgets/subscription_parts.dart`: `SubscriptionStateFrame` (shared-part candidate): Scaffold on `AppDecorations.pageBackground` (the blurred `AuthBackground` photo is gone), content centred at the raw 720 cap, hero in the middle, actions under it, scrolls when short.
